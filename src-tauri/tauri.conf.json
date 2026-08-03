@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "酷安",
-        "width": 1280,
-        "height": 840,
+        "width": 1440,
+        "height": 900,
         "resizable": true,
         "fullscreen": false,
         "center": true,
