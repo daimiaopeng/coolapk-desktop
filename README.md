@@ -1,0 +1,99 @@
+<p align="center">
+  <img src="src/assets/coolapk-logo.png" width="96" alt="酷安 Logo">
+</p>
+
+<h1 align="center">酷安</h1>
+
+<p align="center">基于 Tauri 2、Vue 3 和 Rust 的非官方酷安桌面客户端。</p>
+
+<p align="center">
+  <a href="https://github.com/daimiaopeng/coolapk-desktop/actions/workflows/build.yml"><img src="https://github.com/daimiaopeng/coolapk-desktop/actions/workflows/build.yml/badge.svg" alt="构建状态"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT 许可证"></a>
+  <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri" alt="Tauri 2">
+</p>
+
+> [!IMPORTANT]
+> 本项目是社区维护的非官方客户端，与酷安官方及深圳酷安网络科技有限公司无隶属、授权或合作关系。酷安名称、Logo 和相关商标归其权利人所有。
+
+## 功能
+
+- 首页推荐、24 小时热榜、精选、最新、酷图、二手和分类频道
+- 正文超过约 12 行时才折叠，点击后在本地即时展开，不额外请求详情接口
+- 微博风格评论区、楼中楼、热门/时间排序及酷安表情
+- 搜索、用户空间、话题、应用详情、通知和私信接口
+- 点赞、评论、关注、发布等登录后操作
+- Rust 原生网络层、Token V3 兼容签名及图片代理
+- Windows、macOS、Linux 原生桌面构建
+
+接口来自未公开、可能随时变化的移动端协议。部分频道或登录后操作可能因服务端调整、账号权限或风控策略失效。
+
+## 隐私与网络访问
+
+- 项目不内置个人 Cookie、账号 Token、统计 SDK或遥测服务。
+- 登录 Cookie 由用户手动输入，只保存在当前进程内存中，退出应用后失效。
+- 客户端标识在每次启动时临时生成，不使用开发者或用户的固定设备指纹。
+- 应用会直接访问 `api.coolapk.com`、酷安图片/静态资源域名；不会向第三方字体或图标 CDN 发起请求。
+- 请勿在 Issue、日志或截图中提交真实 Cookie、私信和其他个人数据。
+
+详见 [SECURITY.md](SECURITY.md)。
+
+## 开发环境
+
+- Node.js 22 或更高版本
+- Rust stable
+- 各平台的 [Tauri 2 系统依赖](https://v2.tauri.app/start/prerequisites/)
+
+```bash
+git clone https://github.com/daimiaopeng/coolapk-desktop.git
+cd coolapk-desktop
+npm ci
+npm run tauri dev
+```
+
+生产构建：
+
+```bash
+npm run tauri build
+```
+
+构建产物位于 `src-tauri/target/release/bundle/`。GitHub Actions 会分别构建：
+
+- Windows x64
+- Linux x64
+- macOS Apple Silicon
+- macOS Intel
+
+## 常用检查
+
+```bash
+npm run build
+npm audit
+cd src-tauri
+cargo test
+cargo check
+```
+
+## 项目结构
+
+```text
+src/                         Vue 3 / TypeScript 前端
+  api/coolapk.ts             Tauri 命令调用封装
+  utils/coolapkEmoji.ts      酷安表情映射
+src-tauri/                   Rust / Tauri 桌面端
+  src/coolapk/auth.rs        Token V3 兼容签名
+  src/coolapk/client.rs      API、图片和会话请求
+  src/coolapk/commands.rs    Tauri commands
+.github/workflows/build.yml  跨平台构建流程
+```
+
+## 登录说明
+
+公开浏览功能不需要登录。需要账号权限的操作可在“功能中心”临时载入 Cookie。Cookie 不会写入仓库或持久化到磁盘，但它仍等同于账号凭据，请只在可信的本地构建中使用。
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request。提交前请运行前端构建、Rust 测试，并确保测试数据不包含真实账号、Cookie、设备标识或私信内容。
+
+## 许可证
+
+代码采用 [MIT 许可证](LICENSE)。第三方品牌、Logo、表情及服务端内容不包含在 MIT 授权范围内，详见 [第三方声明](NOTICE.md)。

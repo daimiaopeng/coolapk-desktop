@@ -1,0 +1,35 @@
+# Frontend
+node_modules/
+dist/
+*.log
+npm-debug.log*
+
+# Rust / Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Generated mobile and Windows Store icon variants (desktop bundles use the root icons)
+src-tauri/icons/android/
+src-tauri/icons/ios/
+src-tauri/icons/Square*Logo.png
+src-tauri/icons/StoreLogo.png
+
+# Credentials and local state
+.env
+.env.*
+!.env.example
+*.cookie
+*.cookies
+*.stronghold
+*.key
+*.pem
+*.p12
+*.pfx
+raw_debug.json
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
