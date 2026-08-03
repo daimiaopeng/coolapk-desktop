@@ -370,6 +370,8 @@ const loading = ref(false);
 const loadingMore = ref(false);
 const feedList = ref<any[]>([]);
 const sidebarHotList = ref<any[]>([]);
+const detailPreloadTasks = new WeakMap<object, Promise<void>>();
+const commentPreloadTasks = new WeakMap<object, Promise<void>>();
 
 const searchQuery = ref('');
 const searchMode = ref<'all' | 'feed'>('all');
@@ -567,14 +569,17 @@ const fetchFeeds = async (isAppend = false) => {
       commentsLoading: false,
       commentsError: '',
       commentsLoadedCount: 0,
+      commentsPreloaded: Array.isArray(item.comments) && item.comments.length > 0,
       commentSort: 'time',
       replyInput: '',
       comments: item.comments || [],
+      feedDetail: null,
       isLiked: false
     }));
 
     if (isAppend) feedList.value.push(...cleaned);
     else feedList.value = cleaned;
+    void preloadFeedContent(cleaned);
   } catch (err) {
     console.error('Fetch feeds error:', err);
   } finally {
@@ -622,11 +627,19 @@ const changeSearchMode = async (mode: 'all' | 'feed') => {
 
 const openFeedDetail = async (feedId: string) => {
   feedDetailVisible.value = true;
+  const cachedItem = feedList.value.find(item => String(item.id) === String(feedId));
+  if (cachedItem?.feedDetail) {
+    feedDetailData.value = cachedItem.feedDetail;
+    feedDetailLoading.value = false;
+    return;
+  }
+
   feedDetailLoading.value = true;
   feedDetailData.value = {};
   try {
     const response = await CoolapkTauriAPI.getFeedDetail(String(feedId));
     feedDetailData.value = response.data || {};
+    if (cachedItem) cachedItem.feedDetail = feedDetailData.value;
   } catch (error) {
     showToast(error instanceof Error ? error.message : '动态详情加载失败');
   } finally {
@@ -789,12 +802,68 @@ const loadInlineComments = async (item: any) => {
     }
     item.commentsLoadedCount = res.data.length;
     item.comments = buildCommentThreads(res.data);
+    item.commentsPreloaded = true;
   } catch (err) {
     console.error('Fetch replies error:', err);
     item.commentsError = err instanceof Error ? err.message : '评论加载失败，请稍后重试';
   } finally {
     item.commentsLoading = false;
   }
+};
+
+const preloadFeedDetail = (item: any) => {
+  const existing = detailPreloadTasks.get(item);
+  if (existing) return existing;
+
+  const task = (async () => {
+    try {
+      const response = await CoolapkTauriAPI.getFeedDetail(String(item.id));
+      const detail = response?.data || null;
+      if (!detail) return;
+      item.feedDetail = detail;
+      const fullMessage = detail.message;
+      if (typeof fullMessage === 'string' && fullMessage.trim().length > String(item.message || '').trim().length) {
+        item.message = fullMessage;
+      }
+    } catch (error) {
+      console.debug('动态预加载失败，将在打开详情时重试:', error);
+    }
+  })();
+  detailPreloadTasks.set(item, task);
+  return task;
+};
+
+const preloadFeedComments = (item: any) => {
+  const existing = commentPreloadTasks.get(item);
+  if (existing) return existing;
+
+  const task = (async () => {
+    if (!item.id || Number(item.replynum || 0) <= 0 || item.commentsPreloaded) return;
+    try {
+      const response = await CoolapkTauriAPI.getFeedReplies(String(item.id), 1);
+      if (!response || !Array.isArray(response.data)) return;
+      item.commentsLoadedCount = response.data.length;
+      item.comments = buildCommentThreads(response.data);
+      item.commentsPreloaded = true;
+    } catch (error) {
+      console.debug('评论预加载失败，将在展开评论区时重试:', error);
+    }
+  })();
+  commentPreloadTasks.set(item, task);
+  return task;
+};
+
+// 列表先显示，再以有限并发预取首屏内容，避免影响主请求和触发接口风控。
+const preloadFeedContent = async (items: any[]) => {
+  const queue = items.filter(item => item?.id).slice(0, 6);
+  const worker = async () => {
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item) continue;
+      await Promise.allSettled([preloadFeedDetail(item), preloadFeedComments(item)]);
+    }
+  };
+  await Promise.all([worker(), worker()]);
 };
 
 const changeCommentSort = async (item: any, mode: 'hot' | 'time') => {
@@ -804,11 +873,14 @@ const changeCommentSort = async (item: any, mode: 'hot' | 'time') => {
   await loadInlineComments(item);
 };
 
-// 展开时按动态 ID 拉取完整最新评论楼层。
 const toggleInlineComments = async (item: any) => {
   item.showComments = !item.showComments;
 
-  if (item.showComments && (!item.comments || item.comments.length === 0)) {
+  if (item.showComments && !item.commentsPreloaded) {
+    const pending = commentPreloadTasks.get(item);
+    if (pending) await pending;
+  }
+  if (item.showComments && !item.commentsPreloaded) {
     await loadInlineComments(item);
   }
 };
