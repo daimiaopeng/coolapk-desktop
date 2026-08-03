@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="src/assets/coolapk-logo.png" width="96" alt="酷安 Logo">
+  <img src="src/assets/coolapk-logo-rounded.png" width="96" alt="酷安 Logo">
 </p>
 
 <h1 align="center">酷安</h1>
@@ -14,6 +14,16 @@
 
 > [!IMPORTANT]
 > 本项目是社区维护的非官方客户端，与酷安官方及深圳酷安网络科技有限公司无隶属、授权或合作关系。酷安名称、Logo 和相关商标归其权利人所有。
+
+## 界面预览
+
+### 动态首页
+
+![酷安桌面端动态首页](docs/screenshots/feed-home.png)
+
+### 评论区
+
+![酷安桌面端评论区](docs/screenshots/comments.png)
 
 ## 功能
 
@@ -51,18 +61,25 @@ npm ci
 npm run tauri dev
 ```
 
-生产构建：
+生产构建可按当前平台选择产物格式：
 
 ```bash
-npm run tauri build
+# Windows：仅构建 NSIS 安装包
+npm run tauri build -- --bundles nsis
+
+# Linux
+npm run tauri build -- --bundles appimage,deb,rpm
+
+# macOS
+npm run tauri build -- --bundles app,dmg
 ```
 
-构建产物位于 `src-tauri/target/release/bundle/`。GitHub Actions 会分别构建：
+安装包位于 `src-tauri/target/release/bundle/`。GitHub Actions 会提供：
 
-- Windows x64
-- Linux x64
-- macOS Apple Silicon
-- macOS Intel
+- Windows x64：仅提供 NSIS 安装包 `-setup.exe`，不上传便携版或 MSI
+- Linux x64：AppImage 免安装版 `.AppImage`、Debian 安装包 `.deb`、RPM 安装包 `.rpm`
+- macOS Apple 芯片：磁盘映像 `.dmg`、应用包 `.app`
+- macOS Intel：磁盘映像 `.dmg`、应用包 `.app`
 
 ## 常用检查
 

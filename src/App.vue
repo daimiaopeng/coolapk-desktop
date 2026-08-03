@@ -1,11 +1,11 @@
 <template>
-  <div class="app-root" :style="{ zoom: systemZoomFactor }">
+  <div class="app-root" :style="appZoomStyle">
     <!-- 顶部 Sticky Header -->
     <header>
       <div class="nav-container">
         <div class="brand-section">
           <a class="brand-logo" @click="switchMainTab('indexV8')">
-            <img class="brand-icon" src="./assets/coolapk-logo.png" alt="酷安 Logo">
+            <img class="brand-icon" src="./assets/coolapk-logo-rounded.png" alt="酷安 Logo">
             <span>酷安</span>
           </a>
         </div>
@@ -16,6 +16,12 @@
         </div>
 
         <div class="nav-actions">
+          <label class="zoom-control" title="界面缩放（Ctrl + / Ctrl - / Ctrl 0）">
+            <i class="fa-solid fa-text-height"></i>
+            <select v-model.number="appZoom" aria-label="界面缩放" @change="saveAppZoom">
+              <option v-for="level in zoomLevels" :key="level" :value="level">{{ level }}%</option>
+            </select>
+          </label>
           <button class="btn-post" @click="publishModalVisible = true"><i class="fa-solid fa-plus"></i> 发布</button>
           <button class="btn-feature" @click="featureCenterVisible = true"><i class="fa-solid fa-grip"></i> 功能中心</button>
           <div class="rust-status-tag" title="Tauri 原生桌面客户端"><i class="fa-solid fa-display"></i> 桌面版</div>
@@ -360,7 +366,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { CoolapkTauriAPI } from './api/coolapk';
 import { renderCoolapkEmoji } from './utils/coolapkEmoji';
 
@@ -372,6 +378,56 @@ const feedList = ref<any[]>([]);
 const sidebarHotList = ref<any[]>([]);
 const detailPreloadTasks = new WeakMap<object, Promise<void>>();
 const commentPreloadTasks = new WeakMap<object, Promise<void>>();
+const zoomLevels = [90, 100, 110, 125, 150];
+const zoomStorageKey = 'coolapk-interface-zoom';
+
+const getInitialZoom = () => {
+  const recommended = window.screen.width >= 1800 ? 125 : 110;
+  try {
+    const saved = Number(window.localStorage.getItem(zoomStorageKey));
+    return zoomLevels.includes(saved) ? saved : recommended;
+  } catch {
+    return recommended;
+  }
+};
+
+const appZoom = ref(getInitialZoom());
+const appZoomStyle = computed(() => ({
+  zoom: String(appZoom.value / 100)
+}));
+
+const saveAppZoom = () => {
+  try {
+    window.localStorage.setItem(zoomStorageKey, String(appZoom.value));
+  } catch {
+    // 本地存储不可用时仍保留本次会话的缩放值。
+  }
+};
+
+const setAppZoom = (nextZoom: number) => {
+  appZoom.value = nextZoom;
+  saveAppZoom();
+};
+
+const handleZoomShortcut = (event: KeyboardEvent) => {
+  if (!event.ctrlKey && !event.metaKey) return;
+  if (event.key === '0') {
+    event.preventDefault();
+    setAppZoom(100);
+    return;
+  }
+
+  const direction = ['+', '=', 'Add'].includes(event.key)
+    ? 1
+    : ['-', '_', 'Subtract'].includes(event.key) ? -1 : 0;
+  if (!direction) return;
+
+  event.preventDefault();
+  const currentIndex = zoomLevels.indexOf(appZoom.value);
+  const safeIndex = currentIndex >= 0 ? currentIndex : zoomLevels.indexOf(110);
+  const nextIndex = Math.min(zoomLevels.length - 1, Math.max(0, safeIndex + direction));
+  setAppZoom(zoomLevels[nextIndex]);
+};
 
 const searchQuery = ref('');
 const searchMode = ref<'all' | 'feed'>('all');
@@ -404,30 +460,14 @@ const featureUkey = ref('');
 const featureMessageUid = ref('');
 const featureMessageText = ref('');
 
-const systemZoomFactor = ref(1);
-
-const updateSystemDpiZoom = () => {
-  const ratio = window.devicePixelRatio || 1;
-  if (ratio >= 2.0) {
-    systemZoomFactor.value = 0.9;
-  } else if (ratio >= 1.5) {
-    systemZoomFactor.value = 0.95;
-  } else if (ratio >= 1.25) {
-    systemZoomFactor.value = 0.98;
-  } else {
-    systemZoomFactor.value = 1.0;
-  }
-};
-
 onMounted(() => {
-  updateSystemDpiZoom();
-  window.addEventListener('resize', updateSystemDpiZoom);
+  window.addEventListener('keydown', handleZoomShortcut);
   switchMainTab('indexV8');
   fetchSidebarHot();
 });
 
 onUnmounted(() => {
-  window.removeEventListener('resize', updateSystemDpiZoom);
+  window.removeEventListener('keydown', handleZoomShortcut);
 });
 
 const showToast = (text: string) => {
@@ -935,26 +975,29 @@ const sendComment = async (item: any) => {
 
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif; }
 html, body { height: 100vh; overflow: hidden; background-color: var(--bg-page); color: var(--text-main); }
+html { font-size: 16px; }
 
-.app-root { height: 100vh; display: flex; flex-direction: column; overflow: hidden; width: 100%; transition: zoom 0.2s ease; }
+.app-root { height: 100vh; display: flex; flex-direction: column; overflow: hidden; width: 100%; }
 
-header { height: 56px; flex-shrink: 0; background: var(--bg-card); border-bottom: 1px solid var(--border-color); z-index: 100; width: 100%; }
-.nav-container { max-width: 1240px; width: 100%; margin: 0 auto; height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; gap: 16px; box-sizing: border-box; }
+header { height: 64px; flex-shrink: 0; background: var(--bg-card); border-bottom: 1px solid var(--border-color); z-index: 100; width: 100%; }
+.nav-container { max-width: 1460px; width: 100%; margin: 0 auto; height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; gap: 20px; box-sizing: border-box; }
 .brand-section { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
 .brand-logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.12rem; color: var(--brand-green); cursor: pointer; }
-.brand-icon { width: 32px; height: 32px; border-radius: 9px; display: block; object-fit: cover; }
+.brand-icon { width: 36px; height: 36px; border-radius: 9px; display: block; object-fit: cover; }
 
-.search-box { flex: 1; max-width: 380px; position: relative; min-width: 0; }
-.search-input { width: 100%; height: 34px; background: var(--bg-page); border: 1px solid var(--border-color); border-radius: 17px; padding: 0 16px 0 36px; font-size: 0.86rem; outline: none; transition: border-color 0.2s; }
+.search-box { flex: 1; max-width: 460px; position: relative; min-width: 0; }
+.search-input { width: 100%; height: 38px; background: var(--bg-page); border: 1px solid var(--border-color); border-radius: 19px; padding: 0 18px 0 40px; font-size: 0.86rem; outline: none; transition: border-color 0.2s; }
 .search-input:focus { border-color: var(--brand-green); background: var(--bg-card); }
 .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.82rem; }
 
 .nav-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.zoom-control { height: 34px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border: 1px solid #d9e2ea; border-radius: 17px; background: #fff; color: var(--text-sub); font-size: 0.78rem; }
+.zoom-control select { border: 0; outline: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .btn-post { background: var(--brand-green); color: white; border: none; padding: 6px 15px; border-radius: 16px; font-weight: 600; font-size: 0.86rem; cursor: pointer; }
 .rust-status-tag { background: var(--brand-green-light); color: var(--brand-green); font-size: 0.76rem; font-weight: 600; padding: 4px 10px; border-radius: 12px; }
-.user-avatar { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--border-color); object-fit: cover; cursor: pointer; }
+.user-avatar { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border-color); object-fit: cover; cursor: pointer; }
 
-.main-wrapper { max-width: 1240px; width: 100%; margin: 0 auto; padding: 14px 20px 0 20px; display: grid; grid-template-columns: 190px minmax(0, 1fr) 280px; gap: 16px; height: calc(100vh - 56px); overflow: hidden; box-sizing: border-box; }
+.main-wrapper { max-width: 1460px; width: 100%; margin: 0 auto; padding: 18px 24px 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 320px; gap: 20px; height: calc(100vh - 64px); overflow: hidden; box-sizing: border-box; }
 .left-sidebar, .right-sidebar { height: 100%; min-width: 0; }
 
 .menu-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-card); padding: 6px 4px; box-shadow: var(--shadow-flat); }
@@ -1107,6 +1150,12 @@ header { height: 56px; flex-shrink: 0; background: var(--bg-card); border-bottom
 .lightbox-close { position: absolute; top: 20px; right: 24px; color: white; font-size: 2rem; cursor: pointer; }
 
 .toast-msg { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 8px 18px; border-radius: 18px; font-size: 0.86rem; z-index: 400; }
+
+@media (max-width: 1400px) {
+  .nav-container { max-width: 1280px; height: 60px; padding: 0 20px; gap: 16px; }
+  header { height: 60px; }
+  .main-wrapper { max-width: 1280px; grid-template-columns: 190px minmax(0, 1fr) 280px; gap: 16px; height: calc(100vh - 60px); padding: 14px 20px 0; }
+}
 
 @media (max-width: 1024px) {
   .main-wrapper { grid-template-columns: 190px minmax(0, 1fr); }
