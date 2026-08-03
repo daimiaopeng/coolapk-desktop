@@ -81,6 +81,17 @@ npm run tauri build -- --bundles app,dmg
 - macOS Apple 芯片：磁盘映像 `.dmg`、应用包 `.app`
 - macOS Intel：磁盘映像 `.dmg`、应用包 `.app`
 
+## 自动发布
+
+推送以 `v` 开头的版本标签后，GitHub Actions 会自动构建全部平台，并创建公开的 GitHub Release，上传上述安装包。普通的 `main` 分支推送和 Pull Request 只执行构建检查，不会发布版本。
+
+发布前请先更新 `src-tauri/tauri.conf.json` 中的版本号，再创建并推送对应标签，例如：
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
 ## 常用检查
 
 ```bash
