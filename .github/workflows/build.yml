@@ -24,19 +24,19 @@ jobs:
         include:
           - name: Windows x64
             platform: windows-latest
-            args: ''
+            args: --bundles nsis
             rustTargets: ''
           - name: Linux x64
             platform: ubuntu-22.04
-            args: ''
+            args: --bundles appimage,deb,rpm
             rustTargets: ''
           - name: macOS Apple 芯片
             platform: macos-latest
-            args: --target aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles app,dmg
             rustTargets: aarch64-apple-darwin,x86_64-apple-darwin
           - name: macOS Intel
             platform: macos-latest
-            args: --target x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles app,dmg
             rustTargets: aarch64-apple-darwin,x86_64-apple-darwin
 
     steps:
@@ -62,10 +62,13 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf rpm
 
       - name: 安装前端依赖
         run: npm ci
+
+      - name: 构建前端
+        run: npm run build
 
       - name: 测试 Rust 核心
         working-directory: src-tauri
