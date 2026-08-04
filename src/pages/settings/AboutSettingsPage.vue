@@ -95,6 +95,3 @@ const appVersion = APP_VERSION;
   font-weight: var(--font-weight-medium);
 }
 </style>
-import { APP_VERSION } from '../../constants/version';
-
-const appVersion = APP_VERSION;
