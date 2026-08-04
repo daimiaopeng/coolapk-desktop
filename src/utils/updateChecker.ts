@@ -29,10 +29,13 @@ export async function checkLatestRelease(): Promise<UpdateInfo> {
   if (!response.ok) throw new Error(`GitHub API HTTP ${response.status}`);
   const release = await response.json();
   const tagName = release.tag_name || '';
+  const hasNew = Boolean(tagName) && isNewerVersion(tagName);
   return {
-    hasNew: Boolean(tagName) && isNewerVersion(tagName),
+    hasNew,
     latestVersion: tagName || '最新发布',
-    releaseNotes: release.body ? release.body.slice(0, 300) : '暂无特别更新说明',
+    releaseNotes: hasNew
+      ? (release.body ? release.body.slice(0, 300) : '暂无特别更新说明')
+      : '当前已是最新版本，无需更新。',
     downloadUrl: release.html_url || 'https://github.com/daimiaopeng/coolapk-desktop/releases',
   };
 }

@@ -20,7 +20,7 @@
         </p>
         <p class="startup-update-notes">{{ updateInfo.releaseNotes }}</p>
         <div class="startup-update-actions">
-          <button class="startup-update-later" @click="updateInfo = null">稍后提醒</button>
+          <button class="startup-update-later" @click="updateInfo = null">{{ updateInfo.hasNew ? '稍后提醒' : '关闭' }}</button>
           <button v-if="updateInfo.hasNew" class="startup-update-button" @click="openUpdate">前往下载更新</button>
         </div>
       </div>
