@@ -5,7 +5,7 @@
     <div class="about-card">
       <img src="../../assets/coolapk-logo-rounded.png" alt="Logo" class="about-logo" />
       <h4 class="app-name">Coolapk Desktop</h4>
-      <span class="app-ver">Version 1.2.0 (Tauri 2 Core)</span>
+      <span class="app-ver">Version {{ appVersion }} (Tauri 2 Core)</span>
       <p class="app-desc">基于 Tauri 2、Vue 3、TypeScript 与 Rust 构建的第三方酷安桌面客户端。</p>
 
       <div class="tech-stack-list">
@@ -21,6 +21,9 @@
 </template>
 
 <script setup lang="ts">
+import { APP_VERSION } from '../../constants/version';
+
+const appVersion = APP_VERSION;
 </script>
 
 <style scoped>
@@ -92,3 +95,6 @@
   font-weight: var(--font-weight-medium);
 }
 </style>
+import { APP_VERSION } from '../../constants/version';
+
+const appVersion = APP_VERSION;

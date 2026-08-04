@@ -332,6 +332,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { isNewerVersion } from '../../utils/updateChecker';
+import { APP_VERSION } from '../../constants/version';
 import { settings } from '../../utils/settingsStore';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import Card from '../ui/Card.vue';
@@ -346,7 +348,7 @@ const emit = defineEmits<{
 }>();
 
 const currentTab = ref<'appearance' | 'performance' | 'account' | 'about'>('about');
-const appVersion = '1.2.0';
+const appVersion = APP_VERSION;
 
 // 缓存管理
 const cacheClearing = ref(false);
@@ -459,7 +461,7 @@ async function handleCheckUpdate() {
 
     const data = await res.json();
     const tagName = (data.tag_name || '').replace(/^v/i, '');
-    const isNew = tagName && tagName !== appVersion;
+    const isNew = tagName && isNewerVersion(tagName, appVersion);
 
     updateInfo.value = {
       hasNew: isNew,
