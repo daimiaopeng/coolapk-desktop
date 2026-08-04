@@ -346,7 +346,7 @@ const emit = defineEmits<{
 }>();
 
 const currentTab = ref<'appearance' | 'performance' | 'account' | 'about'>('about');
-const appVersion = '1.0.0';
+const appVersion = '1.2.0';
 
 // 缓存管理
 const cacheClearing = ref(false);

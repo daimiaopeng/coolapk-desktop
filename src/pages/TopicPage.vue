@@ -1,25 +1,45 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <!-- 话题头部 -->
+    <!-- 顶部后退导航栏 -->
+    <div class="top-nav-bar">
+      <button class="btn-back" @click="goBack" title="返回上一页">
+        <i class="fa-solid fa-arrow-left"></i>
+        <span>返回</span>
+      </button>
+      <div class="nav-title-box">
+        <span class="nav-title"># {{ tag }} #</span>
+      </div>
+    </div>
+
+    <!-- 话题头部卡片 -->
     <div v-if="topicDetail" class="topic-header-card">
       <div class="header-content">
-        <div class="topic-icon-wrapper" v-if="topicDetail.logo || topicDetail.cover">
-          <img :src="topicDetail.logo || topicDetail.cover" class="topic-icon" alt="topic icon" />
+        <div class="topic-icon-wrapper">
+          <AppImage
+            v-if="topicLogo"
+            :src="topicLogo"
+            class="topic-icon"
+            fit="cover"
+            :alt="tag"
+          />
+          <div v-else class="topic-icon-fallback">
+            <span class="hashtag">#</span>
+          </div>
         </div>
         <div class="topic-info">
           <h2 class="topic-title"># {{ tag }} #</h2>
           <div class="topic-stats">
             <span class="stat-badge">
-              <span class="stat-value">{{ formatNumber(topicDetail.follower_num || 0) }}</span>
+              <span class="stat-value">{{ formatNumber(followerCount) }}</span>
               <span class="stat-label">关注</span>
             </span>
             <span class="stat-badge">
-              <span class="stat-value">{{ formatNumber(topicDetail.commentnum || topicDetail.discuss_num || 0) }}</span>
+              <span class="stat-value">{{ formatNumber(commentCount) }}</span>
               <span class="stat-label">讨论</span>
             </span>
             <span class="stat-badge">
-              <span class="stat-value">{{ formatNumber(topicDetail.view_num || 0) }}</span>
-              <span class="stat-label">阅读</span>
+              <span class="stat-value">{{ formatNumber(viewCount) }}</span>
+              <span class="stat-label">热度</span>
             </span>
           </div>
         </div>
@@ -37,7 +57,7 @@
       <LoadingState text="正在加载话题信息..." />
     </div>
 
-    <!-- Feed 列表 -->
+    <!-- Feed 动态列表 -->
     <div v-if="feedsLoading && page === 1" class="loading-wrapper">
       <LoadingState text="正在获取话题动态..." />
     </div>
@@ -58,15 +78,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import FeedCard from '../components/feed/FeedCard.vue';
+import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 
 const route = useRoute();
-const tag = (route.params.tag as string) || '';
+const router = useRouter();
+const tag = computed(() => (route.params.tag as string) || '');
 
 const topicDetail = ref<any>(null);
 const headerLoading = ref(false);
@@ -76,9 +98,36 @@ const feedsLoading = ref(false);
 const page = ref(1);
 const noMore = ref(false);
 
-const isFollowed = ref(false); // 模拟关注状态
+const isFollowed = ref(false);
 
-// 格式化数字，例如将 10000 转换为 1.0w
+const topicLogo = computed(() => {
+  if (!topicDetail.value) return '';
+  return topicDetail.value.logo || topicDetail.value.pic || topicDetail.value.cover || topicDetail.value.icon || '';
+});
+
+const followerCount = computed(() => {
+  if (!topicDetail.value) return 0;
+  return topicDetail.value.follower_num || topicDetail.value.follownum || topicDetail.value.follow_num || 0;
+});
+
+const commentCount = computed(() => {
+  if (!topicDetail.value) return 0;
+  return topicDetail.value.commentnum || topicDetail.value.discuss_num || topicDetail.value.replynum || 0;
+});
+
+const viewCount = computed(() => {
+  if (!topicDetail.value) return 0;
+  return topicDetail.value.view_num || topicDetail.value.hot_num || topicDetail.value.click || 0;
+});
+
+function goBack() {
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    router.push('/topics');
+  }
+}
+
 function formatNumber(num: number | string) {
   const n = Number(num);
   if (isNaN(n)) return '0';
@@ -88,10 +137,10 @@ function formatNumber(num: number | string) {
 }
 
 async function fetchTopicHeader() {
-  if (!tag) return;
+  if (!tag.value) return;
   headerLoading.value = true;
   try {
-    const res = await CoolapkTauriAPI.getTopicDetail(tag);
+    const res = await CoolapkTauriAPI.getTopicDetail(tag.value);
     if (res && res.data) {
       topicDetail.value = res.data;
     }
@@ -103,11 +152,11 @@ async function fetchTopicHeader() {
 }
 
 async function fetchFeeds(isLoadMore = false) {
-  if (!tag || feedsLoading.value || noMore.value) return;
+  if (!tag.value || feedsLoading.value || noMore.value) return;
   
   feedsLoading.value = true;
   try {
-    const res = await CoolapkTauriAPI.getTopicFeeds(tag, page.value);
+    const res = await CoolapkTauriAPI.getTopicFeeds(tag.value, page.value);
     const newFeeds = (res && res.data && Array.isArray(res.data)) ? res.data : [];
     
     if (newFeeds.length === 0) {
@@ -130,7 +179,6 @@ async function fetchFeeds(isLoadMore = false) {
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement;
   const { scrollTop, clientHeight, scrollHeight } = target;
-  // 距离底部 100px 时触发加载更多
   if (scrollTop + clientHeight >= scrollHeight - 100) {
     if (!feedsLoading.value && !noMore.value) {
       fetchFeeds(true);
@@ -143,7 +191,6 @@ function toggleFollow() {
 }
 
 onMounted(() => {
-  // 同时调用话题详情和动态列表
   Promise.all([
     fetchTopicHeader(),
     fetchFeeds(false)
@@ -157,18 +204,58 @@ onMounted(() => {
   max-width: var(--feed-max-width);
   height: 100%;
   overflow-y: auto;
-  padding: var(--space-5);
+  padding: var(--space-4) var(--space-5);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
+}
+
+.top-nav-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-2);
+}
+
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill, 9999px);
+  border: 1px solid var(--border);
+  background-color: var(--surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-back:hover {
+  background-color: var(--background);
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+.nav-title-box {
+  flex: 1;
+}
+
+.nav-title {
+  font-size: var(--font-size-base, 15px);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-primary);
 }
 
 .topic-header-card {
   background-color: var(--surface);
   border-radius: var(--radius-card);
   border: 1px solid var(--border);
-  padding: var(--space-6);
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -194,7 +281,7 @@ onMounted(() => {
 .topic-icon-wrapper {
   width: 64px;
   height: 64px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-lg, 14px);
   overflow: hidden;
   flex-shrink: 0;
   border: 1px solid var(--border);
@@ -204,18 +291,32 @@ onMounted(() => {
 .topic-icon {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+}
+
+.topic-icon-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.25));
+}
+
+.hashtag {
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--brand-primary);
 }
 
 .topic-info {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .topic-title {
-  font-size: var(--font-size-title-lg);
+  font-size: var(--font-size-title-lg, 20px);
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);
   margin: 0;

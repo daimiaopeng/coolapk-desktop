@@ -1,10 +1,11 @@
 <template>
-  <div class="app-image-container" :class="{ 'is-loading': loading, 'is-error': error }">
+  <div class="app-image-container" :class="{ 'is-loading': loading, 'is-error': error, 'fit-contain': fit === 'contain' }">
     <img
       v-if="renderedSrc && !error"
       :src="renderedSrc"
       :alt="alt"
       :class="imageClass"
+      :style="{ objectFit: fit }"
       @load="handleLoad"
       @error="handleError"
       v-bind="$attrs"
@@ -22,11 +23,14 @@
 import { ref, watch, onMounted } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   src?: string;
   alt?: string;
   imageClass?: string | object | any[];
-}>();
+  fit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
+}>(), {
+  fit: 'cover'
+});
 
 const renderedSrc = ref<string | undefined>(undefined);
 const loading = ref(false);
@@ -98,11 +102,30 @@ function handleError() {
   position: relative;
 }
 
+.app-image-container.fit-contain {
+  background-color: transparent;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .app-image-container img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.app-image-container.fit-contain img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 
 .image-placeholder,

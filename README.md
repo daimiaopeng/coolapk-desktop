@@ -88,8 +88,8 @@ npm run tauri build -- --bundles app,dmg
 发布前请先更新 `src-tauri/tauri.conf.json` 中的版本号，再创建并推送对应标签，例如：
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.2
+git push origin v1.2
 ```
 
 ## 常用检查

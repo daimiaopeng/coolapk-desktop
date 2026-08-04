@@ -11,6 +11,7 @@ import HistoryPage from '../pages/HistoryPage.vue';
 import FollowingPage from '../pages/FollowingPage.vue';
 import UserPage from '../pages/UserPage.vue';
 import TopicPage from '../pages/TopicPage.vue';
+import TopicsHubPage from '../pages/TopicsHubPage.vue';
 import AppDetailPage from '../pages/AppDetailPage.vue';
 import SettingsLayout from '../pages/settings/SettingsLayout.vue';
 import AccountSettingsPage from '../pages/settings/AccountSettingsPage.vue';
@@ -28,7 +29,7 @@ const routes = [
   { path: '/discover', name: 'Discover', component: DiscoverPage },
   { path: '/apps', name: 'Apps', component: AppsPage },
   { path: '/games', name: 'Games', component: GamesPage },
-  { path: '/topics', name: 'Topics', component: DiscoverPage },
+  { path: '/topics', name: 'Topics', component: TopicsHubPage },
   { path: '/favorites', name: 'Favorites', component: FavoritesPage },
   { path: '/history', name: 'History', component: HistoryPage },
   { path: '/following', name: 'Following', component: FollowingPage },

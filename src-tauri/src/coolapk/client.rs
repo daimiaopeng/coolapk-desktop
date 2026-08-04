@@ -856,6 +856,34 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
+    pub async fn get_topic_hub_data(&self, sub_url: &str, page: u32) -> Result<Value, String> {
+        let raw = if sub_url.contains("/v6/topic/tagList") {
+            let mut query = vec![("page", page.to_string())];
+            if sub_url.contains("sort=hot") {
+                query.push(("sort", "hot".to_string()));
+            } else if sub_url.contains("sort=follow") {
+                query.push(("sort", "follow".to_string()));
+            } else if sub_url.contains("sort=new") {
+                query.push(("sort", "new".to_string()));
+            }
+            self.api_get("/v6/topic/tagList", &query).await?
+        } else {
+            let target_url = if sub_url.trim().is_empty() || sub_url == "/main/tagList" {
+                "#/topic/tagList".to_string()
+            } else {
+                sub_url.to_string()
+            };
+            self.api_get(
+                "/v6/page/dataList",
+                &[("url", target_url), ("page", page.to_string())],
+            )
+            .await?
+        };
+
+        let data = raw.get("data").cloned().unwrap_or(json!([]));
+        Ok(json!({ "code": 200, "data": data }))
+    }
+
     pub async fn get_app_detail(&self, package_name: &str) -> Result<Value, String> {
         wrap_api_data(
             self.api_get("/v6/apk/detail", &[("id", package_name.to_string())])

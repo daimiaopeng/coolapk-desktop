@@ -132,6 +132,15 @@ pub async fn get_topic_feeds(
 }
 
 #[tauri::command]
+pub async fn get_topic_hub_data(
+    state: State<'_, AppState>,
+    sub_url: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_topic_hub_data(&sub_url, page).await
+}
+
+#[tauri::command]
 pub async fn get_app_detail(
     state: State<'_, AppState>,
     package_name: String,
