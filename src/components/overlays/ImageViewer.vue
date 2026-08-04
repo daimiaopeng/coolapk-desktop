@@ -9,7 +9,7 @@
             <button class="viewer-btn" title="缩小" @click="zoomOut"><i class="fas fa-search-minus"></i></button>
             <span class="zoom-text">{{ Math.round(scale * 100) }}%</span>
             <button class="viewer-btn" title="放大" @click="zoomIn"><i class="fas fa-search-plus"></i></button>
-            <button class="viewer-btn" title="重置" @click="resetTransform"><i class="fas fa-compress-arrows-alt"></i></button>
+            <button class="viewer-btn" title="重置 (100%)" @click="resetTransform"><i class="fas fa-compress-arrows-alt"></i></button>
             <button class="viewer-btn" title="复制链接" @click="copyLink"><i class="fas fa-link"></i></button>
             <button class="viewer-btn" title="关闭 (Esc)" @click="close"><i class="fas fa-times"></i></button>
           </div>
@@ -24,17 +24,20 @@
           <i class="fas fa-chevron-right"></i>
         </button>
 
-        <!-- 主图片显示 -->
+        <!-- 主图片显示区 -->
         <div
           class="image-stage"
           @click.stop
+          @dblclick="handleDoubleClick"
           @mousedown="startDrag"
           @mousemove="onDrag"
           @mouseup="stopDrag"
+          @mouseleave="stopDrag"
           @wheel.prevent="handleWheel"
         >
-          <AppImage
-            :src="currentUrl"
+          <img
+            v-if="displaySrc"
+            :src="displaySrc"
             alt="Viewer Image"
             class="viewer-img"
             :style="{
@@ -42,10 +45,15 @@
               cursor: isDragging ? 'grabbing' : 'grab'
             }"
             @load="onImageLoaded"
+            @dragstart.prevent
           />
+          <div v-else class="viewer-loading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span>正在载入高清大图...</span>
+          </div>
         </div>
 
-        <!-- 底部微博风格“查看原图”浮动按钮 -->
+        <!-- 底部“查看原图”控制栏 -->
         <div class="viewer-bottombar" @click.stop>
           <button
             class="raw-image-btn"
@@ -70,7 +78,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useAppStore } from '../../stores/app';
-import AppImage from '../common/AppImage.vue';
+import { CoolapkTauriAPI } from '../../api/coolapk';
 import { getHdImageUrl, getOriginalImageUrl } from '../../utils/image';
 
 const appStore = useAppStore();
@@ -81,6 +89,9 @@ const scale = ref(1);
 const translateX = ref(0);
 const translateY = ref(0);
 const isDragging = ref(false);
+
+const displaySrc = ref<string>('');
+const imageCache = new Map<string, string>();
 
 const originalLoadedMap = ref<Record<number, boolean>>({});
 const originalLoadingMap = ref<Record<number, boolean>>({});
@@ -93,7 +104,6 @@ const rawUrl = computed(() => viewerData.value?.urls[currentIndex.value] || '');
 
 const currentUrl = computed(() => {
   if (!rawUrl.value) return '';
-  // 如果已触发加载原图，使用原图 URL；否则默认使用酷安高清压缩图
   if (originalLoadedMap.value[currentIndex.value]) {
     return getOriginalImageUrl(rawUrl.value);
   }
@@ -102,6 +112,36 @@ const currentUrl = computed(() => {
 
 const isCurrentOriginalLoaded = computed(() => Boolean(originalLoadedMap.value[currentIndex.value]));
 const isCurrentOriginalLoading = computed(() => Boolean(originalLoadingMap.value[currentIndex.value]));
+
+async function resolveImageData(url: string) {
+  if (!url) {
+    displaySrc.value = '';
+    return;
+  }
+  if (url.startsWith('data:') || url.startsWith('blob:')) {
+    displaySrc.value = url;
+    return;
+  }
+  if (imageCache.has(url)) {
+    displaySrc.value = imageCache.get(url)!;
+    return;
+  }
+  displaySrc.value = '';
+  try {
+    const dataUrl = await CoolapkTauriAPI.getImageDataUrl(url);
+    imageCache.set(url, dataUrl);
+    displaySrc.value = dataUrl;
+  } catch (err) {
+    console.warn('看图器加载图片失败:', err);
+    displaySrc.value = url; // 备用回退直接使用原 url
+  }
+}
+
+watch(currentUrl, (newUrl) => {
+  if (newUrl) {
+    resolveImageData(newUrl);
+  }
+}, { immediate: true });
 
 watch(viewerData, (val) => {
   if (val) {
@@ -152,22 +192,30 @@ function next() {
 }
 
 function zoomIn() {
-  scale.value = Math.min(scale.value + 0.25, 4);
+  scale.value = Math.min(Number((scale.value + 0.25).toFixed(2)), 4);
 }
 
 function zoomOut() {
-  scale.value = Math.max(scale.value - 0.25, 0.5);
+  scale.value = Math.max(Number((scale.value - 0.25).toFixed(2)), 0.3);
 }
 
 function handleWheel(e: WheelEvent) {
-  if (e.deltaY < 0) {
-    zoomIn();
+  // 鼠标滚轮流畅缩放
+  const delta = e.deltaY < 0 ? 0.15 : -0.15;
+  const newScale = Math.min(Math.max(scale.value + delta, 0.3), 5);
+  scale.value = Number(newScale.toFixed(2));
+}
+
+function handleDoubleClick() {
+  if (scale.value === 1) {
+    scale.value = 1.8;
   } else {
-    zoomOut();
+    resetTransform();
   }
 }
 
 function startDrag(e: MouseEvent) {
+  if (e.button !== 0) return; // 仅限左键拖拽
   isDragging.value = true;
   startX = e.clientX - translateX.value;
   startY = e.clientY - translateY.value;
@@ -204,7 +252,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
 .image-viewer-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(0, 0, 0, 0.9);
+  background-color: rgba(0, 0, 0, 0.92);
   z-index: 3000;
   display: flex;
   flex-direction: column;
@@ -221,8 +269,8 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
 }
 
 .counter-text {
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sub, 14px);
+  font-weight: var(--font-weight-medium, 500);
 }
 
 .topbar-actions {
@@ -240,8 +288,10 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-control);
-  transition: all var(--duration-fast) var(--ease-default);
+  border: none;
+  border-radius: var(--radius-control, 8px);
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .viewer-btn:hover {
@@ -262,14 +312,16 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
   width: 48px;
   height: 48px;
   border-radius: 50%;
+  border: none;
   background: rgba(255, 255, 255, 0.15);
   color: #ffffff;
   font-size: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
   z-index: 3002;
-  transition: background var(--duration-fast) var(--ease-default);
+  transition: background 0.2s ease;
 }
 
 .nav-arrow:hover {
@@ -281,22 +333,43 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
 
 .image-stage {
   flex: 1;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   position: relative;
+  user-select: none;
 }
 
 .viewer-img {
   max-width: 90vw;
-  max-height: 90vh;
+  max-height: 88vh;
+  width: auto;
+  height: auto;
   object-fit: contain;
+  display: block;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
   transition: transform 0.05s ease-out;
-  user-select: none;
+  pointer-events: auto;
 }
 
-/* 微博风格：底部中置“查看原图”悬浮控制栏 */
+.viewer-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+}
+
+.viewer-loading i {
+  font-size: 32px;
+  color: var(--brand-primary, #10b966);
+}
+
 .viewer-bottombar {
   position: absolute;
   bottom: 24px;
@@ -314,14 +387,14 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
   border: 1px solid rgba(255, 255, 255, 0.25);
   color: #ffffff;
   padding: 6px 16px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-pill, 9999px);
   font-size: 13px;
   font-weight: 500;
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-default);
+  transition: all 0.2s ease;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 

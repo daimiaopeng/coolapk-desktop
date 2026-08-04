@@ -130,6 +130,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_topic_feeds', { tag, page });
   }
 
+  static async getTopicHubData(subUrl: string = '', page: number = 1) {
+    return await safeFetch(`/page/dataList?url=${encodeURIComponent(subUrl || '/main/tagList')}&page=${page}`, 'get_topic_hub_data', { subUrl, page });
+  }
+
   static async getAppDetail(packageName: string) {
     return await invokeNative('get_app_detail', { packageName });
   }

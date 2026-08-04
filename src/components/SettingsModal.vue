@@ -343,7 +343,7 @@ const emit = defineEmits<{
 
 const currentTab = ref<'appearance' | 'performance' | 'account' | 'about'>('appearance');
 const zoomOptions = [90, 100, 110, 125, 150];
-const appVersion = '1.0.0';
+const appVersion = '1.2.0';
 
 // 缓存管理
 const cacheClearing = ref(false);

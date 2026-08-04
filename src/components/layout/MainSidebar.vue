@@ -77,7 +77,7 @@
 
     <div v-if="!isCollapsed" class="sidebar-footer">
       <div class="app-info">
-        <span class="version-text">酷安桌面版 v1.0.0</span>
+        <span class="version-text">酷安桌面版 v1.2.0</span>
         <button class="check-update-btn">检查更新</button>
       </div>
     </div>
