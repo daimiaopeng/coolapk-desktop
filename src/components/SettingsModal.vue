@@ -329,6 +329,8 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { isNewerVersion } from '../utils/updateChecker';
+import { APP_VERSION } from '../constants/version';
 import { settings } from '../utils/settingsStore';
 import { CoolapkTauriAPI } from '../api/coolapk';
 
@@ -343,7 +345,7 @@ const emit = defineEmits<{
 
 const currentTab = ref<'appearance' | 'performance' | 'account' | 'about'>('appearance');
 const zoomOptions = [90, 100, 110, 125, 150];
-const appVersion = '1.2.0';
+const appVersion = APP_VERSION;
 
 // 缓存管理
 const cacheClearing = ref(false);
@@ -467,7 +469,7 @@ async function checkAppUpdate() {
     const tagName = (data.tag_name || '').replace(/^v/i, '');
     
     // 简单的版本号比较 logic
-    const isNew = tagName && tagName !== appVersion;
+    const isNew = tagName && isNewerVersion(tagName, appVersion);
 
     updateInfo.value = {
       hasNew: isNew,

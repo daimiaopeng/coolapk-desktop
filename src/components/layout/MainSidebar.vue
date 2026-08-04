@@ -77,8 +77,8 @@
 
     <div v-if="!isCollapsed" class="sidebar-footer">
       <div class="app-info">
-        <span class="version-text">酷安桌面版 v1.2.0</span>
-        <button class="check-update-btn">检查更新</button>
+        <span class="version-text">酷安桌面版 v{{ appVersion }}</span>
+        <button class="check-update-btn" @click="requestUpdateCheck">检查更新</button>
       </div>
     </div>
   </aside>
@@ -88,9 +88,15 @@
 import { computed } from 'vue';
 import { useSettingsStore } from '../../stores/settings';
 import { useAuthStore } from '../../stores/auth';
+import { APP_VERSION } from '../../constants/version';
 
 const settingsStore = useSettingsStore();
 const authStore = useAuthStore();
+const appVersion = APP_VERSION;
+
+function requestUpdateCheck() {
+  window.dispatchEvent(new Event('check-for-update'));
+}
 
 const isCollapsed = computed(() => settingsStore.settings.sidebarCollapsed);
 
