@@ -1,0 +1,60 @@
+/* src/styles/utilities.css - 通用工具类 */
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-pill);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 酷安表情行内显示规则：强行约束尺寸为 22px x 22px，防止变成巨大图片 */
+img.coolapk-emoji,
+.coolapk-emoji {
+  width: 22px !important;
+  height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  display: inline-block !important;
+  vertical-align: -4px !important;
+  margin: 0 2px !important;
+  object-fit: contain !important;
+}
+
+/* 富文本可点击的外部链接按钮 */
+.cool-external-link {
+  color: var(--brand-primary, #10b768) !important;
+  font-weight: 600 !important;
+  text-decoration: none !important;
+  display: inline-flex !important;
+}
+

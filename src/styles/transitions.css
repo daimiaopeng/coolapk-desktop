@@ -1,0 +1,41 @@
+/* src/styles/transitions.css - 动画与过渡类 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--duration-normal) var(--ease-default);
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-drawer-enter-active,
+.slide-drawer-leave-active {
+  transition: transform var(--duration-slow) var(--ease-default), opacity var(--duration-slow) var(--ease-default);
+}
+
+.slide-drawer-enter-from,
+.slide-drawer-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.scale-dialog-enter-active,
+.scale-dialog-leave-active {
+  transition: transform var(--duration-normal) var(--ease-default), opacity var(--duration-normal) var(--ease-default);
+}
+
+.scale-dialog-enter-from,
+.scale-dialog-leave-to {
+  transform: scale(0.95);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

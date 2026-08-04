@@ -1,0 +1,55 @@
+/* src/styles/tokens.css - 基础 Token 定义 */
+:root {
+  /* 基础字号规范 */
+  --font-family-base: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --font-size-title-lg: 24px;
+  --font-size-title-md: 18px;
+  --font-size-title-sm: 16px;
+  --font-size-body: 15px;
+  --font-size-sub: 14px;
+  --font-size-caption: 12px;
+  --font-size-btn: 14px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 550;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 650;
+
+  --line-height-body: 1.65;
+  --line-height-sub: 1.55;
+  --line-height-caption: 1.45;
+
+  /* 基础圆角规范 */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-control: 8px;
+  --radius-card: 10px;
+  --radius-dialog: 14px;
+  --radius-large: 18px;
+  --radius-pill: 9999px;
+
+  /* 基础间距系统 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* 布局尺寸定义 */
+  --sidebar-width: 175px;
+  --sidebar-collapsed-width: 64px;
+  --feed-max-width: 720px;
+  --right-sidebar-width: 270px;
+  --topbar-height: 72px;
+  --drawer-width: 520px;
+  --header-height: 56px;
+
+  /* 动效时长 */
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --duration-slow: 220ms;
+  --ease-default: cubic-bezier(0.16, 1, 0.3, 1);
+}

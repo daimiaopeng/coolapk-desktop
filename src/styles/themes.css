@@ -1,0 +1,65 @@
+/* src/styles/themes.css - 浅色/深色主题定义 */
+:root {
+  --brand-primary: #10b768;
+  --brand-hover: #079e58;
+  --brand-active: #05844b;
+  --brand-soft: #eaf8f0;
+  --brand-soft-hover: #ddf4e7;
+
+  --background: #f5f7f8;
+  --background-secondary: #f0f2f4;
+
+  --surface: #ffffff;
+  --surface-hover: #f7f9fa;
+  --surface-active: #eef2f3;
+  --surface-elevated: #ffffff;
+
+  --text-primary: #17191c;
+  --text-secondary: #62666d;
+  --text-tertiary: #969ba3;
+  --text-disabled: #b7bbc1;
+  --text-inverse: #ffffff;
+
+  --border: #e3e6e8;
+  --border-light: #eceeef;
+  --divider: #eceef0;
+
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.12);
+  --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-drawer: -8px 0 24px rgba(0, 0, 0, 0.1);
+
+  --success: #10b768;
+  --warning: #f59f00;
+  --danger: #f04444;
+  --info: #2f80ed;
+}
+
+[data-theme="dark"] {
+  --brand-primary: #22c875;
+  --brand-hover: #32d984;
+  --brand-active: #16af65;
+  --brand-soft: #173a29;
+  --brand-soft-hover: #1d4933;
+
+  --background: #0f1113;
+  --background-secondary: #151719;
+
+  --surface: #191b1e;
+  --surface-hover: #202327;
+  --surface-active: #272a2f;
+  --surface-elevated: #202327;
+
+  --text-primary: #f4f5f6;
+  --text-secondary: #b2b6bc;
+  --text-tertiary: #747a82;
+  --text-disabled: #545960;
+  --text-inverse: #ffffff;
+
+  --border: #2a2d31;
+  --border-light: #23262a;
+  --divider: #25282c;
+
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-drawer: -8px 0 24px rgba(0, 0, 0, 0.4);
+}

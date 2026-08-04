@@ -17,7 +17,14 @@ async function safeFetch(pythonEndpoint: string, tauriCmd: string, tauriArgs: an
 
   // 2. 如果无 Tauri 环境，连通 Python 后端
   try {
-    const resp = await fetch(`http://127.0.0.1:8080/api${pythonEndpoint}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    
+    const resp = await fetch(`http://127.0.0.1:8080/api${pythonEndpoint}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+
     const body = await resp.text();
     if (!resp.ok) {
       throw new Error(`Python API returned HTTP ${resp.status}: ${body.slice(0, 200)}`);
@@ -88,6 +95,10 @@ export class CoolapkTauriAPI {
   // 8. 手机楼层评论 (Rust 原生原生打通)
   static async getFeedReplies(feedId: string, page: number = 1) {
     return await safeFetch(`/feed/replies?id=${feedId}&page=${page}`, 'get_feed_replies', { feedId, page });
+  }
+
+  static async getSubReplies(feedId: string, replyId: string, page: number = 1) {
+    return await safeFetch(`/feed/replies?id=${feedId}&rid=${replyId}&page=${page}`, 'get_sub_replies', { feedId, replyId, page });
   }
 
   static async getFeedDetail(feedId: string) {
@@ -172,7 +183,35 @@ export class CoolapkTauriAPI {
     return await invoke<string>('save_cookie_securely', { cookieStr });
   }
 
+  static async checkLoginStatus() {
+    return await invokeNative('check_login_status');
+  }
+
+  static async loginByAccount(account: string, password: string) {
+    return await invokeNative('login_by_account', { account, password });
+  }
+
+  static async sendSmsVcode(mobile: string) {
+    return await invokeNative('send_sms_vcode', { mobile });
+  }
+
+  static async loginByMobile(mobile: string, vcode: string) {
+    return await invokeNative('login_by_mobile', { mobile, vcode });
+  }
+
+  static async clearCookie() {
+    return await invoke<string>('clear_user_cookie');
+  }
+
   static async getImageDataUrl(url: string) {
     return await invoke<string>('get_image_data_url', { url });
+  }
+
+  static async openUrl(url: string) {
+    try {
+      await invoke('open_url', { url });
+    } catch {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
   }
 }
