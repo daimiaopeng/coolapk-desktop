@@ -13,13 +13,15 @@
     <SearchCommand />
     <LoginModal />
 
-    <AppDialog :is-open="Boolean(updateInfo)" title="发现新版本" :width="460" @close="updateInfo = null">
+    <AppDialog :is-open="Boolean(updateInfo)" :title="updateInfo?.hasNew ? '发现新版本' : '检查更新'" :width="460" @close="updateInfo = null">
       <div v-if="updateInfo" class="startup-update">
-        <p class="startup-update-version">酷安桌面版 {{ updateInfo.latestVersion }}</p>
+        <p class="startup-update-version">
+          {{ updateInfo.hasNew ? `酷安桌面版 ${updateInfo.latestVersion}` : '当前已是最新版本' }}
+        </p>
         <p class="startup-update-notes">{{ updateInfo.releaseNotes }}</p>
         <div class="startup-update-actions">
           <button class="startup-update-later" @click="updateInfo = null">稍后提醒</button>
-          <button class="startup-update-button" @click="openUpdate">前往下载更新</button>
+          <button v-if="updateInfo.hasNew" class="startup-update-button" @click="openUpdate">前往下载更新</button>
         </div>
       </div>
     </AppDialog>
@@ -27,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import AppShell from './components/layout/AppShell.vue';
 import CommentDrawer from './components/comments/CommentDrawer.vue';
 import PublishDialog from './components/overlays/PublishDialog.vue';
@@ -42,12 +44,17 @@ import { CoolapkTauriAPI } from './api/coolapk';
 const authStore = useAuthStore();
 const updateInfo = ref<UpdateInfo | null>(null);
 
-async function checkForUpdate() {
+async function checkForUpdate(manual = false) {
   try {
     const result = await checkLatestRelease();
-    if (result.hasNew) updateInfo.value = result;
+    if (manual || result.hasNew) updateInfo.value = result;
   } catch {
-    // 启动时检测失败不打断主界面，用户仍可在设置页手动重试。
+    if (!manual) return;
+    updateInfo.value = {
+      hasNew: false,
+      releaseNotes: '检查更新失败，请检查网络连接后重试。',
+      downloadUrl: 'https://github.com/daimiaopeng/coolapk-desktop/releases',
+    };
   }
 }
 
@@ -60,10 +67,8 @@ function openUpdate() {
 onMounted(() => {
   authStore.initAuth();
   void checkForUpdate();
-  window.addEventListener('check-for-update', checkForUpdate);
+  window.addEventListener('check-for-update', () => void checkForUpdate(true));
 });
-
-onUnmounted(() => window.removeEventListener('check-for-update', checkForUpdate));
 </script>
 
 <style>
