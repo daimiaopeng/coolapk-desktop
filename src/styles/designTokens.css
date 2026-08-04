@@ -1,0 +1,140 @@
+/* 酷安桌面版设计系统 Tokens (Design Tokens) */
+:root {
+  /* 品牌色彩 (Brand Colors) */
+  --brand-green: #10b966;
+  --brand-green-hover: #0ea05b;
+  --brand-green-light: rgba(16, 185, 102, 0.08);
+  --brand-green-subtle: rgba(16, 185, 102, 0.04);
+  --brand-green-border: rgba(16, 185, 102, 0.25);
+
+  /* 背景体系 (Background System) */
+  --bg-app: #f5f7f9;
+  --bg-card: #ffffff;
+  --bg-sidebar: #ffffff;
+  --bg-header: #ffffff;
+  --bg-hover: #f1f5f9;
+  --bg-active: #e2e8f0;
+  --bg-subtle: #f8fafc;
+
+  /* 文字色彩 (Text Colors) */
+  --text-main: #172033;
+  --text-sub: #667085;
+  --text-muted: #98a2b3;
+  --text-white: #ffffff;
+
+  /* 边框与分割线 (Border & Dividers) */
+  --border-color: #e4e9ef;
+  --divider-color: #edf0f3;
+  --border-focus: rgba(16, 185, 102, 0.5);
+
+  /* 状态反馈色彩 (Status Colors) */
+  --color-error: #e5484d;
+  --color-error-light: #fff5f5;
+  --color-warning: #f5a524;
+  --color-warning-light: #fffdf0;
+  --color-success: #10b966;
+  --color-success-light: #f0fdf4;
+
+  /* 圆角规范 (Border Radius) */
+  --radius-xl: 12px;     /* 主卡片容器 */
+  --radius-lg: 10px;     /* 普通卡片 */
+  --radius-md: 8px;      /* 按钮、控件 */
+  --radius-sm: 6px;      /* 标签、Badge */
+  --radius-full: 999px;  /* 胶囊、搜索框 */
+
+  /* 阴影规范 (Shadows) */
+  --shadow-flat: 0 1px 3px rgba(0, 0, 0, 0.03);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-hover: 0 6px 16px rgba(0, 0, 0, 0.06);
+  --shadow-modal: 0 16px 40px rgba(0, 0, 0, 0.15);
+
+  /* 动画规范 (Transitions) */
+  --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* 字体族 (Font Family) */
+  --font-sans: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: Consolas, Monaco, "Courier New", monospace;
+}
+
+/* 全局基准重置 */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 酷安表情行内显示规则：强行约束尺寸为 22px x 22px，防止变成巨大图片 */
+img.coolapk-emoji,
+.coolapk-emoji {
+  width: 22px !important;
+  height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  display: inline-block !important;
+  vertical-align: -4px !important;
+  margin: 0 2px !important;
+  object-fit: contain !important;
+}
+
+/* 富文本可点击的外部链接按钮 */
+.cool-external-link {
+  color: var(--brand-green, #10b966) !important;
+  font-weight: 600 !important;
+  text-decoration: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  padding: 1px 7px !important;
+  background: var(--brand-green-light) !important;
+  border-radius: var(--radius-sm, 4px) !important;
+  margin: 0 3px !important;
+  cursor: pointer !important;
+  transition: var(--transition-fast) !important;
+}
+
+.cool-external-link:hover {
+  background: rgba(16, 185, 102, 0.18) !important;
+  text-decoration: underline !important;
+}
+
+.cool-tag {
+  color: var(--brand-green, #10b966);
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 4px;
+}
+
+.cool-tag:hover {
+  text-decoration: underline;
+}
+
+.cool-uname {
+  color: var(--text-main, #172033);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cool-uname:hover {
+  color: var(--brand-green, #10b966);
+}
+
+/* 缩减动画支持 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

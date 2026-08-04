@@ -60,6 +60,16 @@ pub async fn get_feed_replies(
 }
 
 #[tauri::command]
+pub async fn get_sub_replies(
+    state: State<'_, AppState>,
+    feed_id: String,
+    reply_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_sub_replies(&feed_id, &reply_id, page).await
+}
+
+#[tauri::command]
 pub async fn get_hot_replies(
     state: State<'_, AppState>,
     feed_id: String,
@@ -213,6 +223,69 @@ pub async fn save_cookie_securely(
 }
 
 #[tauri::command]
+pub async fn check_login_status(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.check_login_status().await
+}
+
+#[tauri::command]
+pub fn clear_user_cookie(state: State<'_, AppState>) -> Result<String, String> {
+    state.client.clear_user_cookie()?;
+    Ok("登录状态已清除".to_string())
+}
+
+#[tauri::command]
+pub async fn login_by_account(
+    state: State<'_, AppState>,
+    account: String,
+    password: String,
+) -> Result<Value, String> {
+    state.client.login_by_account(&account, &password).await
+}
+
+#[tauri::command]
+pub async fn send_sms_vcode(
+    state: State<'_, AppState>,
+    mobile: String,
+) -> Result<Value, String> {
+    state.client.send_sms_vcode(&mobile).await
+}
+
+#[tauri::command]
+pub async fn login_by_mobile(
+    state: State<'_, AppState>,
+    mobile: String,
+    vcode: String,
+) -> Result<Value, String> {
+    state.client.login_by_mobile(&mobile, &vcode).await
+}
+
+#[tauri::command]
 pub async fn get_image_data_url(state: State<'_, AppState>, url: String) -> Result<String, String> {
     state.client.get_image_data_url(&url).await
+}
+
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&url)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }

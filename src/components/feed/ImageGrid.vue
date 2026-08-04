@@ -1,0 +1,136 @@
+<template>
+  <div v-if="pics && pics.length > 0" class="image-grid" :class="gridClass">
+    <div
+      v-for="(imgUrl, idx) in pics"
+      :key="idx"
+      class="img-item-wrapper"
+      @click.stop="$emit('open-image', imgUrl)"
+    >
+      <img
+        :src="normalizeImg(imgUrl, 'feed')"
+        alt="动态图片"
+        class="feed-img"
+        loading="lazy"
+        @error="handleImgError"
+      >
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue';
+
+const props = defineProps<{
+  pics: string[];
+  normalizeImg: (url: string, type: 'avatar' | 'feed') => string;
+}>();
+
+defineEmits<{
+  (e: 'open-image', url: string): void;
+}>();
+
+const gridClass = computed(() => {
+  const count = props.pics.length;
+  if (count === 1) return 'grid-single';
+  if (count === 2) return 'grid-2';
+  if (count === 3) return 'grid-3';
+  if (count === 4) return 'grid-4';
+  return 'grid-multi'; // 5 ~ 9 张
+});
+
+function handleImgError(e: Event) {
+  const img = e.currentTarget as HTMLImageElement;
+  img.src = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#f1f5f9"/><text x="160" y="95" text-anchor="middle" font-size="13" fill="#94a3b8">图片加载失败</text></svg>')}`;
+}
+</script>
+
+<style scoped>
+.image-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.img-item-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-color, #e4e9ef);
+  background: var(--bg-app, #f5f7f9);
+  cursor: zoom-in;
+}
+
+.feed-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  transition: transform 0.25s ease;
+}
+
+.img-item-wrapper:hover .feed-img {
+  transform: scale(1.03);
+}
+
+/* 1 张图：保持高尚美感，不压缩为小方块 */
+.grid-single {
+  grid-template-columns: 1fr;
+  max-width: 520px;
+}
+
+.grid-single .img-item-wrapper {
+  max-height: 420px;
+}
+
+.grid-single .feed-img {
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: cover;
+}
+
+/* 2 张图 */
+.grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+  max-width: 520px;
+}
+.grid-2 .img-item-wrapper {
+  aspect-ratio: 16 / 10;
+}
+.grid-2 .feed-img {
+  object-fit: cover;
+}
+
+/* 3 张图 */
+.grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.grid-3 .img-item-wrapper {
+  aspect-ratio: 1 / 1;
+}
+.grid-3 .feed-img {
+  object-fit: cover;
+}
+
+/* 4 张图 (2x2) */
+.grid-4 {
+  grid-template-columns: repeat(2, 1fr);
+  max-width: 440px;
+}
+.grid-4 .img-item-wrapper {
+  aspect-ratio: 1 / 1;
+}
+.grid-4 .feed-img {
+  object-fit: cover;
+}
+
+/* 5 ~ 9 张图 (3列) */
+.grid-multi {
+  grid-template-columns: repeat(3, 1fr);
+}
+.grid-multi .img-item-wrapper {
+  aspect-ratio: 1 / 1;
+}
+.grid-multi .feed-img {
+  object-fit: cover;
+}
+</style>

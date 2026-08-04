@@ -1,0 +1,97 @@
+<template>
+  <div class="feed-content-wrapper">
+    <h3 v-if="title" class="feed-title">{{ title }}</h3>
+    <div
+      :class="['feed-body', { 'is-collapsed': isLongText && !isExpanded }]"
+      v-html="formattedMessage"
+    ></div>
+    <button v-if="isLongText && !isExpanded" class="expand-btn" @click="isExpanded = true">
+      展开全文
+    </button>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue';
+import { renderCoolapkEmoji } from '../../utils/coolapkEmoji';
+
+const props = defineProps<{
+  title?: string;
+  message?: string;
+}>();
+
+const isExpanded = ref(false);
+
+const isLongText = computed(() => {
+  if (!props.message) return false;
+  return props.message.length > 300 || props.message.split('\n').length > 8;
+});
+
+const formattedMessage = computed(() => {
+  if (!props.message) return '';
+  // 简易格式化：换行转换为 <br/>，并渲染表情
+  let html = props.message.replace(/\n/g, '<br/>');
+  html = renderCoolapkEmoji(html);
+  return html;
+});
+</script>
+
+<style scoped>
+.feed-content-wrapper {
+  margin-bottom: var(--space-3);
+}
+
+.feed-title {
+  font-size: var(--font-size-title-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
+  line-height: 1.4;
+}
+
+.feed-body {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  color: var(--text-primary);
+  word-break: break-word;
+  position: relative;
+}
+
+.feed-body :deep(div),
+.feed-body :deep(p) {
+  margin: 6px 0;
+  clear: both;
+}
+
+.feed-body :deep(img):not(.coolapk-emoji) {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  margin: 8px 0;
+  display: block;
+}
+
+.feed-body :deep(a) {
+  color: var(--brand-primary);
+  font-weight: 550;
+}
+
+.feed-body.is-collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.expand-btn {
+  color: var(--brand-primary);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
+  margin-top: var(--space-2);
+  padding: 0;
+  cursor: pointer;
+}
+
+.expand-btn:hover {
+  text-decoration: underline;
+}
+</style>
