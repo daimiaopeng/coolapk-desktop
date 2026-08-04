@@ -12,7 +12,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-${{ github.workflow }}-${{ github.ref }}
+  # main 推送和同一提交的 v* 标签共用并发组，版本构建启动时会取消普通提交构建
+  group: build-${{ github.workflow }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
