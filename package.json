@@ -12,6 +12,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/set-version.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",

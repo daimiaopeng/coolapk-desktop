@@ -85,11 +85,13 @@ npm run tauri build -- --bundles app,dmg
 
 推送以 `v` 开头的版本标签后，GitHub Actions 会自动构建全部平台，并创建公开的 GitHub Release，上传上述安装包。普通的 `main` 分支推送和 Pull Request 只执行构建检查，不会发布版本。
 
-发布前请先更新 `src-tauri/tauri.conf.json` 中的版本号，再创建并推送对应标签，例如：
+发布前只需更新 `src/constants/version.ts`，然后运行版本同步命令并创建对应标签：
 
 ```bash
-git tag v1.2
-git push origin v1.2
+npm run version:set -- 1.2.3
+npm run build
+git tag v1.2.3
+git push origin main v1.2.3
 ```
 
 ## 常用检查
