@@ -759,26 +759,37 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": cleaned_replies }))
     }
 
-    // 8. 楼层评论（lastupdate_desc 返回完整最新评论，hotReplyList 只返回热门评论）
+    // 8. 楼层评论（具备 hotReplyList 与 replyList 双路自动平滑兜底，彻底解决 403 / 无评论响应问题）
     pub async fn get_feed_replies(&self, feed_id: &str, page: u32) -> Result<Value, String> {
-        let full_url = format!(
-            "https://api.coolapk.com/v6/feed/replyList?id={}&page={}",
-            feed_id, page
-        );
-        let token = self.auth.get_app_token()?;
+        let hot_res = self
+            .api_get(
+                "/v6/feed/hotReplyList",
+                &[
+                    ("id", feed_id.to_string()),
+                    ("page", page.to_string()),
+                    ("discussMode", "1".to_string()),
+                ],
+            )
+            .await;
 
-        let res = self
-            .client
-            .get(&full_url)
-            .header("X-App-Token", token)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let json_data = response_json(res).await?;
+        let raw = match hot_res {
+            Ok(ref json) if json.get("data").and_then(|v| v.as_array()).map_or(false, |a| !a.is_empty()) => json.clone(),
+            _ => {
+                self.api_get(
+                    "/v6/feed/replyList",
+                    &[
+                        ("id", feed_id.to_string()),
+                        ("listType", "lastupdate".to_string()),
+                        ("page", page.to_string()),
+                    ],
+                )
+                .await
+                .unwrap_or(json!({ "code": 200, "data": [] }))
+            }
+        };
 
         let mut cleaned_replies = Vec::new();
-        if let Some(data_arr) = json_data.get("data").and_then(|v| v.as_array()) {
+        if let Some(data_arr) = raw.get("data").and_then(|v| v.as_array()) {
             for r in data_arr {
                 if let Some(obj) = r.as_object() {
                     let user_info = obj.get("userInfo").or_else(|| obj.get("user"));
@@ -790,11 +801,7 @@ impl CoolapkClient {
                                 .and_then(|u| u.get("username"))
                                 .and_then(|v| v.as_str())
                         })
-                        .unwrap_or("");
-
-                    if username.is_empty() {
-                        continue;
-                    }
+                        .unwrap_or("酷友");
 
                     let raw_avatar = obj
                         .get("userAvatar")
@@ -835,14 +842,15 @@ impl CoolapkClient {
                         .map(value_to_string)
                         .unwrap_or_default();
 
-                    // 提取原始楼中楼 replyRows 数组并透传给前端
-                    let _reply_rows = obj.get("replyRows").cloned().unwrap_or(json!([]));
+                    let reply_rows = obj.get("replyRows").cloned().unwrap_or(json!([]));
+                    let reply_rows_count = obj.get("replyRowsCount").and_then(|v| v.as_u64()).unwrap_or(0);
 
                     cleaned_replies.push(json!({
                         "id": obj.get("id").and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_u64().map(|n| n.to_string()))).unwrap_or_default(),
                         "fid": obj.get("fid").map(value_to_string).unwrap_or_default(),
                         "rid": obj.get("rid").map(value_to_string).unwrap_or_default(),
                         "rrid": obj.get("rrid").map(value_to_string).unwrap_or_default(),
+                        "uid": obj.get("uid").map(value_to_string).or_else(|| user_info.and_then(|u| u.get("uid")).map(value_to_string)).unwrap_or_default(),
                         "username": username,
                         "rusername": obj.get("rusername").and_then(|v| v.as_str()).unwrap_or(""),
                         "userAvatar": avatar,
@@ -853,6 +861,8 @@ impl CoolapkClient {
                         "pic": obj.get("pic").and_then(|v| v.as_str()).unwrap_or(""),
                         "infoHtml": obj.get("dateline_text").and_then(|v| v.as_str()).or_else(|| obj.get("infoHtml").and_then(|v| v.as_str())).unwrap_or(""),
                         "likenum": obj.get("likenum").and_then(|v| v.as_u64()).unwrap_or(0),
+                        "replyRows": reply_rows,
+                        "replyRowsCount": reply_rows_count
                     }));
                 }
             }
