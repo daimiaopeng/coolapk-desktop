@@ -23,8 +23,11 @@ import AppearanceSettingsPage from '../pages/settings/AppearanceSettingsPage.vue
 import ShortcutSettingsPage from '../pages/settings/ShortcutSettingsPage.vue';
 import AboutSettingsPage from '../pages/settings/AboutSettingsPage.vue';
 
+import AuthCallbackView from '../pages/AuthCallbackView.vue';
+
 const routes = [
   { path: '/', name: 'Home', component: HomePage },
+  { path: '/auth_callback', name: 'AuthCallback', component: AuthCallbackView },
   { path: '/feeds', name: 'Feeds', component: HomePage },
   { path: '/discover', name: 'Discover', component: DiscoverPage },
   { path: '/apps', name: 'Apps', component: AppsPage },

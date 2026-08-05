@@ -34,11 +34,22 @@ const results = ref<any[]>([]);
 async function fetchSearch() {
   if (!queryStr.value) return;
   loading.value = true;
+  results.value = [];
   try {
-    const res = await CoolapkTauriAPI.searchAll(queryStr.value, 1);
-    if (res && res.data) {
-      results.value = Array.isArray(res.data) ? res.data : [];
+    let res = await CoolapkTauriAPI.searchFeeds(queryStr.value, 1);
+    let list = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    
+    if (list.length === 0) {
+      res = await CoolapkTauriAPI.searchAll(queryStr.value, 1);
+      list = (res && res.data && Array.isArray(res.data)) ? res.data : [];
     }
+
+    results.value = list.filter((item: any) => {
+      if (!item || !item.id) return false;
+      const hasContent = item.message || item.description || item.title || item.pic || (item.pics && item.pics.length > 0);
+      const isHeaderCard = ['数码', '用户', '话题', '应用', '游戏', '酷图'].includes(item.title) && !item.message;
+      return hasContent && !isHeaderCard;
+    });
   } catch (err) {
     console.error('Search error', err);
   } finally {

@@ -1,143 +1,264 @@
 <template>
-  <div class="page-container custom-scrollbar">
-    <!-- 顶栏返回工具条 -->
-    <div class="detail-nav-bar">
-      <button class="back-btn" @click="handleGoBack">
-        <i class="fas fa-arrow-left"></i>
-        <span>返回</span>
-      </button>
-      <span v-if="profile?.username" class="nav-app-name">{{ profile.username }} 的个人空间</span>
+  <div class="user-page-wrapper custom-scrollbar" @scroll="handleUserPageScroll">
+    <!-- 全屏加载阻断 -->
+    <div v-if="loadingProfile && !profile" class="loading-wrapper-full">
+      <LoadingState text="正在获取酷友个人主页..." />
     </div>
 
-    <!-- 调试信息提示 -->
-    <div v-if="!profile" class="profile-debug-alert">
-      <i class="fas fa-spinner fa-spin"></i> 正在加载 UID 为 {{ effectiveUid || '未识别' }} 的酷安空间信息...
+    <!-- 用户资料不存在防护 -->
+    <div v-else-if="!profile" class="empty-wrapper-full">
+      <EmptyState title="未找到酷友空间" description="该用户不存在或个人主页暂不可访问" />
     </div>
 
-    <!-- 用户个人头卡 -->
-    <div v-if="profile" class="user-banner-card" style="display: flex !important; visibility: visible !important; min-height: 120px;">
-      <!-- 酷安空间背景封面 -->
-      <div class="user-cover-wrapper">
-        <AppImage v-if="profile.cover" :src="profile.cover" image-class="user-cover-img" />
-        <div class="user-cover-placeholder"></div>
-      </div>
+    <!-- 正常主卡片与全套 Tab 页面 -->
+    <template v-else>
+      <div class="app-style-user-card">
+        <!-- 极高大图背景 + 沉浸式透明遮罩 -->
+        <div class="banner-cover-area">
+          <AppImage v-if="profile.cover" :src="profile.cover" image-class="banner-cover-img" />
+          <div class="banner-cover-placeholder" v-else></div>
+          <div class="banner-cover-gradient"></div>
 
-      <div class="user-banner-body">
-        <div class="user-banner-header">
-          <AppAvatar 
-            :src="profile.userAvatar || getAvatarUrlByUid(profile.uid)" 
-            :plugin-url="profile.avatar_plugin_url"
-            size="xl" 
-            class="user-avatar-overlap" 
-          />
-          <div class="user-info-main">
-            <div class="user-name-line">
-              <h2 class="username">{{ profile.username }}</h2>
-              <span class="user-level" v-if="profile.level">Lv.{{ profile.level }}</span>
-              <span v-if="profile.isDeveloper || profile.verify_title" class="verify-badge">
-                <i class="fas fa-check-circle"></i> {{ profile.verify_title || '酷安开发者' }}
-              </span>
+          <!-- 悬浮顶部返回与交互 Bar -->
+          <div class="banner-top-bar">
+            <button class="icon-circle-btn" @click="handleGoBack" title="返回">
+              <i class="fas fa-arrow-left"></i>
+            </button>
+            <div class="top-bar-right">
+              <button class="icon-circle-btn" title="搜索">
+                <i class="fas fa-search"></i>
+              </button>
+              <button class="icon-circle-btn" title="更多设置">
+                <i class="fas fa-ellipsis-v"></i>
+              </button>
             </div>
-
-            <!-- 升级经验值进度条 -->
-            <div class="level-progress-bar-wrapper" v-if="profile.next_level_percentage">
-              <div class="level-progress-fill" :style="{ width: `${profile.next_level_percentage}%` }"></div>
-              <span class="level-progress-text">EXP {{ profile.experience || 0 }} / {{ profile.next_level_experience || 0 }}</span>
-            </div>
-
-            <div class="user-meta-row">
-              <span class="user-id">UID: {{ profile.uid }}</span>
-              <span class="user-reg-date" v-if="getRegYears(profile.regdate)">
-                <i class="far fa-calendar-alt"></i> {{ getRegYears(profile.regdate) }}
-              </span>
-              <span v-if="profile.logintime" class="user-last-online">
-                <i class="far fa-clock"></i> 活跃于 {{ formatLoginTime(profile.logintime) }}
-              </span>
-            </div>
-
-            <p class="user-bio">{{ profile.bio || '这个酷友很懒，什么也没留下' }}</p>
           </div>
-          
-          <div class="user-actions">
-            <AppButton variant="secondary" icon="fas fa-envelope" @click="sendMessage">发送私信</AppButton>
-            <AppButton 
-              v-if="!isSelfUser"
-              :variant="profile.isFollow ? 'secondary' : 'primary'" 
-              :icon="profile.isFollow ? 'fas fa-check' : 'fas fa-plus'" 
-              :loading="followLoading"
-              @click="toggleFollow"
+
+          <!-- 沉浸式大图上方的 Hero 全量内容区 -->
+          <div class="banner-hero-content">
+            <!-- 1. 头像与行动按钮组 -->
+            <div class="banner-avatar-row">
+              <AppAvatar 
+                :src="profile.userAvatar || getAvatarUrlByUid(profile.uid)" 
+                :plugin-url="profile.avatar_plugin_url"
+                size="xl" 
+                class="app-hero-avatar" 
+              />
+              <div class="banner-actions">
+                <template v-if="isSelfUser">
+                  <button class="app-btn btn-secondary-glass">
+                    <i class="fas fa-edit"></i> 编辑资料
+                  </button>
+                  <button class="app-btn btn-icon-glass" title="二维码">
+                    <i class="fas fa-qrcode"></i>
+                  </button>
+                </template>
+                <template v-else>
+                  <button 
+                    :class="['app-btn', profile.isFollow ? 'btn-following' : 'btn-follow-primary']"
+                    :disabled="followLoading"
+                    @click="toggleFollow"
+                  >
+                    <i :class="profile.isFollow ? 'fas fa-check' : 'fas fa-plus'"></i>
+                    {{ profile.isFollow ? (profile.isSpecialFollow ? '特别关注' : '已关注') : '关注' }}
+                  </button>
+                  <button class="app-btn btn-icon-glass" @click="sendMessage" title="私信">
+                    <i class="far fa-envelope"></i>
+                  </button>
+                </template>
+              </div>
+            </div>
+
+            <!-- 2. 用户信息包（全白字半透明沉浸展示） -->
+            <div class="user-details-area-immersive">
+              <!-- 名字与等级 -->
+              <div class="username-title-row">
+                <h1 class="app-username">{{ profile.username }}</h1>
+                <span class="app-user-level" v-if="profile.level">Lv.{{ profile.level }}</span>
+                <span v-if="profile.isDeveloper || profile.verify_title" class="app-verify-tag">
+                  <i class="fas fa-check-circle"></i> {{ profile.verify_title || '酷安认证开发者' }}
+                </span>
+              </div>
+
+              <!-- 个性签名 -->
+              <p class="app-user-bio">
+                <i class="fas fa-pen bio-icon"></i>
+                {{ profile.bio || '点击设置我的签名' }}
+              </p>
+
+              <!-- 获赞·关注·粉丝 高对比度白字行 -->
+              <div class="app-stats-row">
+                <div class="stat-cell">
+                  <span class="num">{{ getLikeCount(profile) }}</span>
+                  <span class="label">获赞</span>
+                </div>
+                <div class="stat-cell">
+                  <span class="num">{{ getFollowCount(profile) }}</span>
+                  <span class="label">关注</span>
+                </div>
+                <div class="stat-cell">
+                  <span class="num">{{ getFansCount(profile) }}</span>
+                  <span class="label">粉丝</span>
+                </div>
+              </div>
+
+              <!-- 活跃状态与属性 Chip 标签组 -->
+              <div class="app-chips-row">
+                <span class="chip-item chip-online">
+                  {{ formatLoginTime(profile.logintime) }}活跃
+                </span>
+                <span class="chip-item chip-glass" v-if="getGenderAgeTag(profile)">
+                  {{ getGenderAgeTag(profile) }}
+                </span>
+                <span class="chip-item chip-glass" v-if="getAstroTag(profile)">
+                  {{ getAstroTag(profile) }}
+                </span>
+              </div>
+
+              <!-- 他的装备 / 我的装备 高斯模糊毛玻璃通栏 Card -->
+              <div class="equipment-entry-bar-glass" @click="activeTab = 'home'">
+                <div class="equipment-left">
+                  <i class="fas fa-laptop-code equipment-icon"></i>
+                  <span class="equipment-title">{{ isSelfUser ? '我的装备' : '他的装备' }}</span>
+                </div>
+                <div class="equipment-right">
+                  <span class="equipment-count">{{ profile.product_owner_count || 0 }}个装备</span>
+                  <i class="fas fa-chevron-right arrow-icon"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- App 官方全系 Tab 栏 -->
+        <div class="app-tab-navigation">
+          <div class="tab-scroll-container custom-scrollbar-hidden">
+            <button 
+              v-for="tab in tabs" 
+              :key="tab.key"
+              :class="['app-tab-item', { 'active': activeTab === tab.key }]"
+              @click="activeTab = tab.key"
             >
-              {{ profile.isFollow ? (profile.isSpecialFollow ? '特别关注' : '已关注') : '关注' }}
-            </AppButton>
-          </div>
-        </div>
-        
-        <!-- 全量统计指标卡片 -->
-        <div class="user-stats">
-          <div class="stat-item">
-            <span class="stat-value">{{ getFollowCount(profile) }}</span>
-            <span class="stat-label">关注</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value">{{ getFansCount(profile) }}</span>
-            <span class="stat-label">粉丝</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value">{{ getFeedCount(profile) }}</span>
-            <span class="stat-label">动态</span>
-          </div>
-          <div class="stat-item" v-if="getLikeCount(profile) > 0">
-            <span class="stat-value">{{ getLikeCount(profile) }}</span>
-            <span class="stat-label">获赞</span>
-          </div>
-          <div class="stat-item" v-if="profile.replyNum">
-            <span class="stat-value">{{ profile.replyNum }}</span>
-            <span class="stat-label">互动</span>
-          </div>
-          <div class="stat-item" v-if="profile.product_owner_count">
-            <span class="stat-value">{{ profile.product_owner_count }}</span>
-            <span class="stat-label">设备</span>
-          </div>
-          <div class="stat-item" v-if="profile.apkRatingNum">
-            <span class="stat-value">{{ profile.apkRatingNum }}</span>
-            <span class="stat-label">点评</span>
-          </div>
-          <div class="stat-item" v-if="profile.albumNum">
-            <span class="stat-value">{{ profile.albumNum }}</span>
-            <span class="stat-label">图集</span>
+              <span class="tab-text">{{ tab.label }}</span>
+              <span v-if="activeTab === tab.key" class="tab-indicator"></span>
+            </button>
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Tab 标签页 -->
-    <div class="user-tabs-container" v-if="profile">
-      <div class="user-tabs">
-        <button 
-          v-for="tab in tabs" 
-          :key="tab.key"
-          :class="['tab-item', { 'is-active': activeTab === tab.key }]"
-          @click="activeTab = tab.key"
-        >
-          <span class="tab-label">{{ tab.label }}</span>
-          <span v-if="activeTab === tab.key" class="coolapk-tab-indicator"></span>
-        </button>
+    <!-- 各 Tab 内容展示区 -->
+    <div class="tab-content-container">
+      <!-- 1. 「主页」聚合视图 (关注的人 + 关注的板块 + 热门动态) -->
+      <div v-if="activeTab === 'home'" class="home-aggregated-view">
+        <!-- 模块 1：他/我关注的人 -->
+        <div class="home-section-card">
+          <div class="section-header">
+            <h3 class="section-title">{{ isSelfUser ? '我关注的人' : '他关注的人' }}</h3>
+            <i class="fas fa-chevron-right section-arrow"></i>
+          </div>
+          <div class="follow-users-grid custom-scrollbar-hidden" v-if="followingUsers.length > 0">
+            <div v-for="user in followingUsers" :key="user.uid" class="follow-user-item">
+              <AppAvatar :src="user.userAvatar" size="lg" />
+              <span class="follow-user-name">{{ user.username }}</span>
+            </div>
+          </div>
+          <div v-else class="section-loading-placeholder">
+            <div v-for="n in 5" :key="n" class="placeholder-user-item">
+              <div class="placeholder-avatar"></div>
+              <div class="placeholder-text"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 模块 2：他/我关注的板块 -->
+        <div class="home-section-card">
+          <div class="section-header">
+            <h3 class="section-title">{{ isSelfUser ? '我关注的板块' : '他关注的板块' }}</h3>
+            <i class="fas fa-chevron-right section-arrow"></i>
+          </div>
+          <div class="follow-topics-grid custom-scrollbar-hidden" v-if="followTopics.length > 0">
+            <div v-for="topic in followTopics" :key="topic.id || topic.name" class="follow-topic-item">
+              <div class="topic-icon-wrapper" :style="{ background: topic.bg }">
+                <AppImage v-if="topic.icon" :src="topic.icon" image-class="topic-icon" />
+                <i v-else :class="['fas', topic.fallbackIcon || 'fa-layer-group', 'topic-fallback-icon']"></i>
+              </div>
+              <span class="topic-name">{{ topic.name }}</span>
+            </div>
+          </div>
+          <div v-else class="empty-section-tip">
+            <span>{{ loadingTopics ? '正在加载关注板块...' : '暂无关注的板块' }}</span>
+          </div>
+        </div>
+
+        <!-- 模块 3：热门动态 -->
+        <div class="home-section-card no-padding">
+          <div class="section-header with-padding">
+            <h3 class="section-title">{{ isSelfUser ? '我的热门动态' : '他的热门动态' }}</h3>
+            <i class="fas fa-chevron-right section-arrow"></i>
+          </div>
+          <div v-if="loadingFeeds" class="loading-wrapper">
+            <LoadingState text="加载热门动态中..." />
+          </div>
+          <div v-else-if="userFeeds.length === 0" class="empty-wrapper">
+            <EmptyState title="暂无热门动态" />
+          </div>
+          <div v-else class="feed-list">
+            <FeedCard v-for="item in userFeeds.slice(0, 5)" :key="item.id" :feed="item" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. 「点评」视图 (带机主评分、多维参数打分及二级筛选) -->
+      <div v-else-if="activeTab === 'rating'" class="rating-tab-view">
+        <!-- 二级筛选分类条 (全部 / 只看应用 / 只看数码) -->
+        <div class="sub-filter-row">
+          <span class="filter-label">筛选</span>
+          <div class="filter-pills">
+            <button 
+              v-for="f in ratingFilters" 
+              :key="f.key"
+              :class="['filter-pill', { 'active': activeRatingFilter === f.key }]"
+              @click="activeRatingFilter = f.key"
+            >
+              {{ f.label }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="loadingFeeds" class="loading-wrapper">
+          <LoadingState text="正在获取酷友点评..." />
+        </div>
+        <div v-else-if="userFeeds.length === 0" class="empty-wrapper">
+          <EmptyState title="暂无点评记录" />
+        </div>
+        <div v-else class="feed-list">
+          <RatingCard v-for="item in userFeeds" :key="item.id" :feed="item" />
+        </div>
+      </div>
+
+      <!-- 3. 常规动态/回复/图文/二手 Tab 视图 -->
+      <div v-else class="standard-feed-tab-view">
+        <div v-if="loadingFeeds" class="loading-wrapper">
+          <LoadingState text="正在加载内容..." />
+        </div>
+        <div v-else-if="userFeeds.length === 0" class="empty-wrapper">
+          <EmptyState title="暂无相关内容" />
+        </div>
+        <div v-else class="feed-list">
+          <FeedCard v-for="item in userFeeds" :key="item.id" :feed="item" />
+        </div>
+      </div>
+
+      <!-- 底部无限加载更多指示器 -->
+      <div v-if="userFeedsLoadingMore" class="loading-more-footer">
+        <i class="fas fa-circle-notch fa-spin"></i> 正在读取下一页动态...
+      </div>
+      <div v-else-if="userFeedsNoMore && userFeeds.length > 5" class="no-more-footer">
+        已无更多动态内容
       </div>
     </div>
-
-    <!-- 动态列表 -->
-    <div v-if="loading" class="loading-wrapper">
-      <LoadingState text="正在加载内容..." />
-    </div>
-
-    <div v-else-if="userFeeds.length === 0" class="empty-wrapper">
-      <EmptyState title="暂无内容" />
-    </div>
-
-    <div v-else class="feed-list">
-      <FeedCard v-for="item in userFeeds" :key="item.id" :feed="item" />
-    </div>
-  </div>
+  </template>
+</div>
 </template>
 
 <script setup lang="ts">
@@ -146,8 +267,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppImage from '../components/common/AppImage.vue';
-import AppButton from '../components/common/AppButton.vue';
 import FeedCard from '../components/feed/FeedCard.vue';
+import RatingCard from '../components/feed/RatingCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import { useAuthStore } from '../stores/auth';
@@ -155,12 +276,12 @@ import { useAuthStore } from '../stores/auth';
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+
 const rawUid = computed(() => (route.params.uid as string) || 'me');
 
 const effectiveUid = computed(() => {
   const rUid = rawUid.value;
-  const res = (!rUid || rUid === 'me') ? (authStore.user?.uid || '') : rUid;
-  return res;
+  return (!rUid || rUid === 'me') ? (authStore.user?.uid || '') : rUid;
 });
 
 const isSelfUser = computed(() => {
@@ -168,152 +289,199 @@ const isSelfUser = computed(() => {
   return String(effectiveUid.value) === String(authStore.user.uid);
 });
 
-const loading = ref(false);
+const loadingProfile = ref(false);
+const loadingFeeds = ref(false);
 const followLoading = ref(false);
+
 const profile = ref<any>(null);
 const userFeeds = ref<any[]>([]);
+const followingUsers = ref<any[]>([]);
 
-const activeTab = ref('feed');
+const activeTab = ref('home');
 const tabs = [
+  { key: 'home', label: '主页' },
   { key: 'feed', label: '动态' },
-  { key: 'coolpic', label: '酷图' }
+  { key: 'reply', label: '回复' },
+  { key: 'rating', label: '点评' },
+  { key: 'picture', label: '图文' },
+  { key: 'ershou', label: '二手' }
 ];
 
-const getFollowCount = (p: any) => {
-  try {
-    return p?.follow ?? p?.followNum ?? p?.follow_num ?? 0;
-  } catch { return 0; }
-};
-const getFansCount = (p: any) => {
-  try {
-    return p?.fans ?? p?.fansNum ?? p?.fans_num ?? 0;
-  } catch { return 0; }
-};
-const getFeedCount = (p: any) => {
-  try {
-    return p?.feed ?? p?.feedNum ?? p?.feed_num ?? 0;
-  } catch { return 0; }
-};
-const getLikeCount = (p: any) => {
-  try {
-    return p?.be_like_num ?? p?.likeNum ?? 0;
-  } catch { return 0; }
+const activeRatingFilter = ref('all');
+const ratingFilters = [
+  { key: 'all', label: '全部' },
+  { key: 'app', label: '只看应用' },
+  { key: 'digital', label: '只看数码' }
+];
+
+const followTopics = ref<any[]>([]);
+const loadingTopics = ref(false);
+
+const getFollowCount = (p: any) => p?.follow ?? p?.followNum ?? p?.follow_num ?? 0;
+const getFansCount = (p: any) => p?.fans ?? p?.fansNum ?? p?.fans_num ?? 0;
+const getLikeCount = (p: any) => p?.be_like_num ?? p?.likeNum ?? 0;
+
+const getGenderAgeTag = (p: any) => {
+  if (p?.gender === 1) return '♂95后';
+  if (p?.gender === 0) return '♀95后';
+  return '♂95后';
 };
 
-const getRegYears = (regdate: any) => {
-  try {
-    if (!regdate) return '';
-    const numDate = Number(regdate);
-    if (isNaN(numDate) || numDate <= 0) return '';
-    const regYear = new Date(numDate * 1000).getFullYear();
-    const currentYear = new Date().getFullYear();
-    const years = currentYear - regYear;
-    return years > 0 ? `${years}年酷友 (${regYear}入驻)` : `${regYear}入驻`;
-  } catch { return ''; }
-};
+const getAstroTag = (p: any) => p?.astro || '天蝎座';
 
 const getAvatarUrlByUid = (uid: any) => {
   try {
     if (!uid) return '';
     const strUid = String(uid);
     const padded = strUid.padStart(9, '0');
-    const p1 = padded.slice(0, 3);
-    const p2 = padded.slice(3, 5);
-    const p3 = padded.slice(5, 7);
-    return `http://avatar.coolapk.com/data/${p1}/${p2}/${p3}/${strUid.slice(-2)}_avatar_middle.jpg`;
+    return `http://avatar.coolapk.com/data/${padded.slice(0, 3)}/${padded.slice(3, 5)}/${padded.slice(5, 7)}/${strUid.slice(-2)}_avatar_middle.jpg`;
   } catch { return ''; }
 };
 
 const formatLoginTime = (ts: any) => {
   try {
-    if (!ts) return '';
+    if (!ts) return '刚刚';
     const numTs = Number(ts);
-    if (isNaN(numTs) || numTs <= 0) return '';
+    if (isNaN(numTs) || numTs <= 0) return '刚刚';
     const date = new Date(numTs * 1000);
-    const now = new Date();
-    const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+    const diffSec = Math.floor((new Date().getTime() - date.getTime()) / 1000);
     if (diffSec < 60) return '刚刚';
     if (diffSec < 3600) return `${Math.floor(diffSec / 60)}分钟前`;
     if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}小时前`;
     return `${date.getMonth() + 1}月${date.getDate()}日`;
-  } catch { return ''; }
+  } catch { return '刚刚'; }
 };
 
 async function fetchUserProfile() {
   const targetUid = effectiveUid.value;
   if (!targetUid) return;
 
-  if (profile.value && String(profile.value.uid) !== String(targetUid)) {
-    profile.value = null;
-  }
-
+  loadingProfile.value = true;
+  loadingTopics.value = true;
   try {
     const profRes = await CoolapkTauriAPI.getUserSpace(targetUid);
     if (profRes && profRes.data) {
       const spaceData = profRes.data;
-      const userInfo = spaceData.userInfo || {};
-      const merged = {
+      profile.value = {
         ...spaceData,
-        ...userInfo
+        ...(spaceData.userInfo || {})
       };
-      if (merged.username || merged.uid) {
-        profile.value = merged;
-        return;
+
+      // 从 spaceData.homeTabCardRows 中精准解析主页的各个组件卡片
+      const homeCards = spaceData.homeTabCardRows || [];
+      if (Array.isArray(homeCards)) {
+        // 1. 解析 TA关注的人 卡片
+        const followUsersCard = homeCards.find((c: any) => c.title && c.title.includes('关注的人'));
+        if (followUsersCard && Array.isArray(followUsersCard.entities)) {
+          followingUsers.value = followUsersCard.entities.map((u: any) => ({
+            uid: u.uid || u.fuid,
+            username: u.username || u.fusername || u.displayUsername || '酷友',
+            userAvatar: u.userAvatar || u.fUserAvatar || u.avatar || getAvatarUrlByUid(u.uid || u.fuid)
+          }));
+        }
+
+        // 2. 解析 TA关注的板块 卡片
+        const followTopicsCard = homeCards.find((c: any) => c.title && c.title.includes('关注的板块'));
+        if (followTopicsCard && Array.isArray(followTopicsCard.entities)) {
+          followTopics.value = followTopicsCard.entities.map((b: any) => ({
+            id: b.id || b.target_id,
+            name: b.title || b.name || b.short_title || '板块',
+            icon: b.logo || b.pic || b.icon || '',
+            bg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            fallbackIcon: 'fa-layer-group'
+          }));
+        }
+      }
+    } else {
+      const backupProf = await CoolapkTauriAPI.getUserProfile(targetUid);
+      if (backupProf && backupProf.data) {
+        profile.value = {
+          ...backupProf.data,
+          ...(backupProf.data.userInfo || {})
+        };
       }
     }
-    
-    // 降级尝试 getUserProfile
-    const backupProf = await CoolapkTauriAPI.getUserProfile(targetUid);
-    if (backupProf && backupProf.data) {
-      const backupData = backupProf.data;
-      const backupUserInfo = backupData.userInfo || {};
-      profile.value = {
-        ...backupData,
-        ...backupUserInfo
-      };
-      return;
-    }
-
-    // 终极防御兜底：确保界面100%能成功渲染出卡片框架
-    profile.value = {
-      uid: targetUid,
-      username: `酷友_${String(targetUid).slice(-4)}`,
-      userAvatar: getAvatarUrlByUid(targetUid),
-      level: 1,
-      bio: '这个酷友很懒，什么也没留下',
-      feed: 0,
-      fans: 0,
-      follow: 0
-    };
   } catch (err) {
     console.warn('获取用户信息异常:', err);
-    profile.value = {
-      uid: targetUid,
-      username: `酷友_${String(targetUid).slice(-4)}`,
-      userAvatar: getAvatarUrlByUid(targetUid),
-      level: 1,
-      bio: '用户信息加载失败，请重试',
-      feed: 0,
-      fans: 0,
-      follow: 0
-    };
+  } finally {
+    loadingProfile.value = false;
+    loadingTopics.value = false;
   }
 }
 
-async function fetchFeeds(page: number = 1) {
+async function fetchFollowingUsers() {
+  const targetUid = effectiveUid.value;
+  if (!targetUid) return;
+  // 如果已经在 fetchUserProfile 的 homeTabCardRows 中拉到了，不再重复覆盖
+  if (followingUsers.value.length > 0) return;
+
+  try {
+    const res = await CoolapkTauriAPI.getFollowUserList(targetUid, 1);
+    const list = res?.data || res;
+    if (Array.isArray(list) && list.length > 0) {
+      followingUsers.value = list.slice(0, 10).map((u: any) => ({
+        uid: u.uid || u.fuid,
+        username: u.fusername || u.username || u.fUserInfo?.username || '酷友',
+        userAvatar: u.fUserAvatar || u.userAvatar || u.fUserInfo?.userAvatar || getAvatarUrlByUid(u.uid || u.fuid)
+      }));
+    }
+  } catch (e) {
+    console.warn('获取关注列表接口异常:', e);
+  }
+}
+
+const userFeedsPage = ref(1);
+const userFeedsLoadingMore = ref(false);
+const userFeedsNoMore = ref(false);
+
+async function fetchTabFeeds(isRefresh: boolean = true) {
   const targetUid = effectiveUid.value;
   if (!targetUid) return;
 
-  loading.value = true;
+  if (loadingFeeds.value || (userFeedsLoadingMore.value && !isRefresh)) return;
+
+  if (isRefresh) {
+    userFeedsPage.value = 1;
+    userFeedsNoMore.value = false;
+    userFeeds.value = [];
+    loadingFeeds.value = true;
+  } else {
+    if (userFeedsNoMore.value) return;
+    userFeedsLoadingMore.value = true;
+  }
+
   try {
-    const feedsRes = await CoolapkTauriAPI.getUserFeeds(targetUid, page, activeTab.value);
-    if (feedsRes && feedsRes.data && Array.isArray(feedsRes.data)) {
-      userFeeds.value = feedsRes.data;
+    const fetchType = activeTab.value === 'home' ? 'feed' : activeTab.value;
+    const feedsRes = await CoolapkTauriAPI.getUserFeeds(targetUid, userFeedsPage.value, fetchType);
+    const list = (feedsRes && feedsRes.data && Array.isArray(feedsRes.data)) ? feedsRes.data : [];
+
+    if (list.length < 3) {
+      userFeedsNoMore.value = true;
     }
+
+    if (isRefresh) {
+      userFeeds.value = list;
+    } else {
+      const existingIds = new Set(userFeeds.value.map((i: any) => i.id));
+      const uniqueNew = list.filter((i: any) => !existingIds.has(i.id));
+      userFeeds.value.push(...uniqueNew);
+    }
+    userFeedsPage.value++;
   } catch (err) {
-    console.warn('获取用户动态异常:', err);
+    console.warn('获取动态列表异常:', err);
   } finally {
-    loading.value = false;
+    loadingFeeds.value = false;
+    userFeedsLoadingMore.value = false;
+  }
+}
+
+function handleUserPageScroll(e: Event) {
+  const el = e.target as HTMLElement;
+  if (!el) return;
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 220) {
+    if (!loadingFeeds.value && !userFeedsLoadingMore.value && !userFeedsNoMore.value) {
+      fetchTabFeeds(false);
+    }
   }
 }
 
@@ -324,25 +492,20 @@ async function toggleFollow() {
     if (profile.value.isFollow) {
       await CoolapkTauriAPI.unfollowUser(effectiveUid.value);
       profile.value.isFollow = 0;
-      if (profile.value.fansNum) profile.value.fansNum--;
-      if (profile.value.fans) profile.value.fans--;
     } else {
       await CoolapkTauriAPI.followUser(effectiveUid.value);
       profile.value.isFollow = 1;
-      if (profile.value.fansNum !== undefined) profile.value.fansNum++;
-      if (profile.value.fans !== undefined) profile.value.fans++;
     }
   } catch (err) {
-    console.error('关注操作失败:', err);
+    console.error('关注失败:', err);
   } finally {
     followLoading.value = false;
   }
 }
 
 function sendMessage() {
-  const targetUid = effectiveUid.value;
-  if (targetUid) {
-    router.push(`/messages?uid=${targetUid}`);
+  if (effectiveUid.value) {
+    router.push(`/messages?uid=${effectiveUid.value}`);
   }
 }
 
@@ -357,6 +520,7 @@ function handleGoBack() {
 watch(effectiveUid, (newUid) => {
   if (newUid) {
     fetchUserProfile();
+    fetchFollowingUsers();
     fetchFeeds(1);
   }
 }, { immediate: true });
@@ -367,50 +531,16 @@ watch(activeTab, () => {
 </script>
 
 <style scoped>
-.page-container {
+.user-page-wrapper {
   width: 100%;
   max-width: var(--feed-max-width);
   height: 100%;
   overflow-y: auto;
-  padding: var(--space-5);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-}
-
-.detail-nav-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-2);
-}
-
-.back-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-primary);
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-
-.back-btn:hover {
-  background-color: var(--surface-hover);
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-}
-
-.nav-app-name {
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-secondary);
+  padding-bottom: 40px;
 }
 
 .profile-debug-alert {
@@ -423,268 +553,598 @@ watch(activeTab, () => {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  margin: var(--space-4);
 }
 
-.user-banner-card {
+/* App 原生沉浸式 Header 整体卡片 */
+.app-style-user-card {
   position: relative;
-  overflow: hidden;
   background-color: var(--surface);
   border-radius: var(--radius-card);
   border: 1px solid var(--border);
+  overflow: hidden;
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
-  transition: all var(--duration-normal) var(--ease-default);
-}
-
-.user-banner-card:hover {
-  box-shadow: var(--shadow-md);
-}
-
-.user-cover-wrapper {
+  flex-shrink: 0;
   width: 100%;
-  height: 140px;
-  overflow: hidden;
-  position: relative;
-  background-color: var(--background-secondary);
 }
 
-.user-cover-wrapper :deep(.user-cover-img) {
+.banner-cover-area {
   position: relative;
-  z-index: 1;
+  width: 100%;
+  min-height: 420px;
+  background-color: #2a2a2a;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.banner-cover-area :deep(.banner-cover-img) {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.user-cover-placeholder {
+.banner-cover-placeholder {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, var(--brand-soft), var(--brand-primary));
-  opacity: 0.35;
-  z-index: 0;
+  background: linear-gradient(135deg, #1e3a8a 0%, #065f46 100%);
 }
 
-.user-banner-body {
-  padding: var(--space-5) var(--space-6) var(--space-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
-
-.user-banner-header {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-5);
-}
-
-.user-avatar-overlap {
-  flex-shrink: 0;
-  margin-top: -42px;
-  border: 3px solid var(--surface);
-  border-radius: var(--radius-pill);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  background: var(--surface);
-  z-index: 2;
-}
-
-.user-info-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.user-name-line {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-1);
-}
-
-.username {
-  font-size: var(--font-size-title-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.user-level {
-  font-size: 12px;
-  font-weight: var(--font-weight-bold);
-  font-style: italic;
-  color: #fff;
-  background: var(--brand-primary);
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-}
-
-.verify-badge {
-  font-size: 11px;
-  font-weight: var(--font-weight-semibold);
-  color: #0084ff;
-  background: rgba(0, 132, 255, 0.1);
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.user-meta-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  margin-bottom: var(--space-2);
-}
-
-.user-last-online {
-  font-size: var(--font-size-caption);
-  color: var(--text-tertiary);
-}
-
-.user-reg-date {
-  font-size: var(--font-size-caption);
-  color: var(--text-tertiary);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.level-progress-bar-wrapper {
-  position: relative;
-  width: 220px;
-  height: 16px;
-  background: var(--background-secondary, rgba(0, 0, 0, 0.06));
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-  margin: 4px 0 8px 0;
-}
-
-.level-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--brand-soft), var(--brand-primary));
-  border-radius: var(--radius-pill);
-  transition: width 0.3s ease;
-}
-
-.level-progress-text {
+.banner-cover-gradient {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 0.55) 60%, rgba(0, 0, 0, 0.85) 100%);
+  z-index: 1;
+}
+
+.banner-top-bar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.top-bar-right {
+  display: flex;
+  gap: 10px;
+}
+
+.icon-circle-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  font-weight: bold;
-  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.user-id {
-  font-size: var(--font-size-caption);
-  color: var(--text-tertiary);
-  margin-bottom: 0;
+.icon-circle-btn:hover {
+  background: rgba(0, 0, 0, 0.6);
+  transform: scale(1.05);
 }
 
-.user-bio {
-  font-size: var(--font-size-body);
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.6;
-  word-break: break-all;
-}
-
-.user-actions {
-  display: flex;
-  gap: var(--space-3);
-  flex-shrink: 0;
-}
-
-.user-stats {
-  display: flex;
-  gap: var(--space-8);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--border);
-}
-
-.stat-item {
+.banner-hero-content {
+  position: relative;
+  z-index: 5;
+  padding: 80px 20px 20px 20px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
+  gap: 12px;
 }
 
-.stat-value {
-  font-size: var(--font-size-title);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-}
-
-.stat-label {
-  font-size: var(--font-size-sub);
-  color: var(--text-tertiary);
-}
-
-.user-tabs-container {
-  background-color: var(--surface);
-  border-radius: var(--radius-card);
-  border: 1px solid var(--border);
-  padding: 0 var(--space-4);
-  box-shadow: var(--shadow-sm);
-}
-
-.user-tabs {
+.banner-avatar-row {
   display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  height: 52px;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 4px;
 }
 
-.tab-item {
-  position: relative;
+.app-hero-avatar {
+  border: 3px solid rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  background-color: var(--surface);
+}
+
+.banner-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.app-btn {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 6px;
+  gap: 6px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.btn-follow-primary {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.btn-follow-primary:hover {
+  background: #059669;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.btn-following {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.btn-secondary-glass {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.btn-icon-glass {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* 沉浸式详情描述行 */
+.user-details-area-immersive {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.username-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-username {
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.app-user-level {
+  font-size: 11px;
+  font-weight: 800;
+  font-style: italic;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff;
+  padding: 2px 8px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+.app-verify-tag {
+  font-size: 11px;
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.25);
+  backdrop-filter: blur(8px);
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-user-bio {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.bio-icon {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.app-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-top: 2px;
+}
+
+.stat-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.stat-cell .num {
+  font-size: 17px;
+  font-weight: 700;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.stat-cell .label {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.app-chips-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chip-item {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.chip-glass {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.chip-online {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* 他的装备 Card 毛玻璃入口条 */
+.equipment-entry-bar-glass {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 11px 16px;
+  border-radius: 14px;
+  margin-top: 4px;
+  cursor: pointer;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+}
+
+.equipment-entry-bar-glass:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.equipment-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.equipment-icon {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.equipment-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.equipment-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* App 风格全系 Tab 栏 */
+.app-tab-navigation {
+  border-top: 1px solid var(--border);
+  padding: 0 16px;
+}
+
+.tab-scroll-container {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.app-tab-item {
+  position: relative;
+  height: 48px;
+  background: transparent;
+  border: none;
   font-size: 15px;
   font-weight: 500;
   color: var(--text-secondary);
-  transition: all var(--duration-fast) var(--ease-default);
-  white-space: nowrap;
-  background: transparent;
   cursor: pointer;
-  border: none;
-  outline: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  transition: color 0.2s;
 }
 
-.tab-item:hover {
+.app-tab-item:hover {
   color: var(--text-primary);
 }
 
-.tab-item.is-active {
-  color: var(--text-primary);
-  font-weight: 700;
+.app-tab-item.active {
   font-size: 16px;
+  font-weight: 700;
+  color: #10b981;
 }
 
-.coolapk-tab-indicator {
+.tab-indicator {
   position: absolute;
   bottom: 4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 20px;
-  height: 4px;
-  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  width: 18px;
+  height: 3px;
+  background: #10b981;
+  border-radius: 3px;
+}
+
+/* 各 Tab 内容与聚合模块 */
+.tab-content-container {
+  margin-top: 8px;
+}
+
+.home-aggregated-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.home-section-card {
+  background-color: var(--surface);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.home-section-card.no-padding {
+  padding: 0;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-header.with-padding {
+  padding: 16px 16px 0 16px;
+  margin-bottom: 8px;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.section-arrow {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.follow-users-grid {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.follow-user-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 64px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.follow-user-name {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.section-loading-placeholder {
+  display: flex;
+  gap: 16px;
+}
+
+.placeholder-user-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.placeholder-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--background-secondary);
+}
+
+.placeholder-text {
+  width: 40px;
+  height: 10px;
   border-radius: 4px;
-  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
-  animation: tabSlideIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  background: var(--background-secondary);
+}
+
+.follow-topics-grid {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.follow-topic-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 76px;
+  flex-shrink: 0;
+  background: var(--background-secondary, rgba(0, 0, 0, 0.02));
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.topic-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.topic-fallback-icon {
+  color: #ffffff;
+  font-size: 18px;
+}
+
+.topic-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.topic-name {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: center;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.2;
+}
+
+.loading-more-footer,
+.no-more-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 0 24px;
+  font-size: 12px;
+  color: var(--text-tertiary, rgba(0, 0, 0, 0.35));
+  user-select: none;
+}
+
+.no-more-footer::before,
+.no-more-footer::after {
+  content: '';
+  width: 48px;
+  height: 1px;
+  background: var(--border-light, rgba(0, 0, 0, 0.08));
+}
+
+/* 点评 Tab Filter */
+.sub-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.filter-label {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.filter-pills {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-pill {
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-pill.active {
+  background: var(--background-secondary, #e5e7eb);
+  color: var(--text-primary);
+  font-weight: 700;
 }
 
 .feed-list {
@@ -701,5 +1161,13 @@ watch(activeTab, () => {
   padding: var(--space-8);
   display: flex;
   justify-content: center;
+}
+
+.custom-scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+.custom-scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 </style>

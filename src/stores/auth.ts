@@ -78,16 +78,25 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (err: any) {
       // 只有显式声明了 uid=xxxx 数字 ID 并且带有有效 Session 时，才进行补充识别
       const uidMatch = trimmed.match(/uid=(\d+)/i);
+      const nameMatch = trimmed.match(/username=([^;]+)/i);
+      let parsedUsername = '';
+      if (nameMatch && nameMatch[1]) {
+        try {
+          parsedUsername = decodeURIComponent(nameMatch[1]);
+        } catch (e) {
+          parsedUsername = nameMatch[1];
+        }
+      }
+
       if (uidMatch && uidMatch[1] && uidMatch[1] !== '10000') {
         const uid = uidMatch[1];
         profile = {
           uid: uid,
-          username: `酷友_${uid.slice(-4)}`,
+          username: parsedUsername || `酷友_${uid.slice(-4)}`,
           userAvatar: getAvatarUrlByUid(uid),
           level: 1
         };
       } else {
-        // 清理刚刚保存的无效 Cookie
         await CoolapkTauriAPI.clearCookie();
         throw new Error(err?.message || '凭据无效或已过期（服务端返回：登录信息有误），请登录酷安网页后拷贝完整的 Cookie');
       }

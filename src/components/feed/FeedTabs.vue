@@ -23,9 +23,9 @@ defineEmits<{
 
 const tabs = [
   { key: 'index_v8', label: '推荐' },
+  { key: 'digest', label: '头条' },
   { key: 'hot', label: '热榜' },
   { key: 'latest', label: '快讯' },
-  { key: 'digest', label: '头条' },
   { key: 'cool_picture', label: '酷图' },
   { key: 'secondhand', label: '二手' },
 ];

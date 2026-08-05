@@ -108,6 +108,11 @@ pub async fn get_user_profile(state: State<'_, AppState>, uid: String) -> Result
 }
 
 #[tauri::command]
+pub async fn get_user_follow_nodes(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
+    state.client.get_user_follow_nodes(&uid).await
+}
+
+#[tauri::command]
 pub async fn get_user_feeds(
     state: State<'_, AppState>,
     uid: String,
@@ -238,10 +243,15 @@ pub async fn create_feed(state: State<'_, AppState>, message: String) -> Result<
 
 #[tauri::command]
 pub async fn save_cookie_securely(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     cookie_str: String,
 ) -> Result<String, String> {
+    use tauri::Manager;
     state.client.set_user_cookie(cookie_str)?;
+    if let Some(win) = app.get_webview_window("login_window") {
+        let _ = win.close();
+    }
     Ok("登录 Cookie 已载入当前桌面会话".to_string())
 }
 
@@ -343,6 +353,15 @@ pub fn open_url(url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn close_login_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(win) = app.get_webview_window("login_window") {
+        let _ = win.close();
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
 
@@ -351,20 +370,60 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    let login_url = reqwest::Url::parse("https://account.coolapk.com/auth/loginByCoolapk")
+    let login_url = reqwest::Url::parse("https://account.coolapk.com/auth/loginByCoolapk?forward=http%3A%2F%2F127.0.0.1%3A14280%2F%23%2Fauth_callback")
         .map_err(|e| e.to_string())?;
 
     let js_script = r#"
         (function() {
-            function checkCookie() {
+            var saved = false;
+            
+            function notifySuccess() {
+                if (saved) return;
                 var cookies = document.cookie || "";
-                if (cookies.indexOf("SESSID=") !== -1 && (cookies.indexOf("uid=") !== -1 || cookies.indexOf("displayVersion=") !== -1)) {
-                    if (window.__TAURI_INTERNALS__) {
-                        window.__TAURI_INTERNALS__.invoke('save_cookie_securely', { cookieStr: cookies });
-                    }
+                if (window.__TAURI_INTERNALS__) {
+                    saved = true;
+                    window.__TAURI_INTERNALS__.invoke('save_cookie_securely', { cookieStr: cookies })
+                        .then(function() {
+                            setTimeout(function() {
+                                window.__TAURI_INTERNALS__.invoke('close_login_window');
+                            }, 200);
+                        }).catch(function() {
+                            setTimeout(function() {
+                                window.__TAURI_INTERNALS__.invoke('close_login_window');
+                            }, 300);
+                        });
                 }
             }
-            setInterval(checkCookie, 1000);
+
+            // 1. 代理 XHR 网络库，拦截 POST /auth/validateLogin 响应完成
+            try {
+                var oldOpen = XMLHttpRequest.prototype.open;
+                var oldSend = XMLHttpRequest.prototype.send;
+                XMLHttpRequest.prototype.open = function(method, url) {
+                    this._reqUrl = url || "";
+                    return oldOpen.apply(this, arguments);
+                };
+                XMLHttpRequest.prototype.send = function() {
+                    this.addEventListener('load', function() {
+                        if (this._reqUrl && this._reqUrl.indexOf('validateLogin') !== -1) {
+                            setTimeout(notifySuccess, 300);
+                        }
+                    });
+                    return oldSend.apply(this, arguments);
+                };
+            } catch(e) {}
+
+            // 2. 轮询侦测域名跳转与 Cookie
+            setInterval(function() {
+                var cookies = document.cookie || "";
+                var href = window.location.href || "";
+                var hasCreds = (cookies.indexOf("SESSID=") !== -1 || cookies.indexOf("uid=") !== -1 || cookies.indexOf("token=") !== -1);
+                var isRedirected = (href.indexOf("loginByCoolapk") === -1 && (href.indexOf("coolapk.com") !== -1 || href.indexOf("account.coolapk.com") !== -1));
+
+                if (hasCreds || (cookies.length > 15 && isRedirected)) {
+                    notifySuccess();
+                }
+            }, 400);
         })();
     "#;
 
@@ -380,6 +439,32 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     .initialization_script(js_script)
     .build()
     .map_err(|e| e.to_string())?;
+
+    // 在 Rust 侧使用原生 Task 监控 Webview URL 重定向状态，解决跨域沙箱无法调用 IPC 的瓶颈
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if let Some(win) = app_handle.get_webview_window("login_window") {
+                if let Ok(url) = win.url() {
+                    let url_str = url.as_str();
+                    // 当跳转至 auth_callback 或 www.coolapk.com 官网宣传落地页时，执行关窗与同步
+                    let is_auth_flow = (url_str.contains("/auth/") && !url_str.contains("auth_callback")) || url_str.contains("key=") || url_str.contains("loginBy");
+                    let is_final_redirect = url_str.contains("auth_callback") || url_str.contains("www.coolapk.com") || (url_str.contains("coolapk.com") && !is_auth_flow);
+
+                    if is_final_redirect {
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        let _ = win.close();
+                        use tauri::Emitter;
+                        let _ = app_handle.emit("login-window-closed", ());
+                        break;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+    });
 
     Ok(())
 }

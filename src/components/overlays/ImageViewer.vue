@@ -1,9 +1,9 @@
 <template>
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="viewerData" class="image-viewer-backdrop" @click="close">
+      <div v-if="viewerData" class="image-viewer-backdrop" @click="handleBackdropClick">
         <!-- 顶部工具栏 -->
-        <div class="viewer-topbar" @click.stop>
+        <div class="viewer-topbar">
           <span class="counter-text">{{ currentIndex + 1 }} / {{ totalCount }}</span>
           <div class="topbar-actions">
             <button class="viewer-btn" title="缩小" @click="zoomOut"><i class="fas fa-search-minus"></i></button>
@@ -16,18 +16,17 @@
         </div>
 
         <!-- 左右导航 -->
-        <button v-if="currentIndex > 0" class="nav-arrow nav-prev" @click.stop="prev">
+        <button v-if="currentIndex > 0" class="nav-arrow nav-prev" @click="prev">
           <i class="fas fa-chevron-left"></i>
         </button>
 
-        <button v-if="currentIndex < totalCount - 1" class="nav-arrow nav-next" @click.stop="next">
+        <button v-if="currentIndex < totalCount - 1" class="nav-arrow nav-next" @click="next">
           <i class="fas fa-chevron-right"></i>
         </button>
 
         <!-- 主图片显示区 -->
         <div
           class="image-stage"
-          @click.stop
           @dblclick="handleDoubleClick"
           @mousedown="startDrag"
           @mousemove="onDrag"
@@ -200,7 +199,6 @@ function zoomOut() {
 }
 
 function handleWheel(e: WheelEvent) {
-  // 鼠标滚轮流畅缩放
   const delta = e.deltaY < 0 ? 0.15 : -0.15;
   const newScale = Math.min(Math.max(scale.value + delta, 0.3), 5);
   scale.value = Number(newScale.toFixed(2));
@@ -214,21 +212,51 @@ function handleDoubleClick() {
   }
 }
 
+let dragStartX = 0;
+let dragStartY = 0;
+let isDraggedMove = false;
+
 function startDrag(e: MouseEvent) {
   if (e.button !== 0) return; // 仅限左键拖拽
   isDragging.value = true;
+  isDraggedMove = false;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
   startX = e.clientX - translateX.value;
   startY = e.clientY - translateY.value;
 }
 
 function onDrag(e: MouseEvent) {
   if (!isDragging.value) return;
+  const dist = Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY);
+  if (dist > 4) {
+    isDraggedMove = true;
+  }
   translateX.value = e.clientX - startX;
   translateY.value = e.clientY - startY;
 }
 
 function stopDrag() {
-  isDragging.value = false;
+  setTimeout(() => {
+    isDragging.value = false;
+  }, 50);
+}
+
+function handleBackdropClick(e: MouseEvent) {
+  if (isDraggedMove) {
+    isDraggedMove = false;
+    return;
+  }
+
+  const target = e.target as HTMLElement;
+  if (!target) return;
+
+  if (target.tagName.toLowerCase() === 'img') return;
+  if (target.closest('.viewer-topbar') || target.closest('.viewer-bottombar') || target.closest('.nav-arrow') || target.closest('.raw-image-btn') || target.closest('.viewer-btn')) {
+    return;
+  }
+
+  close();
 }
 
 function copyLink() {

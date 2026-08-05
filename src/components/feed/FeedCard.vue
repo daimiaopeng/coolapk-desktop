@@ -4,10 +4,12 @@
       :uid="feed.uid || feed.userInfo?.uid"
       :avatar="feed.userAvatar || feed.userInfo?.userAvatar || feed.pic"
       :username="feed.username || feed.userInfo?.username"
-      :level="feed.userInfo?.level"
-      :verify-title="feed.userInfo?.verify_title"
-      :dateline="feed.dateline"
-      :device="feed.device_title"
+      :level="feed.userInfo?.level || feed.level"
+      :verify-title="feed.userInfo?.verify_title || feed.verifyTitle"
+      :dateline="feed.dateline || feed.infoHtml"
+      :device="feed.device_title || feed.deviceTitle"
+      :rank-index="rankIndex"
+      :recommend-source="feed.recommendSource || feed.targetType"
     />
 
     <FeedContent
@@ -16,6 +18,20 @@
     />
 
     <FeedImageGrid :images="feed.pics || feed.picArr || (feed.pic ? [feed.pic] : [])" />
+
+    <!-- 被回复的原动态 / 被引用的卡片预览 -->
+    <div v-if="feed.targetRow || feed.replyRows?.length" class="quoted-feed-box">
+      <div class="quoted-header" v-if="feed.targetRow?.username || feed.targetRow?.userInfo?.username">
+        <span class="quoted-author">@{{ feed.targetRow?.username || feed.targetRow?.userInfo?.username }}</span>
+      </div>
+      <div class="quoted-message">
+        {{ feed.targetRow?.message || feed.targetRow?.title || feed.replyRows?.[0]?.message || '原动态内容' }}
+      </div>
+      <FeedImageGrid 
+        v-if="feed.targetRow?.pics || feed.targetRow?.pic" 
+        :images="feed.targetRow?.pics || (feed.targetRow?.pic ? [feed.targetRow?.pic] : [])" 
+      />
+    </div>
 
     <FeedActionBar
       :feed-id="feed.id"
@@ -53,6 +69,7 @@ import { renderCoolapkEmoji } from '../../utils/coolapkEmoji';
 
 const props = defineProps<{
   feed: FeedItem;
+  rankIndex?: number;
 }>();
 
 const showComments = ref(false);
@@ -112,6 +129,32 @@ function formatRichText(text: string) {
 
 .feed-card:hover {
   background-color: var(--surface-hover);
+}
+
+.quoted-feed-box {
+  background: var(--background-secondary, rgba(0, 0, 0, 0.03));
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+  border-radius: var(--radius-md, 10px);
+  padding: 12px 14px;
+  margin: 10px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.quoted-author {
+  font-weight: 600;
+  color: var(--brand-primary, #10b981);
+}
+
+.quoted-message {
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .inline-comment-wrapper {
