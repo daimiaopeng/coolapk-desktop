@@ -4,7 +4,7 @@
 
     <div class="about-card">
       <img src="../../assets/coolapk-logo-rounded.png" alt="Logo" class="about-logo" />
-      <h4 class="app-name">Coolapk Desktop</h4>
+      <h4 class="app-name">酷安</h4>
       <span class="app-ver">Version {{ appVersion }} (Tauri 2 Core)</span>
       <p class="app-desc">基于 Tauri 2、Vue 3、TypeScript 与 Rust 构建的第三方酷安桌面客户端。</p>
 
