@@ -64,7 +64,10 @@ async function toggleComments() {
   if (showComments.value && comments.value.length === 0) {
     commentsLoading.value = true;
     try {
-      const res = await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1);
+      let res = await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1);
+      if (!res || !res.data || !res.data.length) {
+        res = await CoolapkTauriAPI.getHotReplies(String(props.feed.id), 1);
+      }
       if (res && res.data) {
         comments.value = res.data;
       }

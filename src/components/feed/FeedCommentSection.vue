@@ -116,7 +116,7 @@
                 @click.stop="toggleExpandSub(String(c.id))"
               >
                 <template v-if="!expandedFloorIds.has(String(c.id))">
-                  共 {{ c.replyRows.length }} 条回复 <i class="fa-solid fa-chevron-down icon-arrow"></i>
+                  展开剩下的 {{ getRemainingSubCount(c) }} 条回复 <i class="fa-solid fa-chevron-down icon-arrow"></i>
                 </template>
                 <template v-else>
                   收起回复 <i class="fa-solid fa-chevron-up icon-arrow"></i>
@@ -171,6 +171,13 @@ function toggleExpandSub(floorId: string) {
   expandedFloorIds.value = nextSet;
 }
 
+function getRemainingSubCount(floor: any) {
+  const total = floor.replyRowsCount || (floor.replyRows ? floor.replyRows.length : 0);
+  const remaining = total - 2;
+  if (remaining > 0) return remaining;
+  return floor.replyRows ? Math.max(0, floor.replyRows.length - 2) : 0;
+}
+
 function getVisibleSubReplies(floor: any) {
   if (!floor.replyRows || !floor.replyRows.length) return [];
   const floorId = String(floor.id);
@@ -219,16 +226,21 @@ const nestedComments = computed(() => {
   const orphanSubs: any[] = [];
 
   // 第一遍扫描：识别一级楼层与已有 replyRows
+  const feedIdStr = String(props.feedUid || '');
+
   props.comments.forEach((rawItem) => {
     const item = {
       ...rawItem,
       replyRows: Array.isArray(rawItem.replyRows) ? [...rawItem.replyRows] : [],
     };
 
+    const ridStr = String(item.rid || '0');
+    const rridStr = String(item.rrid || '0');
+
+    // 只有当 rid/rrid 既不为 '0' 也不等于原动态 feedId 时，才是楼中楼二层回复
     const isSub = Boolean(
-      (item.rrid && String(item.rrid) !== '0') ||
-      (item.rid && String(item.rid) !== '0') ||
-      (item.replyUsername || item.rusername)
+      (rridStr !== '0' && rridStr !== feedIdStr) ||
+      (ridStr !== '0' && ridStr !== feedIdStr)
     );
 
     if (!isSub) {
