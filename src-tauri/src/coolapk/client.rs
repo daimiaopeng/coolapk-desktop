@@ -61,10 +61,6 @@ impl CoolapkClient {
             USER_AGENT,
             HeaderValue::from_static("Dalvik/2.1.0 (Linux; U; Android 16; 23113RKC6C Build/AQ3A.250226.002) +CoolMarket/16.2.0-2604201-universal"),
         );
-        headers.insert(
-            "X-Requested-With",
-            HeaderValue::from_static("XMLHttpRequest"),
-        );
         headers.insert("X-Sdk-Int", HeaderValue::from_static("36"));
         headers.insert("X-Sdk-Locale", HeaderValue::from_static("zh-CN"));
         headers.insert("X-App-Mode", HeaderValue::from_static("universal"));
@@ -116,10 +112,16 @@ impl CoolapkClient {
     ) -> Result<Value, String> {
         let token = self.auth.get_app_token()?;
         let url = format!("https://api.coolapk.com{path}");
+        let requested_with = if method == Method::POST {
+            "com.coolapk.market"
+        } else {
+            "XMLHttpRequest"
+        };
         let mut request = self
             .client
             .request(method, url)
             .header("X-App-Token", token)
+            .header("X-Requested-With", requested_with)
             .query(query);
 
         let cookie = self
@@ -356,6 +358,146 @@ impl CoolapkClient {
         cleaned_list
     }
 
+    // 提取并清洗单个 APK/游戏 实体
+    fn clean_single_apk(item: &Value) -> Option<Value> {
+        let obj = item.as_object()?;
+
+        // 提取标题与包名，若两者皆无则非合规应用实体
+        let title = get_str_by_keys(obj, &["title", "shorttitle", "apkname", "label", "entityTitle"])?;
+        let package_name = get_str_by_keys(obj, &["packageName", "apkname", "package_name", "id"])?;
+
+        let raw_icon = get_str_by_keys(
+            obj,
+            &[
+                "apkRomIcon",
+                "logo",
+                "icon",
+                "pic",
+                "cover",
+                "apkIcon",
+                "apkLogo",
+                "appIcon",
+                "bigIcon",
+            ],
+        )
+        .unwrap_or_default();
+        let icon = if raw_icon.starts_with("http") {
+            raw_icon
+        } else if raw_icon.starts_with("//") {
+            format!("https:{}", raw_icon)
+        } else if !raw_icon.is_empty() {
+            format!("https://image.coolapk.com/{}", raw_icon.trim_start_matches('/'))
+        } else {
+            String::new()
+        };
+
+
+        let sub_title = get_str_by_keys(obj, &["subTitle", "description", "target_row_title", "comment"]).unwrap_or_default();
+        let score = get_str_by_keys(obj, &["score", "star", "rating"]).unwrap_or_else(|| "9.0".to_string());
+        let apk_size = get_str_by_keys(obj, &["apkSizeFormatted", "size", "apk_size"]).unwrap_or_default();
+        let down_num = get_str_by_keys(obj, &["downCountFormatted", "downnum", "download_count"]).unwrap_or_default();
+        let category = get_str_by_keys(obj, &["category_title", "category_name", "category", "tag"]).unwrap_or_else(|| "应用".to_string());
+        let version = get_str_by_keys(obj, &["apkVersionName", "version", "versionName"]).unwrap_or_default();
+
+        let apk_type = get_u64_by_keys(obj, &["apkType", "apk_type", "type"]);
+        let title_lower = title.to_lowercase();
+        let cat_lower = category.to_lowercase();
+
+        // 明确的游戏类型判定
+        let is_explicit_game = apk_type == 1
+            || cat_lower.contains("游戏")
+            || cat_lower.contains("手游")
+            || cat_lower.contains("动作")
+            || cat_lower.contains("射击")
+            || cat_lower.contains("角色")
+            || cat_lower.contains("策略")
+            || cat_lower.contains("卡牌")
+            || cat_lower.contains("赛车")
+            || cat_lower.contains("竞技")
+            || cat_lower.contains("二次元")
+            || cat_lower.contains("模拟器");
+
+        // 明确的辅助工具/盒子黑名单判定
+        let is_utility_tool = title_lower.contains("游戏盒")
+            || title_lower.contains("游戏大厅")
+            || title_lower.contains("游戏交易")
+            || title_lower.contains("游戏翻译")
+            || title_lower.contains("游戏串")
+            || title_lower.contains("游戏助手")
+            || title_lower.contains("单反相机")
+            || cat_lower.contains("相机");
+
+        Some(json!({
+            "id": obj.get("id").map(value_to_string).unwrap_or_else(|| package_name.clone()),
+            "title": title,
+            "packageName": package_name,
+            "icon": icon,
+            "apkRomIcon": icon,
+            "logo": icon,
+            "subTitle": sub_title,
+            "description": sub_title,
+            "score": score,
+            "version": version,
+            "apkSizeFormatted": apk_size,
+            "downCountFormatted": down_num,
+            "category": category,
+            "isExplicitGame": is_explicit_game,
+            "isUtilityTool": is_utility_tool,
+            "entityType": obj.get("entityType").and_then(|v| v.as_str()).unwrap_or("apk")
+        }))
+    }
+
+    // 从酷安响应 JSON 中解构合规 APK/Game 实体列表，支持指定类型模式 (game/app/all)
+    fn extract_apk_list(json_data: &Value, filter_mode: &str) -> Vec<Value> {
+        let mut apk_list = Vec::new();
+        let items = if let Some(arr) = json_data.get("data").and_then(|v| v.as_array()) {
+            arr
+        } else if let Some(arr) = json_data.as_array() {
+            arr
+        } else {
+            return apk_list;
+        };
+
+        for item in items {
+            if let Some(obj) = item.as_object() {
+                if let Some(clean_apk) = Self::clean_single_apk(item) {
+                    let is_explicit_game = clean_apk.get("isExplicitGame").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let is_utility_tool = clean_apk.get("isUtilityTool").and_then(|v| v.as_bool()).unwrap_or(false);
+
+                    let should_keep = match filter_mode {
+                        "game" => !is_utility_tool,
+                        "app" => !is_explicit_game,
+                        _ => true,
+                    };
+                    if should_keep {
+                        apk_list.push(clean_apk);
+                    }
+                }
+                if let Some(entities) = obj.get("entities").and_then(|v| v.as_array()) {
+                    for entity in entities {
+                        if let Some(clean_apk) = Self::clean_single_apk(entity) {
+                            let is_explicit_game = clean_apk.get("isExplicitGame").and_then(|v| v.as_bool()).unwrap_or(false);
+                            let is_utility_tool = clean_apk.get("isUtilityTool").and_then(|v| v.as_bool()).unwrap_or(false);
+
+                            let should_keep = match filter_mode {
+                                "game" => !is_utility_tool,
+                                "app" => !is_explicit_game,
+                                _ => true,
+                            };
+                            if should_keep {
+                                apk_list.push(clean_apk);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        apk_list
+    }
+
+
+
+
     pub async fn get_by_full_url(&self, full_url: &str) -> Result<Value, String> {
         let token = self.auth.get_app_token()?;
 
@@ -421,19 +563,39 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&fallback) }))
     }
 
-    // 3. 全站最新
+    // 3. 科技快讯 (对接官方快讯专栏 #/feed/digestList?type=1，含平滑降级)
     pub async fn get_latest_feeds(&self, page: u32) -> Result<Value, String> {
-        let raw = self
+        let res = self
+            .api_get(
+                "/v6/page/dataList",
+                &[
+                    ("url", "#/feed/digestList?type=1".to_string()),
+                    ("title", "快讯".to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await;
+
+        let cleaned = match res {
+            Ok(ref raw) => Self::extract_cleaned_list(raw),
+            Err(_) => Vec::new(),
+        };
+
+        if !cleaned.is_empty() {
+            return Ok(json!({ "code": 200, "data": cleaned }));
+        }
+
+        // 备用快讯/最新 API: /v6/page/dataList?url=%23%2Ffeed%2FnewestList
+        let fallback = self
             .api_get(
                 "/v6/page/dataList",
                 &[
                     ("url", "#/feed/newestList".to_string()),
-                    ("title", "最新".to_string()),
                     ("page", page.to_string()),
                 ],
             )
             .await?;
-        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&fallback) }))
     }
 
     // 4. 精选热帖
@@ -674,7 +836,7 @@ impl CoolapkClient {
                         .unwrap_or_default();
 
                     // 提取原始楼中楼 replyRows 数组并透传给前端
-                    let reply_rows = obj.get("replyRows").cloned().unwrap_or(json!([]));
+                    let _reply_rows = obj.get("replyRows").cloned().unwrap_or(json!([]));
 
                     cleaned_replies.push(json!({
                         "id": obj.get("id").and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_u64().map(|n| n.to_string()))).unwrap_or_default(),
@@ -691,8 +853,6 @@ impl CoolapkClient {
                         "pic": obj.get("pic").and_then(|v| v.as_str()).unwrap_or(""),
                         "infoHtml": obj.get("dateline_text").and_then(|v| v.as_str()).or_else(|| obj.get("infoHtml").and_then(|v| v.as_str())).unwrap_or(""),
                         "likenum": obj.get("likenum").and_then(|v| v.as_u64()).unwrap_or(0),
-                        "replyRows": reply_rows,
-                        "replyRowsCount": obj.get("replynum").and_then(|v| v.as_u64()).or_else(|| obj.get("replyRowsCount").and_then(|v| v.as_u64())).unwrap_or(0)
                     }));
                 }
             }
@@ -714,23 +874,186 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
+    // 获取酷安游戏中心列表/热门与分类榜单
+    pub async fn get_game_list(&self, page: u32, game_type: &str) -> Result<Value, String> {
+
+        let page_url = match game_type {
+            "hot" => "#/game/gameRankList",
+            "new" => "#/game/newestList",
+            "single" => "#/game/singleGameRankList",
+            "online" => "#/game/onlineGameRankList",
+            _ => "#/game/gameRankList",
+        };
+
+        let raw = self
+            .api_get(
+                "/v6/page/dataList",
+                &[
+                    ("url", page_url.to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await;
+
+        let apks = match raw {
+            Ok(ref json_val) => Self::extract_apk_list(json_val, "game"),
+            Err(_) => Vec::new(),
+        };
+
+        if !apks.is_empty() {
+            return Ok(json!({ "code": 200, "data": apks }));
+        }
+
+        // 如果榜单抓取为空，回退到对应的分类精准手游搜索（结合 isGame 强过滤）
+        let query = match game_type {
+            "single" => "单机手游",
+            "online" => "网游手游",
+            "casual" => "休闲游戏",
+            "indie" => "独立游戏",
+            _ => "手游",
+        };
+
+
+        let search_raw = self
+            .api_get(
+                "/v6/search",
+                &[
+                    ("type", "apk".to_string()),
+                    ("searchValue", query.to_string()),
+                    ("page", page.to_string()),
+                    ("show_flag", "1".to_string()),
+                ],
+            )
+            .await?;
+
+        let search_apks = Self::extract_apk_list(&search_raw, "game");
+        Ok(json!({ "code": 200, "data": search_apks }))
+    }
+
+    // 专项搜索游戏与 APK 软件实体
+    pub async fn search_apks(&self, query: &str, page: u32) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/search",
+                &[
+                    ("type", "apk".to_string()),
+                    ("searchValue", query.to_string()),
+                    ("page", page.to_string()),
+                    ("show_flag", "1".to_string()),
+                ],
+            )
+            .await?;
+
+        let apks = Self::extract_apk_list(&raw, "all");
+        Ok(json!({ "code": 200, "data": apks }))
+    }
+
+    // 获取酷安应用中心列表/热门与分类榜单
+    pub async fn get_app_list(&self, page: u32, cat: &str) -> Result<Value, String> {
+        let page_url = match cat {
+            "recommend" => "#/apk/rankList",
+            "newest" => "#/apk/newestList",
+            "tools" => "#/apk/rankList?type=tools",
+            "social" => "#/apk/rankList?type=social",
+            "media" => "#/apk/rankList?type=media",
+            "beauty" => "#/apk/rankList?type=theme",
+            _ => "#/apk/rankList",
+        };
+
+        let raw = self
+            .api_get(
+                "/v6/page/dataList",
+                &[
+                    ("url", page_url.to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await;
+
+        let apks = match raw {
+            Ok(ref json_val) => Self::extract_apk_list(json_val, "app"),
+            Err(_) => Vec::new(),
+        };
+
+        if !apks.is_empty() {
+            return Ok(json!({ "code": 200, "data": apks }));
+        }
+
+        let query = match cat {
+            "tools" => "系统工具",
+            "social" => "微信 社交",
+            "media" => "播放器 影音",
+            "beauty" => "壁纸 主题",
+            "newest" => "应用",
+            _ => "常用应用",
+        };
+
+        let search_raw = self
+            .api_get(
+                "/v6/search",
+                &[
+                    ("type", "apk".to_string()),
+                    ("searchValue", query.to_string()),
+                    ("page", page.to_string()),
+                    ("show_flag", "1".to_string()),
+                ],
+            )
+            .await?;
+
+        let search_apks = Self::extract_apk_list(&search_raw, "app");
+        Ok(json!({ "code": 200, "data": search_apks }))
+    }
+
     pub async fn get_image_data_url(&self, source_url: &str) -> Result<String, String> {
+
         let mut url =
             reqwest::Url::parse(source_url).map_err(|e| format!("invalid image URL: {e}"))?;
-        let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
-        if !host.ends_with("coolapk.com") {
-            return Err("only Coolapk image hosts are allowed".to_string());
+        let scheme = url.scheme().to_ascii_lowercase();
+        if scheme != "http" && scheme != "https" {
+            return Err("only HTTP/HTTPS image schemes are allowed".to_string());
         }
+
+        let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+        if host.is_empty()
+            || host == "localhost"
+            || host == "127.0.0.1"
+            || host == "0.0.0.0"
+            || host.starts_with("192.168.")
+            || host.starts_with("10.")
+            || host.starts_with("172.16.")
+            || host.starts_with("172.17.")
+            || host.starts_with("172.18.")
+            || host.starts_with("172.19.")
+            || host.starts_with("172.20.")
+            || host.starts_with("172.30.")
+            || host.starts_with("172.31.")
+        {
+            return Err(format!("disallowed private or local host: {host}"));
+        }
+
         if url.scheme() == "http" {
             url.set_scheme("https")
                 .map_err(|_| "failed to upgrade image URL to HTTPS".to_string())?;
         }
 
-        let response = self
-            .client
+
+        let img_client = Client::builder()
+            .timeout(std::time::Duration::from_secs(12))
+            .build()
+            .unwrap_or_default();
+
+        let mut req = img_client
             .get(url)
-            .header("X-App-Token", self.auth.get_app_token()?)
-            .header("Referer", "https://www.coolapk.com/")
+            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .header("Referer", "https://www.coolapk.com/");
+
+        if let Ok(guard) = self.user_cookie.read() {
+            if let Some(cookie_str) = guard.as_ref() {
+                req = req.header("Cookie", cookie_str);
+            }
+        }
+
+        let response = req
             .send()
             .await
             .map_err(|e| format!("failed to fetch image: {e}"))?;
@@ -857,30 +1180,87 @@ impl CoolapkClient {
     }
 
     pub async fn get_topic_hub_data(&self, sub_url: &str, page: u32) -> Result<Value, String> {
-        let raw = if sub_url.contains("/v6/topic/tagList") {
-            let mut query = vec![("page", page.to_string())];
-            if sub_url.contains("sort=hot") {
-                query.push(("sort", "hot".to_string()));
-            } else if sub_url.contains("sort=follow") {
-                query.push(("sort", "follow".to_string()));
-            } else if sub_url.contains("sort=new") {
-                query.push(("sort", "new".to_string()));
-            }
-            self.api_get("/v6/topic/tagList", &query).await?
+        let clean_sub_url = sub_url.trim_start_matches('#');
+        
+        // 识别分类 Tag 维度 (1: 手机数码, 2: 电脑外设, 3: 游戏生活)
+        let tag_type = if clean_sub_url.contains("tagType=1") || clean_sub_url.contains("type=1") {
+            Some(1)
+        } else if clean_sub_url.contains("tagType=2") || clean_sub_url.contains("type=2") {
+            Some(2)
+        } else if clean_sub_url.contains("tagType=3") || clean_sub_url.contains("type=3") {
+            Some(3)
         } else {
-            let target_url = if sub_url.trim().is_empty() || sub_url == "/main/tagList" {
-                "#/topic/tagList".to_string()
-            } else {
-                sub_url.to_string()
-            };
-            self.api_get(
-                "/v6/page/dataList",
-                &[("url", target_url), ("page", page.to_string())],
-            )
-            .await?
+            None
         };
 
-        let data = raw.get("data").cloned().unwrap_or(json!([]));
+        // 如果选择具体领域维度分类，使用酷安原生 /v6/search?type=topic 接口精准拉取专属话题
+        if let Some(tt) = tag_type {
+            let search_term = match tt {
+                1 => "手机",
+                2 => "电脑",
+                3 => "游戏",
+                _ => "数码",
+            };
+
+            let search_raw = self
+                .api_get(
+                    "/v6/search",
+                    &[
+                        ("type", "topic".to_string()),
+                        ("searchValue", search_term.to_string()),
+                        ("page", page.to_string()),
+                        ("show_flag", "1".to_string()),
+                    ],
+                )
+                .await?;
+
+            let data = search_raw.get("data").cloned().unwrap_or(json!([]));
+            return Ok(json!({ "code": 200, "data": data }));
+        }
+
+        // 基础排行榜维度：热门/最受关注/最新
+        let mut query = vec![("page", page.to_string())];
+        if clean_sub_url.contains("sort=follow") {
+            query.push(("sort", "follow".to_string()));
+        } else if clean_sub_url.contains("sort=new") {
+            query.push(("sort", "new".to_string()));
+        } else {
+            query.push(("sort", "hot".to_string()));
+        }
+
+        let raw = self.api_get("/v6/topic/tagList", &query).await;
+
+        let res = match raw {
+            Ok(val) if val.get("data").and_then(|d| d.as_array()).map_or(false, |arr| !arr.is_empty()) => val,
+            _ => {
+                let page_url = if clean_sub_url.is_empty() || clean_sub_url == "/main/tagList" {
+                    "/topic/tagList".to_string()
+                } else {
+                    clean_sub_url.to_string()
+                };
+                self.api_get(
+                    "/v6/page/dataList",
+                    &[("url", page_url), ("page", page.to_string())],
+                )
+                .await?
+            }
+        };
+
+        let mut data = res.get("data").cloned().unwrap_or(json!([]));
+
+        // 对最受关注维度按照关注人数 follower_num 进行二次精准倒序重排
+        if clean_sub_url.contains("sort=follow") {
+            if let Some(arr) = data.as_array_mut() {
+                arr.sort_by(|a, b| {
+                    let f_a = a.get("follower_num").and_then(|v| v.as_u64())
+                        .or_else(|| a.get("follownum").and_then(|v| v.as_u64())).unwrap_or(0);
+                    let f_b = b.get("follower_num").and_then(|v| v.as_u64())
+                        .or_else(|| b.get("follownum").and_then(|v| v.as_u64())).unwrap_or(0);
+                    f_b.cmp(&f_a)
+                });
+            }
+        }
+
         Ok(json!({ "code": 200, "data": data }))
     }
 
@@ -968,6 +1348,28 @@ impl CoolapkClient {
         self.post_id_action("/v6/user/unfollow", "uid", uid).await
     }
 
+    pub async fn get_following_feeds(&self, page: u32) -> Result<Value, String> {
+        self.api_get(
+            "/v6/page/dataList",
+            &[
+                ("url", "/user/followFeedList".to_string()),
+                ("page", page.to_string()),
+            ],
+        )
+        .await
+    }
+
+    pub async fn get_follow_user_list(&self, uid: &str, page: u32) -> Result<Value, String> {
+        self.api_get(
+            "/v6/user/followList",
+            &[
+                ("uid", uid.to_string()),
+                ("page", page.to_string()),
+            ],
+        )
+        .await
+    }
+
     pub async fn create_feed(&self, message: &str) -> Result<Value, String> {
         wrap_api_data(
             self.api_post(
@@ -980,7 +1382,21 @@ impl CoolapkClient {
     }
 
     pub async fn check_login_status(&self) -> Result<Value, String> {
-        let res = self.api_get("/v6/account/checkLoginInfo", &[]).await?;
+        let mut query_params: Vec<(&str, String)> = Vec::new();
+        if let Ok(guard) = self.user_cookie.read() {
+            if let Some(cookie_str) = guard.as_ref() {
+                for item in cookie_str.split(';') {
+                    let parts: Vec<&str> = item.trim().split('=').collect();
+                    if parts.len() == 2 && parts[0] == "uid" {
+                        query_params.push(("uid", parts[1].to_string()));
+                        break;
+                    }
+                }
+            }
+        }
+
+        let query_refs: Vec<(&str, String)> = query_params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        let res = self.api_get("/v6/user/space", &query_refs).await?;
         if let Some(data) = res.get("data") {
             return Ok(json!({ "code": 200, "data": data }));
         }
@@ -997,6 +1413,11 @@ impl CoolapkClient {
     }
 
     pub async fn login_by_account(&self, account: &str, password: &str) -> Result<Value, String> {
+        use md5::{Digest, Md5};
+        let mut hasher = Md5::new();
+        hasher.update(password.as_bytes());
+        let md5_pwd = format!("{:x}", hasher.finalize());
+
         let res = self
             .api_post(
                 "/v6/account/login",
@@ -1004,16 +1425,24 @@ impl CoolapkClient {
                 &[
                     ("login", account.to_string()),
                     ("password", password.to_string()),
+                    ("md5_pass", md5_pwd.clone()),
+                    ("md5_password", md5_pwd),
                 ],
             )
             .await?;
+
+        if let Some(msg) = res.get("message").and_then(Value::as_str) {
+            if msg.contains("unsupported") || res.get("status").and_then(Value::as_i64) == Some(403) {
+                return Err("酷安官方现已停用第三方原生账号密码 API (403 Unsupported)，请切换至【SESSID 凭据】标签导入凭据登录。".to_string());
+            }
+        }
 
         self.extract_and_set_session(&res);
         wrap_api_data(res)
     }
 
     pub async fn send_sms_vcode(&self, mobile: &str) -> Result<Value, String> {
-        let res = self
+        let first_try = self
             .api_post(
                 "/v6/account/sendVcode",
                 &[],
@@ -1022,8 +1451,19 @@ impl CoolapkClient {
                     ("type", "login".to_string()),
                 ],
             )
-            .await?;
-        wrap_api_data(res)
+            .await;
+
+        match first_try {
+            Ok(res) => {
+                if let Some(msg) = res.get("message").and_then(Value::as_str) {
+                    if msg.contains("unsupported") || res.get("status").and_then(Value::as_i64) == Some(403) {
+                        return Err("酷安官方已停用第三方纯验证码直连 API (403 API Unsupported)，请使用【SESSID 凭据】快捷登录。".to_string());
+                    }
+                }
+                wrap_api_data(res)
+            }
+            Err(err1) => Err(format!("验证码下发失败: {err1}")),
+        }
     }
 
     pub async fn login_by_mobile(&self, mobile: &str, vcode: &str) -> Result<Value, String> {
@@ -1038,6 +1478,12 @@ impl CoolapkClient {
                 ],
             )
             .await?;
+
+        if let Some(msg) = res.get("message").and_then(Value::as_str) {
+            if msg.contains("unsupported") || res.get("status").and_then(Value::as_i64) == Some(403) {
+                return Err("酷安官方已停用第三方手机号登录 API (403 API Unsupported)，请使用【SESSID 凭据】快捷登录。".to_string());
+            }
+        }
 
         self.extract_and_set_session(&res);
         wrap_api_data(res)
@@ -1090,12 +1536,28 @@ fn value_to_string(value: &Value) -> String {
 }
 
 fn wrap_api_data(response: Value) -> Result<Value, String> {
+    if let Some(err_msg) = response.get("error").and_then(Value::as_str) {
+        if !err_msg.is_empty() {
+            return Err(err_msg.to_string());
+        }
+    }
+    
     if let Some(message) = response.get("message").and_then(Value::as_str) {
-        let code = response.get("code").and_then(Value::as_i64).unwrap_or(0);
-        if code != 0 && code != 200 {
+        let code = response.get("code").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))).unwrap_or(200);
+        let status = response.get("status").and_then(|v| v.as_i64()).unwrap_or(1);
+
+        if (code != 200 && code != 0 && code != 1) || status < 0 {
             return Err(message.to_string());
         }
     }
+
+    if let Some(status) = response.get("status").and_then(|v| v.as_i64()) {
+        if status < 0 {
+            let msg = response.get("message").or_else(|| response.get("error")).and_then(Value::as_str).unwrap_or("酷安服务端拒绝请求");
+            return Err(msg.to_string());
+        }
+    }
+
     let data = response.get("data").cloned().unwrap_or(response);
     Ok(json!({ "code": 200, "data": data }))
 }

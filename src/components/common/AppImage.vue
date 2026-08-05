@@ -1,10 +1,12 @@
 <template>
-  <div class="app-image-container" :class="{ 'is-loading': loading, 'is-error': error, 'fit-contain': fit === 'contain' }">
+  <div
+    class="app-image-container"
+    :class="[imageClass, { 'is-loading': loading, 'is-error': error, 'fit-contain': fit === 'contain' }]"
+  >
     <img
       v-if="renderedSrc && !error"
       :src="renderedSrc"
       :alt="alt"
-      :class="imageClass"
       :style="{ objectFit: fit }"
       @load="handleLoad"
       @error="handleError"
@@ -35,38 +37,55 @@ const props = withDefaults(defineProps<{
 const renderedSrc = ref<string | undefined>(undefined);
 const loading = ref(false);
 const error = ref(false);
+const isFallback = ref(false);
 
 const imageCache = new Map<string, string>();
 
 async function loadImage(url: string | undefined) {
   if (!url) {
     renderedSrc.value = undefined;
+    error.value = false;
+    loading.value = false;
     return;
   }
 
-  // 如果是本地或者是 base64，直接使用
-  if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('/')) {
-    renderedSrc.value = url;
+  // 1. 如果是相对地址，自动补全 https；如果是 http 协议，强制自动升级为 https
+  let targetUrl = url;
+  if (targetUrl.startsWith('//')) {
+    targetUrl = `https:${targetUrl}`;
+  } else if (targetUrl.startsWith('http://')) {
+    targetUrl = targetUrl.replace('http://', 'https://');
+  }
+
+  // 2. 如果是本地或者 base64，直接使用
+  if (targetUrl.startsWith('data:') || targetUrl.startsWith('blob:') || targetUrl.startsWith('/')) {
+    renderedSrc.value = targetUrl;
+    loading.value = false;
+    error.value = false;
     return;
   }
 
-  // 检查内存缓存
-  if (imageCache.has(url)) {
-    renderedSrc.value = imageCache.get(url);
+  // 3. 检查内存缓存
+  if (imageCache.has(targetUrl)) {
+    renderedSrc.value = imageCache.get(targetUrl);
+    loading.value = false;
+    error.value = false;
     return;
   }
 
   loading.value = true;
   error.value = false;
+  isFallback.value = false;
   renderedSrc.value = undefined;
 
   try {
-    const dataUrl = await CoolapkTauriAPI.getImageDataUrl(url);
-    imageCache.set(url, dataUrl);
+    const dataUrl = await CoolapkTauriAPI.getImageDataUrl(targetUrl);
+    imageCache.set(targetUrl, dataUrl);
     renderedSrc.value = dataUrl;
   } catch (err) {
-    console.error('Failed to load image via Tauri proxy:', url, err);
-    error.value = true;
+    // 代理请求失败时，自动降级为原生应用 HTTP/HTTPS 直接请求
+    isFallback.value = true;
+    renderedSrc.value = targetUrl;
   } finally {
     loading.value = false;
   }
@@ -85,10 +104,21 @@ function handleLoad() {
 }
 
 function handleError() {
-  error.value = true;
+  // 如果降级直接链接后依然失败，才提示为 Error
+  if (isFallback.value || !props.src) {
+    error.value = true;
+  } else {
+    isFallback.value = true;
+    let targetUrl = props.src;
+    if (targetUrl.startsWith('//')) {
+      targetUrl = `https:${targetUrl}`;
+    }
+    renderedSrc.value = targetUrl;
+  }
   loading.value = false;
 }
 </script>
+
 
 <style scoped>
 .app-image-container {

@@ -83,6 +83,24 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_board_feeds', { boardTag, page });
   }
 
+  // 游戏中心榜单与列表
+  static async getGameList(gameType: string = 'hot', page: number = 1) {
+    return await safeFetch(`/game/list?type=${gameType}&page=${page}`, 'get_game_list', { gameType, page });
+  }
+
+  // 应用中心榜单与分类列表
+  static async getAppList(cat: string = 'recommend', page: number = 1) {
+    return await safeFetch(`/apk/list?cat=${cat}&page=${page}`, 'get_app_list', { cat, page });
+  }
+
+  // 专项 APK / 软件 / 游戏搜索
+  static async searchApks(query: string, page: number = 1) {
+    return await safeFetch(`/search/apks?q=${encodeURIComponent(query)}&page=${page}`, 'search_apks', { query, page });
+  }
+
+
+
+
   // 7. 全站搜索
   static async searchAll(query: string, page: number = 1) {
     return await safeFetch(`/search?q=${encodeURIComponent(query)}&page=${page}`, 'search_all', { query, page });
@@ -217,5 +235,21 @@ export class CoolapkTauriAPI {
     } catch {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
+  }
+
+  static async openLoginWebview() {
+    try {
+      await invoke('open_login_webview');
+    } catch {
+      window.open('https://account.coolapk.com/auth/loginByCoolapk', '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  static async getFollowingFeeds(page: number = 1) {
+    return await invokeNative('get_following_feeds', { page });
+  }
+
+  static async getFollowUserList(uid: string, page: number = 1) {
+    return await invokeNative('get_follow_user_list', { uid, page });
   }
 }

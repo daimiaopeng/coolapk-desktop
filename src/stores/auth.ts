@@ -18,6 +18,16 @@ export const useAuthStore = defineStore('auth', () => {
   const rawCookie = ref('');
   const isLoginModalOpen = ref(false);
 
+  function getAvatarUrlByUid(uidStr: string): string {
+    const s = String(uidStr).trim();
+    if (!s || s === '10000') return '';
+    const padded = s.padStart(9, '0');
+    const p1 = padded.slice(0, 3);
+    const p2 = padded.slice(3, 5);
+    const p3 = padded.slice(5, 7);
+    return `https://avatar.coolapk.com/data/${p1}/${p2}/${p3}/${s.slice(-2)}_avatar_middle.jpg`;
+  }
+
   /**
    * 打开登录弹窗
    */
@@ -47,35 +57,39 @@ export const useAuthStore = defineStore('auth', () => {
     // 2. 发起 API 验证登录有效性并抓取个人资料
     let profile: UserProfile;
     try {
-      const res = await CoolapkTauriAPI.checkLoginStatus();
-      const data = res?.data || res || {};
-
+      const data = await CoolapkTauriAPI.checkLoginStatus();
       // 解析 API 返回的用户属性
-      const uid = data.uid || data.id || '';
+      const uid = String(data.uid || data.id || '');
       const username = data.username || data.displayUsername || data.user_name || '酷友';
-      const userAvatar = data.userAvatar || data.avatar || data.user_avatar || '';
+      
+      let userAvatar = data.userAvatar || data.avatar || data.user_avatar || '';
+      if (!userAvatar && uid) {
+        userAvatar = getAvatarUrlByUid(uid);
+      }
+
       const level = Number(data.level || data.userLevel || 0);
       const bio = data.bio || data.sign || '';
 
       if (!uid) {
-        throw new Error('无效的 Cookie 凭据，未能识别酷安用户身份');
+        throw new Error('无效的 Cookie 凭据，未能识别酷安 UID 账号身份');
       }
 
       profile = { uid, username, userAvatar, level, bio };
     } catch (err: any) {
-      // 若 checkLoginStatus 接口解析受限，提供解析容错（例如提取 uid 参数）
-      const uidMatch = trimmed.match(/uid=(\d+)/i) || trimmed.match(/SESSID=([a-zA-Z0-9]+)/i);
-      if (uidMatch) {
+      // 只有显式声明了 uid=xxxx 数字 ID 并且带有有效 Session 时，才进行补充识别
+      const uidMatch = trimmed.match(/uid=(\d+)/i);
+      if (uidMatch && uidMatch[1] && uidMatch[1] !== '10000') {
+        const uid = uidMatch[1];
         profile = {
-          uid: uidMatch[1],
-          username: `酷友_${uidMatch[1].slice(-4)}`,
-          userAvatar: '',
+          uid: uid,
+          username: `酷友_${uid.slice(-4)}`,
+          userAvatar: getAvatarUrlByUid(uid),
           level: 1
         };
       } else {
         // 清理刚刚保存的无效 Cookie
         await CoolapkTauriAPI.clearCookie();
-        throw new Error(err?.message || 'Cookie 验证失败，请检查凭据是否正确或已过期');
+        throw new Error(err?.message || '凭据无效或已过期（服务端返回：登录信息有误），请登录酷安网页后拷贝完整的 Cookie');
       }
     }
 
@@ -117,17 +131,43 @@ export const useAuthStore = defineStore('auth', () => {
       rawCookie.value = savedCookie;
       if (savedUser) {
         try {
-          user.value = JSON.parse(savedUser);
-          isLoggedIn.value = true;
+          const parsed = JSON.parse(savedUser);
+          if (parsed && parsed.uid) {
+            if (!parsed.userAvatar) {
+              parsed.userAvatar = getAvatarUrlByUid(parsed.uid);
+            }
+            user.value = parsed;
+            isLoggedIn.value = true;
+          }
         } catch {
           // 忽略解析错误
         }
       }
-      // 静默发到底层引擎
+
+      // 自动静默发送到底层 Rust 引擎
       try {
         await CoolapkTauriAPI.saveCookie(savedCookie);
+        const res = await CoolapkTauriAPI.checkLoginStatus();
+        const data = res?.data || res || {};
+        if (data && (data.uid || data.username)) {
+          const uid = String(data.uid || user.value?.uid || '');
+          let userAvatar = data.userAvatar || data.avatar || data.user_avatar || '';
+          if (!userAvatar && uid) {
+            userAvatar = getAvatarUrlByUid(uid);
+          }
+          const updatedProfile: UserProfile = {
+            uid,
+            username: data.username || user.value?.username || '酷友',
+            userAvatar: userAvatar || user.value?.userAvatar || '',
+            level: Number(data.level || user.value?.level || 1),
+            bio: data.bio || data.sign || user.value?.bio || ''
+          };
+          user.value = updatedProfile;
+          isLoggedIn.value = true;
+          localStorage.setItem('coolapk_user', JSON.stringify(updatedProfile));
+        }
       } catch (e) {
-        console.warn('静默恢复 Cookie 失败:', e);
+        console.warn('静默恢复并同步 Cookie 状态:', e);
       }
     }
   }
@@ -145,24 +185,29 @@ export const useAuthStore = defineStore('auth', () => {
     const res = await CoolapkTauriAPI.loginByAccount(acc, pwd);
     const data = res?.data || res || {};
 
+    const uid = data.uid || data.id || data.user?.uid || data.userInfo?.uid;
+    const sessid = data.sessid || data.token || data.user?.token || data.userInfo?.token;
+
+    if (!uid || !sessid) {
+      throw new Error(data.message || data.error || '账号或密码不正确，请核对后重试');
+    }
+
     const profile: UserProfile = {
-      uid: data.uid || data.id || '10000',
-      username: data.username || data.displayUsername || acc,
-      userAvatar: data.userAvatar || data.avatar || '',
-      level: Number(data.level || data.userLevel || 1),
-      bio: data.bio || data.sign || ''
+      uid,
+      username: data.username || data.displayUsername || data.user?.username || acc,
+      userAvatar: data.userAvatar || data.avatar || data.user?.avatar || '',
+      level: Number(data.level || data.userLevel || data.user?.level || 1),
+      bio: data.bio || data.sign || data.user?.bio || ''
     };
 
     user.value = profile;
     isLoggedIn.value = true;
     localStorage.setItem('coolapk_user', JSON.stringify(profile));
 
-    // 如果返回了 sessid / token，进行存储
-    if (data.sessid || data.token) {
-      const tokenStr = `SESSID=${data.sessid || data.token}`;
-      rawCookie.value = tokenStr;
-      localStorage.setItem('coolapk_cookie', tokenStr);
-    }
+    const tokenStr = `SESSID=${sessid}; uid=${uid}`;
+    rawCookie.value = tokenStr;
+    localStorage.setItem('coolapk_cookie', tokenStr);
+    await CoolapkTauriAPI.saveCookie(tokenStr);
 
     return profile;
   }
@@ -191,25 +236,38 @@ export const useAuthStore = defineStore('auth', () => {
     const res = await CoolapkTauriAPI.loginByMobile(phone, code);
     const data = res?.data || res || {};
 
+    const uid = data.uid || data.id || data.user?.uid || data.userInfo?.uid;
+    const sessid = data.sessid || data.token || data.user?.token || data.userInfo?.token;
+
+    if (!uid || !sessid) {
+      throw new Error(data.message || data.error || '手机验证码无效或已失效，请重新获取');
+    }
+
     const profile: UserProfile = {
-      uid: data.uid || data.id || '10000',
-      username: data.username || data.displayUsername || `酷友_${phone.slice(-4)}`,
-      userAvatar: data.userAvatar || data.avatar || '',
-      level: Number(data.level || data.userLevel || 1),
-      bio: data.bio || data.sign || ''
+      uid,
+      username: data.username || data.displayUsername || data.user?.username || `酷友_${phone.slice(-4)}`,
+      userAvatar: data.userAvatar || data.avatar || data.user?.avatar || '',
+      level: Number(data.level || data.userLevel || data.user?.level || 1),
+      bio: data.bio || data.sign || data.user?.bio || ''
     };
 
     user.value = profile;
     isLoggedIn.value = true;
     localStorage.setItem('coolapk_user', JSON.stringify(profile));
 
-    if (data.sessid || data.token) {
-      const tokenStr = `SESSID=${data.sessid || data.token}`;
-      rawCookie.value = tokenStr;
-      localStorage.setItem('coolapk_cookie', tokenStr);
-    }
+    const tokenStr = `SESSID=${sessid}; uid=${uid}`;
+    rawCookie.value = tokenStr;
+    localStorage.setItem('coolapk_cookie', tokenStr);
+    await CoolapkTauriAPI.saveCookie(tokenStr);
 
     return profile;
+  }
+
+  /**
+   * 保存并导入第三方 Cookie/SESSID 凭据
+   */
+  async function saveCookie(cookieStr: string): Promise<UserProfile> {
+    return await loginWithCookie(cookieStr);
   }
 
   return {
@@ -223,6 +281,7 @@ export const useAuthStore = defineStore('auth', () => {
     loginWithAccount,
     sendSmsCode,
     loginWithMobile,
+    saveCookie,
     logout,
     initAuth
   };

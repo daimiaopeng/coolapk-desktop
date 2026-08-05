@@ -9,7 +9,7 @@
               <img src="../../assets/coolapk-logo-rounded.png" alt="Coolapk" class="brand-logo" />
               <div class="header-titles">
                 <h3 class="dialog-title">酷安账号登录</h3>
-                <span class="dialog-sub">登录后即可同步体验点赞、发布动态、发送私信与评论功能</span>
+                <span class="dialog-sub">登录后同步发帖、发表评论、发私信与点赞等权益</span>
               </div>
             </div>
             <button class="close-btn" title="关闭" @click="handleClose">
@@ -43,13 +43,27 @@
 
           <!-- 未登录或重新绑定凭据流程 -->
           <div v-else class="login-body">
+            <!-- 方案 B 核心入口：酷安官方 Web 快捷授权 -->
+            <div class="web-login-banner">
+              <div class="banner-left">
+                <i class="fas fa-shield-cat banner-icon"></i>
+                <div class="banner-texts">
+                  <span class="banner-title">方案 B：官方网页极速直连登录</span>
+                  <span class="banner-sub">调起酷安官方授权页，支持扫码与极验验证，无视 403 阻断</span>
+                </div>
+              </div>
+              <AppButton variant="primary" size="sm" icon="fas fa-arrow-up-right-from-square" @click="handleOpenWebAuth">
+                打开官方授权页
+              </AppButton>
+            </div>
+
             <div class="tab-nav">
               <button
-                :class="['tab-item', { active: activeTab === 'mobile' }]"
-                @click="switchTab('mobile')"
+                :class="['tab-item', { active: activeTab === 'cookie' }]"
+                @click="switchTab('cookie')"
               >
-                <i class="fas fa-mobile-screen-button tab-icon"></i>
-                手机号验证码登录
+                <i class="fas fa-key tab-icon"></i>
+                SESSID / Cookie 导入
               </button>
               <button
                 :class="['tab-item', { active: activeTab === 'account' }]"
@@ -57,6 +71,13 @@
               >
                 <i class="fas fa-user-lock tab-icon"></i>
                 账号密码登录
+              </button>
+              <button
+                :class="['tab-item', { active: activeTab === 'mobile' }]"
+                @click="switchTab('mobile')"
+              >
+                <i class="fas fa-mobile-screen-button tab-icon"></i>
+                手机验证码
               </button>
             </div>
 
@@ -100,11 +121,16 @@
 
               <!-- 错误或提示反馈 -->
               <div v-if="errorMessage" class="status-alert alert-error">
-                <i class="fas fa-exclamation-circle"></i>
-                <span>{{ errorMessage }}</span>
+                <i class="fas fa-exclamation-circle alert-icon"></i>
+                <div class="alert-content">
+                  <span>{{ errorMessage }}</span>
+                  <div class="alert-action-link" @click="switchTab('account')">
+                    若因酷安风控无法收取短信，可点此尝试【账号密码】或【SESSID】登录
+                  </div>
+                </div>
               </div>
               <div v-else-if="successMessage" class="status-alert alert-success">
-                <i class="fas fa-check-circle"></i>
+                <i class="fas fa-check-circle alert-icon"></i>
                 <span>{{ successMessage }}</span>
               </div>
 
@@ -129,7 +155,7 @@
             </div>
 
             <!-- TAB 2: 账号密码登录 -->
-            <div v-else class="tab-pane">
+            <div v-else-if="activeTab === 'account'" class="tab-pane">
               <div class="form-item">
                 <label class="form-label">酷安账号 / 手机号 / 邮箱</label>
                 <input
@@ -158,11 +184,11 @@
 
               <!-- 错误或提示反馈 -->
               <div v-if="errorMessage" class="status-alert alert-error">
-                <i class="fas fa-exclamation-circle"></i>
+                <i class="fas fa-exclamation-circle alert-icon"></i>
                 <span>{{ errorMessage }}</span>
               </div>
               <div v-else-if="successMessage" class="status-alert alert-success">
-                <i class="fas fa-check-circle"></i>
+                <i class="fas fa-check-circle alert-icon"></i>
                 <span>{{ successMessage }}</span>
               </div>
 
@@ -185,6 +211,49 @@
                 </AppButton>
               </div>
             </div>
+
+            <!-- TAB 3: Cookie / SESSID 快速快捷登录 -->
+            <div v-else class="tab-pane">
+              <div class="form-item">
+                <label class="form-label">SESSID 或 Cookie 字符串</label>
+                <textarea
+                  v-model="rawCookieInput"
+                  rows="4"
+                  class="form-textarea"
+                  placeholder="可在此直接贴入浏览器抓包或包含 SESSID、uid、username、token 的完整 Cookie 字符串"
+                ></textarea>
+                <span class="input-hint">完整凭据格式: SESSID=ea45...; uid=1451266; username=oxygen...; token=64f3...</span>
+              </div>
+
+              <!-- 错误或提示反馈 -->
+              <div v-if="errorMessage" class="status-alert alert-error">
+                <i class="fas fa-exclamation-circle alert-icon"></i>
+                <span>{{ errorMessage }}</span>
+              </div>
+              <div v-else-if="successMessage" class="status-alert alert-success">
+                <i class="fas fa-check-circle alert-icon"></i>
+                <span>{{ successMessage }}</span>
+              </div>
+
+              <div class="dialog-actions">
+                <AppButton
+                  v-if="isRebinding && authStore.isLoggedIn"
+                  variant="secondary"
+                  @click="isRebinding = false"
+                >
+                  取消
+                </AppButton>
+                <AppButton
+                  variant="primary"
+                  icon="fas fa-key"
+                  :loading="isLoading"
+                  :disabled="!rawCookieInput.trim()"
+                  @click="handleCookieLogin"
+                >
+                  解析并导入凭据
+                </AppButton>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -195,12 +264,18 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { useAuthStore } from '../../stores/auth';
+import { CoolapkTauriAPI } from '../../api/coolapk';
 import AppButton from '../common/AppButton.vue';
 import AppAvatar from '../common/AppAvatar.vue';
 
 const authStore = useAuthStore();
 
-const activeTab = ref<'mobile' | 'account'>('mobile');
+const activeTab = ref<'mobile' | 'account' | 'cookie'>('cookie');
+
+function handleOpenWebAuth() {
+  CoolapkTauriAPI.openLoginWebview();
+  successMessage.value = '已调起客户端嵌入式官方登录窗口。请在窗口内完成登录，登录成功后 App 将自动捕获凭据并同步；若提示“已经登录了哦”，只需刷新或粘贴控制台 Cookies 即可！';
+}
 
 // 手机号登录表单
 const mobilePhone = ref('');
@@ -213,6 +288,9 @@ let timer: any = null;
 const accountName = ref('');
 const accountPassword = ref('');
 const showPassword = ref(false);
+
+// Cookie凭据表单
+const rawCookieInput = ref('');
 
 const isLoading = ref(false);
 const errorMessage = ref('');
@@ -234,7 +312,7 @@ watch(
   }
 );
 
-function switchTab(tab: 'mobile' | 'account') {
+function switchTab(tab: 'mobile' | 'account' | 'cookie') {
   activeTab.value = tab;
   errorMessage.value = '';
   successMessage.value = '';
@@ -254,8 +332,8 @@ async function handleSendVcode() {
 
   try {
     await authStore.sendSmsCode(mobilePhone.value);
-    successMessage.value = '验证码已成功发送至您的手机，请注意查收';
-    
+    successMessage.value = '验证码指令已下发，请查收手机短信';
+
     // 启动 60s 倒计时
     countdown.value = 60;
     timer = setInterval(() => {
@@ -267,7 +345,7 @@ async function handleSendVcode() {
       }
     }, 1000);
   } catch (err: any) {
-    errorMessage.value = err?.message || '发送验证码失败，请稍后再试';
+    errorMessage.value = err?.message || err || '发送失败：酷安接口风控拦截或网络DNS限制';
   } finally {
     isSendingCode.value = false;
   }
@@ -288,7 +366,7 @@ async function handleMobileLogin() {
       authStore.closeLoginModal();
     }, 1000);
   } catch (err: any) {
-    errorMessage.value = err?.message || '手机号登录失败，请检查验证码是否正确';
+    errorMessage.value = err?.message || err || '手机号登录失败，请检查验证码';
   } finally {
     isLoading.value = false;
   }
@@ -309,7 +387,28 @@ async function handleAccountLogin() {
       authStore.closeLoginModal();
     }, 1000);
   } catch (err: any) {
-    errorMessage.value = err?.message || '账号或密码错误，请核对后重试';
+    errorMessage.value = err?.message || err || '账号或密码错误，请核对后重试';
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+// Cookie 凭据导入登录
+async function handleCookieLogin() {
+  if (!rawCookieInput.value.trim() || isLoading.value) return;
+
+  isLoading.value = true;
+  errorMessage.value = '';
+  successMessage.value = '';
+
+  try {
+    const profile = await authStore.loginWithCookie(rawCookieInput.value);
+    successMessage.value = `凭据绑定成功！欢迎，${profile.username || '酷友'}`;
+    setTimeout(() => {
+      authStore.closeLoginModal();
+    }, 1000);
+  } catch (err: any) {
+    errorMessage.value = err?.message || err || '解析凭据失败，请检查输入格式';
   } finally {
     isLoading.value = false;
   }
@@ -321,6 +420,7 @@ async function handleLogout() {
   smsCode.value = '';
   accountName.value = '';
   accountPassword.value = '';
+  rawCookieInput.value = '';
   successMessage.value = '';
   errorMessage.value = '';
   isRebinding.value = false;
@@ -346,7 +446,7 @@ onUnmounted(() => {
 
 .login-dialog {
   width: 100%;
-  max-width: 460px;
+  max-width: 480px;
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg, 16px);
@@ -482,12 +582,51 @@ onUnmounted(() => {
   gap: var(--space-4);
 }
 
+.web-login-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--brand-soft, #f0fdf4);
+  border: 1px solid var(--brand-primary, #10b966);
+  border-radius: var(--radius-card, 10px);
+  padding: 12px 14px;
+}
+
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.banner-icon {
+  font-size: 1.5rem;
+  color: var(--brand-primary, #10b966);
+}
+
+.banner-texts {
+  display: flex;
+  flex-direction: column;
+}
+
+.banner-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--text-primary);
+}
+
+.banner-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .tab-nav {
   display: flex;
   background-color: var(--background);
   padding: 3px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
+  gap: 2px;
 }
 
 .tab-item {
@@ -495,12 +634,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: var(--space-2) 0;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  font-size: var(--font-size-sub);
+  font-size: 13px;
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   cursor: pointer;
@@ -532,13 +671,12 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-.form-input {
+.form-input, .form-textarea {
   width: 100%;
-  height: 40px;
   background-color: var(--background);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 0 var(--space-3);
+  padding: 8px var(--space-3);
   font-size: var(--font-size-sub);
   color: var(--text-primary);
   box-sizing: border-box;
@@ -546,8 +684,23 @@ onUnmounted(() => {
   transition: border-color var(--duration-fast);
 }
 
-.form-input:focus {
+.form-input {
+  height: 40px;
+}
+
+.form-textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-input:focus, .form-textarea:focus {
   border-color: var(--brand-primary);
+}
+
+.input-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
 }
 
 .input-with-prefix {
@@ -625,11 +778,30 @@ onUnmounted(() => {
 
 .status-alert {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-2);
   padding: var(--space-3);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sub);
+}
+
+.alert-icon {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.alert-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.alert-action-link {
+  font-size: 12px;
+  color: var(--brand-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: bold;
 }
 
 .alert-error {

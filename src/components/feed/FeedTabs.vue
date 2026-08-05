@@ -6,7 +6,8 @@
       :class="['tab-item', { 'is-active': activeKey === tab.key }]"
       @click="$emit('update:activeKey', tab.key)"
     >
-      {{ tab.label }}
+      <span class="tab-label">{{ tab.label }}</span>
+      <span v-if="activeKey === tab.key" class="coolapk-tab-indicator"></span>
     </button>
   </div>
 </template>
@@ -23,8 +24,8 @@ defineEmits<{
 const tabs = [
   { key: 'index_v8', label: '推荐' },
   { key: 'hot', label: '热榜' },
-  { key: 'latest', label: '最新' },
-  { key: 'digest', label: '精选' },
+  { key: 'latest', label: '快讯' },
+  { key: 'digest', label: '头条' },
   { key: 'cool_picture', label: '酷图' },
   { key: 'secondhand', label: '二手' },
 ];
@@ -34,35 +35,65 @@ const tabs = [
 .feed-tabs {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-5);
+  gap: var(--space-4);
+  padding: 0 var(--space-6);
   background-color: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
   height: 52px;
   overflow-x: auto;
   flex-shrink: 0;
+  user-select: none;
 }
 
 .tab-item {
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 6px;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--text-secondary);
   transition: all var(--duration-fast) var(--ease-default);
   white-space: nowrap;
   background: transparent;
   cursor: pointer;
+  border: none;
+  outline: none;
 }
 
 .tab-item:hover {
-  background-color: var(--surface-hover);
   color: var(--text-primary);
 }
 
 .tab-item.is-active {
-  background-color: var(--brand-soft);
-  color: var(--brand-primary);
-  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* 酷安 APP 标志性绿色下划弧线/胶囊滑块指示器 */
+.coolapk-tab-indicator {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 4px;
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
+  animation: tabSlideIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes tabSlideIn {
+  from {
+    width: 0px;
+    opacity: 0;
+  }
+  to {
+    width: 20px;
+    opacity: 1;
+  }
 }
 </style>

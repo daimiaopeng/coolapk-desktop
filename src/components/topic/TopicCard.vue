@@ -1,13 +1,12 @@
 <template>
   <div class="topic-card" @click="handleClick">
     <div class="topic-icon-wrapper">
-      <img
+      <AppImage
         v-if="iconUrl"
         :src="iconUrl"
         class="topic-icon"
+        fit="cover"
         :alt="topicName"
-        loading="lazy"
-        @error="handleImageError"
       />
       <div v-else class="topic-icon-fallback">
         <span class="hashtag">#</span>
@@ -27,15 +26,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
+import AppImage from '../common/AppImage.vue';
 
 const props = defineProps<{
   topic: any;
 }>();
 
 const router = useRouter();
-const imgError = ref(false);
 
 const topicName = computed(() => {
   const item = props.topic;
@@ -44,10 +43,9 @@ const topicName = computed(() => {
 });
 
 const iconUrl = computed(() => {
-  if (imgError.value) return '';
   const item = props.topic;
   if (!item) return '';
-  return item.logo || item.pic || item.cover || item.icon || '';
+  return item.logo || item.pic || item.cover || item.icon || item.topic_logo || item.img || '';
 });
 
 const subText = computed(() => {
@@ -55,7 +53,7 @@ const subText = computed(() => {
   if (!item) return '';
   
   if (item.sub_title) return item.sub_title;
-  if (item.follower_num) return `${formatNumber(item.follower_num)} 关注`;
+  if (item.follower_num || item.follownum) return `${formatNumber(item.follower_num || item.follownum)} 关注`;
   if (item.commentnum || item.discuss_num) return `${formatNumber(item.commentnum || item.discuss_num)} 讨论`;
   if (item.hot_num) return `${formatNumber(item.hot_num)} 热度`;
   if (item.hot_num_txt) return item.hot_num_txt;
@@ -68,10 +66,6 @@ function formatNumber(num: number | string) {
   if (n >= 10000) return (n / 10000).toFixed(1) + '万';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
   return n.toString();
-}
-
-function handleImageError() {
-  imgError.value = true;
 }
 
 function handleClick() {

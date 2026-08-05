@@ -91,15 +91,15 @@ const router = useRouter();
 
 // 对应酷安真实有效的 话题 维度分类列表
 const categories = ref<CategoryItem[]>([
-  { title: '🔥 热门话题', url: '#/topic/tagList' },
+  { title: '🔥 热门话题', url: '/v6/topic/tagList?sort=hot' },
   { title: '⭐ 最受关注', url: '/v6/topic/tagList?sort=follow' },
   { title: '🆕 最新话题', url: '/v6/topic/tagList?sort=new' },
-  { title: '📱 手机数码', url: '#/topic/tagList?tagType=1' },
-  { title: '💻 电脑外设', url: '#/topic/tagList?tagType=2' },
-  { title: '🎮 游戏生活', url: '#/topic/tagList?tagType=3' },
+  { title: '📱 手机数码', url: '/v6/topic/tagList?tagType=1' },
+  { title: '💻 电脑外设', url: '/v6/topic/tagList?tagType=2' },
+  { title: '🎮 游戏生活', url: '/v6/topic/tagList?tagType=3' },
 ]);
 
-const activeCategoryUrl = ref<string>('#/topic/tagList');
+const activeCategoryUrl = ref<string>('/v6/topic/tagList?sort=hot');
 
 const rawTopicItems = ref<any[]>([]);
 const searchQuery = ref('');
@@ -119,7 +119,7 @@ const filteredTopics = computed(() => {
   });
 });
 
-async function fetchTopicData(url: string = '#/topic/tagList', isLoadMore = false) {
+async function fetchTopicData(url: string = '/v6/topic/tagList?sort=hot', isLoadMore = false) {
   if (loading.value) return;
   loading.value = true;
 

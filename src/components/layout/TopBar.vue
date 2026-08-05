@@ -6,6 +6,7 @@
     </div>
 
     <div class="top-bar-center">
+
       <div class="search-input-wrapper" @click="appStore.openSearch">
         <i class="fas fa-search search-icon"></i>
         <span class="placeholder-text">搜索应用、动态、用户、话题</span>
@@ -90,6 +91,8 @@ function handleUserClick() {
   flex-shrink: 0;
   transition: width var(--duration-normal) var(--ease-default);
 }
+
+
 
 .top-bar-left.is-collapsed {
   width: var(--sidebar-collapsed-width);

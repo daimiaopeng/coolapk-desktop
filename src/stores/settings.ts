@@ -1,8 +1,21 @@
 import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
-import type { AppSettings, ThemeMode, FeedDensity, ImageQuality } from '../types/settings';
+import type { AppSettings, ThemeMode, FeedDensity, ImageQuality, NavVisibilitySettings } from '../types/settings';
 
 const STORAGE_KEY = 'coolapk_desktop_settings';
+
+const defaultNavVisibility: NavVisibilitySettings = {
+  home: true,
+  feeds: true,
+  discover: true,
+  apps: true,
+  games: true,
+  topics: true,
+  favorites: true,
+  history: true,
+  messages: true,
+  following: true,
+};
 
 const defaultSettings: AppSettings = {
   theme: 'system',
@@ -16,7 +29,8 @@ const defaultSettings: AppSettings = {
   maxConcurrentDownloads: 3,
   autoCleanCache: true,
   cacheThresholdMB: 500,
-  imageQuality: 'hd'
+  imageQuality: 'hd',
+  navVisibility: { ...defaultNavVisibility }
 };
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -26,11 +40,17 @@ export const useSettingsStore = defineStore('settings', () => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      settings.value = { ...defaultSettings, ...JSON.parse(saved) };
+      const parsed = JSON.parse(saved);
+      settings.value = {
+        ...defaultSettings,
+        ...parsed,
+        navVisibility: { ...defaultNavVisibility, ...(parsed.navVisibility || {}) }
+      };
     }
   } catch (err) {
     console.error('Failed to load settings from storage', err);
   }
+
 
   // 持久化与生效应用
   watch(
@@ -93,10 +113,19 @@ export const useSettingsStore = defineStore('settings', () => {
     settings.value.zoom = Math.min(Math.max(zoom, 50), 200);
   }
 
+  function toggleNavVisibility(key: keyof NavVisibilitySettings) {
+    if (!settings.value.navVisibility) {
+      settings.value.navVisibility = { ...defaultNavVisibility };
+    }
+    settings.value.navVisibility[key] = !settings.value.navVisibility[key];
+  }
+
   return {
     settings,
     setTheme,
     toggleSidebar,
-    setZoom
+    setZoom,
+    toggleNavVisibility
   };
 });
+

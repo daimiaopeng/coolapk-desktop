@@ -56,6 +56,25 @@
         <AppSwitch v-model="settingsStore.settings.reduceMotion" />
       </div>
     </div>
+
+    <!-- 页面栏目显隐设置区域 -->
+    <div class="setting-group">
+      <h4 class="group-title">侧边栏页面栏目显隐设置</h4>
+      <p class="group-sub">根据个人使用习惯自由开启或关闭左侧侧边栏对应的功能栏目</p>
+
+      <div class="nav-grid">
+        <div v-for="nav in navItems" :key="nav.key" class="nav-toggle-card">
+          <div class="nav-item-meta">
+            <i :class="[nav.icon, 'nav-item-icon']"></i>
+            <span class="nav-item-name">{{ nav.label }}</span>
+          </div>
+          <AppSwitch
+            :model-value="getNavVisible(nav.key)"
+            @update:model-value="toggleNav(nav.key)"
+          />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -64,7 +83,31 @@ import { useSettingsStore } from '../../stores/settings';
 import AppSwitch from '../../components/common/AppSwitch.vue';
 
 const settingsStore = useSettingsStore();
+
+const navItems = [
+  { key: 'home', label: '首页', icon: 'fas fa-home' },
+  { key: 'feeds', label: '动态中心', icon: 'fas fa-stream' },
+  { key: 'discover', label: '发现中心', icon: 'fas fa-compass' },
+  { key: 'apps', label: '应用中心', icon: 'fas fa-cubes' },
+  { key: 'games', label: '游戏中心', icon: 'fas fa-gamepad' },
+  { key: 'topics', label: '话题广场', icon: 'fas fa-hashtag' },
+  { key: 'favorites', label: '收藏夹', icon: 'far fa-bookmark' },
+  { key: 'history', label: '历史记录', icon: 'far fa-clock' },
+  { key: 'messages', label: '消息通知', icon: 'far fa-comment-alt' },
+  { key: 'following', label: '我关注的', icon: 'far fa-user' },
+];
+
+function getNavVisible(key: string): boolean {
+  const vis = settingsStore.settings.navVisibility;
+  if (!vis) return true;
+  return vis[key as keyof typeof vis] !== false;
+}
+
+function toggleNav(key: string) {
+  settingsStore.toggleNavVisibility(key as any);
+}
 </script>
+
 
 <style scoped>
 .settings-section {
@@ -93,6 +136,49 @@ const settingsStore = useSettingsStore();
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
 }
+
+.group-sub {
+  font-size: var(--font-size-sub);
+  color: var(--text-tertiary);
+  margin-top: -4px;
+}
+
+.nav-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.nav-toggle-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+
+.nav-item-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.nav-item-icon {
+  color: var(--brand-primary);
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+}
+
+.nav-item-name {
+  font-size: var(--font-size-sub);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
 
 .theme-options {
   display: grid;

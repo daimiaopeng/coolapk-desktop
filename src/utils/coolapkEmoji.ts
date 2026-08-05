@@ -38,6 +38,9 @@ const COOLAPK_EMOJI_MAP: Record<string, string> = {
   '新酷币5€': 'coolapk_emotion_80.png'
 };
 
+export const EMOJI_MAP = COOLAPK_EMOJI_MAP;
+export const EMOJI_BASE = EMOJI_BASE_URL;
+
 export const renderCoolapkEmoji = (html: string) => html.replace(/\[([^\]\r\n]{1,20})\]/g, (match, name: string) => {
   const filename = COOLAPK_EMOJI_MAP[name];
   if (!filename) return match;
