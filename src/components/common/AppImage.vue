@@ -8,6 +8,7 @@
       :src="renderedSrc"
       :alt="alt"
       :style="{ objectFit: fit }"
+      referrerpolicy="no-referrer"
       @load="handleLoad"
       @error="handleError"
       v-bind="$attrs"

@@ -43,43 +43,72 @@
 
           <!-- 未登录或重新绑定凭据流程 -->
           <div v-else class="login-body">
-            <!-- 方案 B 核心入口：酷安官方 Web 快捷授权 -->
-            <div class="web-login-banner">
-              <div class="banner-left">
-                <i class="fas fa-shield-cat banner-icon"></i>
-                <div class="banner-texts">
-                  <span class="banner-title">方案 B：官方网页极速直连登录</span>
-                  <span class="banner-sub">调起酷安官方授权页，支持扫码与极验验证，无视 403 阻断</span>
-                </div>
+            <!-- 官方直连授权核心主视觉卡片 -->
+            <div class="official-login-card">
+              <div class="card-hero-icon">
+                <img src="../../assets/coolapk-logo-rounded.png" alt="Coolapk" class="hero-logo" />
               </div>
-              <AppButton variant="primary" size="sm" icon="fas fa-arrow-up-right-from-square" @click="handleOpenWebAuth">
-                打开官方授权页
+              <h4 class="hero-title">酷安官方授权登录</h4>
+              <p class="hero-desc">调起酷安官方授权窗口，支持扫码验证与手机极验，登录完成自动同步会话</p>
+              
+              <AppButton 
+                variant="primary" 
+                size="lg" 
+                icon="fas fa-arrow-up-right-from-square" 
+                class="btn-hero-login"
+                @click="handleOpenWebAuth"
+              >
+                调起官方授权登录
               </AppButton>
+              
+              <button class="btn-hero-sync" @click="handleCheckWebLogin">
+                <i class="fas fa-rotate"></i> 已在窗口完成登录？点击同步凭据
+              </button>
             </div>
 
-            <div class="tab-nav">
-              <button
-                :class="['tab-item', { active: activeTab === 'cookie' }]"
-                @click="switchTab('cookie')"
-              >
-                <i class="fas fa-key tab-icon"></i>
-                SESSID / Cookie 导入
-              </button>
-              <button
-                :class="['tab-item', { active: activeTab === 'account' }]"
-                @click="switchTab('account')"
-              >
-                <i class="fas fa-user-lock tab-icon"></i>
-                账号密码登录
-              </button>
-              <button
-                :class="['tab-item', { active: activeTab === 'mobile' }]"
-                @click="switchTab('mobile')"
-              >
-                <i class="fas fa-mobile-screen-button tab-icon"></i>
-                手机验证码
+            <!-- 提示状态框 -->
+            <div v-if="successMessage" class="status-alert alert-success">
+              <i class="fas fa-check-circle alert-icon"></i>
+              <span>{{ successMessage }}</span>
+            </div>
+            <div v-else-if="errorMessage" class="status-alert alert-error">
+              <i class="fas fa-exclamation-circle alert-icon"></i>
+              <span>{{ errorMessage }}</span>
+            </div>
+
+            <!-- 底部折叠：高级 / 备用登录选项 -->
+            <div class="advanced-login-toggle">
+              <button class="toggle-link" @click="showAdvanced = !showAdvanced">
+                <span>{{ showAdvanced ? '收起备用登录选项' : '备用登录选项 (Cookie 凭据 / 密码 / 短信)' }}</span>
+                <i :class="showAdvanced ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
               </button>
             </div>
+
+            <!-- 备用登录选项容器 -->
+            <div v-if="showAdvanced" class="advanced-login-panel">
+              <div class="tab-nav">
+                <button
+                  :class="['tab-item', { active: activeTab === 'cookie' }]"
+                  @click="switchTab('cookie')"
+                >
+                  <i class="fas fa-key tab-icon"></i>
+                  <span>Cookie 凭据导入</span>
+                </button>
+                <button
+                  :class="['tab-item', { active: activeTab === 'account' }]"
+                  @click="switchTab('account')"
+                >
+                  <i class="fas fa-user-lock tab-icon"></i>
+                  <span>账号密码</span>
+                </button>
+                <button
+                  :class="['tab-item', { active: activeTab === 'mobile' }]"
+                  @click="switchTab('mobile')"
+                >
+                  <i class="fas fa-mobile-screen-button tab-icon"></i>
+                  <span>手机验证码</span>
+                </button>
+              </div>
 
             <!-- TAB 1: 手机号 + 验证码登录 -->
             <div v-if="activeTab === 'mobile'" class="tab-pane">
@@ -257,6 +286,7 @@
           </div>
         </div>
       </div>
+    </div>
     </Transition>
   </Teleport>
 </template>
@@ -271,11 +301,61 @@ import AppAvatar from '../common/AppAvatar.vue';
 const authStore = useAuthStore();
 
 const activeTab = ref<'mobile' | 'account' | 'cookie'>('cookie');
+const showAdvanced = ref(false);
+
+let statusPollTimer: any = null;
 
 function handleOpenWebAuth() {
   CoolapkTauriAPI.openLoginWebview();
-  successMessage.value = '已调起客户端嵌入式官方登录窗口。请在窗口内完成登录，登录成功后 App 将自动捕获凭据并同步；若提示“已经登录了哦”，只需刷新或粘贴控制台 Cookies 即可！';
+  successMessage.value = '已调起客户端嵌入式官方登录窗口。登录完成后窗口将自动关闭并完成凭据同步！';
+  
+  // 开启 15 秒轮询检测登录状态
+  if (statusPollTimer) clearInterval(statusPollTimer);
+  let attempts = 0;
+  statusPollTimer = setInterval(async () => {
+    attempts++;
+    const res = await authStore.checkStatus();
+    if (res || attempts > 20) {
+      clearInterval(statusPollTimer);
+      statusPollTimer = null;
+      if (res) {
+        successMessage.value = '🎉 酷安账号凭据同步成功！欢迎回来，' + (authStore.user?.username || '酷友');
+      }
+    }
+  }, 1500);
 }
+
+async function handleCheckWebLogin() {
+  isLoading.value = true;
+  errorMessage.value = '';
+  try {
+    const isLoggedIn = await authStore.checkStatus();
+    if (isLoggedIn) {
+      successMessage.value = '🎉 酷安账号凭据同步成功！欢迎回来，' + (authStore.user?.username || '酷友');
+      setTimeout(() => {
+        authStore.closeLoginModal();
+      }, 1000);
+    } else {
+      showAdvanced.value = true;
+      activeTab.value = 'cookie';
+      errorMessage.value = '提示：因 Edge 系统内核沙箱隔离，网页 Cookie 暂未透传。请直接在下方粘贴抓包获得的 Cookie（包含 SESSID），一秒点击立即登录！';
+    }
+  } catch (e: any) {
+    errorMessage.value = '同步校验失败: ' + (e?.message || e);
+  } finally {
+    isLoading.value = false;
+  }
+}
+
+// 监听 Rust 端发送的网页窗口自动重定向闭环事件
+let unlistenFn: any = null;
+import('@tauri-apps/api/event').then(({ listen }) => {
+  listen('login-window-closed', () => {
+    handleCheckWebLogin();
+  }).then(unlisten => {
+    unlistenFn = unlisten;
+  });
+});
 
 // 手机号登录表单
 const mobilePhone = ref('');
@@ -428,6 +508,8 @@ async function handleLogout() {
 
 onUnmounted(() => {
   if (timer) clearInterval(timer);
+  if (statusPollTimer) clearInterval(statusPollTimer);
+  if (unlistenFn) unlistenFn();
 });
 </script>
 
@@ -582,42 +664,103 @@ onUnmounted(() => {
   gap: var(--space-4);
 }
 
-.web-login-banner {
+/* 官方直连授权核心极简卡片 */
+.official-login-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  background: var(--brand-soft, #f0fdf4);
-  border: 1px solid var(--brand-primary, #10b966);
-  border-radius: var(--radius-card, 10px);
-  padding: 12px 14px;
-}
-
-.banner-left {
-  display: flex;
-  align-items: center;
+  text-align: center;
+  padding: 24px 20px;
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.06) 0%, rgba(16, 185, 129, 0.01) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.18);
+  border-radius: var(--radius-card, 14px);
   gap: 10px;
 }
 
-.banner-icon {
-  font-size: 1.5rem;
-  color: var(--brand-primary, #10b966);
+.card-hero-icon {
+  margin-bottom: 2px;
 }
 
-.banner-texts {
+.hero-logo {
+  width: 54px;
+  height: 54px;
+  filter: drop-shadow(0 4px 10px rgba(16, 185, 129, 0.25));
+}
+
+.hero-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.hero-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 360px;
+  line-height: 1.5;
+}
+
+.btn-hero-login {
+  width: 100%;
+  max-width: 320px;
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  height: 42px;
+  border-radius: 21px;
+}
+
+.btn-hero-sync {
+  background: transparent;
+  border: none;
+  color: #10b981;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  transition: all 0.2s;
+}
+
+.btn-hero-sync:hover {
+  text-decoration: underline;
+  color: #059669;
+}
+
+/* 高级 / 备用登录面板折叠链接 */
+.advanced-login-toggle {
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.toggle-link {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  transition: color 0.2s;
+}
+
+.toggle-link:hover {
+  color: var(--text-secondary);
+}
+
+.advanced-login-panel {
   display: flex;
   flex-direction: column;
-}
-
-.banner-title {
-  font-size: 13px;
-  font-weight: bold;
-  color: var(--text-primary);
-}
-
-.banner-sub {
-  font-size: 11px;
-  color: var(--text-secondary);
+  gap: 16px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-light);
 }
 
 .tab-nav {
@@ -634,12 +777,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1);
-  padding: var(--space-2) 0;
+  gap: 6px;
+  padding: 8px 10px;
+  white-space: nowrap;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   cursor: pointer;

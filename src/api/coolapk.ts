@@ -245,11 +245,29 @@ export class CoolapkTauriAPI {
     }
   }
 
+  static async closeLoginWebview() {
+    try {
+      await invoke('close_login_window');
+    } catch {}
+  }
+
+  static async saveCookieSecurely(cookieStr: string) {
+    try {
+      await invoke('save_cookie_securely', { cookieStr });
+    } catch (e) {
+      console.warn('saveCookieSecurely 触发失败:', e);
+    }
+  }
+
   static async getFollowingFeeds(page: number = 1) {
     return await invokeNative('get_following_feeds', { page });
   }
 
   static async getFollowUserList(uid: string, page: number = 1) {
     return await invokeNative('get_follow_user_list', { uid, page });
+  }
+
+  static async getUserFollowNodes(uid: string) {
+    return await invokeNative('get_user_follow_nodes', { uid });
   }
 }

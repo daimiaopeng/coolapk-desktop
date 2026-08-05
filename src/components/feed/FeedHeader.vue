@@ -12,11 +12,18 @@
         <span v-if="verifyTitle" class="verify-badge">{{ verifyTitle }}</span>
       </div>
       <div class="meta-row">
+        <span v-if="recommendSource" class="source-tag">{{ recommendSource }}</span>
         <span class="dateline">{{ formatDateline(dateline) }}</span>
         <span v-if="device" class="device-tag">· {{ device }}</span>
       </div>
     </div>
-    <div class="action-more">
+
+    <!-- 酷安 App 原生热榜名次 01/02 醒目标记 -->
+    <div v-if="rankIndex" class="rank-badge">
+      <i class="fas fa-chart-line rank-icon"></i>
+      <span>{{ rankIndex < 10 ? '0' + rankIndex : rankIndex }}</span>
+    </div>
+    <div v-else class="action-more">
       <AppIconButton icon="fas fa-ellipsis-h" size="sm" title="更多" aria-label="更多" />
     </div>
   </div>
@@ -35,6 +42,8 @@ const props = defineProps<{
   verifyTitle?: string;
   dateline?: number | string;
   device?: string;
+  rankIndex?: number;
+  recommendSource?: string;
 }>();
 
 const router = useRouter();
@@ -123,9 +132,38 @@ function formatDateline(time?: number | string): string {
   font-size: var(--font-size-caption);
   color: var(--text-tertiary);
   margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.source-tag {
+  color: var(--brand-primary, #10b981);
+  font-size: 11px;
+  background-color: var(--brand-soft, rgba(16, 185, 129, 0.1));
+  padding: 0 4px;
+  border-radius: 3px;
 }
 
 .device-tag {
   margin-left: 2px;
+}
+
+.rank-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+  font-style: italic;
+}
+
+.rank-icon {
+  font-size: 12px;
 }
 </style>

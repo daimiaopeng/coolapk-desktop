@@ -1,5 +1,5 @@
 <template>
-  <div v-if="images && images.length > 0" :class="['feed-image-grid', `count-${gridCount}`]">
+  <div v-if="processedImages && processedImages.length > 0" :class="['feed-image-grid', `count-${gridCount}`]">
     <div
       v-for="(url, index) in processedImages"
       :key="index"
@@ -7,6 +7,9 @@
       @click.stop="openViewer(index)"
     >
       <AppImage :src="getHdImageUrl(url)" alt="feed image" image-class="grid-img" />
+      <div v-if="processedImages.length >= 3 && index === processedImages.length - 1" class="image-count-badge">
+        {{ processedImages.length }}图
+      </div>
     </div>
   </div>
 </template>
@@ -23,13 +26,17 @@ const props = defineProps<{
 
 const appStore = useAppStore();
 
-const gridCount = computed(() => {
-  if (!props.images) return 0;
-  return Math.min(props.images.length, 9);
+const processedImages = computed(() => {
+  if (!props.images || !Array.isArray(props.images)) return [];
+  return props.images.filter(url => {
+    if (!url || typeof url !== 'string') return false;
+    const trimmed = url.trim();
+    return trimmed.length > 5 && trimmed !== 'null' && trimmed !== 'undefined';
+  });
 });
 
-const processedImages = computed(() => {
-  return props.images || [];
+const gridCount = computed(() => {
+  return Math.min(processedImages.value.length, 9);
 });
 
 function openViewer(index: number) {
@@ -68,6 +75,7 @@ function openViewer(index: number) {
 }
 
 .grid-item {
+  position: relative;
   aspect-ratio: 1 / 1;
   border-radius: var(--radius-control);
   overflow: hidden;
@@ -84,5 +92,19 @@ function openViewer(index: number) {
 
 .grid-item:hover .grid-img {
   transform: scale(1.03);
+}
+
+.image-count-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
 }
 </style>

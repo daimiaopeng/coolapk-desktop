@@ -4,6 +4,96 @@
       <FeedTabs v-model:active-key="activeTab" />
 
       <div class="feed-scroll-container custom-scrollbar" @scroll="handleScroll">
+        <!-- 1. 头条 Tab (`digest`) 专属：今日酷安日历 & 金刚位入口 & 关照关注栏 -->
+        <div v-if="activeTab === 'digest'" class="headline-header-section">
+          <!-- 今日酷安日历与要闻栏 -->
+          <div class="today-coolapk-card">
+            <div class="calendar-badge">
+              <span class="cal-top">今日酷安</span>
+              <span class="cal-day">{{ todayDay }}</span>
+              <span class="cal-meta">{{ todayYearMonth }} {{ todayWeek }}</span>
+            </div>
+            <div class="headline-bulletins">
+              <div v-for="(b, idx) in topBulletins" :key="idx" class="bulletin-item" @click="handleBulletinClick(b)">
+                <span class="bulletin-dot"></span>
+                <span class="bulletin-text">{{ b.text }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 5 大快捷金刚图标 -->
+          <div class="quick-icons-grid">
+            <div class="icon-btn-item" @click="quickFilter('值得看')">
+              <div class="icon-circle icon-blue"><i class="fas fa-check-circle"></i></div>
+              <span>值得看</span>
+            </div>
+            <div class="icon-btn-item" @click="quickFilter('热闻')">
+              <div class="icon-circle icon-yellow"><i class="fas fa-newspaper"></i></div>
+              <span>热闻</span>
+            </div>
+            <div class="icon-btn-item" @click="quickFilter('活动')">
+              <div class="icon-circle icon-red"><i class="fas fa-gift"></i></div>
+              <span>活动</span>
+            </div>
+            <div class="icon-btn-item" @click="quickFilter('AI')">
+              <div class="icon-circle icon-cyan"><i class="fas fa-robot"></i></div>
+              <span>AI</span>
+            </div>
+            <div class="icon-btn-item" @click="quickFilter('摄影')">
+              <div class="icon-circle icon-teal"><i class="fas fa-camera"></i></div>
+              <span>人像摄影</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. 热榜 Tab (`hot`) 专属：周榜/月榜 + 热门搜索词 + 排序名次 -->
+        <div v-if="activeTab === 'hot'" class="hot-header-section">
+          <!-- 5 大榜单金刚组 -->
+          <div class="hot-ranks-row">
+            <div class="rank-action-item" @click="quickFilter('周榜')">
+              <div class="rank-icon-bg bg-orange"><i class="fas fa-thumbs-up"></i></div>
+              <span>周榜</span>
+            </div>
+            <div class="rank-action-item" @click="quickFilter('月榜')">
+              <div class="rank-icon-bg bg-cyan"><i class="fas fa-calendar-alt"></i></div>
+              <span>月榜</span>
+            </div>
+            <div class="rank-action-item" @click="quickFilter('收藏榜')">
+              <div class="rank-icon-bg bg-yellow"><i class="fas fa-star"></i></div>
+              <span>收藏榜</span>
+            </div>
+            <div class="rank-action-item" @click="quickFilter('酷安指数')">
+              <div class="rank-icon-bg bg-purple"><i class="fas fa-chart-line"></i></div>
+              <span>酷安指数</span>
+            </div>
+            <div class="rank-action-item" @click="quickFilter('酷图榜')">
+              <div class="rank-icon-bg bg-red"><i class="fas fa-chart-bar"></i></div>
+              <span>酷图榜</span>
+            </div>
+          </div>
+
+          <!-- 热门搜索词 Chips 胶囊标签 -->
+          <div v-if="hotKeywords.length" class="hot-search-chips custom-scrollbar">
+            <button
+              v-for="(kw, idx) in hotKeywords"
+              :key="idx"
+              class="chip-btn"
+              @click="quickSearch(kw)"
+            >
+              {{ kw }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. 快讯 Tab (`latest`) 专属：酷安快讯 Banner -->
+        <div v-if="activeTab === 'latest'" class="express-banner">
+          <div class="express-banner-content">
+            <div class="banner-title"><i class="fas fa-bolt"></i> 酷安快讯</div>
+            <div class="banner-sub">每日科技新鲜事 · 7x24小时不间断更新</div>
+          </div>
+        </div>
+
+        <!-- 动态列表与 Loading/Error/Empty 状态 -->
         <div v-if="loading && feeds.length === 0" class="skeleton-padding">
           <FeedSkeleton :count="4" />
         </div>
@@ -18,9 +108,10 @@
 
         <div v-else class="feed-list-padding">
           <FeedCard
-            v-for="item in feeds"
-            :key="item.id"
+            v-for="(item, idx) in feeds"
+            :key="item.id || idx"
             :feed="item"
+            :rank-index="activeTab === 'hot' ? idx + 1 : undefined"
           />
 
           <div v-if="loadingMore" class="loading-more">
@@ -35,8 +126,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, computed, watch, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import FeedTabs from '../components/feed/FeedTabs.vue';
 import FeedCard from '../components/feed/FeedCard.vue';
 import FeedSkeleton from '../components/feed/FeedSkeleton.vue';
@@ -47,12 +138,39 @@ import ErrorState from '../components/common/ErrorState.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 
 const route = useRoute();
+const router = useRouter();
 const activeTab = ref('index_v8');
 const page = ref(1);
 const feeds = ref<any[]>([]);
 const loading = ref(false);
 const loadingMore = ref(false);
+const noMore = ref(false);
 const error = ref('');
+
+// 实时日期计算（对应截图4 “今日酷安”日历块）
+const now = new Date();
+const todayDay = computed(() => String(now.getDate()).padStart(2, '0'));
+const todayYearMonth = computed(() => `${now.getFullYear()}年${now.getMonth() + 1}月`);
+const weekNames = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+const todayWeek = computed(() => weekNames[now.getDay()]);
+
+// 简报要闻 (优化展示文本，避免显示 'XXX的动态')
+const topBulletins = computed(() => {
+  return feeds.value.slice(0, 3).map((item: any) => {
+    let rawText = item.title || item.message || '最新酷安精彩动态';
+    rawText = rawText.replace(/^[#＃][^#＃]+[#＃]\s*/, '').trim();
+    if (rawText.length > 28) rawText = rawText.slice(0, 28) + '...';
+    return {
+      id: item.id,
+      text: rawText || '酷友最新话题热议中'
+    };
+  });
+});
+
+// 热门搜索关键词 Chips
+const hotKeywords = ref<string[]>([
+  '酷安优惠券', 'ios27', '小米15', '抖音', '酷安', 'scene', '小米17', '电动车', '澎湃os4', 'shizuku'
+]);
 
 function syncTabFromRoute() {
   const path = route.path;
@@ -89,54 +207,124 @@ function syncTabFromRoute() {
   }
 }
 
+const prefetchBuffer = ref<any[]>([]);
+const prefetchPage = ref(2);
+const isPrefetching = ref(false);
+
+async function fetchTabApi(tab: string, p: number) {
+  switch (tab) {
+    case 'hot': return await CoolapkTauriAPI.getHotFeeds(p);
+    case 'latest': return await CoolapkTauriAPI.getLatestFeeds(p);
+    case 'digest': return await CoolapkTauriAPI.getDigestFeeds(p);
+    case 'cool_picture': return await CoolapkTauriAPI.getCoolPictureRank(p);
+    case 'secondhand': return await CoolapkTauriAPI.getSecondHandFeeds(p);
+    default: return await CoolapkTauriAPI.getIndexV8Feeds(p);
+  }
+}
+
+async function prefetchNextPage() {
+  if (isPrefetching.value || noMore.value) return;
+  isPrefetching.value = true;
+  try {
+    const nextP = page.value;
+    const res: any = await fetchTabApi(activeTab.value, nextP);
+    if (res && res.data && Array.isArray(res.data)) {
+      const validItems = res.data.filter((item: any) => item.id && (item.message || item.title || item.pic));
+      if (validItems.length > 0) {
+        prefetchBuffer.value = validItems;
+        prefetchPage.value = nextP + 1;
+      }
+    }
+  } catch (e) {
+    console.warn('首页静默预取下一页异常:', e);
+  } finally {
+    isPrefetching.value = false;
+  }
+}
+
 async function loadFeeds(isRefresh: boolean = false) {
+  if (loading.value || (loadingMore.value && !isRefresh)) return;
+
   if (isRefresh) {
     page.value = 1;
+    noMore.value = false;
     feeds.value = [];
+    prefetchBuffer.value = [];
     loading.value = true;
   } else {
+    if (noMore.value) return;
     loadingMore.value = true;
   }
   error.value = '';
 
   try {
-    let res: any;
-    const p = page.value;
+    let validItems: any[] = [];
 
-    switch (activeTab.value) {
-      case 'hot':
-        res = await CoolapkTauriAPI.getHotFeeds(p);
-        break;
-      case 'latest':
-        res = await CoolapkTauriAPI.getLatestFeeds(p);
-        break;
-      case 'digest':
-        res = await CoolapkTauriAPI.getDigestFeeds(p);
-        break;
-      case 'cool_picture':
-        res = await CoolapkTauriAPI.getCoolPictureRank(p);
-        break;
-      case 'secondhand':
-        res = await CoolapkTauriAPI.getSecondHandFeeds(p);
-        break;
-      default:
-        res = await CoolapkTauriAPI.getIndexV8Feeds(p);
-        break;
-    }
-
-    if (res && res.data && Array.isArray(res.data)) {
-      const validItems = res.data.filter((item: any) => item.id && (item.message || item.title || item.pic));
-      if (isRefresh) {
-        feeds.value = validItems;
-      } else {
-        feeds.value.push(...validItems);
+    if (!isRefresh && prefetchBuffer.value.length > 0) {
+      validItems = prefetchBuffer.value;
+      prefetchBuffer.value = [];
+      page.value = prefetchPage.value;
+    } else {
+      const res: any = await fetchTabApi(activeTab.value, page.value);
+      if (res && res.data && Array.isArray(res.data)) {
+        validItems = res.data.filter((item: any) => item.id && (item.message || item.title || item.pic));
       }
+      page.value++;
     }
+
+    if (validItems.length < 3) {
+      noMore.value = true;
+    }
+
+    const extractedKw = validItems
+      .map((item: any) => item.deviceTitle || item.targetType)
+      .filter(Boolean);
+    if (extractedKw.length > 0) {
+      const uniqueKw = Array.from(new Set([...hotKeywords.value, ...extractedKw]));
+      hotKeywords.value = uniqueKw.slice(0, 12);
+    }
+
+    if (isRefresh) {
+      feeds.value = validItems;
+    } else {
+      const existingIds = new Set(feeds.value.map(i => i.id));
+      const uniqueNew = validItems.filter(i => !existingIds.has(i.id));
+      feeds.value.push(...uniqueNew);
+    }
+
+    setTimeout(() => {
+      prefetchNextPage();
+    }, 200);
+
   } catch (err: any) {
-    error.value = err.message || '网络连接失败';
+    error.value = err?.message || '加载失败，请检查网络';
   } finally {
     loading.value = false;
     loadingMore.value = false;
+  }
+}
+
+function handleScroll(e: Event) {
+  const el = e.target as HTMLElement;
+  if (!el) return;
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) {
+    if (!loading.value && !loadingMore.value && !noMore.value) {
+      loadFeeds(false);
+    }
+  }
+}
+
+function quickSearch(kw: string) {
+  router.push({ path: '/search', query: { q: kw } });
+}
+
+function quickFilter(tag: string) {
+  quickSearch(tag);
+}
+
+function handleBulletinClick(item: any) {
+  if (item.id) {
+    // 引导点击
   }
 }
 
@@ -151,16 +339,6 @@ watch(
 watch(activeTab, () => {
   loadFeeds(true);
 });
-
-function handleScroll(e: Event) {
-  const el = e.target as HTMLElement;
-  if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
-    if (!loading.value && !loadingMore.value) {
-      page.value++;
-      loadFeeds(false);
-    }
-  }
-}
 
 onMounted(() => {
   syncTabFromRoute();
@@ -202,6 +380,229 @@ onMounted(() => {
 .feed-scroll-container {
   flex: 1;
   overflow-y: auto;
+}
+
+/* 1. 头条 Tab 头部样式 */
+.headline-header-section {
+  padding: 14px 16px 4px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface-hover, rgba(0,0,0,0.01));
+  border-bottom: 1px solid var(--border);
+}
+
+.today-coolapk-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
+}
+
+.calendar-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 6px 12px;
+  min-width: 70px;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.cal-top {
+  font-size: 10px;
+  font-weight: 700;
+  background: #ef4444;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.cal-day {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.1;
+  margin: 2px 0;
+}
+
+.cal-meta {
+  font-size: 10px;
+  opacity: 0.9;
+}
+
+.headline-bulletins {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bulletin-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.bulletin-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #38bdf8;
+  flex-shrink: 0;
+}
+
+.bulletin-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.95;
+}
+
+.quick-icons-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.icon-btn-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.icon-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #fff;
+  transition: transform 0.2s ease;
+}
+
+.icon-btn-item:hover .icon-circle {
+  transform: translateY(-2px);
+}
+
+.icon-blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+.icon-yellow { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.icon-red { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+.icon-cyan { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+.icon-teal { background: linear-gradient(135deg, #14b8a6, #0d9488); }
+
+/* 2. 热榜 Tab 头部样式 */
+.hot-header-section {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--surface-hover, rgba(0,0,0,0.01));
+  border-bottom: 1px solid var(--border);
+}
+
+.hot-ranks-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.rank-action-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.rank-icon-bg {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #fff;
+  transition: transform 0.2s ease;
+}
+
+.rank-action-item:hover .rank-icon-bg {
+  transform: scale(1.05);
+}
+
+.bg-orange { background: linear-gradient(135deg, #f97316, #ea580c); }
+.bg-cyan { background: linear-gradient(135deg, #06b6d4, #0284c7); }
+.bg-yellow { background: linear-gradient(135deg, #eab308, #ca8a04); }
+.bg-purple { background: linear-gradient(135deg, #a855f7, #7e22ce); }
+.bg-red { background: linear-gradient(135deg, #f43f5e, #e11d48); }
+
+.hot-search-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.chip-btn {
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.chip-btn:hover {
+  background: var(--brand-soft);
+  color: var(--brand-primary);
+  border-color: var(--brand-primary);
+}
+
+/* 3. 快讯 Banner 样式 */
+.express-banner {
+  margin: 14px 16px 4px 16px;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border-radius: 12px;
+  padding: 16px 20px;
+  color: #fff;
+}
+
+.express-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.banner-title {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.banner-sub {
+  font-size: 12px;
+  opacity: 0.85;
 }
 
 .skeleton-padding, .error-padding, .empty-padding, .feed-list-padding {

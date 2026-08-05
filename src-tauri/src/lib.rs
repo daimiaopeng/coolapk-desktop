@@ -7,9 +7,10 @@ use coolapk::client::CoolapkClient;
         get_game_list, get_hot_feeds, get_hot_replies, get_image_data_url, get_index_v8_feeds, get_latest_feeds,
         get_notification_count, get_notifications, get_secondhand_feeds, get_sub_replies,
         get_topic_detail, get_topic_feeds, get_topic_hub_data, get_user_feeds, get_user_profile, get_user_space,
+        get_user_follow_nodes,
         like_feed, list_chat_history, list_messages, login_by_account, login_by_mobile, open_url,
         reply_feed, save_cookie_securely, search_all, search_apks, search_feeds, send_private_message,
-        send_sms_vcode, unfollow_user, unlike_feed, open_login_webview, get_following_feeds,
+        send_sms_vcode, unfollow_user, unlike_feed, open_login_webview, close_login_window, get_following_feeds,
         get_follow_user_list, AppState,
     };
 
@@ -39,6 +40,7 @@ pub fn run() {
             get_sub_replies,
             get_user_space,
             get_user_profile,
+            get_user_follow_nodes,
             get_user_feeds,
             get_topic_detail,
             get_topic_feeds,
@@ -64,6 +66,7 @@ pub fn run() {
             get_image_data_url,
             open_url,
             open_login_webview,
+            close_login_window,
             get_following_feeds,
             get_follow_user_list
         ])

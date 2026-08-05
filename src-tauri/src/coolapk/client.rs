@@ -90,15 +90,27 @@ impl CoolapkClient {
     }
 
     pub fn set_user_cookie(&self, cookie: String) -> Result<(), String> {
-        let normalized = cookie.trim().to_string();
+        let clean = cookie.replace('\r', "").replace('\n', " ").trim().to_string();
+        // 转换非 ASCII 字符，防止 reqwest 构造 HeaderValue 出现 builder error
+        let safe_ascii: String = clean
+            .chars()
+            .map(|c| {
+                if c.is_ascii() && c != '\r' && c != '\n' {
+                    c.to_string()
+                } else {
+                    format!("%{:02X}", c as u32)
+                }
+            })
+            .collect();
+
         let mut stored = self
             .user_cookie
             .write()
             .map_err(|_| "failed to lock login state".to_string())?;
-        *stored = if normalized.is_empty() {
+        *stored = if safe_ascii.is_empty() {
             None
         } else {
-            Some(normalized)
+            Some(safe_ascii)
         };
         Ok(())
     }
@@ -130,7 +142,9 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            request = request.header(COOKIE, cookie);
+            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
+                request = request.header(COOKIE, header_val);
+            }
         }
         if let Some(form) = form {
             request = request.form(form);
@@ -188,15 +202,36 @@ impl CoolapkClient {
                 })
             });
 
-        // 100% 严格拦截：必须有真实发帖人 Username & UID
+        let entity_type = obj.get("entityType").and_then(|v| v.as_str()).unwrap_or("");
+
+        // 过滤 Banner、Card 广告与结构占位卡 (如 "今日酷安" Banner 广告卡、搜索分组头)
+        if entity_type == "card" || entity_type == "header" || entity_type == "card_title" || entity_type == "banner" {
+            return None;
+        }
+
+        let is_news_type = entity_type == "dyh" || entity_type == "article" || entity_type == "news";
+
         let raw_username = match username {
-            Some(u) if !u.is_empty() => u,
-            _ => return None,
+            Some(u) if !u.is_empty() => u.to_string(),
+            _ => {
+                let dyh = obj.get("dyh_name").and_then(|v| v.as_str());
+                let author = obj.get("author").and_then(|v| v.as_str());
+                let source = obj.get("source").and_then(|v| v.as_str());
+
+                if let Some(name) = dyh.or(author).or(source) {
+                    name.to_string()
+                } else if is_news_type {
+                    "酷安快讯".to_string()
+                } else {
+                    // 普通 Feed 贴文必须有真实发帖人 Username，禁止向推荐流注入盲目“酷安快讯”
+                    return None;
+                }
+            }
         };
 
         let raw_uid = match uid {
             Some(u) if !u.is_empty() => u,
-            _ => return None,
+            _ => "0".to_string(),
         };
 
         let message = obj
@@ -1149,19 +1184,30 @@ impl CoolapkClient {
         )
     }
 
+    pub async fn get_user_follow_nodes(&self, uid: &str) -> Result<Value, String> {
+        let raw = self
+            .api_get("/v6/user/customNodeList", &[("uid", uid.to_string())])
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
     pub async fn get_user_feeds(
         &self,
         uid: &str,
         page: u32,
         feed_type: &str,
     ) -> Result<Value, String> {
-        let feed_type = match feed_type {
-            "picture" => "picture",
-            _ => "feed",
+        let feed_endpoint = match feed_type {
+            "picture" | "coolpic" => "pictureList",
+            "reply" => "replyList",
+            "rating" => "apkRatingList",
+            "ershou" => "ershouList",
+            "fav" | "favorite" => "favList",
+            _ => "feedList",
         };
         let raw = self
             .api_get(
-                &format!("/v6/user/{feed_type}List"),
+                &format!("/v6/user/{feed_endpoint}"),
                 &[
                     ("uid", uid.to_string()),
                     ("page", page.to_string()),
@@ -1359,25 +1405,58 @@ impl CoolapkClient {
     }
 
     pub async fn get_following_feeds(&self, page: u32) -> Result<Value, String> {
-        self.api_get(
-            "/v6/page/dataList",
-            &[
-                ("url", "/user/followFeedList".to_string()),
-                ("page", page.to_string()),
-            ],
-        )
-        .await
+        // 1. 优先尝试 page/dataList 关注流接口（全量关注 Feed）
+        if let Ok(raw) = self
+            .api_get(
+                "/v6/page/dataList",
+                &[
+                    ("url", "/user/followFeedList".to_string()),
+                    ("title", "关注".to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await
+        {
+            let cleaned = Self::extract_cleaned_list(&raw);
+            if !cleaned.is_empty() {
+                return Ok(json!({ "code": 200, "data": cleaned }));
+            }
+        }
+
+        // 2. 备用尝试 /v6/feed/followFeedList 关注流接口
+        if let Ok(raw) = self
+            .api_get(
+                "/v6/feed/followFeedList",
+                &[("page", page.to_string())],
+            )
+            .await
+        {
+            let cleaned = Self::extract_cleaned_list(&raw);
+            if !cleaned.is_empty() {
+                return Ok(json!({ "code": 200, "data": cleaned }));
+            }
+        }
+
+        // 3. 备用尝试主页关注页接口 /v6/main/indexV8?type=follow
+        let raw = self
+            .api_get(
+                "/v6/main/indexV8",
+                &[("type", "follow".to_string()), ("page", page.to_string())],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
     pub async fn get_follow_user_list(&self, uid: &str, page: u32) -> Result<Value, String> {
-        self.api_get(
-            "/v6/user/followList",
-            &[
-                ("uid", uid.to_string()),
-                ("page", page.to_string()),
-            ],
-        )
-        .await
+        let raw = self
+            .api_get(
+                "/v6/user/followList",
+                &[("uid", uid.to_string()), ("page", page.to_string())],
+            )
+            .await?;
+
+        let list = raw.get("data").cloned().unwrap_or(Value::Array(Vec::new()));
+        Ok(json!({ "code": 200, "data": list }))
     }
 
     pub async fn create_feed(&self, message: &str) -> Result<Value, String> {
