@@ -141,6 +141,26 @@
               </div>
             </div>
 
+            <!-- 侧边栏栏目显示开关卡片 -->
+            <div class="setting-item vertical">
+              <div class="item-info">
+                <label class="item-label">侧边栏页面栏目显隐设置</label>
+                <span class="item-desc">根据使用习惯勾选控制左侧导航栏中的各板块按钮展示</span>
+              </div>
+              <div class="nav-visibility-modal-grid">
+                <label v-for="nav in modalNavItems" :key="nav.key" class="nav-checkbox-pill">
+                  <input
+                    type="checkbox"
+                    :checked="getNavVisibleModal(nav.key)"
+                    @change="toggleNavModal(nav.key)"
+                  />
+                  <i :class="[nav.icon, 'pill-icon']"></i>
+                  <span>{{ nav.label }}</span>
+                </label>
+              </div>
+            </div>
+
+
             <div class="setting-item">
               <div class="item-info">
                 <label class="item-label">图片画质模式</label>
@@ -333,6 +353,7 @@ import { isNewerVersion } from '../utils/updateChecker';
 import { APP_VERSION } from '../constants/version';
 import { settings } from '../utils/settingsStore';
 import { CoolapkTauriAPI } from '../api/coolapk';
+import { useSettingsStore } from '../stores/settings';
 
 const props = defineProps<{
   visible: boolean;
@@ -343,9 +364,35 @@ const emit = defineEmits<{
   (e: 'cookie-changed'): void;
 }>();
 
+const settingsStore = useSettingsStore();
+
+const modalNavItems = [
+  { key: 'home', label: '首页', icon: 'fa-solid fa-house' },
+  { key: 'feeds', label: '动态中心', icon: 'fa-solid fa-bars-staggered' },
+  { key: 'discover', label: '发现中心', icon: 'fa-solid fa-compass' },
+  { key: 'apps', label: '应用中心', icon: 'fa-solid fa-cubes' },
+  { key: 'games', label: '游戏中心', icon: 'fa-solid fa-gamepad' },
+  { key: 'topics', label: '话题广场', icon: 'fa-solid fa-hashtag' },
+  { key: 'favorites', label: '收藏夹', icon: 'fa-regular fa-bookmark' },
+  { key: 'history', label: '历史记录', icon: 'fa-regular fa-clock' },
+  { key: 'messages', label: '消息通知', icon: 'fa-regular fa-comment' },
+  { key: 'following', label: '我关注的', icon: 'fa-regular fa-user' },
+];
+
+function getNavVisibleModal(key: string): boolean {
+  const vis = settingsStore.settings.navVisibility;
+  if (!vis) return true;
+  return vis[key as keyof typeof vis] !== false;
+}
+
+function toggleNavModal(key: string) {
+  settingsStore.toggleNavVisibility(key as any);
+}
+
 const currentTab = ref<'appearance' | 'performance' | 'account' | 'about'>('appearance');
 const zoomOptions = [90, 100, 110, 125, 150];
 const appVersion = APP_VERSION;
+
 
 // 缓存管理
 const cacheClearing = ref(false);
@@ -671,6 +718,40 @@ async function checkAppUpdate() {
   color: #777777;
   line-height: 1.35;
 }
+
+.nav-visibility-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.nav-checkbox-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  background-color: var(--bg-hover, #f8fafc);
+  font-size: 0.82rem;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.nav-checkbox-pill:hover {
+  border-color: var(--brand-green, #11b066);
+  background-color: #f0fdf4;
+}
+
+.pill-icon {
+  color: var(--brand-green, #11b066);
+  font-size: 13px;
+}
+
 
 /* Pills & Buttons */
 .zoom-pill-group,

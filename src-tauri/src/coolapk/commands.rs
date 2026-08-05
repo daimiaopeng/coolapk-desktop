@@ -218,6 +218,20 @@ pub async fn unfollow_user(state: State<'_, AppState>, uid: String) -> Result<Va
 }
 
 #[tauri::command]
+pub async fn get_following_feeds(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+    state.client.get_following_feeds(page).await
+}
+
+#[tauri::command]
+pub async fn get_follow_user_list(
+    state: State<'_, AppState>,
+    uid: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_follow_user_list(&uid, page).await
+}
+
+#[tauri::command]
 pub async fn create_feed(state: State<'_, AppState>, message: String) -> Result<Value, String> {
     state.client.create_feed(&message).await
 }
@@ -274,7 +288,36 @@ pub async fn get_image_data_url(state: State<'_, AppState>, url: String) -> Resu
 }
 
 #[tauri::command]
+pub async fn get_game_list(
+    state: State<'_, AppState>,
+    page: u32,
+    game_type: String,
+) -> Result<Value, String> {
+    state.client.get_game_list(page, &game_type).await
+}
+
+#[tauri::command]
+pub async fn search_apks(
+    state: State<'_, AppState>,
+    query: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.search_apks(&query, page).await
+}
+
+#[tauri::command]
+pub async fn get_app_list(
+    state: State<'_, AppState>,
+    page: u32,
+    cat: String,
+) -> Result<Value, String> {
+    state.client.get_app_list(page, &cat).await
+}
+
+#[tauri::command]
 pub fn open_url(url: String) -> Result<(), String> {
+
+
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("cmd")
@@ -296,5 +339,47 @@ pub fn open_url(url: String) -> Result<(), String> {
             .spawn()
             .map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    if let Some(win) = app.get_webview_window("login_window") {
+        let _ = win.set_focus();
+        return Ok(());
+    }
+
+    let login_url = reqwest::Url::parse("https://account.coolapk.com/auth/loginByCoolapk")
+        .map_err(|e| e.to_string())?;
+
+    let js_script = r#"
+        (function() {
+            function checkCookie() {
+                var cookies = document.cookie || "";
+                if (cookies.indexOf("SESSID=") !== -1 && (cookies.indexOf("uid=") !== -1 || cookies.indexOf("displayVersion=") !== -1)) {
+                    if (window.__TAURI_INTERNALS__) {
+                        window.__TAURI_INTERNALS__.invoke('save_cookie_securely', { cookieStr: cookies });
+                    }
+                }
+            }
+            setInterval(checkCookie, 1000);
+        })();
+    "#;
+
+    let _window = tauri::WebviewWindowBuilder::new(
+        &app,
+        "login_window",
+        tauri::WebviewUrl::External(login_url),
+    )
+    .title("酷安官方授权登录")
+    .user_agent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1")
+    .inner_size(440.0, 620.0)
+    .center()
+    .initialization_script(js_script)
+    .build()
+    .map_err(|e| e.to_string())?;
+
     Ok(())
 }

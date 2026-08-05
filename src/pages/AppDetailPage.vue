@@ -1,5 +1,14 @@
 <template>
   <div class="page-container custom-scrollbar">
+    <!-- 顶栏返回工具条 -->
+    <div class="detail-nav-bar">
+      <button class="back-btn" @click="handleGoBack">
+        <i class="fas fa-arrow-left"></i>
+        <span>返回</span>
+      </button>
+      <span v-if="appTitle" class="nav-app-name">{{ appTitle }}</span>
+    </div>
+
     <div v-if="loading" class="loading-wrapper">
       <LoadingState text="正在加载应用详情..." />
     </div>
@@ -11,6 +20,7 @@
     <div v-else class="app-detail-content">
       <!-- 头部应用主信息卡片 -->
       <div class="app-header-card">
+
         <AppImage :src="logoUrl" alt="App Logo" image-class="app-large-icon" />
 
         <div class="app-main-meta">
@@ -94,7 +104,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAppStore } from '../stores/app';
 import AppButton from '../components/common/AppButton.vue';
@@ -103,8 +113,10 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 
 const route = useRoute();
+const router = useRouter();
 const appStore = useAppStore();
 const packageName = computed(() => (route.params.packageName as string) || '');
+
 
 const loading = ref(false);
 const appInfo = ref<any>(null);
@@ -169,6 +181,15 @@ function toggleFollow() {
   isFollowed.value = !isFollowed.value;
 }
 
+function handleGoBack() {
+  if (window.history.state && window.history.state.back) {
+    router.back();
+  } else {
+    router.push('/apps');
+  }
+}
+
+
 onMounted(() => fetchAppDetail());
 </script>
 
@@ -182,7 +203,42 @@ onMounted(() => fetchAppDetail());
   margin: 0 auto;
 }
 
+.detail-nav-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.back-btn:hover {
+  background-color: var(--surface-hover);
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+.nav-app-name {
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-secondary);
+}
+
 .app-detail-content {
+
   display: flex;
   flex-direction: column;
   gap: var(--space-5);

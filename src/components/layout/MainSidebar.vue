@@ -104,21 +104,34 @@ const isDark = computed(() => {
   return settingsStore.settings.theme === 'dark';
 });
 
-const primaryNavs = [
-  { path: '/', label: '首页', icon: 'fas fa-home' },
-  { path: '/feeds', label: '动态', icon: 'fas fa-stream' },
-  { path: '/discover', label: '发现', icon: 'fas fa-compass' },
-  { path: '/apps', label: '应用', icon: 'fas fa-cubes' },
-  { path: '/games', label: '游戏', icon: 'fas fa-gamepad' },
-  { path: '/topics', label: '话题', icon: 'fas fa-hashtag' },
+const allPrimaryNavs = [
+  { key: 'home', path: '/', label: '首页', icon: 'fas fa-home' },
+  { key: 'feeds', path: '/feeds', label: '动态', icon: 'fas fa-stream' },
+  { key: 'discover', path: '/discover', label: '发现', icon: 'fas fa-compass' },
+  { key: 'apps', path: '/apps', label: '应用', icon: 'fas fa-cubes' },
+  { key: 'games', path: '/games', label: '游戏', icon: 'fas fa-gamepad' },
+  { key: 'topics', path: '/topics', label: '话题', icon: 'fas fa-hashtag' },
 ];
 
-const secondaryNavs = [
-  { path: '/favorites', label: '收藏', icon: 'far fa-bookmark' },
-  { path: '/history', label: '历史', icon: 'far fa-clock' },
-  { path: '/messages', label: '消息', icon: 'far fa-comment-alt' },
-  { path: '/following', label: '我关注的', icon: 'far fa-user' },
+const allSecondaryNavs = [
+  { key: 'favorites', path: '/favorites', label: '收藏', icon: 'far fa-bookmark' },
+  { key: 'history', path: '/history', label: '历史', icon: 'far fa-clock' },
+  { key: 'messages', path: '/messages', label: '消息', icon: 'far fa-comment-alt' },
+  { key: 'following', path: '/following', label: '我关注的', icon: 'far fa-user' },
 ];
+
+const primaryNavs = computed(() => {
+  const vis = settingsStore.settings.navVisibility;
+  if (!vis) return allPrimaryNavs;
+  return allPrimaryNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
+});
+
+const secondaryNavs = computed(() => {
+  const vis = settingsStore.settings.navVisibility;
+  if (!vis) return allSecondaryNavs;
+  return allSecondaryNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
+});
+
 
 function toggleTheme() {
   const nextTheme = settingsStore.settings.theme === 'dark' ? 'light' : 'dark';

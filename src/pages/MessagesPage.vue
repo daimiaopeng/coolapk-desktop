@@ -15,7 +15,7 @@
           :class="{ active: currentSession && (currentSession.ukey === session.ukey || currentSession.id === session.id) }"
           @click="selectSession(session)"
         >
-          <AppAvatar :src="getAvatar(session)" size="md" />
+          <AppAvatar :src="getSessionPartnerAvatar(session)" size="md" />
           <div class="session-info">
             <div class="session-header">
               <span class="username">{{ getUsername(session) }}</span>
@@ -47,23 +47,83 @@
         </div>
         
         <template v-else>
-          <div 
-            v-for="(msg, index) in chatHistory" 
-            :key="msg.id || msg.dateline || index" 
-            class="message-item"
-            :class="{ 'is-self': isSelf(msg) }"
-          >
-            <AppAvatar v-if="!isSelf(msg)" :src="getAvatar(msg) || getAvatar(currentSession)" size="sm" class="msg-avatar" />
-            <div class="message-content">
-              <div class="bubble">{{ getMessageText(msg) }}</div>
-              <div class="msg-time">{{ formatTime(getDateline(msg)) }}</div>
+          <template v-for="(msg, index) in chatHistory" :key="msg.id || msg.dateline || index">
+            <!-- 酷安官方系统提醒 / 时间分隔项 (entityType === 'messageExtra') -->
+            <div v-if="msg.entityType === 'messageExtra'" class="system-notice-item">
+              <div :class="['system-notice-badge', { 'is-warning': isWarningNotice(msg) }]">
+                <i v-if="isWarningNotice(msg)" class="fas fa-shield-halved warning-icon"></i>
+                <span>{{ getSystemNoticeText(msg) }}</span>
+                <button 
+                  v-if="getSystemNoticeText(msg).includes('关注')" 
+                  class="follow-action-btn" 
+                  @click="handleFollowPartner"
+                  :disabled="followingPartner"
+                >
+                  <i class="fas fa-user-plus"></i> {{ followingPartner ? '关注中...' : '关注对方' }}
+                </button>
+              </div>
             </div>
-          </div>
+
+            <!-- 普通用户对话气泡消息 -->
+            <div
+              v-else
+              class="message-item"
+              :class="{ 'is-self': isSelf(msg) }"
+            >
+              <AppAvatar v-if="!isSelf(msg)" :src="getSessionPartnerAvatar(currentSession)" size="sm" class="msg-avatar" />
+              <div class="message-content">
+                <!-- 纯图片消息 -->
+                <div v-if="getPicUrl(msg) && !getMessageText(msg)" class="msg-pic-only-card">
+                  <AppImage :src="getPicUrl(msg)" image-class="msg-pure-img" />
+                </div>
+                <!-- 包含文本或文本+图片混合消息 -->
+                <div v-else class="bubble">
+                  <div v-if="getPicUrl(msg)" class="msg-pic-container">
+                    <AppImage :src="getPicUrl(msg)" image-class="msg-img" />
+                  </div>
+                  <div v-if="getMessageText(msg)" class="msg-text" v-html="renderMessageContent(msg)"></div>
+                </div>
+                <div class="msg-time">{{ formatTime(getDateline(msg)) }}</div>
+              </div>
+              <AppAvatar v-if="isSelf(msg)" :src="authStore.user?.userAvatar" size="sm" class="msg-avatar" />
+            </div>
+          </template>
         </template>
       </div>
       
       <div class="input-area">
+        <!-- 底部功能工具栏 (酷安表情贴图选择、发图) -->
+        <div class="input-toolbar">
+          <button class="toolbar-btn" title="表情" @click.stop="toggleEmojiPicker">
+            <i class="far fa-face-smile"></i>
+          </button>
+          <button class="toolbar-btn" title="发图" @click="triggerImageSelect">
+            <i class="far fa-image"></i>
+          </button>
+          <input type="file" ref="fileInputRef" accept="image/*" style="display: none;" @change="handleImageSelected" />
+
+          <!-- 酷安 Emoji 表情包浮动面板 -->
+          <div v-if="showEmojiPicker" class="emoji-picker-popover" @click.stop>
+            <div class="emoji-picker-header">
+              <span>酷安表情</span>
+              <button class="close-picker-btn" @click="showEmojiPicker = false">&times;</button>
+            </div>
+            <div class="emoji-grid">
+              <button
+                v-for="(filename, name) in EMOJI_MAP"
+                :key="name"
+                class="emoji-item-btn"
+                :title="String(name)"
+                @click="insertEmoji(String(name))"
+              >
+                <img :src="`${EMOJI_BASE}${filename}`" :alt="String(name)" />
+              </button>
+            </div>
+          </div>
+        </div>
+
         <textarea
+          ref="textareaRef"
           v-model="inputText"
           placeholder="发消息..."
           @keydown="handleKeydown"
@@ -92,11 +152,16 @@ import { ref, onMounted, nextTick, computed } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import AppAvatar from '../components/common/AppAvatar.vue';
+import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import AppButton from '../components/common/AppButton.vue';
+import { renderCoolapkEmoji, EMOJI_MAP, EMOJI_BASE } from '../utils/coolapkEmoji';
+
+import { useRoute } from 'vue-router';
 
 // --- 状态管理 ---
+const route = useRoute();
 const authStore = useAuthStore();
 const currentUserUid = computed(() => authStore.user?.uid || authStore.uid);
 
@@ -106,39 +171,103 @@ const currentSession = ref<any>(null);
 
 const chatHistory = ref<any[]>([]);
 const loadingHistory = ref(false);
+const chatHistoryCache = new Map<string, any[]>();
 
 const inputText = ref('');
 const sending = ref(false);
+const followingPartner = ref(false);
 
+const showEmojiPicker = ref(false);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const chatAreaRef = ref<HTMLElement | null>(null);
 
-// --- 字段提取工具（容错处理） ---
-const getUid = (item: any) => item.uid || item.fuid || item.tuid || '';
-const getUsername = (item: any) => item.username || item.title || item.fusername || item.tusername || '未知用户';
-const getAvatar = (item: any) => item.userAvatar || item.avatar || item.face || '';
-const getLastMessage = (item: any) => item.lastMessage || item.message || item.summary || item.last_message || '';
+// --- 字段提取工具（基于酷安真实 API 数据结构精确适配） ---
+// 酷安 API 中：uid = 消息发送者，fromuid = 消息接收者
+// 会话列表中：messageUid / messageUsername / messageUserAvatar = 对方信息
+
+/**
+ * 从会话列表项中提取对方（聊天伙伴）的 uid。
+ * 会话列表 API 返回 messageUid 字段专门表示对方 uid。
+ */
+const getSessionPartnerUid = (session: any) => {
+  if (!session) return '';
+  return session.messageUid || session.fromuid || session.uid || '';
+};
+
+/**
+ * 从会话列表项中提取对方的用户名。
+ * 优先使用 messageUsername，其次 fromusername。
+ */
+const getUsername = (session: any) => {
+  if (!session) return '未知酷友';
+  return session.messageUsername || session.fromusername || session.username || '未知酷友';
+};
+
+/**
+ * 从会话列表项中提取对方的头像 URL。
+ * 优先使用 messageUserAvatar / fromUserAvatar（对方头像），
+ * 而非 userAvatar（可能是自己的头像）。
+ */
+const getSessionPartnerAvatar = (session: any) => {
+  if (!session) return '';
+  return session.messageUserAvatar || session.fromUserAvatar
+    || session.messageUserInfo?.userAvatar || '';
+};
+
+const getLastMessage = (item: any) => item.message || item.lastMessage || item.summary || item.last_message || '';
 const getMessageText = (item: any) => item.message || item.text || item.content || '';
 const getDateline = (item: any) => item.dateline || item.lastupdate || item.time || item.created_at || 0;
+
+const getPicUrl = (msg: any) => {
+  if (!msg) return '';
+  const pic = msg.message_pic || msg.pic || msg.image;
+  if (!pic) return '';
+  if (pic.startsWith('/')) {
+    return `https://image.coolapk.com${pic}`;
+  }
+  return pic;
+};
+
+const renderMessageContent = (msg: any) => {
+  if (!msg) return '';
+  const text = getMessageText(msg);
+  if (!text) return '';
+  let htmlText = text.replace(/href="\/u\//g, 'href="https://www.coolapk.com/u/');
+  return renderCoolapkEmoji(htmlText);
+};
+
+const getSystemNoticeText = (msg: any) => {
+  if (!msg) return '';
+  return msg.title || msg.message || msg.text || '';
+};
+
+const isWarningNotice = (msg: any) => {
+  const text = getSystemNoticeText(msg);
+  return text.includes('交易') || text.includes('防骗') || text.includes('损失') || text.includes('现金') || text.includes('陌生人');
+};
 
 // --- 辅助函数 ---
 const formatTime = (time: number | string) => {
   if (!time) return '';
-  // 处理可能是秒级的时间戳
   const date = new Date(typeof time === 'number' && time < 10000000000 ? time * 1000 : time);
-  
   const now = new Date();
   const isToday = date.getDate() === now.getDate() && date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-  
   if (isToday) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
   return `${date.getMonth() + 1}-${date.getDate()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 };
 
+/**
+ * 判断一条聊天消息是否是自己发出的。
+ * 酷安私信 API 中 fromuid = 发送者，uid = 接收者。
+ * 当 fromuid 等于自己的 uid 时，表示这条消息是自己发出的。
+ */
 const isSelf = (msg: any) => {
-  const msgUid = String(getUid(msg));
-  const myUid = String(currentUserUid.value);
-  return msgUid === myUid;
+  if (!msg || !msg.fromuid) return false;
+  const myUid = String(currentUserUid.value || '');
+  return String(msg.fromuid) === myUid;
 };
 
 const scrollToBottom = async () => {
@@ -153,8 +282,32 @@ const loadSessions = async () => {
   loadingSessions.value = true;
   try {
     const res = await CoolapkTauriAPI.listMessages(1);
-    if (res?.data) {
+    if (res?.data && Array.isArray(res.data)) {
       sessions.value = res.data;
+      
+      const queryUid = String(route.query.uid || '');
+      if (queryUid) {
+        const found = sessions.value.find(s => String(getSessionPartnerUid(s)) === queryUid);
+        if (found) {
+          selectSession(found);
+        } else {
+          try {
+            const userProf = await CoolapkTauriAPI.getUserProfile(queryUid);
+            const userData = userProf?.data || {};
+            const tempSession = {
+              messageUid: queryUid,
+              messageUsername: userData.username || `酷友_${queryUid.slice(-4)}`,
+              messageUserAvatar: userData.userAvatar || '',
+              lastMessage: '开始对话...',
+              dateline: Math.floor(Date.now() / 1000)
+            };
+            sessions.value.unshift(tempSession);
+            selectSession(tempSession);
+          } catch {
+            // ignore
+          }
+        }
+      }
     }
   } catch (err) {
     console.error('加载会话列表失败', err);
@@ -165,20 +318,31 @@ const loadSessions = async () => {
 
 const selectSession = async (session: any) => {
   currentSession.value = session;
-  loadingHistory.value = true;
-  chatHistory.value = [];
+  const ukey = session.ukey || session.id;
+  if (!ukey) return;
+
+  // 1. 如果缓存中已存在历史记录，直接使用，实现 0 延迟秒切无转圈
+  if (chatHistoryCache.has(ukey)) {
+    chatHistory.value = chatHistoryCache.get(ukey) || [];
+    loadingHistory.value = false;
+    scrollToBottom();
+  } else {
+    loadingHistory.value = true;
+    chatHistory.value = [];
+  }
+
+  // 2. 静默发送 API 请求抓取最新记录并同步更新缓存
   try {
-    const ukey = session.ukey || session.id;
-    if (!ukey) return;
-    
     const res = await CoolapkTauriAPI.listChatHistory(ukey, 1);
-    if (res?.data) {
-      let history = res.data;
-      // 确保消息是按照时间正序排列（旧的在上面，新的在下面）
-      if (history.length > 1 && getDateline(history[0]) > getDateline(history[history.length - 1])) {
-        history = history.reverse();
-      }
-      chatHistory.value = history;
+    if (res?.data && Array.isArray(res.data)) {
+      const list = [...res.data];
+      list.sort((a, b) => {
+        const timeA = getDateline(a) || 0;
+        const timeB = getDateline(b) || 0;
+        return timeA - timeB;
+      });
+      chatHistory.value = list;
+      chatHistoryCache.set(ukey, list);
     }
   } catch (err) {
     console.error('加载聊天记录失败', err);
@@ -199,16 +363,63 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 };
 
+const handleFollowPartner = async () => {
+  if (!currentSession.value || followingPartner.value) return;
+  const partnerUid = getSessionPartnerUid(currentSession.value);
+  if (!partnerUid) return;
+
+  followingPartner.value = true;
+  try {
+    await CoolapkTauriAPI.followUser(partnerUid);
+    alert('已成功关注该酷友！');
+  } catch (err: any) {
+    alert(err?.message || '关注操作失败，请稍后重试');
+  } finally {
+    followingPartner.value = false;
+  }
+};
+
+const toggleEmojiPicker = () => {
+  showEmojiPicker.value = !showEmojiPicker.value;
+};
+
+const insertEmoji = (emojiName: string) => {
+  inputText.value += `[${emojiName}]`;
+  showEmojiPicker.value = false;
+  nextTick(() => {
+    if (textareaRef.value) {
+      textareaRef.value.focus();
+    }
+  });
+};
+
+const triggerImageSelect = () => {
+  if (fileInputRef.value) {
+    fileInputRef.value.click();
+  }
+};
+
+const handleImageSelected = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  if (target.files && target.files[0]) {
+    const file = target.files[0];
+    alert(`已选择文件: ${file.name}\n(酷安官方私信接口暂未开放第三方向私信点对点上传图床功能)`);
+  }
+};
+
 const sendMessage = async () => {
   const text = inputText.value.trim();
   if (!text || !currentSession.value) return;
   
   sending.value = true;
   try {
-    // 对方的 uid
-    const targetUid = getUid(currentSession.value);
+    // 提取对方的真实 uid
+    const targetUid = getSessionPartnerUid(currentSession.value);
+    if (!targetUid) {
+      throw new Error('未识别到对方的合法酷安账号 UID');
+    }
     
-    // 调用 API 发送
+    // 调用后台原生 API 发送
     await CoolapkTauriAPI.sendPrivateMessage(targetUid, text);
     
     // 乐观更新 UI
@@ -216,18 +427,25 @@ const sendMessage = async () => {
     const newMsg = {
       id: Date.now(),
       uid: currentUserUid.value,
+      fromuid: targetUid, // 在 isSelf 判断中：fromuid !== myUid 表示是我发给对方的消息
       message: text,
       dateline: nowTimestamp
     };
     
     chatHistory.value.push(newMsg);
+
+    // 同步写入缓存
+    const ukey = currentSession.value.ukey || currentSession.value.id;
+    if (ukey) {
+      chatHistoryCache.set(ukey, [...chatHistory.value]);
+    }
     
     // 更新左侧列表的摘要和时间
     currentSession.value.lastMessage = text;
     currentSession.value.dateline = nowTimestamp;
     
     // 将当前会话置顶
-    const idx = sessions.value.findIndex(s => s.ukey === currentSession.value.ukey);
+    const idx = sessions.value.findIndex(s => (s.ukey && s.ukey === currentSession.value.ukey) || s.id === currentSession.value.id);
     if (idx > 0) {
       const [s] = sessions.value.splice(idx, 1);
       sessions.value.unshift(s);
@@ -235,8 +453,9 @@ const sendMessage = async () => {
     
     inputText.value = '';
     scrollToBottom();
-  } catch (err) {
+  } catch (err: any) {
     console.error('发送消息失败', err);
+    alert(err?.message || '消息发送失败，请确认网络与账号权限状态');
   } finally {
     sending.value = false;
   }
@@ -401,19 +620,54 @@ onMounted(() => {
   padding: var(--space-4);
 }
 
+.system-notice-item {
+  display: flex;
+  justify-content: center;
+  margin: var(--space-2) 0;
+  width: 100%;
+}
+
+.system-notice-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--background-secondary, rgba(0, 0, 0, 0.04));
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  max-width: 85%;
+}
+
+.system-notice-badge.is-warning {
+  background: rgba(234, 179, 8, 0.12);
+  color: #b45309;
+  border: 1px solid rgba(234, 179, 8, 0.25);
+}
+
+.system-notice-badge .warning-icon {
+  color: #d97706;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
 .message-item {
   display: flex;
+  align-items: flex-start;
   gap: var(--space-3);
   max-width: 75%;
 }
 
 .message-item.is-self {
   align-self: flex-end;
-  flex-direction: row-reverse;
+  justify-content: flex-end;
 }
 
 .msg-avatar {
   flex-shrink: 0;
+  margin-top: 2px;
 }
 
 .message-content {
@@ -427,25 +681,107 @@ onMounted(() => {
 }
 
 .bubble {
+  position: relative;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--text-primary);
   font-size: var(--font-size-body);
-  line-height: 1.6;
+  line-height: 1.5;
   word-break: break-word;
-  white-space: pre-wrap;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  display: inline-block;
 }
 
+/* 对方消息气泡（左侧，白色/Surface背景 + 左小尖角引出） */
+.message-item:not(.is-self) .bubble {
+  border-top-left-radius: 2px;
+}
+
+.message-item:not(.is-self) .bubble::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: -6px;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-right: 7px solid var(--surface);
+}
+
+/* 自己消息气泡（右侧，品牌绿背景 + 右小尖角引出） */
 .message-item.is-self .bubble {
   background: var(--brand-primary);
   color: #ffffff;
-  border-bottom-right-radius: var(--radius-xs);
+  border-top-right-radius: 2px;
 }
 
-.message-item:not(.is-self) .bubble {
-  border-top-left-radius: var(--radius-xs);
+.message-item.is-self .bubble::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  right: -6px;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 7px solid var(--brand-primary);
+}
+
+/* 富文本、超链接与表情图片全局样式 */
+.bubble :deep(a) {
+  color: var(--brand-primary);
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.message-item.is-self .bubble :deep(a) {
+  color: #ffffff !important;
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.bubble :deep(.coolapk-emoji) {
+  width: 22px;
+  height: 22px;
+  vertical-align: -5px;
+  display: inline-block;
+  margin: 0 1px;
+}
+
+.msg-pic-only-card {
+  width: 220px;
+  height: 160px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--border-light);
+  background: var(--surface);
+}
+
+.msg-pic-only-card :deep(.msg-pure-img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.bubble :deep(.msg-pic-container) {
+  width: 220px;
+  height: 150px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: var(--space-1);
+}
+
+.bubble :deep(.msg-img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  display: block;
+  cursor: pointer;
 }
 
 .msg-time {
@@ -461,11 +797,117 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  position: relative;
+}
+
+.input-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  position: relative;
+}
+
+.toolbar-btn {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-xs);
+  transition: color var(--duration-fast);
+}
+
+.toolbar-btn:hover {
+  color: var(--brand-primary);
+  background: var(--surface-hover);
+}
+
+.emoji-picker-popover {
+  position: absolute;
+  bottom: 36px;
+  left: 0;
+  width: 320px;
+  max-height: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-card);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.emoji-picker-header {
+  padding: var(--space-2) var(--space-3);
+  background: var(--background-secondary, #f8f9fa);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
+}
+
+.close-picker-btn {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+}
+
+.emoji-grid {
+  padding: var(--space-2);
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: var(--space-1);
+  overflow-y: auto;
+  max-height: 190px;
+}
+
+.emoji-item-btn {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emoji-item-btn:hover {
+  background: var(--surface-hover);
+}
+
+.emoji-item-btn img {
+  width: 24px;
+  height: 24px;
+}
+
+.follow-action-btn {
+  margin-left: var(--space-2);
+  background: var(--brand-primary);
+  color: #ffffff;
+  border: none;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.follow-action-btn:hover {
+  opacity: 0.9;
 }
 
 textarea {
   width: 100%;
-  height: 90px;
+  height: 70px;
   resize: none;
   border: none;
   background: transparent;
