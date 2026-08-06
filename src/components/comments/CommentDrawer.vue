@@ -53,6 +53,7 @@
 import { ref, watch, computed } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { useSettingsStore } from '../../stores/settings';
 import AppDrawer from '../common/AppDrawer.vue';
 import CommentComposer from './CommentComposer.vue';
 import CommentItem from './CommentItem.vue';
@@ -68,7 +69,7 @@ const isOpen = computed(() => !!feedId.value);
 const loading = ref(false);
 const error = ref('');
 const comments = ref<any[]>([]);
-const sortType = ref<'hot' | 'latest'>('hot');
+const sortType = ref<'hot' | 'latest'>(useSettingsStore().settings.commentSort || 'hot');
 
 function close() {
   appStore.closeCommentDrawer();
@@ -79,7 +80,15 @@ async function fetchReplies() {
   loading.value = true;
   error.value = '';
   try {
-    const res = await CoolapkTauriAPI.getFeedReplies(String(feedId.value), 1);
+    let res: any;
+    if (sortType.value === 'hot') {
+      res = await CoolapkTauriAPI.getHotReplies(String(feedId.value), 1);
+      if (!res || !res.data || !res.data.length) {
+        res = await CoolapkTauriAPI.getFeedReplies(String(feedId.value), 1);
+      }
+    } else {
+      res = await CoolapkTauriAPI.getFeedReplies(String(feedId.value), 1);
+    }
     if (res && res.data) {
       comments.value = Array.isArray(res.data) ? res.data : [];
     } else {
@@ -98,6 +107,7 @@ function refreshReplies() {
 
 function setSort(type: 'hot' | 'latest') {
   sortType.value = type;
+  useSettingsStore().settings.commentSort = type;
   fetchReplies();
 }
 

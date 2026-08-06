@@ -17,6 +17,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useAppStore } from '../../stores/app';
+import { useSettingsStore } from '../../stores/settings';
 import AppImage from '../common/AppImage.vue';
 import { getHdImageUrl } from '../../utils/image';
 
@@ -25,13 +26,19 @@ const props = defineProps<{
 }>();
 
 const appStore = useAppStore();
+const settingsStore = useSettingsStore();
 
 const processedImages = computed(() => {
   if (!props.images || !Array.isArray(props.images)) return [];
   return props.images.filter(url => {
     if (!url || typeof url !== 'string') return false;
     const trimmed = url.trim();
-    return trimmed.length > 5 && trimmed !== 'null' && trimmed !== 'undefined';
+    if (trimmed.length <= 5 || trimmed === 'null' || trimmed === 'undefined') return false;
+    // 关闭动图自动播放时，过滤 GIF 图片以节省流量
+    if (!settingsStore.settings.autoPlayGif && /\.gif(?:v)?[\s?]|\.gif$/i.test(trimmed)) {
+      return false;
+    }
+    return true;
   });
 });
 

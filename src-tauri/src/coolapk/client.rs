@@ -3,6 +3,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
 use reqwest::{Client, Method};
 use serde_json::{json, Value};
+use std::path::PathBuf;
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -10,6 +11,7 @@ pub struct CoolapkClient {
     client: Client,
     auth: CoolapkAuth,
     user_cookie: RwLock<Option<String>>,
+    cookie_file: RwLock<Option<PathBuf>>,
 }
 
 fn parse_u64_val(val: &Value) -> Option<u64> {
@@ -86,7 +88,46 @@ impl CoolapkClient {
             client,
             auth: CoolapkAuth::new(device_code),
             user_cookie: RwLock::new(None),
+            cookie_file: RwLock::new(None),
         }
+    }
+
+    /// 绑定 Cookie 持久化文件路径，并载入上次保存的登录凭据
+    pub fn persist_cookie_to(&self, path: PathBuf) {
+        {
+            let mut guard = match self.cookie_file.write() {
+                Ok(g) => g,
+                Err(_) => return,
+            };
+            *guard = Some(path.clone());
+        }
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            let content = content.trim().to_string();
+            if !content.is_empty() {
+                if let Ok(mut stored) = self.user_cookie.write() {
+                    *stored = Some(content);
+                }
+            }
+        }
+    }
+
+    fn save_cookie_file(&self, cookie: &str) {
+        let path = match self.cookie_file.read() {
+            Ok(guard) => guard.clone(),
+            Err(_) => return,
+        };
+        if let Some(path) = path {
+            if cookie.is_empty() {
+                let _ = std::fs::remove_file(&path);
+            } else {
+                let _ = std::fs::write(&path, cookie);
+            }
+        }
+    }
+
+    /// 读取当前登录凭据（可能为 None）
+    pub fn get_user_cookie(&self) -> Option<String> {
+        self.user_cookie.read().ok().and_then(|g| g.clone())
     }
 
     pub fn set_user_cookie(&self, cookie: String) -> Result<(), String> {
@@ -110,8 +151,9 @@ impl CoolapkClient {
         *stored = if safe_ascii.is_empty() {
             None
         } else {
-            Some(safe_ascii)
+            Some(safe_ascii.clone())
         };
+        self.save_cookie_file(&safe_ascii);
         Ok(())
     }
 
@@ -1498,6 +1540,7 @@ impl CoolapkClient {
             .write()
             .map_err(|_| "failed to lock login state".to_string())?;
         *stored = None;
+        self.save_cookie_file("");
         Ok(())
     }
 
@@ -1743,6 +1786,92 @@ mod tests {
         } else {
             println!("No data array in response");
         }
+    }
+
+    /// 模拟「登录 → 保存 Cookie → 落盘 → 重启恢复 → 登出删除」完整链路（不依赖网络）
+    #[test]
+    fn test_login_cookie_persistence_flow() {
+        use std::path::PathBuf;
+
+        let dir = std::env::temp_dir().join(format!(
+            "coolapk_desktop_login_test_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cookie_file: PathBuf = dir.join("session_cookie.txt");
+
+        // 1. 首次启动：无持久化凭据
+        let client = CoolapkClient::new();
+        client.persist_cookie_to(cookie_file.clone());
+        assert_eq!(client.get_user_cookie(), None, "首次启动不应有 cookie");
+
+        // 2. 模拟 Webview 授权登录：save_cookie_securely 内部调用 set_user_cookie
+        let fake_cookie = "SESSID=abc123def456; uid=10086; Hm_lvt_xxx=1";
+        client.set_user_cookie(fake_cookie.to_string()).unwrap();
+        assert_eq!(client.get_user_cookie(), Some(fake_cookie.to_string()));
+        assert!(
+            cookie_file.exists(),
+            "登录后凭据应已写入持久化文件"
+        );
+        let on_disk = std::fs::read_to_string(&cookie_file).unwrap();
+        assert_eq!(on_disk, fake_cookie, "落盘内容应与登录凭据一致");
+
+        // 3. 模拟应用重启：新实例通过 persist_cookie_to 自动恢复
+        let restarted = CoolapkClient::new();
+        restarted.persist_cookie_to(cookie_file.clone());
+        assert_eq!(
+            restarted.get_user_cookie(),
+            Some(fake_cookie.to_string()),
+            "重启后应自动恢复登录凭据"
+        );
+
+        // 4. 模拟退出登录：clear_user_cookie 清空内存并删除文件
+        restarted.clear_user_cookie().unwrap();
+        assert_eq!(restarted.get_user_cookie(), None);
+        assert!(
+            !cookie_file.exists(),
+            "退出登录后持久化文件应被删除"
+        );
+
+        // 5. 清理：再次 set 后再 clear，验证空串路径不残留文件
+        restarted.set_user_cookie("SESSID=tmp".to_string()).unwrap();
+        assert!(cookie_file.exists());
+        restarted.set_user_cookie(String::new()).unwrap();
+        assert_eq!(restarted.get_user_cookie(), None);
+        assert!(!cookie_file.exists(), "空凭据也应删除持久化文件");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 模拟 Webview 登录脚本捕获到的真实 Cookie 形态（含中文/换行等脏字符），
+    /// 验证 set_user_cookie 的 ASCII 清洗与落盘逻辑不会崩坏
+    #[test]
+    fn test_login_cookie_dirty_input_sanitized() {
+        use std::path::PathBuf;
+
+        let dir = std::env::temp_dir().join(format!(
+            "coolapk_desktop_sanitize_test_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let cookie_file: PathBuf = dir.join("session_cookie.txt");
+
+        let client = CoolapkClient::new();
+        client.persist_cookie_to(cookie_file.clone());
+
+        let dirty = "SESSID=abc;\r\n uid=10086; 昵称=oxygen的喵; other=\"v\"";
+        client.set_user_cookie(dirty.to_string()).unwrap();
+
+        let stored = client.get_user_cookie().unwrap();
+        assert!(!stored.contains('\r') && !stored.contains('\n'), "不应包含换行");
+        assert!(stored.contains("SESSID=abc") && stored.contains("uid=10086"));
+        // 落盘文件也必须是无换行的安全形态
+        let on_disk = std::fs::read_to_string(&cookie_file).unwrap();
+        assert!(!on_disk.contains('\r') && !on_disk.contains('\n'));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

@@ -521,12 +521,12 @@ watch(effectiveUid, (newUid) => {
   if (newUid) {
     fetchUserProfile();
     fetchFollowingUsers();
-    fetchFeeds(1);
+    fetchTabFeeds();
   }
 }, { immediate: true });
 
 watch(activeTab, () => {
-  fetchFeeds(1);
+  fetchTabFeeds();
 });
 </script>
 

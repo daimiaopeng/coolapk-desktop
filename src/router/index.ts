@@ -22,6 +22,7 @@ import DownloadSettingsPage from '../pages/settings/DownloadSettingsPage.vue';
 import AppearanceSettingsPage from '../pages/settings/AppearanceSettingsPage.vue';
 import ShortcutSettingsPage from '../pages/settings/ShortcutSettingsPage.vue';
 import AboutSettingsPage from '../pages/settings/AboutSettingsPage.vue';
+import StartupSettingsPage from '../pages/settings/StartupSettingsPage.vue';
 
 import AuthCallbackView from '../pages/AuthCallbackView.vue';
 
@@ -54,6 +55,7 @@ const routes = [
       { path: 'downloads', component: DownloadSettingsPage },
       { path: 'appearance', component: AppearanceSettingsPage },
       { path: 'shortcuts', component: ShortcutSettingsPage },
+      { path: 'startup', component: StartupSettingsPage },
       { path: 'about', component: AboutSettingsPage },
     ]
   }

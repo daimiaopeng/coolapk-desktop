@@ -40,10 +40,12 @@ import LoginModal from './components/overlays/LoginModal.vue';
 import BackToTop from './components/common/BackToTop.vue';
 import AppDialog from './components/common/AppDialog.vue';
 import { useAuthStore } from './stores/auth';
+import { useSettingsStore } from './stores/settings';
 import { checkLatestRelease, type UpdateInfo } from './utils/updateChecker';
 import { CoolapkTauriAPI } from './api/coolapk';
 
 const authStore = useAuthStore();
+const settingsStore = useSettingsStore();
 const updateInfo = ref<UpdateInfo | null>(null);
 
 async function checkForUpdate(manual = false) {
@@ -68,7 +70,9 @@ function openUpdate() {
 
 onMounted(() => {
   authStore.initAuth();
-  void checkForUpdate();
+  if (settingsStore.settings.checkUpdateOnStartup) {
+    void checkForUpdate();
+  }
   window.addEventListener('check-for-update', () => void checkForUpdate(true));
 });
 </script>

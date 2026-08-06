@@ -133,8 +133,21 @@ export const useAuthStore = defineStore('auth', () => {
    * 应用启动时自动载入持久化的凭据与登录状态
    */
   async function initAuth() {
-    const savedCookie = localStorage.getItem('coolapk_cookie');
+    let savedCookie = localStorage.getItem('coolapk_cookie');
     const savedUser = localStorage.getItem('coolapk_user');
+
+    // 本地无持久化凭据时，兜底读取 Rust 侧落盘的 Cookie（Webview 授权登录持久化的来源）
+    if (!savedCookie || !savedCookie.trim()) {
+      try {
+        const persisted = await CoolapkTauriAPI.getUserCookie();
+        if (persisted && persisted.trim()) {
+          savedCookie = persisted.trim();
+          localStorage.setItem('coolapk_cookie', savedCookie);
+        }
+      } catch (e) {
+        console.warn('读取 Rust 持久化 Cookie 失败:', e);
+      }
+    }
 
     if (savedCookie && savedCookie.trim()) {
       rawCookie.value = savedCookie;
@@ -279,6 +292,59 @@ export const useAuthStore = defineStore('auth', () => {
     return await loginWithCookie(cookieStr);
   }
 
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('校验请求超时')), ms);
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
+
+  /**
+   * 校验当前凭据是否仍有效，并同步刷新用户资料。
+   * 优先用本地持久化 cookie 同步到 Rust；若本地为空，则直接校验 Rust 内存态中的
+   * cookie（Webview 授权登录路径 save_cookie_securely 只写 Rust，不写 localStorage）。
+   */
+  async function checkStatus(): Promise<boolean> {
+    const savedCookie = localStorage.getItem('coolapk_cookie');
+    if (savedCookie && savedCookie.trim()) {
+      try {
+        await CoolapkTauriAPI.saveCookie(savedCookie);
+      } catch (e) {
+        console.warn('checkStatus 同步本地 Cookie 失败:', e);
+      }
+    }
+    try {
+      const res = await withTimeout(CoolapkTauriAPI.checkLoginStatus(), 10000);
+      const data = res?.data || res || {};
+      if (data && (data.uid || data.username)) {
+        const uid = String(data.uid || user.value?.uid || '');
+        let userAvatar = data.userAvatar || data.avatar || data.user_avatar || '';
+        if (!userAvatar && uid) {
+          userAvatar = getAvatarUrlByUid(uid);
+        }
+        const profile: UserProfile = {
+          uid,
+          username: data.username || user.value?.username || '酷友',
+          userAvatar: userAvatar || user.value?.userAvatar || '',
+          level: Number(data.level || user.value?.level || 1),
+          bio: data.bio || data.sign || user.value?.bio || ''
+        };
+        user.value = profile;
+        isLoggedIn.value = true;
+        rawCookie.value = savedCookie || rawCookie.value;
+        localStorage.setItem('coolapk_user', JSON.stringify(profile));
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.warn('checkStatus 校验失败:', e);
+      return false;
+    }
+  }
+
   return {
     isLoggedIn,
     user,
@@ -291,6 +357,7 @@ export const useAuthStore = defineStore('auth', () => {
     sendSmsCode,
     loginWithMobile,
     saveCookie,
+    checkStatus,
     logout,
     initAuth
   };

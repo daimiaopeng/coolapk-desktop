@@ -136,10 +136,13 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
+import { useSettingsStore } from '../stores/settings';
+
+const settingsStore = useSettingsStore();
 
 const route = useRoute();
 const router = useRouter();
-const activeTab = ref('index_v8');
+const activeTab = ref(settingsStore.settings.defaultHomeTab);
 const page = ref(1);
 const feeds = ref<any[]>([]);
 const loading = ref(false);
@@ -292,9 +295,11 @@ async function loadFeeds(isRefresh: boolean = false) {
       feeds.value.push(...uniqueNew);
     }
 
-    setTimeout(() => {
-      prefetchNextPage();
-    }, 200);
+    if (settingsStore.settings.infiniteScroll) {
+      setTimeout(() => {
+        prefetchNextPage();
+      }, 200);
+    }
 
   } catch (err: any) {
     error.value = err?.message || '加载失败，请检查网络';
@@ -307,6 +312,7 @@ async function loadFeeds(isRefresh: boolean = false) {
 function handleScroll(e: Event) {
   const el = e.target as HTMLElement;
   if (!el) return;
+  if (!settingsStore.settings.infiniteScroll) return;
   if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) {
     if (!loading.value && !loadingMore.value && !noMore.value) {
       loadFeeds(false);

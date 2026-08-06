@@ -3,6 +3,7 @@
     <h3 v-if="title" class="feed-title">{{ title }}</h3>
     <div
       :class="['feed-body', { 'is-collapsed': isLongText && !isExpanded }]"
+      :style="isLongText && !isExpanded ? { WebkitLineClamp: collapseLines } : undefined"
       v-html="formattedMessage"
     ></div>
     <button v-if="isLongText && !isExpanded" class="expand-btn" @click="isExpanded = true">
@@ -14,17 +15,24 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { renderCoolapkEmoji } from '../../utils/coolapkEmoji';
+import { useSettingsStore } from '../../stores/settings';
 
 const props = defineProps<{
   title?: string;
   message?: string;
 }>();
 
+const settingsStore = useSettingsStore();
+
 const isExpanded = ref(false);
+
+const collapseLines = computed(() => settingsStore.settings.collapseLines || 0);
 
 const isLongText = computed(() => {
   if (!props.message) return false;
-  return props.message.length > 300 || props.message.split('\n').length > 8;
+  const lines = collapseLines.value;
+  if (lines <= 0) return false;
+  return props.message.length > 400 || props.message.split('\n').length > lines;
 });
 
 const formattedMessage = computed(() => {

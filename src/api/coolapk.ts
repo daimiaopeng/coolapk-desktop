@@ -225,6 +225,10 @@ export class CoolapkTauriAPI {
     return await invoke<string>('clear_user_cookie');
   }
 
+  static async getUserCookie() {
+    return await invoke<string | null>('get_user_cookie');
+  }
+
   static async getImageDataUrl(url: string) {
     return await invoke<string>('get_image_data_url', { url });
   }
