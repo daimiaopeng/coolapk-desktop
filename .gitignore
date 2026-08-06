@@ -33,6 +33,3 @@ raw_debug.json
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# 本地测试文件不上传
-src/**/__tests__/
