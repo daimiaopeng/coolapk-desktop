@@ -51,12 +51,12 @@ jobs:
       - name: 安装前端依赖
         run: npm ci
 
+      - name: 前端构建
+        run: npm run build
+
       - name: Rust 测试
         working-directory: src-tauri
         run: cargo test --lib
-
-      - name: 前端构建检查
-        run: npm run build
 
       - name: 总结
         if: success() || failure()
