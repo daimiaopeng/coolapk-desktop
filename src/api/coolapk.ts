@@ -184,8 +184,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('unlike_feed', { feedId });
   }
 
-  static async replyFeed(feedId: string, message: string) {
-    return await invokeNative('reply_feed', { feedId, message });
+  static async replyFeed(feedId: string, message: string, rid?: string) {
+    const args: any = { feedId, message };
+    if (rid) args.rid = rid;
+    return await invokeNative('reply_feed', args);
   }
 
   static async followUser(uid: string) {

@@ -1427,11 +1427,24 @@ impl CoolapkClient {
         self.post_id_action("/v6/feed/unlike", "id", feed_id).await
     }
 
-    pub async fn reply_feed(&self, feed_id: &str, message: &str) -> Result<Value, String> {
+    /// 发表评论；rid 非空时表示回复楼中楼（某条评论）
+    pub async fn reply_feed(
+        &self,
+        feed_id: &str,
+        message: &str,
+        rid: Option<&str>,
+    ) -> Result<Value, String> {
+        let mut query: Vec<(&str, String)> = vec![
+            ("id", feed_id.to_string()),
+            ("type", "feed".to_string()),
+        ];
+        if let Some(rid) = rid {
+            query.push(("rid", rid.to_string()));
+        }
         wrap_api_data(
             self.api_post(
                 "/v6/feed/reply",
-                &[("id", feed_id.to_string()), ("type", "feed".to_string())],
+                &query,
                 &[("message", message.to_string())],
             )
             .await?,

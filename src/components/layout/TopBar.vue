@@ -42,11 +42,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppStore } from '../../stores/app';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
+import { CoolapkTauriAPI } from '../../api/coolapk';
 import AppButton from '../common/AppButton.vue';
 import AppIconButton from '../common/AppIconButton.vue';
 import AppAvatar from '../common/AppAvatar.vue';
@@ -57,6 +58,36 @@ const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 
 const unreadNotificationCount = ref(0);
+let notifTimer: any = null;
+
+async function fetchNotificationCount() {
+  if (!authStore.isLoggedIn) {
+    unreadNotificationCount.value = 0;
+    return;
+  }
+  try {
+    const res: any = await CoolapkTauriAPI.getNotificationCount();
+    const data = res?.data || res || {};
+    const count = Number(data?.count ?? data?.fcount ?? data ?? 0);
+    unreadNotificationCount.value = Number.isFinite(count) && count > 0 ? count : 0;
+  } catch (e) {
+    console.warn('获取通知未读数失败:', e);
+  }
+}
+
+onMounted(() => {
+  fetchNotificationCount();
+  notifTimer = setInterval(fetchNotificationCount, 60000);
+});
+
+onUnmounted(() => {
+  if (notifTimer) clearInterval(notifTimer);
+});
+
+watch(
+  () => authStore.isLoggedIn,
+  () => fetchNotificationCount()
+);
 
 function navigateTo(path: string) {
   router.push(path);

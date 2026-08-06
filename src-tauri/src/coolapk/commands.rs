@@ -208,8 +208,9 @@ pub async fn reply_feed(
     state: State<'_, AppState>,
     feed_id: String,
     message: String,
+    rid: Option<String>,
 ) -> Result<Value, String> {
-    state.client.reply_feed(&feed_id, &message).await
+    state.client.reply_feed(&feed_id, &message, rid.as_deref()).await
 }
 
 #[tauri::command]

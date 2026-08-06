@@ -103,13 +103,13 @@ const router = useRouter();
 
 const activeSubTab = ref('digital');
 const subTabs = [
-  { key: 'lib', label: '数码库' },
-  { key: 'digital', label: '数码' },
-  { key: 'phone', label: '手机' },
-  { key: 'rank', label: '排行榜' },
-  { key: 'system', label: '系统' },
-  { key: 'tablet', label: '平板' },
-  { key: 'laptop', label: '电脑' },
+  { key: 'lib', label: '数码库', boardTag: '#/board/数码库' },
+  { key: 'digital', label: '数码', boardTag: '#/board/数码' },
+  { key: 'phone', label: '手机', boardTag: '#/board/手机' },
+  { key: 'rank', label: '排行榜', boardTag: '#/board/排行榜' },
+  { key: 'system', label: '系统', boardTag: '#/board/系统' },
+  { key: 'tablet', label: '平板', boardTag: '#/board/平板' },
+  { key: 'laptop', label: '电脑', boardTag: '#/board/电脑' },
 ];
 
 const followedDevices = ref([
@@ -141,8 +141,24 @@ async function loadDigitalData() {
   rankLoading.value = true;
   feedLoading.value = true;
   try {
-    const res = await CoolapkTauriAPI.getHotFeeds(1);
-    const list = res?.data || res || [];
+    // 优先使用板块动态接口（getBoardFeeds），取不到有效列表时回退热榜
+    const currentTab = subTabs.find(t => t.key === activeSubTab.value);
+    let list: any[] = [];
+    if (currentTab?.boardTag) {
+      try {
+        const boardRes: any = await CoolapkTauriAPI.getBoardFeeds(currentTab.boardTag, 1);
+        const boardList = boardRes?.data || [];
+        if (Array.isArray(boardList) && boardList.length > 0) {
+          list = boardList;
+        }
+      } catch (e) {
+        console.warn(`获取板块(${currentTab.label})动态失败，回退热榜:`, e);
+      }
+    }
+    if (list.length === 0) {
+      const res = await CoolapkTauriAPI.getHotFeeds(1);
+      list = res?.data || res || [];
+    }
     if (Array.isArray(list)) {
       // 从真实 API 热帖中提取热度较高的品牌手机及帖子
       feeds.value = list.filter((item: any) => item.id && (item.message || item.title || item.username));
