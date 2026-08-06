@@ -1,5 +1,6 @@
 use crate::coolapk::client::CoolapkClient;
 use serde_json::Value;
+use std::path::PathBuf;
 use tauri::State;
 
 pub struct AppState {
@@ -118,6 +119,234 @@ pub async fn get_board_feeds(
 #[tauri::command]
 pub async fn get_secondhand_feeds(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.get_secondhand_feeds(page).await
+}
+
+#[tauri::command]
+pub async fn get_hot_topics(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_hot_topics().await
+}
+
+#[tauri::command]
+pub async fn get_recommend_users(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_recommend_users().await
+}
+
+#[tauri::command]
+pub async fn get_favorite_list(
+    state: State<'_, AppState>,
+    fav_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_favorite_list(&fav_type, page).await
+}
+
+#[tauri::command]
+pub async fn get_collection_list(
+    state: State<'_, AppState>,
+    uid: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_collection_list(&uid, page).await
+}
+
+#[tauri::command]
+pub async fn get_collection_item_list(
+    state: State<'_, AppState>,
+    collection_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_collection_item_list(&collection_id, page).await
+}
+
+#[tauri::command]
+pub async fn get_collection_detail(
+    state: State<'_, AppState>,
+    collection_id: String,
+) -> Result<Value, String> {
+    state.client.get_collection_detail(&collection_id).await
+}
+
+#[tauri::command]
+pub async fn follow_collection(
+    state: State<'_, AppState>,
+    collection_id: String,
+) -> Result<Value, String> {
+    state.client.follow_collection(&collection_id).await
+}
+
+#[tauri::command]
+pub async fn unfollow_collection(
+    state: State<'_, AppState>,
+    collection_id: String,
+) -> Result<Value, String> {
+    state.client.unfollow_collection(&collection_id).await
+}
+
+#[tauri::command]
+pub async fn like_collection(
+    state: State<'_, AppState>,
+    collection_id: String,
+) -> Result<Value, String> {
+    state.client.like_collection(&collection_id).await
+}
+
+#[tauri::command]
+pub async fn unlike_collection(
+    state: State<'_, AppState>,
+    collection_id: String,
+) -> Result<Value, String> {
+    state.client.unlike_collection(&collection_id).await
+}
+
+#[tauri::command]
+pub async fn follow_dyh(
+    state: State<'_, AppState>,
+    dyh_id: String,
+) -> Result<Value, String> {
+    state.client.follow_dyh(&dyh_id).await
+}
+
+#[tauri::command]
+pub async fn unfollow_dyh(
+    state: State<'_, AppState>,
+    dyh_id: String,
+) -> Result<Value, String> {
+    state.client.unfollow_dyh(&dyh_id).await
+}
+
+#[tauri::command]
+pub async fn get_feed_forward_list(
+    state: State<'_, AppState>,
+    feed_id: String,
+    feed_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_feed_forward_list(&feed_id, &feed_type, page).await
+}
+
+#[tauri::command]
+pub async fn get_feed_like_list(
+    state: State<'_, AppState>,
+    feed_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_feed_like_list(&feed_id, page).await
+}
+
+#[tauri::command]
+pub async fn get_feed_change_history(
+    state: State<'_, AppState>,
+    feed_id: String,
+) -> Result<Value, String> {
+    state.client.get_feed_change_history(&feed_id).await
+}
+
+#[tauri::command]
+pub async fn search_tags(
+    state: State<'_, AppState>,
+    query: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.search_tags(&query, page).await
+}
+
+#[tauri::command]
+pub async fn follow_tag(
+    state: State<'_, AppState>,
+    tag: String,
+) -> Result<Value, String> {
+    state.client.follow_tag(&tag).await
+}
+
+#[tauri::command]
+pub async fn unfollow_tag(
+    state: State<'_, AppState>,
+    tag: String,
+) -> Result<Value, String> {
+    state.client.unfollow_tag(&tag).await
+}
+
+#[tauri::command]
+pub async fn get_device_feed_list(
+    state: State<'_, AppState>,
+    tag: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_device_feed_list(&tag, page).await
+}
+
+#[tauri::command]
+pub async fn get_question_answers(
+    state: State<'_, AppState>,
+    feed_id: String,
+    sort: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_question_answers(&feed_id, &sort, page).await
+}
+
+#[tauri::command]
+pub async fn get_vote_comments(
+    state: State<'_, AppState>,
+    feed_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_vote_comments(&feed_id, page).await
+}
+
+#[tauri::command]
+pub async fn get_hit_history(
+    state: State<'_, AppState>,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_hit_history(page).await
+}
+
+#[tauri::command]
+pub async fn get_recent_history(
+    state: State<'_, AppState>,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_recent_history(page).await
+}
+
+#[tauri::command]
+pub async fn search_users(
+    state: State<'_, AppState>,
+    query: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.search_users(&query, page).await
+}
+
+#[tauri::command]
+pub async fn get_search_suggestions_app(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Value, String> {
+    state.client.get_search_suggestions_app(&query).await
+}
+
+#[tauri::command]
+pub async fn search_feed_topics(
+    state: State<'_, AppState>,
+    query: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.search_feed_topics(&query, page).await
+}
+
+#[tauri::command]
+pub async fn get_product_detail_by_name(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<Value, String> {
+    state.client.get_product_detail_by_name(&name).await
+}
+
+#[tauri::command]
+pub async fn get_load_config(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_load_config().await
 }
 
 #[tauri::command]
@@ -269,6 +498,134 @@ pub async fn send_private_message(
 }
 
 #[tauri::command]
+pub async fn send_private_image(
+    state: State<'_, AppState>,
+    uid: String,
+    message_pic: String,
+) -> Result<Value, String> {
+    state.client.send_private_image(&uid, &message_pic).await
+}
+
+#[tauri::command]
+pub async fn read_message(
+    state: State<'_, AppState>,
+    ukey: String,
+) -> Result<Value, String> {
+    state.client.read_message(&ukey).await
+}
+
+#[tauri::command]
+pub async fn favorite_feed(
+    state: State<'_, AppState>,
+    feed_id: String,
+) -> Result<Value, String> {
+    state.client.favorite_feed(&feed_id).await
+}
+
+#[tauri::command]
+pub async fn unfavorite_feed(
+    state: State<'_, AppState>,
+    feed_id: String,
+) -> Result<Value, String> {
+    state.client.unfavorite_feed(&feed_id).await
+}
+
+#[tauri::command]
+pub async fn upload_image(
+    state: State<'_, AppState>,
+    image_bytes: Vec<u8>,
+    file_name: String,
+    content_type: String,
+    dir: String,
+    to_uid: Option<String>,
+) -> Result<Value, String> {
+    state
+        .client
+        .upload_image(&image_bytes, &file_name, &content_type, &dir, to_uid.as_deref())
+        .await
+}
+
+#[tauri::command]
+pub async fn get_black_list(
+    state: State<'_, AppState>,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_black_list(page).await
+}
+
+#[tauri::command]
+pub async fn get_ignore_list(
+    state: State<'_, AppState>,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_ignore_list(page).await
+}
+
+#[tauri::command]
+pub async fn get_limit_list(
+    state: State<'_, AppState>,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_limit_list(page).await
+}
+
+#[tauri::command]
+pub async fn add_to_black_list(
+    state: State<'_, AppState>,
+    uid: String,
+) -> Result<Value, String> {
+    state.client.add_to_black_list(&uid).await
+}
+
+#[tauri::command]
+pub async fn remove_from_black_list(
+    state: State<'_, AppState>,
+    uid: String,
+) -> Result<Value, String> {
+    state.client.remove_from_black_list(&uid).await
+}
+
+#[tauri::command]
+pub async fn add_to_ignore_list(
+    state: State<'_, AppState>,
+    uid: String,
+) -> Result<Value, String> {
+    state.client.add_to_ignore_list(&uid).await
+}
+
+#[tauri::command]
+pub async fn remove_from_ignore_list(
+    state: State<'_, AppState>,
+    uid: String,
+) -> Result<Value, String> {
+    state.client.remove_from_ignore_list(&uid).await
+}
+
+#[tauri::command]
+pub async fn get_apk_url(
+    state: State<'_, AppState>,
+    package_name: String,
+) -> Result<Value, String> {
+    state.client.get_apk_url(&package_name).await
+}
+
+#[tauri::command]
+pub async fn get_apk_qr(
+    state: State<'_, AppState>,
+    package_name: String,
+) -> Result<Value, String> {
+    state.client.get_apk_qr(&package_name).await
+}
+
+#[tauri::command]
+pub async fn check_update(
+    state: State<'_, AppState>,
+    pkgs: String,
+) -> Result<Value, String> {
+    state.client.check_update(&pkgs).await
+}
+
+#[tauri::command]
 pub async fn like_feed(state: State<'_, AppState>, feed_id: String) -> Result<Value, String> {
     state.client.like_feed(&feed_id).await
 }
@@ -313,8 +670,12 @@ pub async fn get_follow_user_list(
 }
 
 #[tauri::command]
-pub async fn create_feed(state: State<'_, AppState>, message: String) -> Result<Value, String> {
-    state.client.create_feed(&message).await
+pub async fn create_feed(
+    state: State<'_, AppState>,
+    message: String,
+    pic: Option<String>,
+) -> Result<Value, String> {
+    state.client.create_feed(&message, pic.as_deref()).await
 }
 
 #[tauri::command]
@@ -413,30 +774,42 @@ pub async fn get_app_list(
 }
 
 #[tauri::command]
-pub fn open_url(url: String) -> Result<(), String> {
+pub fn open_url(app: tauri::AppHandle, url: String, mode: Option<String>) -> Result<(), String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static BROWSER_WINDOW_ID: AtomicU64 = AtomicU64::new(1);
 
+    // 协议白名单：仅允许 http/https/mailto/tel。
+    // 拒绝 file:、ms-msdt:、smb:、javascript: 等可被系统协议处理器滥用的 scheme，
+    // 防止来自动态/评论里的恶意链接触发本地程序。
+    let parsed = reqwest::Url::parse(&url).map_err(|e| format!("无效链接: {e}"))?;
+    let scheme = parsed.scheme().to_ascii_lowercase();
+    if !matches!(scheme.as_str(), "http" | "https" | "mailto" | "tel") {
+        return Err(format!("不支持的链接协议: {scheme}"));
+    }
 
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(&url)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+    // mode: "system" 交给系统默认程序；非 http(s) 协议（如 mailto:）也必须走系统默认程序
+    let system_mode = mode.as_deref() == Some("system");
+    if system_mode || (scheme != "http" && scheme != "https") {
+        return opener::open(&url).map_err(|e| e.to_string());
     }
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(&url)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(target_os = "linux")]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(&url)
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
+
+    // 应用本身即 WebView 浏览器：外部链接在新开窗口内浏览，不调起系统浏览器
+    let label = format!(
+        "browser_window_{}",
+        BROWSER_WINDOW_ID.fetch_add(1, Ordering::Relaxed)
+    );
+    let title = parsed.host_str().unwrap_or("链接").to_string();
+
+    // 移动端 UA：酷安网页（如账号安全页）在桌面 UA 下会白屏，与登录窗口同一套已验证可用的 UA
+    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::External(parsed))
+        .title(title)
+        .user_agent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1")
+        .inner_size(1100.0, 780.0)
+        .center()
+        .decorations(true)
+        .visible(true)
+        .build()
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -454,26 +827,36 @@ pub fn close_login_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn get_user_cookie(state: State<'_, AppState>) -> Result<Option<String>, String> {
-    let val = state.client.get_user_cookie();
-    eprintln!(
-        "[login-debug] get_user_cookie -> {}",
-        if val.is_some() { "present" } else { "none" }
-    );
-    Ok(val)
+pub async fn fetch_external_page(
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<Value, String> {
+    state.client.fetch_external_page(&url).await
 }
 
 /// 从主窗口当前 URL 推导应用自身源地址（dev 为 http://127.0.0.1:17520，打包后为 tauri 自定义协议源），
 /// 用于登录回跳 forward 与关窗判定，避免 dev/生产环境不一致。
+///
+/// 安全约束：只允许应用自身的固定源。登录回跳会把 Cookie 拼进 URL 带回本地，
+/// 若主窗口被导航到外部域名，绝不能把凭据回跳到该域。
+const ALLOWED_APP_ORIGINS: &[&str] = &[
+    "http://127.0.0.1:17520",
+    "http://tauri.localhost",
+    "tauri://localhost",
+];
+
 fn get_app_origin(app: &tauri::AppHandle) -> String {
     use tauri::Manager;
     if let Some(main) = app.get_webview_window("main") {
         if let Ok(url) = main.url() {
             if let Some(host) = url.host_str() {
-                return match url.port() {
+                let origin = match url.port() {
                     Some(port) => format!("{}://{}:{}", url.scheme(), host, port),
                     None => format!("{}://{}", url.scheme(), host),
                 };
+                if ALLOWED_APP_ORIGINS.contains(&origin.as_str()) {
+                    return origin;
+                }
             }
         }
     }
@@ -676,37 +1059,94 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// 后台静默下载更新安装包，实时向前端广播下载进度
+/// 后台静默下载更新安装包，实时向前端广播下载进度；
+/// 支持限速（speed_limit_kbps，0 为不限速）与 HTTP 代理（proxy_url，空为不使用）
+///
+/// 安全约束：仅允许 https + GitHub 官方域名白名单（含 release 资源重定向目标），
+/// 文件名净化 + 体积上限，防止前端被注入时被利用下载并执行任意文件。
+const UPDATE_ALLOWED_HOSTS: &[&str] = &[
+    "github.com",
+    "www.github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+];
+const UPDATE_MAX_BYTES: u64 = 500 * 1024 * 1024;
+
 #[tauri::command]
-pub async fn download_update(app: tauri::AppHandle, url: String) -> Result<String, String> {
+pub async fn download_update(
+    app: tauri::AppHandle,
+    url: String,
+    speed_limit_kbps: Option<u64>,
+    proxy_url: Option<String>,
+) -> Result<String, String> {
     use tauri::Emitter;
     use tokio::io::AsyncWriteExt;
+
+    let parsed_url = reqwest::Url::parse(&url).map_err(|e| format!("更新链接无效: {e}"))?;
+    if parsed_url.scheme() != "https" {
+        return Err("更新链接必须为 HTTPS".to_string());
+    }
+    let host = parsed_url.host_str().unwrap_or_default().to_ascii_lowercase();
+    if !UPDATE_ALLOWED_HOSTS.contains(&host.as_str()) {
+        return Err(format!("更新链接域名不在允许列表内: {host}"));
+    }
 
     let dir = std::env::temp_dir().join("coolapk-desktop-update");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    let file_name = url
-        .rsplit('/')
-        .next()
-        .filter(|name| !name.is_empty())
-        .unwrap_or("coolapk-desktop-setup.exe");
-    let path = dir.join(file_name);
+    // 文件名净化：只保留安全字符，防路径穿越（..\..\x.exe 等），并限制扩展名
+    let raw_name = url.rsplit('/').next().unwrap_or("").trim();
+    let safe_name: String = raw_name
+        .chars()
+        .take(128)
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        .collect();
+    if safe_name.is_empty() || !(safe_name.ends_with(".exe") || safe_name.ends_with(".msi")) {
+        return Err("更新包文件名不合法".to_string());
+    }
+    let path = dir.join(safe_name);
 
-    let client = reqwest::Client::builder()
-        .user_agent("coolapk-desktop-updater")
-        .build()
-        .map_err(|e| e.to_string())?;
+    let mut builder = reqwest::Client::builder().user_agent("coolapk-desktop-updater");
+    if let Some(proxy) = proxy_url.filter(|p| !p.trim().is_empty()) {
+        builder = builder
+            .proxy(reqwest::Proxy::all(proxy).map_err(|e| format!("代理设置无效: {e}"))?);
+    }
+    let client = builder.build().map_err(|e| e.to_string())?;
     let mut response = client.get(&url).send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         return Err(format!("下载失败：HTTP {}", response.status()));
     }
 
     let total = response.content_length().unwrap_or(0);
+    if total > UPDATE_MAX_BYTES {
+        return Err("更新包体积异常（超过 500MB），已拒绝下载".to_string());
+    }
     let mut file = tokio::fs::File::create(&path).await.map_err(|e| e.to_string())?;
     let mut downloaded: u64 = 0;
+    // 限速：按 1 秒滑动窗口累积字节数，超出配额后补眠
+    let limit_bytes_per_sec = speed_limit_kbps.unwrap_or(0).saturating_mul(1024);
+    let mut window_bytes: u64 = 0;
+    let mut window_start = tokio::time::Instant::now();
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
-        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
         downloaded += chunk.len() as u64;
+        if downloaded > UPDATE_MAX_BYTES {
+            let _ = tokio::fs::remove_file(&path).await;
+            return Err("更新包体积异常（超过 500MB），已中止下载".to_string());
+        }
+        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+        if limit_bytes_per_sec > 0 {
+            window_bytes += chunk.len() as u64;
+            let elapsed = window_start.elapsed().as_secs_f64();
+            if elapsed >= 1.0 {
+                window_bytes = 0;
+                window_start = tokio::time::Instant::now();
+            } else {
+                let budget = window_bytes as f64 / limit_bytes_per_sec as f64;
+                if budget > elapsed {
+                    tokio::time::sleep(std::time::Duration::from_secs_f64(budget - elapsed)).await;
+                }
+            }
+        }
         if total > 0 {
             let _ = app.emit(
                 "update-download-progress",
@@ -723,22 +1163,141 @@ pub async fn download_update(app: tauri::AppHandle, url: String) -> Result<Strin
     Ok(path.to_string_lossy().to_string())
 }
 
+/// 将文本内容以 JSON 形式导出到指定目录（dir 为空时使用系统下载目录），返回完整保存路径
+#[tauri::command]
+pub fn export_json_file(
+    app: tauri::AppHandle,
+    file_name: String,
+    content: String,
+    dir: Option<String>,
+) -> Result<String, String> {
+    use tauri::Manager;
+
+    // 文件名净化：只保留安全字符，拒绝 .. 路径穿越与空名，并限制长度与内容体积
+    let safe_name: String = file_name
+        .chars()
+        .take(100)
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+        .collect();
+    if safe_name.is_empty() || safe_name == "." || safe_name == ".." || safe_name.contains("..") {
+        return Err("导出文件名不合法".to_string());
+    }
+    if content.len() > 20 * 1024 * 1024 {
+        return Err("导出内容过大（超过 20MB）".to_string());
+    }
+
+    let dir = dir
+        .filter(|d| !d.trim().is_empty())
+        .map(PathBuf::from)
+        .or_else(|| app.path().download_dir().ok())
+        .unwrap_or_else(|| std::env::temp_dir());
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(safe_name);
+    std::fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+fn dir_total_size(dir: &std::path::Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_dir() {
+                    total += dir_total_size(&entry.path());
+                } else {
+                    total += meta.len();
+                }
+            }
+        }
+    }
+    total
+}
+
+/// 更新包临时目录 + WebView 缓存目录（如 WebView2 的 EBWebView）
+fn cache_dirs(app: &tauri::AppHandle) -> Vec<std::path::PathBuf> {
+    use tauri::Manager;
+    let mut dirs = Vec::new();
+    dirs.push(std::env::temp_dir().join("coolapk-desktop-update"));
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        let webview = data_dir.join("EBWebView");
+        if webview.exists() {
+            dirs.push(webview);
+        }
+    }
+    if let Ok(cache) = app.path().app_cache_dir() {
+        if cache.exists() {
+            dirs.push(cache);
+        }
+    }
+    dirs
+}
+
+/// 统计本地缓存占用（更新包临时文件 + WebView 缓存）
+#[tauri::command]
+pub fn get_cache_info(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let mut total = 0u64;
+    for dir in cache_dirs(&app) {
+        total += dir_total_size(&dir);
+    }
+    Ok(serde_json::json!({ "bytes": total }))
+}
+
+/// 清理本地缓存（更新包临时文件 + WebView 缓存目录内容），返回清理后的占用
+#[tauri::command]
+pub fn clear_app_cache(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    for dir in cache_dirs(&app) {
+        if !dir.exists() {
+            continue;
+        }
+        // 更新包目录整体删除重建；WebView 缓存目录删除子项（运行中可能有文件被锁，忽略失败）
+        if dir.ends_with("coolapk-desktop-update") {
+            let _ = std::fs::remove_dir_all(&dir);
+        } else if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    let _ = std::fs::remove_dir_all(&path);
+                } else {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
+        }
+    }
+    get_cache_info(app)
+}
+
 /// 以静默更新模式启动安装包：/S 静默、/UPDATE 跳过卸载、/R 安装完成后自动重新启动应用
 #[tauri::command]
 pub fn install_update(installer_path: String) -> Result<(), String> {
-    if !std::path::Path::new(&installer_path).exists() {
-        return Err("更新安装包不存在，可能已被清理，请重新下载".to_string());
+    // 只允许执行更新目录内的 .exe/.msi 安装包：
+    // 路径必须真实存在于下载目录（canonicalize 解析 .. / 符号链接后再前缀校验），
+    // 防止前端被注入时借助该命令执行任意文件。
+    let canonical = std::fs::canonicalize(&installer_path)
+        .map_err(|_| "更新安装包不存在，可能已被清理，请重新下载".to_string())?;
+    let expected_dir = std::env::temp_dir().join("coolapk-desktop-update");
+    let expected_dir = expected_dir.canonicalize().unwrap_or(expected_dir);
+    if !canonical.starts_with(&expected_dir) {
+        return Err("拒绝安装不在更新目录内的文件".to_string());
     }
+    let ext = canonical
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if ext != "exe" && ext != "msi" {
+        return Err("拒绝安装非安装包文件".to_string());
+    }
+
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new(&installer_path)
+        std::process::Command::new(&canonical)
             .args(["/S", "/UPDATE", "/R"])
             .spawn()
             .map_err(|e| e.to_string())?;
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = installer_path;
+        let _ = canonical;
     }
     Ok(())
 }

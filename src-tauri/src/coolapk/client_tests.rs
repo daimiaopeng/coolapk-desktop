@@ -139,6 +139,102 @@ fn test_login_cookie_persistence_flow() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// 网页外壳噪音剔除 + 正文提取：酷安 /feed/ 分享页只有导航/页脚/扫码提示，
+/// 提取后不应残留导航与页脚链接
+#[test]
+fn test_extract_readable_content_strips_chrome() {
+    let html = r#"<!DOCTYPE html>
+<html><head><title>动态分享 - 酷安</title></head>
+<body>
+<header><a href="/">酷安</a><a href="/editorChoice">编辑精选</a></header>
+<nav><a href="/apk/">应用</a><a href="/game/">游戏</a><a href="/u/1451266">oxygen的喵</a></nav>
+<div>您当前查看的是「动态分享」，请用酷安手机APP扫码查看详情<br>下载酷安手机APP</div>
+<article>
+<p>在家用 Windows 刷酷安的新方式——</p>
+<a href="/t/数码日常">#数码日常#</a>
+</article>
+<footer><a href="/about/contact.html">联系酷安</a><span>粤ICP备15030494号</span></footer>
+<script>alert(1)</script>
+</body></html>"#;
+
+    let cleaned = extract_readable_content(html);
+    assert!(cleaned.contains("在家用 Windows 刷酷安"), "正文应保留");
+    assert!(cleaned.contains("#数码日常#"), "正文链接应保留");
+    assert!(!cleaned.contains("编辑精选"), "导航不应残留");
+    assert!(!cleaned.contains("oxygen的喵"), "导航用户链接不应残留");
+    assert!(!cleaned.contains("粤ICP备"), "页脚不应残留");
+    assert!(!cleaned.contains("alert"), "脚本不应残留");
+    assert!(!cleaned.contains("<script"), "script 标签不应残留");
+}
+
+/// 无 article/main 容器时退化为整体剥壳结果，且自闭合/未闭合标签不 panic
+#[test]
+fn test_extract_readable_content_fallback_safe() {
+    let html = r#"<html><body><nav>导航</nav><div><br/><img src="a.png">正文内容</div><footer>页脚</footer></body></html>"#;
+    let cleaned = extract_readable_content(html);
+    assert!(cleaned.contains("正文内容"));
+    assert!(!cleaned.contains("导航"));
+    assert!(!cleaned.contains("页脚"));
+
+    let broken = "<article>无闭合正文...<div>内容";
+    let out = extract_readable_content(broken);
+    assert!(out.contains("无闭合正文"));
+}
+
+/// 浏览历史/最近访问实体没有 username/userInfo，
+/// 必须能原样保留（此前走 clean_single_feed 会被全部丢弃）
+#[test]
+fn test_extract_history_list_preserves_entities() {
+    let raw = json!({
+        "data": [
+            {
+                "title": "oxygen",
+                "description": "",
+                "logo": "http://avatar.coolapk.com/data/001/45/12/66_avatar_middle.jpg",
+                "url": "u/1451266",
+                "historyType": "user",
+                "typeName": "用户",
+                "id": "user:1451266",
+                "entityType": "history",
+                "dateline": 1786022084
+            },
+            {
+                "id": 247872765,
+                "uid": 1451266,
+                "target_type": "apk",
+                "entityType": "recentHistory",
+                "entityId": 247872765,
+                "target_type_title": "应用",
+                "title": "哔哩哔哩",
+                "url": "/apk/tv.danmaku.bili",
+                "logo": "//pp.myapp.com/ma_icon/0/icon/256",
+                "follow_num": 25289
+            }
+        ]
+    });
+
+    let list = CoolapkClient::extract_history_list(&raw);
+    assert_eq!(list.len(), 2, "历史实体不能被丢弃");
+
+    let history = &list[0];
+    assert_eq!(history["entityType"], "history");
+    assert_eq!(history["url"], "/u/1451266", "url 应补全前导斜杠");
+    assert_eq!(
+        history["logo"],
+        "https://avatar.coolapk.com/data/001/45/12/66_avatar_middle.jpg",
+        "http 图片应升级为 https"
+    );
+
+    let recent = &list[1];
+    assert_eq!(recent["entityType"], "recentHistory");
+    assert_eq!(recent["url"], "/apk/tv.danmaku.bili", "已有前导斜杠的 url 不应被改动");
+    assert_eq!(
+        recent["logo"],
+        "https://pp.myapp.com/ma_icon/0/icon/256",
+        "// 开头图片应补全 https"
+    );
+}
+
 /// 模拟 Webview 登录脚本捕获到的真实 Cookie 形态（含中文/换行等脏字符），
 /// 验证 set_user_cookie 的 ASCII 清洗与落盘逻辑不会崩坏
 #[test]

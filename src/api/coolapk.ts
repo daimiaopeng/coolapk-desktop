@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { router } from '../router';
 
 async function safeFetch(pythonEndpoint: string, tauriCmd: string, tauriArgs: any = {}) {
   let rustError: unknown;
@@ -246,9 +247,184 @@ export class CoolapkTauriAPI {
     return await invokeNative('unfollow_user', { uid });
   }
 
+  // 右侧栏：热门话题 / 推荐酷友
+  static async getHotTopics() {
+    return await invokeNative('get_hot_topics');
+  }
+
+  static async getRecommendUsers() {
+    return await invokeNative('get_recommend_users');
+  }
+
+  static async getFavoriteList(favType: string = 'feed', page: number = 1) {
+    return await invokeNative('get_favorite_list', { favType, page });
+  }
+
+  static async getCollectionList(uid: string, page: number = 1) {
+    return await invokeNative('get_collection_list', { uid, page });
+  }
+
+  static async getCollectionItemList(collectionId: string, page: number = 1) {
+    return await invokeNative('get_collection_item_list', { collectionId, page });
+  }
+
+  static async getCollectionDetail(collectionId: string) {
+    return await invokeNative('get_collection_detail', { collectionId });
+  }
+
+  static async followCollection(collectionId: string) {
+    return await invokeNative('follow_collection', { collectionId });
+  }
+
+  static async unfollowCollection(collectionId: string) {
+    return await invokeNative('unfollow_collection', { collectionId });
+  }
+
+  static async likeCollection(collectionId: string) {
+    return await invokeNative('like_collection', { collectionId });
+  }
+
+  static async unlikeCollection(collectionId: string) {
+    return await invokeNative('unlike_collection', { collectionId });
+  }
+
+  static async followDyh(dyhId: string) {
+    return await invokeNative('follow_dyh', { dyhId });
+  }
+
+  static async unfollowDyh(dyhId: string) {
+    return await invokeNative('unfollow_dyh', { dyhId });
+  }
+
+  static async getFeedForwardList(feedId: string, feedType: string = 'feed', page: number = 1) {
+    return await invokeNative('get_feed_forward_list', { feedId, feedType, page });
+  }
+
+  static async getFeedLikeList(feedId: string, page: number = 1) {
+    return await invokeNative('get_feed_like_list', { feedId, page });
+  }
+
+  static async getFeedChangeHistory(feedId: string) {
+    return await invokeNative('get_feed_change_history', { feedId });
+  }
+
+  static async searchTags(query: string, page: number = 1) {
+    return await invokeNative('search_tags', { query, page });
+  }
+
+  static async followTag(tag: string) {
+    return await invokeNative('follow_tag', { tag });
+  }
+
+  static async unfollowTag(tag: string) {
+    return await invokeNative('unfollow_tag', { tag });
+  }
+
+  static async getDeviceFeedList(tag: string, page: number = 1) {
+    return await invokeNative('get_device_feed_list', { tag, page });
+  }
+
+  static async getQuestionAnswers(feedId: string, sort: string = 'hot', page: number = 1) {
+    return await invokeNative('get_question_answers', { feedId, sort, page });
+  }
+
+  static async getVoteComments(feedId: string, page: number = 1) {
+    return await invokeNative('get_vote_comments', { feedId, page });
+  }
+
+  static async getHitHistory(page: number = 1) {
+    return await invokeNative('get_hit_history', { page });
+  }
+
+  static async getRecentHistory(page: number = 1) {
+    return await invokeNative('get_recent_history', { page });
+  }
+
+  static async searchUsers(query: string, page: number = 1) {
+    return await invokeNative('search_users', { query, page });
+  }
+
+  static async getSearchSuggestionsApp(query: string) {
+    return await invokeNative('get_search_suggestions_app', { query });
+  }
+
+  static async searchFeedTopics(query: string, page: number = 1) {
+    return await invokeNative('search_feed_topics', { query, page });
+  }
+
+  static async getProductDetailByName(name: string) {
+    return await invokeNative('get_product_detail_by_name', { name });
+  }
+
+  static async getLoadConfig() {
+    return await invokeNative('get_load_config');
+  }
+
+  static async sendPrivateImage(uid: string, messagePic: string) {
+    return await invokeNative('send_private_image', { uid, messagePic });
+  }
+
+  static async readMessage(ukey: string) {
+    return await invokeNative('read_message', { ukey });
+  }
+
+  static async favoriteFeed(feedId: string) {
+    return await invokeNative('favorite_feed', { feedId });
+  }
+
+  static async unfavoriteFeed(feedId: string) {
+    return await invokeNative('unfavorite_feed', { feedId });
+  }
+
+  static async uploadImage(imageBytes: Uint8Array, fileName: string, contentType: string, dir: string = 'feed', toUid?: string) {
+    return await invokeNative('upload_image', { imageBytes, fileName, contentType, dir, toUid });
+  }
+
+  static async getBlackList(page: number = 1) {
+    return await invokeNative('get_black_list', { page });
+  }
+
+  static async getIgnoreList(page: number = 1) {
+    return await invokeNative('get_ignore_list', { page });
+  }
+
+  static async getLimitList(page: number = 1) {
+    return await invokeNative('get_limit_list', { page });
+  }
+
+  static async addToBlackList(uid: string) {
+    return await invokeNative('add_to_black_list', { uid });
+  }
+
+  static async removeFromBlackList(uid: string) {
+    return await invokeNative('remove_from_black_list', { uid });
+  }
+
+  static async addToIgnoreList(uid: string) {
+    return await invokeNative('add_to_ignore_list', { uid });
+  }
+
+  static async removeFromIgnoreList(uid: string) {
+    return await invokeNative('remove_from_ignore_list', { uid });
+  }
+
+  static async getApkUrl(packageName: string) {
+    return await invokeNative('get_apk_url', { packageName });
+  }
+
+  static async getApkQr(packageName: string) {
+    return await invokeNative('get_apk_qr', { packageName });
+  }
+
+  static async checkUpdate(pkgs: string) {
+    return await invokeNative('check_update', { pkgs });
+  }
+
   // 10. 离线/在线发布动态
-  static async createFeed(message: string) {
-    return await invokeNative('create_feed', { message });
+  static async createFeed(message: string, pic?: string) {
+    const args: any = { message };
+    if (pic) args.pic = pic;
+    return await invokeNative('create_feed', args);
   }
 
   static async saveCookie(cookieStr: string) {
@@ -283,16 +459,45 @@ export class CoolapkTauriAPI {
     return await invoke<string>('get_image_data_url', { url });
   }
 
-  static async openUrl(url: string) {
+  static async openUrl(url: string, mode: 'internal' | 'system' = 'internal') {
+    // 内置模式：不再新建窗口，直接跳转应用内"外部链接"页（由 Rust 抓取 + 安全渲染）
+    if (mode === 'internal' && (url.startsWith('http://') || url.startsWith('https://'))) {
+      router.push({ path: '/external', query: { url } });
+      return;
+    }
+    // 非 http(s)（如 mailto:）与 system 模式交给系统默认程序
     try {
-      await invoke('open_url', { url });
+      await invoke('open_url', { url, mode: 'system' });
     } catch {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
   }
 
-  static async downloadUpdate(url: string) {
-    return await invoke<string>('download_update', { url });
+  static async fetchExternalPage(url: string) {
+    return await invokeNative('fetch_external_page', { url });
+  }
+
+  static async downloadUpdate(
+    url: string,
+    options?: { speedLimitKbps?: number; proxyUrl?: string }
+  ) {
+    return await invoke<string>('download_update', {
+      url,
+      speedLimitKbps: options?.speedLimitKbps ?? 0,
+      proxyUrl: options?.proxyUrl ?? '',
+    });
+  }
+
+  static async exportJsonFile(fileName: string, content: string, dir?: string) {
+    return await invoke<string>('export_json_file', { fileName, content, dir: dir || '' });
+  }
+
+  static async getCacheInfo() {
+    return await invoke<{ bytes: number }>('get_cache_info');
+  }
+
+  static async clearAppCache() {
+    return await invoke<{ bytes: number }>('clear_app_cache');
   }
 
   static async installUpdate(installerPath: string) {

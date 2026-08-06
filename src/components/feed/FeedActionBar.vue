@@ -17,15 +17,14 @@
 
     <button :class="['action-btn', { 'is-fav': isFav }]" @click.stop="toggleFav">
       <i :class="[isFav ? 'fas fa-bookmark' : 'far fa-bookmark', 'action-icon']"></i>
-      <span>{{ favCount > 0 ? favCount : '收藏' }}</span>
+      <span>{{ favnum ? favnum : '收藏' }}</span>
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
-import { isFavorite } from '../../utils/favoritesStore';
 import { useAuthStore } from '../../stores/auth';
 
 const authStore = useAuthStore();
@@ -50,11 +49,28 @@ const emit = defineEmits<{
 const isLiked = ref(props.userAction?.like === 1);
 const likeCount = ref(props.likenum || 0);
 
-const isFav = ref(props.userAction?.favorite === 1 || isFavorite(props.feedId));
-const favCount = ref(props.favnum || 0);
+const isFav = ref(props.userAction?.favorite === 1);
 
 const replyCount = ref(props.replynum || 0);
 const shareCount = ref(props.sharenum || 0);
+
+// 动态详情可能异步到达（如评论抽屉先渲染上下文再拉取权威详情），需同步 props 更新
+watch(
+  () => [props.likenum, props.replynum, props.sharenum] as const,
+  ([like, reply, share]) => {
+    if (like !== undefined) likeCount.value = like;
+    if (reply !== undefined) replyCount.value = reply;
+    if (share !== undefined) shareCount.value = share;
+  }
+);
+
+watch(
+  () => [props.userAction?.like, props.userAction?.favorite] as const,
+  ([like, favorite]) => {
+    if (like !== undefined) isLiked.value = like === 1;
+    if (favorite !== undefined) isFav.value = favorite === 1;
+  }
+);
 
 async function toggleLike() {
   if (!authStore.isLoggedIn) {
@@ -78,7 +94,6 @@ async function toggleLike() {
 
 function toggleFav() {
   isFav.value = !isFav.value;
-  favCount.value += isFav.value ? 1 : -1;
   emit('toggle-fav');
 }
 

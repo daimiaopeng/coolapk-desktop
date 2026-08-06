@@ -1,11 +1,11 @@
 {
   "identifier": "main-window-default",
-  "description": "主窗口默认能力：保留原有对 core 与各插件的访问权限",
+  "description": "主窗口默认能力：仅保留实际初始化的插件权限（http/store/stronghold 插件未注册，已移除对应权限）",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "http:default",
-    "store:default",
-    "stronghold:default"
+    "autostart:default",
+    "dialog:default",
+    "notification:default"
   ]
 }

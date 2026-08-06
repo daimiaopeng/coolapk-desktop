@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import FeedCard from '../components/feed/FeedCard.vue';
 import FeedSkeleton from '../components/feed/FeedSkeleton.vue';
@@ -47,6 +47,7 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import { useSettingsStore } from '../stores/settings';
+import { shouldHideFeed } from '../utils/feedFilter';
 
 const settingsStore = useSettingsStore();
 
@@ -90,7 +91,7 @@ async function loadFeeds(isRefresh: boolean = false) {
   try {
     const res: any = await fetchTabApi(activeTab.value, page.value);
     const validItems = res && res.data && Array.isArray(res.data)
-      ? res.data.filter((item: any) => item.id && (item.message || item.title || item.pic))
+      ? res.data.filter((item: any) => item.id && (item.message || item.title || item.pic) && !shouldHideFeed(item, settingsStore.settings))
       : [];
 
     if (validItems.length < 3) {
@@ -103,7 +104,7 @@ async function loadFeeds(isRefresh: boolean = false) {
       feeds.value = validItems;
     } else {
       const existingIds = new Set(feeds.value.map(i => i.id));
-      const uniqueNew = validItems.filter(i => !existingIds.has(i.id));
+      const uniqueNew = validItems.filter((i: any) => !existingIds.has(i.id));
       feeds.value.push(...uniqueNew);
     }
   } catch (err: any) {
@@ -131,8 +132,17 @@ function handleScroll(e: Event) {
   }
 }
 
+const onRefreshFeeds = () => {
+  if (!loading.value && !loadingMore.value) loadFeeds(true);
+};
+
 onMounted(() => {
   loadFeeds(true);
+  window.addEventListener('refresh-feeds', onRefreshFeeds);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('refresh-feeds', onRefreshFeeds);
 });
 </script>
 

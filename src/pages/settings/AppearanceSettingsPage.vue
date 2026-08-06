@@ -53,7 +53,9 @@
       <div class="setting-row">
         <div class="row-info">
           <span class="row-label">界面缩放比例 (Ctrl + / -)</span>
-          <span class="row-sub">调整整体桌面的视觉尺寸放大率</span>
+          <span class="row-sub">
+            {{ settingsStore.settings.zoomManuallySet ? '使用手动设置的整体桌面缩放比例' : '跟随系统显示缩放比例自动调整' }}
+          </span>
         </div>
         <div class="zoom-controls">
           <button class="zoom-btn" @click="settingsStore.setZoom(settingsStore.settings.zoom - 10)">-</button>
@@ -125,18 +127,19 @@
 
 <script setup lang="ts">
 import { useSettingsStore } from '../../stores/settings';
+import type { AccentColor, FeedDensity } from '../../types/settings';
 import AppSwitch from '../../components/common/AppSwitch.vue';
 
 const settingsStore = useSettingsStore();
 
-const accentColors = [
+const accentColors: { key: AccentColor; label: string; color: string }[] = [
   { key: 'green', label: '酷安绿', color: '#10b768' },
   { key: 'blue', label: '活力蓝', color: '#2f7bff' },
   { key: 'violet', label: '优雅紫', color: '#7c5cff' },
   { key: 'orange', label: '暖橙', color: '#f58220' },
 ];
 
-const densityOptions = [
+const densityOptions: { key: FeedDensity; label: string; icon: string }[] = [
   { key: 'comfortable', label: '舒适', icon: '▨' },
   { key: 'standard', label: '标准', icon: '▦' },
   { key: 'compact', label: '紧凑', icon: '▤' },
@@ -154,6 +157,9 @@ const navItems = [
   { key: 'apps', label: '应用中心', icon: 'fas fa-cubes' },
   { key: 'games', label: '游戏中心', icon: 'fas fa-gamepad' },
   { key: 'topics', label: '话题广场', icon: 'fas fa-hashtag' },
+  { key: 'reviews', label: '评测区', icon: 'fas fa-flask' },
+  { key: 'secondhand', label: '二手市场', icon: 'fas fa-store' },
+  { key: 'notifications', label: '通知中心', icon: 'far fa-bell' },
   { key: 'favorites', label: '收藏夹', icon: 'far fa-bookmark' },
   { key: 'history', label: '历史记录', icon: 'far fa-clock' },
   { key: 'messages', label: '消息通知', icon: 'far fa-comment-alt' },

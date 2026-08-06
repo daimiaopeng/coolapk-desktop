@@ -132,7 +132,7 @@ import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
-import { renderCoolapkEmoji } from '../utils/coolapkEmoji';
+import { renderCoolapkRichText } from '../utils/richText';
 
 const route = useRoute();
 const router = useRouter();
@@ -294,7 +294,7 @@ function normalizeImg(url: string, _type: 'avatar' | 'feed') {
 
 function formatRichText(text: string) {
   if (!text) return '';
-  return renderCoolapkEmoji(text.replace(/\n/g, '<br/>'));
+  return renderCoolapkRichText(text);
 }
 
 function focusSearch() {

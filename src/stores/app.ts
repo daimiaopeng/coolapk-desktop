@@ -5,6 +5,7 @@ export const useAppStore = defineStore('app', () => {
   const isSearchOpen = ref(false);
   const isPublishOpen = ref(false);
   const activeCommentFeedId = ref<string | number | null>(null);
+  const activeCommentFeed = ref<any>(null);
   const activeImageViewer = ref<{ urls: string[]; currentIndex: number } | null>(null);
 
   function openSearch() {
@@ -23,12 +24,14 @@ export const useAppStore = defineStore('app', () => {
     isPublishOpen.value = false;
   }
 
-  function openCommentDrawer(feedId: string | number) {
+  function openCommentDrawer(feedId: string | number, feed?: any) {
     activeCommentFeedId.value = feedId;
+    activeCommentFeed.value = feed || null;
   }
 
   function closeCommentDrawer() {
     activeCommentFeedId.value = null;
+    activeCommentFeed.value = null;
   }
 
   function openImageViewer(urls: string[], currentIndex: number = 0) {
@@ -43,6 +46,7 @@ export const useAppStore = defineStore('app', () => {
     isSearchOpen,
     isPublishOpen,
     activeCommentFeedId,
+    activeCommentFeed,
     activeImageViewer,
     openSearch,
     closeSearch,

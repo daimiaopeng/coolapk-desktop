@@ -51,3 +51,16 @@ export function getHdImageUrl(url: string): string {
 export function getOriginalImageUrl(url: string): string {
   return getImageUrlByQuality(url, 'raw');
 }
+
+/**
+ * 图片 URL 协议白名单：仅放行 http/https、data:、blob: 与站内相对路径。
+ * 用于直接交给 <img> 的路径（绕过 Rust 代理的降级分支），
+ * 防止 file:、javascript: 等异常 scheme 被 WebView 加载/探测本地文件。
+ */
+export function sanitizeImageUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith('/') || trimmed.startsWith('//')) return true;
+  return /^(https?|data|blob):/i.test(trimmed);
+}

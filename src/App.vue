@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 import { listen } from '@tauri-apps/api/event';
 import AppShell from './components/layout/AppShell.vue';
 import CommentDrawer from './components/comments/CommentDrawer.vue';
@@ -72,6 +72,8 @@ import AppDialog from './components/common/AppDialog.vue';
 import { useAuthStore } from './stores/auth';
 import { useSettingsStore } from './stores/settings';
 import { checkLatestRelease, type UpdateInfo } from './utils/updateChecker';
+import { desktopNotify } from './utils/desktopNotify';
+import { registerGlobalHotkeys } from './utils/hotkeys';
 import { CoolapkTauriAPI } from './api/coolapk';
 
 const PENDING_UPDATE_KEY = 'coolapk_pending_update';
@@ -87,6 +89,7 @@ const readyInfo = ref<ReadyInfo | null>(null);
 const downloading = ref<DownloadProgress | null>(null);
 const downloadError = ref<string | null>(null);
 const isWindows = navigator.userAgent.includes('Windows');
+let unregisterHotkeys: (() => void) | null = null;
 
 function formatBytes(bytes: number) {
   if (!bytes) return '0 MB';
@@ -96,7 +99,7 @@ function formatBytes(bytes: number) {
 
 async function checkForUpdate(manual = false) {
   try {
-    const result = await checkLatestRelease();
+    const result = await checkLatestRelease(settingsStore.settings.updateChannel);
     if (result.hasNew && !manual) {
       if (settingsStore.settings.ignoreAllUpdates) return;
       if (result.latestVersion && result.latestVersion === settingsStore.settings.ignoredUpdateVersion) return;
@@ -131,11 +134,23 @@ async function startBackgroundDownload(info: UpdateInfo) {
     };
   });
   try {
-    const path = await CoolapkTauriAPI.downloadUpdate(url);
+    const path = await CoolapkTauriAPI.downloadUpdate(url, {
+      speedLimitKbps: settingsStore.settings.updateSpeedLimitKBps,
+      proxyUrl: settingsStore.settings.proxyUrl,
+    });
     await unlisten();
     downloading.value = null;
     readyInfo.value = { version: info.latestVersion || '', path };
     localStorage.setItem(PENDING_UPDATE_KEY, JSON.stringify(readyInfo.value));
+    if (settingsStore.settings.desktopNotifications && settingsStore.settings.notifyDownloadComplete) {
+      void desktopNotify(
+        {
+          title: '更新包下载完成',
+          body: `酷安桌面版 ${info.latestVersion || ''} 更新包已下载完成，点击“立即更新”即可安装。`,
+        },
+        settingsStore.settings.notificationSound
+      );
+    }
   } catch (err) {
     await unlisten();
     downloading.value = null;
@@ -171,12 +186,14 @@ function ignoreAllUpdates() {
 
 function openUpdate() {
   const url = updateInfo.value?.downloadUrl;
-  if (url) void CoolapkTauriAPI.openUrl(url);
+  if (url) void CoolapkTauriAPI.openUrl(url, 'system');
   updateInfo.value = null;
 }
 
 onMounted(() => {
   authStore.initAuth();
+  window.addEventListener('resize', settingsStore.refreshAutoZoom);
+  unregisterHotkeys = registerGlobalHotkeys();
 
   // 上次已下载但未安装的更新包：启动时再次询问
   try {
@@ -197,6 +214,26 @@ onMounted(() => {
     void checkForUpdate();
   }
   window.addEventListener('check-for-update', () => void checkForUpdate(true));
+
+  // 启动时按阈值自动清理缓存
+  if (settingsStore.settings.autoCleanCache) {
+    void (async () => {
+      try {
+        const info = await CoolapkTauriAPI.getCacheInfo();
+        const threshold = (settingsStore.settings.cacheThresholdMB || 500) * 1024 * 1024;
+        if (Number(info?.bytes) > threshold) {
+          await CoolapkTauriAPI.clearAppCache();
+        }
+      } catch {
+        // 自动清理失败不影响启动
+      }
+    })();
+  }
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', settingsStore.refreshAutoZoom);
+  unregisterHotkeys?.();
 });
 </script>
 

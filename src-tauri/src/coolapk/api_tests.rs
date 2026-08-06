@@ -138,6 +138,54 @@ async fn probe_all_write_endpoints_http_method() {
             params: vec![("uid", "1".to_string()), ("message", "api-probe-test".to_string())],
         },
         Case {
+            label: "addToBlackList (GET)",
+            path: "/v6/user/addToBlackList",
+            is_get: true,
+            params: vec![("uid", "1".to_string())],
+        },
+        Case {
+            label: "addToBlackList (POST)",
+            path: "/v6/user/addToBlackList",
+            is_get: false,
+            params: vec![("uid", "1".to_string())],
+        },
+        Case {
+            label: "removeFromBlackList (GET)",
+            path: "/v6/user/removeFromBlackList",
+            is_get: true,
+            params: vec![("uid", "1".to_string())],
+        },
+        Case {
+            label: "removeFromBlackList (POST)",
+            path: "/v6/user/removeFromBlackList",
+            is_get: false,
+            params: vec![("uid", "1".to_string())],
+        },
+        Case {
+            label: "addToIgnoreList (GET)",
+            path: "/v6/user/addToIgnoreList",
+            is_get: true,
+            params: vec![("uid", "1".to_string())],
+        },
+        Case {
+            label: "addToIgnoreList (POST)",
+            path: "/v6/user/addToIgnoreList",
+            is_get: false,
+            params: vec![("uid", "1".to_string())],
+        },
+        Case {
+            label: "removeFromIgnoreList (GET)",
+            path: "/v6/user/removeFromIgnoreList",
+            is_get: true,
+            params: vec![("uid", "1".to_string())],
+        },
+        Case {
+            label: "removeFromIgnoreList (POST)",
+            path: "/v6/user/removeFromIgnoreList",
+            is_get: false,
+            params: vec![("uid", "1".to_string())],
+        },
+        Case {
             label: "account/login (GET)",
             path: "/v6/account/login",
             is_get: true,
@@ -1221,4 +1269,156 @@ async fn probe_apk_discussion_chain() {
     let cleaned = CoolapkClient::extract_cleaned_list(&raw);
     println!("bilibili discussion raw={}", clip(&raw.to_string(), 1000));
     println!("bilibili discussion cleaned={}", cleaned.len());
+}
+
+/// 探测 Coolapk-UWP 收集整理的全部未接入接口（收藏单/历史/话题/搜索/问答/投票等）。
+/// 未登录时：读接口返回数据 → 可用；返回登录跳转 → 需登录；404 → 已废弃。
+#[tokio::test]
+#[ignore]
+async fn probe_uwp_collected_endpoints() {
+    let client = CoolapkClient::new();
+
+    let feed_id = "72652194".to_string();
+    let coll_id = "4939783".to_string();
+    let tag = "摄影".to_string();
+
+    #[derive(Clone)]
+    struct Case(&'static str, &'static str, Vec<(&'static str, String)>);
+    let cases: Vec<Case> = vec![
+        // === 收藏单 / 合集 ===
+        Case("收藏单详情", "/v6/collection/detail", vec![("id", coll_id.clone())]),
+        Case("收藏单列表", "/v6/collection/list", vec![("uid", "10086".to_string()), ("page", "1".to_string())]),
+        Case("收藏单内容", "/v6/collection/itemList", vec![("id", coll_id.clone()), ("page", "1".to_string())]),
+        // === 动态扩展 ===
+        Case("修改历史", "/v6/feed/changeHistoryList", vec![("id", feed_id.clone())]),
+        Case("转发列表", "/v6/feed/forwardList", vec![("id", feed_id.clone()), ("type", "feed".to_string()), ("page", "1".to_string())]),
+        Case("点赞列表", "/v6/feed/likeList", vec![("id", feed_id.clone()), ("listType", "lastupdate_desc".to_string()), ("page", "1".to_string())]),
+        Case("话题搜索", "/v6/feed/searchTag", vec![("q", "手机".to_string()), ("page", "1".to_string())]),
+        // === 问答 / 投票 ===
+        Case("问答列表", "/v6/question/answerList", vec![("id", feed_id.clone()), ("sort", "hot".to_string()), ("page", "1".to_string())]),
+        Case("投票评论", "/v6/vote/commentList", vec![("fid", feed_id.clone()), ("page", "1".to_string())]),
+        // === 话题 ===
+        Case("话题设备动态", "/v6/topic/deviceFeedList", vec![("tag", tag.clone()), ("page", "1".to_string()), ("listType", "lastupdate_desc".to_string())]),
+        // === 用户历史 / 搜索 ===
+        Case("浏览历史", "/v6/user/hitHistoryList", vec![("page", "1".to_string())]),
+        Case("最近历史", "/v6/user/recentHistoryList", vec![("page", "1".to_string())]),
+        Case("用户搜索", "/v6/user/search", vec![("q", "小编".to_string()), ("page", "1".to_string())]),
+        // === 搜索扩展 ===
+        Case("搜索联想(app)", "/v6/search/suggestSearchWordsNew", vec![("searchValue", "小米".to_string()), ("type", "app".to_string())]),
+        Case("搜索话题", "/v6/search", vec![("type", "feedTopic".to_string()), ("searchValue", "手机".to_string()), ("page", "1".to_string())]),
+        // === 产品 / 配置 ===
+        Case("产品详情(name)", "/v6/product/detail", vec![("name", "小米15 Ultra".to_string())]),
+        Case("加载配置", "/v6/account/loadConfig", vec![("key", "my_page_card_config".to_string())]),
+    ];
+
+    println!("\n======== Coolapk-UWP 补充接口探测 ({}) ========", cases.len());
+    let mut ok = 0;
+    let mut need_auth = 0;
+    let mut deprecated = 0;
+    let mut blocked = 0;
+
+    for c in &cases {
+        let (name, path, params) = (c.0, c.1, &c.2);
+        match client.api_get(path, params).await {
+            Ok(res) => {
+                let has_data = res.get("data").map_or(false, |v| !v.is_null());
+                let message_str = res.get("message").and_then(|v| v.as_str()).unwrap_or("");
+                let status_code = res.get("status").and_then(|v| v.as_i64()).unwrap_or(0);
+                let error_code = res.get("error").and_then(|v| v.as_i64());
+                let forward_url = res.get("forwardUrl").and_then(|v| v.as_str()).unwrap_or("");
+
+                let is_unauthed = message_str.contains("登录") || status_code == 401;
+                let is_captcha = message_str.contains("验证码");
+                let is_notfound = message_str.contains("does not exists") || status_code == 404;
+                let is_redirect = message_str.starts_with("https://")
+                    || forward_url.starts_with("/account/login")
+                    || error_code == Some(-10001);
+                let is_forbidden = message_str.contains("无法访问") || error_code == Some(-3);
+
+                if has_data {
+                    println!("  [  ✓ ] {name:16} 有数据");
+                    ok += 1;
+                } else if is_unauthed || is_redirect {
+                    println!("  [  ! ] {name:16} 需登录");
+                    need_auth += 1;
+                } else if is_captcha || is_forbidden {
+                    println!("  [  ! ] {name:16} 被拦截");
+                    blocked += 1;
+                } else if is_notfound {
+                    println!("  [  ✗ ] {name:16} 已废弃");
+                    deprecated += 1;
+                } else if !message_str.is_empty() {
+                    println!("  [  ? ] {name:16} 无数据: {}", clip(message_str, 40));
+                    ok += 1;
+                } else {
+                    println!("  [  ? ] {name:16} 响应结构未知: {}", clip(&res.to_string(), 60));
+                    ok += 1;
+                }
+            }
+            Err(e) => {
+                println!("  [  ✗ ] {name:16} 网络错误: {}", e);
+                blocked += 1;
+            }
+        }
+    }
+
+    println!("\n补充接口 ({total}):  {ok} 可用 · {need_auth} 需登录 · {blocked} 被拦截 · {deprecated} 已废弃", total = cases.len());
+    assert!(ok + need_auth >= 14, "可用+需登录接口不足，期望 >= 14，实际 {}", ok + need_auth);
+    assert!(deprecated <= 2, "废弃接口过多，期望 <= 2，实际 {}", deprecated);
+}
+
+#[tokio::test]
+#[ignore]
+async fn probe_hot_reply_target_row() {
+    let client = CoolapkClient::new();
+    let token = client.auth.get_app_token().unwrap();
+    for feed_id in ["73077541", "72984525"] {
+        let url = format!(
+            "https://api.coolapk.com/v6/feed/hotReplyList?id={}&page=1&discussMode=1",
+            feed_id
+        );
+        let resp = client
+            .client
+            .get(&url)
+            .header("X-App-Token", token.clone())
+            .header("X-Requested-With", "XMLHttpRequest")
+            .send()
+            .await
+            .unwrap();
+        let body = resp.text().await.unwrap_or_default();
+        let json: serde_json::Value =
+            serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+        let arr = json.pointer("/data").and_then(|d| d.as_array());
+        if let Some(arr) = arr {
+            println!("  [hotReply] {} count={}", feed_id, arr.len());
+            if let Some(first) = arr.first() {
+                let keys: Vec<String> = first
+                    .as_object()
+                    .map(|o| o.keys().cloned().collect())
+                    .unwrap_or_default();
+                println!("  [hotReply] {} first keys: {:?}", feed_id, keys);
+                let tr = first
+                    .get("targetRow")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                let tr_msg = tr
+                    .get("message")
+                    .map(|m| clip(&m.to_string(), 80))
+                    .unwrap_or_default();
+                let tr_title = tr
+                    .get("message_title")
+                    .map(|m| clip(&m.to_string(), 60))
+                    .unwrap_or_default();
+                println!(
+                    "  [hotReply] {} targetRow={} msg={} title={}",
+                    feed_id,
+                    tr.is_object(),
+                    tr_msg,
+                    tr_title
+                );
+            }
+        } else {
+            println!("  [hotReply] {} no data: {}", feed_id, clip(&body, 150));
+        }
+    }
 }

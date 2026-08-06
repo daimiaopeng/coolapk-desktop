@@ -4,6 +4,9 @@ export type ImageQuality = 'standard' | 'hd' | 'raw';
 export type AccentColor = 'green' | 'blue' | 'violet' | 'orange';
 export type CommentSort = 'hot' | 'latest';
 export type HomeTabKey = 'index_v8' | 'digest' | 'hot' | 'latest' | 'cool_picture' | 'secondhand';
+export type ExternalLinkMode = 'internal' | 'system';
+export type TimeDisplayMode = 'relative' | 'absolute';
+export type UpdateChannel = 'stable' | 'beta';
 
 export interface NavVisibilitySettings {
   home: boolean;
@@ -12,6 +15,9 @@ export interface NavVisibilitySettings {
   apps: boolean;
   games: boolean;
   topics: boolean;
+  reviews: boolean;
+  secondhand: boolean;
+  notifications: boolean;
   favorites: boolean;
   history: boolean;
   messages: boolean;
@@ -23,6 +29,7 @@ export interface AppSettings {
   density: FeedDensity;
   fontSize: number;
   zoom: number;
+  zoomManuallySet: boolean;
   sidebarCollapsed: boolean;
   reduceMotion: boolean;
   inlineComments: boolean;
@@ -43,4 +50,26 @@ export interface AppSettings {
   ignoredUpdateVersion: string;
   ignoreAllUpdates: boolean;
   closeToTray: boolean;
+  autostart: boolean;
+  startMinimized: boolean;
+  alwaysOnTop: boolean;
+  rememberWindowState: boolean;
+  notifyReplies: boolean;
+  notifyAt: boolean;
+  notifyPm: boolean;
+  desktopNotifications: boolean;
+  notificationSound: boolean;
+  notificationPollInterval: number;
+  externalLinkMode: ExternalLinkMode;
+  timeDisplay: TimeDisplayMode;
+  hideAdCards: boolean;
+  blockedKeywords: string[];
+  publishDeviceSignature: boolean;
+  deviceSignature: string;
+  imageOpenMode: ExternalLinkMode;
+  updateSpeedLimitKBps: number;
+  proxyUrl: string;
+  notifyDownloadComplete: boolean;
+  updateChannel: UpdateChannel;
+  experimentalFeatures: boolean;
 }

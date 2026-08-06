@@ -102,13 +102,28 @@
       </div>
     </div>
 
+    <!-- 4.1 动态类型筛选 [全部动态 / 设备动态] -->
+    <div class="topic-filter-bar">
+      <span class="filter-label">动态类型</span>
+      <div class="filter-options">
+        <button
+          v-for="mode in feedModes"
+          :key="mode.key"
+          :class="['filter-btn', { active: feedMode === mode.key }]"
+          @click="switchFeedMode(mode.key)"
+        >
+          {{ mode.label }}
+        </button>
+      </div>
+    </div>
+
     <!-- 5. Feed 动态列表 -->
     <div v-if="feedsLoading && page === 1" class="loading-wrapper">
-      <LoadingState text="正在获取话题动态..." />
+      <LoadingState :text="feedMode === 'device' ? '正在获取设备动态...' : '正在获取话题动态...'" />
     </div>
 
     <div v-else-if="topicFeeds.length === 0" class="empty-wrapper">
-      <EmptyState title="暂无相关话题动态" />
+      <EmptyState :title="feedMode === 'device' ? '暂无设备动态' : '暂无相关话题动态'" />
     </div>
 
     <div v-else class="feed-list">
@@ -126,6 +141,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
+import { useAuthStore } from '../stores/auth';
 import FeedCard from '../components/feed/FeedCard.vue';
 import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -133,6 +149,7 @@ import EmptyState from '../components/common/EmptyState.vue';
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 const tag = computed(() => (route.params.tag as string) || '薅羊毛小分队');
 
 const topicDetail = ref<any>(null);
@@ -160,6 +177,12 @@ const sortOptions = [
   { key: 'default', label: '默认' },
   { key: 'latest', label: '最新' },
   { key: 'hot', label: '热度' },
+];
+
+const feedMode = ref('all');
+const feedModes = [
+  { key: 'all', label: '全部动态' },
+  { key: 'device', label: '设备动态' },
 ];
 
 const topicLogo = computed(() => {
@@ -198,6 +221,10 @@ function formatNumber(num: number | string) {
   return n.toString();
 }
 
+function readFollowedState(detail: any) {
+  return !!(detail && (detail.followed ?? detail.isFollowed ?? detail.is_follow ?? detail.follow ?? false));
+}
+
 async function fetchTopicHeader() {
   if (!tag.value) return;
   headerLoading.value = true;
@@ -205,6 +232,7 @@ async function fetchTopicHeader() {
     const res = await CoolapkTauriAPI.getTopicDetail(tag.value);
     if (res && res.data) {
       topicDetail.value = res.data;
+      isFollowed.value = readFollowedState(res.data);
     } else {
       // 提供无缝兜底
       topicDetail.value = {
@@ -231,7 +259,9 @@ async function fetchFeeds(isLoadMore = false) {
   
   feedsLoading.value = true;
   try {
-    const res = await CoolapkTauriAPI.getTopicFeeds(tag.value, page.value);
+    const res = feedMode.value === 'device'
+      ? await CoolapkTauriAPI.getDeviceFeedList(tag.value, page.value)
+      : await CoolapkTauriAPI.getTopicFeeds(tag.value, page.value);
     const newFeeds = (res && res.data && Array.isArray(res.data)) ? res.data : [];
     
     if (newFeeds.length === 0) {
@@ -265,6 +295,15 @@ function changeSort(sortKey: string) {
   fetchFeeds(false);
 }
 
+function switchFeedMode(mode: string) {
+  if (feedMode.value === mode) return;
+  feedMode.value = mode;
+  page.value = 1;
+  noMore.value = false;
+  topicFeeds.value = [];
+  fetchFeeds(false);
+}
+
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement;
   const { scrollTop, clientHeight, scrollHeight } = target;
@@ -275,8 +314,22 @@ function handleScroll(e: Event) {
   }
 }
 
-function toggleFollow() {
-  isFollowed.value = !isFollowed.value;
+async function toggleFollow() {
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  const target = !isFollowed.value;
+  try {
+    if (target) {
+      await CoolapkTauriAPI.followTag(tag.value);
+    } else {
+      await CoolapkTauriAPI.unfollowTag(tag.value);
+    }
+    isFollowed.value = target;
+  } catch (err) {
+    console.warn(target ? '关注话题失败' : '取消关注失败', err);
+  }
 }
 
 function focusSearch() {

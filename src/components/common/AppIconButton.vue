@@ -6,7 +6,7 @@
     v-bind="$attrs"
   >
     <i :class="icon"></i>
-    <span v-if="badge !== undefined && badge !== null && badge !== 0" class="badge-dot">{{ badge > 99 ? '99+' : badge }}</span>
+    <span v-if="badge !== undefined && badge !== null && badge !== 0" class="badge-dot">{{ Number(badge) > 99 ? '99+' : badge }}</span>
   </button>
 </template>
 

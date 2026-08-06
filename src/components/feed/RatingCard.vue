@@ -37,7 +37,7 @@
 
     <!-- 点评正文及维度的结构化评语 -->
     <div class="rating-body">
-      <div v-if="feed.message" class="message-text" v-html="formattedMessage"></div>
+      <div v-if="feed.message" class="message-text" v-html="formattedMessage" @click="handleAnchorClick"></div>
     </div>
 
     <!-- 点评配图 -->
@@ -67,7 +67,7 @@
       :feed-id="feed.id"
       :likenum="feed.likenum"
       :replynum="feed.replynum"
-      :favnum="feed.favnum"
+      :favnum="favnum"
       :sharenum="feed.sharenum"
       :user-action="feed.userAction"
       @open-comment="toggleComments"
@@ -96,8 +96,9 @@ import FeedActionBar from './FeedActionBar.vue';
 import FeedCommentSection from './FeedCommentSection.vue';
 import AppImage from '../common/AppImage.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
-import { renderCoolapkEmoji } from '../../utils/coolapkEmoji';
-import { isFavorite, addFavorite, removeFavorite } from '../../utils/favoritesStore';
+import { renderCoolapkRichText } from '../../utils/richText';
+import { handleAnchorClick } from '../../utils/anchorClick';
+import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 
 const settingsStore = useSettingsStore();
@@ -107,16 +108,34 @@ const props = defineProps<{
   feed: any;
 }>();
 
+const authStore = useAuthStore();
+
+const isFav = ref(props.feed.userAction?.favorite === 1);
+const favnum = ref(props.feed.favnum || 0);
+
 const showComments = ref(false);
 const comments = ref<any[]>([]);
 const commentsLoading = ref(false);
 
-function toggleFav() {
+async function toggleFav() {
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
   const id = String(props.feed.id);
-  if (isFavorite(id)) {
-    removeFavorite(id);
-  } else {
-    addFavorite(props.feed);
+  const target = !isFav.value;
+  isFav.value = target;
+  favnum.value = Math.max(0, favnum.value + (target ? 1 : -1));
+  try {
+    if (target) {
+      await CoolapkTauriAPI.favoriteFeed(id);
+    } else {
+      await CoolapkTauriAPI.unfavoriteFeed(id);
+    }
+  } catch (err) {
+    isFav.value = !target;
+    favnum.value = Math.max(0, favnum.value + (target ? -1 : 1));
+    console.warn('Failed to toggle favorite', err);
   }
 }
 
@@ -172,9 +191,7 @@ const targetProduct = computed(() => {
 
 const formattedMessage = computed(() => {
   if (!props.feed.message) return '';
-  let html = props.feed.message.replace(/\n/g, '<br/>');
-  html = renderCoolapkEmoji(html);
-  return html;
+  return renderCoolapkRichText(props.feed.message);
 });
 
 async function toggleComments() {
@@ -212,8 +229,7 @@ function handleCardClick(e: MouseEvent) {
 
 function formatRichText(text: string) {
   if (!text) return '';
-  let html = text.replace(/\n/g, '<br/>');
-  return renderCoolapkEmoji(html);
+  return renderCoolapkRichText(text);
 }
 </script>
 

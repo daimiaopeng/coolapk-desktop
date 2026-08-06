@@ -5,17 +5,36 @@ import './styles/index.css';
 import App from './App.vue';
 import { router } from './router';
 import { CoolapkTauriAPI } from './api/coolapk';
+import { useSettingsStore } from './stores/settings';
+
+const app = createApp(App);
+app.use(createPinia());
 
 // 全局挂载外部链接打开器，供 DOM v-html 中的 <a onclick="..."> 安全调用
 (window as any).__openCoolapkUrl = (url: string) => {
   if (!url) return;
   console.log('Open coolapk link:', url);
-  void CoolapkTauriAPI.openUrl(url);
+  void CoolapkTauriAPI.openUrl(url, useSettingsStore().settings.externalLinkMode);
 };
-
-const app = createApp(App);
-app.use(createPinia());
 app.use(router);
+
+// 全局兜底：拦截 v-html 或未来新增页面中遗漏处理的 <a> 点击，
+// 防止主窗口被导航到外部域名（外部页面接管主窗口 = 钓鱼/凭据回跳源被劫持风险）。
+// 冒泡阶段执行：页面级 handleAnchorClick / vue-router 已处理（preventDefault）的
+// 点击自动让行，只接管"无人处理"的外部链接。
+document.addEventListener('click', (e) => {
+  if (e.defaultPrevented) return;
+  const anchor = (e.target as HTMLElement).closest('a');
+  if (!anchor) return;
+  const href = anchor.getAttribute('href') || '';
+  // 站内相对/锚点链接交给 vue-router 与页面级逻辑
+  if (!href || href.startsWith('/') || href.startsWith('#')) return;
+  e.preventDefault();
+  if (/^https?:\/\//i.test(href)) {
+    void CoolapkTauriAPI.openUrl(anchor.href, useSettingsStore().settings.externalLinkMode);
+  }
+  // 其余 scheme（javascript:、file: 等）直接静默阻止，协议白名单由 open_url 兜底
+}, false);
 
 // 全局错误捕获：把渲染期/异步崩溃显示出来，避免静默白屏，便于定位问题
 function showGlobalError(message: string) {

@@ -5,6 +5,7 @@
       :class="['feed-body', { 'is-collapsed': isLongText && !isExpanded }]"
       :style="isLongText && !isExpanded ? { WebkitLineClamp: collapseLines } : undefined"
       v-html="formattedMessage"
+      @click="handleAnchorClick"
     ></div>
     <button v-if="isLongText && !isExpanded" class="expand-btn" @click="isExpanded = true">
       展开全文
@@ -14,7 +15,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { renderCoolapkEmoji } from '../../utils/coolapkEmoji';
+import { renderCoolapkRichText } from '../../utils/richText';
+import { handleAnchorClick } from '../../utils/anchorClick';
 import { useSettingsStore } from '../../stores/settings';
 
 const props = defineProps<{
@@ -37,10 +39,8 @@ const isLongText = computed(() => {
 
 const formattedMessage = computed(() => {
   if (!props.message) return '';
-  // 简易格式化：换行转换为 <br/>，并渲染表情
-  let html = props.message.replace(/\n/g, '<br/>');
-  html = renderCoolapkEmoji(html);
-  return html;
+  // 统一渲染：先安全化（去标签/防注入/换行），再渲染酷安表情
+  return renderCoolapkRichText(props.message);
 });
 </script>
 

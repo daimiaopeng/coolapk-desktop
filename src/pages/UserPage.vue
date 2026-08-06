@@ -65,6 +65,27 @@
                   <button class="app-btn btn-icon-glass" @click="sendMessage" title="私信">
                     <i class="far fa-envelope"></i>
                   </button>
+                  <button
+                    :class="['app-btn', isBlacklisted ? 'btn-blacklisted' : 'btn-danger-glass']"
+                    :disabled="blacklistLoading"
+                    @click="toggleBlacklist"
+                    :title="isBlacklisted ? '取消拉黑' : '拉黑该用户'"
+                  >
+                    <i class="fas fa-ban"></i>
+                    {{ isBlacklisted ? '已拉黑' : '拉黑' }}
+                  </button>
+                  <button
+                    :class="['app-btn', isIgnored ? 'btn-ignored' : 'btn-danger-ghost']"
+                    :disabled="ignoreLoading"
+                    @click="toggleIgnore"
+                    :title="isIgnored ? '取消屏蔽' : '屏蔽该用户'"
+                  >
+                    <i class="fas fa-eye-slash"></i>
+                    {{ isIgnored ? '已屏蔽' : '屏蔽' }}
+                  </button>
+                  <router-link to="/blacklist" class="blacklist-manage-link" title="黑名单管理">
+                    <i class="fas fa-list"></i> 黑名单管理
+                  </router-link>
                 </template>
               </div>
             </div>
@@ -163,7 +184,7 @@
             </span>
           </div>
           <div class="follow-users-grid custom-scrollbar-hidden" v-if="followingUsers.length > 0">
-            <div v-for="user in followingUsers" :key="user.uid" class="follow-user-item">
+            <div v-for="user in followingUsers" :key="user.uid" class="follow-user-item" @click="openUserProfile(user)">
               <AppAvatar :src="user.userAvatar" size="lg" />
               <span class="follow-user-name">{{ user.username }}</span>
             </div>
@@ -183,7 +204,7 @@
             <i class="fas fa-chevron-right section-arrow"></i>
           </div>
           <div class="follow-topics-grid custom-scrollbar-hidden" v-if="followTopics.length > 0">
-            <div v-for="topic in followTopics" :key="topic.id || topic.name" class="follow-topic-item">
+            <div v-for="topic in followTopics" :key="topic.id || topic.name" class="follow-topic-item" @click="openFollowTopic(topic)">
               <div class="topic-icon-wrapper" :style="{ background: topic.bg }">
                 <AppImage v-if="topic.icon" :src="topic.icon" image-class="topic-icon" />
                 <i v-else :class="['fas', topic.fallbackIcon || 'fa-layer-group', 'topic-fallback-icon']"></i>
@@ -287,7 +308,7 @@ const rawUid = computed(() => (route.params.uid as string) || 'me');
 
 const effectiveUid = computed(() => {
   const rUid = rawUid.value;
-  return (!rUid || rUid === 'me') ? (authStore.user?.uid || '') : rUid;
+  return String((!rUid || rUid === 'me') ? (authStore.user?.uid || '') : rUid);
 });
 
 const isSelfUser = computed(() => {
@@ -529,9 +550,80 @@ async function toggleFollow() {
   }
 }
 
+const isBlacklisted = ref(false);
+const isIgnored = ref(false);
+const blacklistLoading = ref(false);
+const ignoreLoading = ref(false);
+
+async function toggleBlacklist() {
+  const uid = effectiveUid.value;
+  if (!uid || blacklistLoading.value) return;
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  if (!isBlacklisted.value && !confirm('确定要拉黑该用户吗？')) return;
+  blacklistLoading.value = true;
+  try {
+    if (isBlacklisted.value) {
+      await CoolapkTauriAPI.removeFromBlackList(uid);
+      isBlacklisted.value = false;
+      alert('已取消拉黑该用户');
+    } else {
+      await CoolapkTauriAPI.addToBlackList(uid);
+      isBlacklisted.value = true;
+      alert('已成功拉黑该用户');
+    }
+  } catch (err: any) {
+    alert(err?.message || '拉黑操作失败，请稍后重试');
+  } finally {
+    blacklistLoading.value = false;
+  }
+}
+
+async function toggleIgnore() {
+  const uid = effectiveUid.value;
+  if (!uid || ignoreLoading.value) return;
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  if (!isIgnored.value && !confirm('确定要屏蔽该用户吗？')) return;
+  ignoreLoading.value = true;
+  try {
+    if (isIgnored.value) {
+      await CoolapkTauriAPI.removeFromIgnoreList(uid);
+      isIgnored.value = false;
+      alert('已取消屏蔽该用户');
+    } else {
+      await CoolapkTauriAPI.addToIgnoreList(uid);
+      isIgnored.value = true;
+      alert('已成功屏蔽该用户');
+    }
+  } catch (err: any) {
+    alert(err?.message || '屏蔽操作失败，请稍后重试');
+  } finally {
+    ignoreLoading.value = false;
+  }
+}
+
 function sendMessage() {
   if (effectiveUid.value) {
     router.push(`/messages?uid=${effectiveUid.value}`);
+  }
+}
+
+function openUserProfile(user: any) {
+  const uid = user?.uid || user?.id;
+  if (uid) {
+    router.push(`/user/${uid}`);
+  }
+}
+
+function openFollowTopic(topic: any) {
+  const name = topic?.name || topic?.title || topic?.tag;
+  if (name) {
+    router.push(`/topic/${encodeURIComponent(name)}`);
   }
 }
 
@@ -544,6 +636,8 @@ function handleGoBack() {
 }
 
 watch(effectiveUid, (newUid) => {
+  isBlacklisted.value = false;
+  isIgnored.value = false;
   if (newUid) {
     fetchUserProfile();
     fetchFollowingUsers();
@@ -701,6 +795,59 @@ watch(activeTab, () => {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.blacklist-manage-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.75);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.blacklist-manage-link:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-danger-glass {
+  background: rgba(239, 68, 68, 0.85);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.btn-danger-glass:hover {
+  background: rgba(220, 38, 38, 0.95);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.btn-danger-ghost {
+  background: rgba(239, 68, 68, 0.35);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+  border: 1px solid rgba(239, 68, 68, 0.6);
+}
+
+.btn-danger-ghost:hover {
+  background: rgba(239, 68, 68, 0.55);
+}
+
+.btn-blacklisted,
+.btn-ignored {
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
 .app-btn {
@@ -1059,6 +1206,11 @@ watch(activeTab, () => {
   width: 64px;
   flex-shrink: 0;
   cursor: pointer;
+  transition: opacity var(--duration-fast) var(--ease-default);
+}
+
+.follow-user-item:hover {
+  opacity: 0.75;
 }
 
 .follow-user-name {
@@ -1114,6 +1266,13 @@ watch(activeTab, () => {
   padding: 10px 8px;
   border-radius: 10px;
   border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.follow-topic-item:hover {
+  border-color: var(--brand-primary);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.12);
 }
 
 .topic-icon-wrapper {

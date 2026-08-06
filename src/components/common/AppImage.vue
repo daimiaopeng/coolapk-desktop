@@ -25,6 +25,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { sanitizeImageUrl } from '../../utils/image';
 
 const props = withDefaults(defineProps<{
   src?: string;
@@ -34,6 +35,11 @@ const props = withDefaults(defineProps<{
 }>(), {
   fit: 'cover'
 });
+
+const emit = defineEmits<{
+  (event: 'load', payload: Event): void;
+  (event: 'error', payload: Event): void;
+}>();
 
 const renderedSrc = ref<string | undefined>(undefined);
 const loading = ref(false);
@@ -56,6 +62,15 @@ async function loadImage(url: string | undefined) {
     targetUrl = `https:${targetUrl}`;
   } else if (targetUrl.startsWith('http://')) {
     targetUrl = targetUrl.replace('http://', 'https://');
+  }
+
+  // 协议白名单：降级路径会直接把 URL 交给 <img>（WebView 原生加载），
+  // file:/javascript: 等异常 scheme 一律拒绝，防止加载/探测本地文件
+  if (!sanitizeImageUrl(targetUrl)) {
+    error.value = true;
+    loading.value = false;
+    renderedSrc.value = undefined;
+    return;
   }
 
   // 2. 如果是本地或者 base64，直接使用
@@ -100,11 +115,12 @@ onMounted(() => {
   loadImage(props.src);
 });
 
-function handleLoad() {
+function handleLoad(event: Event) {
   loading.value = false;
+  emit('load', event);
 }
 
-function handleError() {
+function handleError(event: Event) {
   // 如果降级直接链接后依然失败，才提示为 Error
   if (isFallback.value || !props.src) {
     error.value = true;
@@ -117,6 +133,7 @@ function handleError() {
     renderedSrc.value = targetUrl;
   }
   loading.value = false;
+  emit('error', event);
 }
 </script>
 

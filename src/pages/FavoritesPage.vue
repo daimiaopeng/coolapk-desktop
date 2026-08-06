@@ -1,122 +1,473 @@
 <template>
-  <div class="page-container custom-scrollbar">
+  <div class="page-container custom-scrollbar" @scroll="handleScroll">
     <div class="page-header">
       <div class="header-main">
         <h2 class="page-title"><i class="far fa-bookmark icon"></i> 我的收藏</h2>
-        <span class="page-subtitle">已收藏的精彩动态与酷图备忘</span>
+        <span class="page-subtitle">同步自酷安账号的真实收藏</span>
       </div>
       <div class="header-actions">
         <AppButton
-          v-if="favoritesStore.length > 0"
+          v-if="authStore.isLoggedIn"
           variant="secondary"
           size="sm"
-          icon="fas fa-file-export"
-          @click="exportFavorites"
+          icon="fas fa-sync-alt"
+          @click="fetchCloudFavorites(true)"
         >
-          导出收藏
+          刷新收藏
         </AppButton>
-        <AppButton
-          variant="secondary"
-          size="sm"
-          icon="fas fa-file-import"
-          @click="triggerImport"
-        >
-          导入收藏
-        </AppButton>
-        <AppButton
-          v-if="favoritesStore.length > 0"
-          variant="danger"
-          size="sm"
-          icon="fas fa-trash-alt"
-          @click="clearFavorites"
-        >
-          清空收藏
-        </AppButton>
-        <input ref="fileInput" type="file" accept=".json,application/json" class="hidden-input" @change="handleImport" />
       </div>
     </div>
 
-    <!-- 加载中状态 -->
-    <div v-if="loading" class="loading-wrapper">
-      <LoadingState text="正在获取收藏列表..." />
+    <!-- 云端收藏：酷安账号真实收藏 -->
+    <div v-if="!authStore.isLoggedIn" class="empty-wrapper">
+      <EmptyState title="登录后查看云端收藏" description="登录酷安账号后，此处将同步展示您在酷安上真实收藏的动态" />
+      <div class="login-hint">
+        <AppButton variant="primary" size="sm" @click="authStore.openLoginModal()">立即登录</AppButton>
+      </div>
     </div>
 
-    <div v-else-if="favoritesStore.length === 0" class="empty-wrapper">
-      <EmptyState title="暂无收藏内容" description="在浏览动态时点击“收藏”按钮，精彩内容将保存在这里" />
-    </div>
+    <template v-else>
+        <div class="cloud-sub-tabs">
+          <button
+            :class="['cloud-sub-tab', { active: activeSubTab === 'all' }]"
+            @click="switchSubTab('all')"
+          >
+            全部收藏
+          </button>
+          <button
+            :class="['cloud-sub-tab', { active: activeSubTab === 'collections' }]"
+            @click="switchSubTab('collections')"
+          >
+            收藏单
+          </button>
+        </div>
 
-    <div v-else class="feed-list">
-      <FeedCard v-for="item in favoritesStore" :key="item.id" :feed="item" />
-    </div>
+        <!-- 收藏单内容视图 -->
+        <div v-if="activeSubTab === 'collections' && activeCollectionId" class="collection-detail">
+          <div class="collection-detail-header">
+            <AppButton variant="secondary" size="sm" icon="fas fa-arrow-left" @click="backToCollections">
+              返回收藏单
+            </AppButton>
+            <span class="collection-detail-title">{{ activeCollectionTitle }}</span>
+          </div>
+
+          <div class="collection-detail-info">
+            <AppImage
+              v-if="collectionDetail.cover"
+              :src="collectionDetail.cover"
+              class="collection-detail-cover"
+              fit="cover"
+              :alt="collectionDetail.title || activeCollectionTitle"
+            />
+            <div v-else class="collection-detail-cover collection-detail-cover-fallback">
+              <i class="fas fa-folder-open"></i>
+            </div>
+            <div class="collection-detail-main">
+              <span class="collection-detail-name">{{ collectionDetail.title || activeCollectionTitle }}</span>
+              <span v-if="collectionDetail.description" class="collection-detail-desc">{{ collectionDetail.description }}</span>
+              <div class="collection-detail-stats">
+                <span class="stat-item"><i class="fas fa-heart"></i> {{ collectionFavnum }} 收藏</span>
+                <span class="stat-item"><i class="fas fa-user-plus"></i> {{ collectionFollownum }} 关注</span>
+                <span class="stat-item"><i class="fas fa-file-alt"></i> {{ collectionItemNum }} 内容</span>
+              </div>
+            </div>
+            <div class="collection-detail-actions">
+              <AppButton
+                variant="secondary"
+                size="sm"
+                :icon="collectionFollowed ? 'fas fa-check' : 'fas fa-plus'"
+                :loading="collectionFollowPending"
+                @click="toggleFollowCollection"
+              >
+                {{ collectionFollowed ? '已关注' : '关注' }}
+              </AppButton>
+              <AppButton
+                variant="soft"
+                size="sm"
+                :icon="collectionLiked ? 'fas fa-thumbs-up' : 'far fa-thumbs-up'"
+                :loading="collectionLikePending"
+                @click="toggleLikeCollection"
+              >
+                {{ collectionLiked ? '已点赞' : '点赞' }}
+              </AppButton>
+            </div>
+          </div>
+
+          <div v-if="collectionItemsLoading && collectionItems.length === 0" class="loading-wrapper">
+            <LoadingState text="正在获取收藏单内容..." />
+          </div>
+
+          <div v-else-if="collectionItemsError && collectionItems.length === 0" class="error-wrapper">
+            <ErrorState title="内容加载失败" :message="collectionItemsError" @retry="fetchCollectionItems(true)" />
+          </div>
+
+          <div v-else-if="collectionItems.length === 0 && !collectionItemsLoading" class="empty-wrapper">
+            <EmptyState title="收藏单暂无内容" />
+          </div>
+
+          <div v-else class="feed-list">
+            <FeedCard v-for="item in collectionItems" :key="item.id" :feed="item" />
+            <div class="pagination-footer">
+              <LoadingState v-if="collectionItemsLoadingMore" text="加载更多中..." />
+              <div v-else-if="collectionItemsNoMore" class="no-more">没有更多内容了</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 收藏单列表视图 -->
+        <div v-else-if="activeSubTab === 'collections'" class="collection-grid">
+          <div v-if="collectionsLoading" class="loading-wrapper">
+            <LoadingState text="正在获取收藏单..." />
+          </div>
+
+          <div v-else-if="collections.length === 0" class="empty-wrapper">
+            <EmptyState title="暂无收藏单" description="在酷安上创建的收藏单会显示在这里" />
+          </div>
+
+          <div v-else class="collection-cards">
+            <div
+              v-for="collection in collections"
+              :key="collection.id"
+              class="collection-card"
+              @click="openCollection(collection)"
+            >
+              <AppImage
+                v-if="collection.cover"
+                :src="collection.cover"
+                class="collection-cover"
+                fit="cover"
+                :alt="collection.title"
+              />
+              <div v-else class="collection-cover collection-cover-fallback">
+                <i class="fas fa-folder-open"></i>
+              </div>
+              <div class="collection-info">
+                <span class="collection-title">{{ collection.title }}</span>
+                <span class="collection-meta">
+                  <template v-if="collection.itemNum">{{ collection.itemNum }} 条内容</template>
+                  <template v-else>收藏单</template>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 全部收藏视图 -->
+        <template v-else>
+          <div v-if="loading && cloudFeeds.length === 0" class="loading-wrapper">
+            <LoadingState text="正在获取云端收藏..." />
+          </div>
+
+          <div v-else-if="cloudError && cloudFeeds.length === 0" class="error-wrapper">
+            <ErrorState title="收藏加载失败" :message="cloudError" @retry="fetchCloudFavorites(true)" />
+          </div>
+
+          <div v-else-if="cloudFeeds.length === 0 && !loading" class="empty-wrapper">
+            <EmptyState title="暂无云端收藏" description="在酷安上收藏过的动态将显示在这里" />
+          </div>
+
+          <div v-else class="feed-list">
+            <FeedCard v-for="item in cloudFeeds" :key="item.id" :feed="item" />
+            <div class="pagination-footer">
+              <LoadingState v-if="loadingMore" text="加载更多收藏中..." />
+              <div v-else-if="noMore" class="no-more">没有更多收藏了</div>
+            </div>
+          </div>
+        </template>
+      </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import FeedCard from '../components/feed/FeedCard.vue';
 import AppButton from '../components/common/AppButton.vue';
+import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
-import { favorites as favoritesStore, clearFavorites as clearAllFavorites, importFavorites } from '../utils/favoritesStore';
+import ErrorState from '../components/common/ErrorState.vue';
+import { CoolapkTauriAPI } from '../api/coolapk';
+import { useAuthStore } from '../stores/auth';
 
-const loading = ref(true);
-const fileInput = ref<HTMLInputElement | null>(null);
+const authStore = useAuthStore();
 
-function triggerImport() {
-  fileInput.value?.click();
+const activeSubTab = ref<'all' | 'collections'>('all');
+
+const cloudFeeds = ref<any[]>([]);
+const loading = ref(false);
+const loadingMore = ref(false);
+const cloudError = ref('');
+const page = ref(1);
+const noMore = ref(false);
+
+const collections = ref<any[]>([]);
+const collectionsLoading = ref(false);
+const activeCollectionId = ref('');
+const activeCollectionTitle = ref('');
+const collectionItems = ref<any[]>([]);
+const collectionItemsLoading = ref(false);
+const collectionItemsLoadingMore = ref(false);
+const collectionItemsError = ref('');
+const collectionItemsPage = ref(1);
+const collectionItemsNoMore = ref(false);
+const collectionDetail = ref<any>({});
+const collectionFavnum = ref(0);
+const collectionFollownum = ref(0);
+const collectionItemNum = ref(0);
+const collectionFollowed = ref(false);
+const collectionLiked = ref(false);
+const collectionFollowPending = ref(false);
+const collectionLikePending = ref(false);
+
+function firstValue(obj: any, keys: string[]) {
+  for (const key of keys) {
+    if (obj && obj[key] !== undefined && obj[key] !== null) return obj[key];
+  }
+  return undefined;
 }
 
-function handleImport(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = '';
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const data = JSON.parse(String(reader.result));
-      const list = Array.isArray(data) ? data : data?.favorites;
-      if (!Array.isArray(list)) {
-        alert('导入失败：文件格式不正确，应为收藏导出的 JSON 文件');
-        return;
-      }
-      const count = importFavorites(list);
-      alert(count > 0 ? `成功导入 ${count} 条收藏` : '没有新增收藏（内容已存在或为空）');
-    } catch (err) {
-      alert('导入失败：无法解析该 JSON 文件');
-    }
-  };
-  reader.readAsText(file);
+function toBool(value: any) {
+  return value === true || value === 1 || value === '1' || value === 'true';
 }
 
-function exportFavorites() {
-  const data = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), favorites: favoritesStore.value }, null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `酷安收藏-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+function switchSubTab(tab: 'all' | 'collections') {
+  if (activeSubTab.value === tab) return;
+  activeSubTab.value = tab;
+  activeCollectionId.value = '';
+  if (tab === 'all') {
+    if (cloudFeeds.value.length === 0) void fetchCloudFavorites(true);
+  } else {
+    if (collections.value.length === 0) void fetchCollections();
+  }
 }
 
-onMounted(async () => {
+async function fetchCollections() {
+  const uid = authStore.user?.uid;
+  if (!uid) return;
+  collectionsLoading.value = true;
   try {
-    await Promise.resolve();
+    const res = await CoolapkTauriAPI.getCollectionList(String(uid), 1);
+    collections.value = (res && res.data && Array.isArray(res.data)) ? res.data : [];
   } catch (err) {
-    console.warn('Fetch favorites error', err);
+    console.warn('获取收藏单失败', err);
+  } finally {
+    collectionsLoading.value = false;
+  }
+}
+
+function openCollection(collection: any) {
+  activeCollectionId.value = String(collection.id);
+  activeCollectionTitle.value = collection.title || '收藏单';
+  collectionDetail.value = { ...collection };
+  collectionFavnum.value = Number(firstValue(collection, ['favnum', 'favNum']) ?? 0);
+  collectionFollownum.value = Number(firstValue(collection, ['follownum', 'followNum']) ?? 0);
+  collectionItemNum.value = Number(firstValue(collection, ['itemNum']) ?? 0);
+  collectionFollowed.value = toBool(firstValue(collection, ['isFollowed', 'isFollow', 'is_followed']));
+  collectionLiked.value = toBool(firstValue(collection, ['isLiked', 'isLike', 'is_liked']));
+  void fetchCollectionDetail();
+  void fetchCollectionItems(true);
+}
+
+function backToCollections() {
+  activeCollectionId.value = '';
+  activeCollectionTitle.value = '';
+  collectionDetail.value = {};
+  collectionFavnum.value = 0;
+  collectionFollownum.value = 0;
+  collectionItemNum.value = 0;
+  collectionFollowed.value = false;
+  collectionLiked.value = false;
+  collectionItems.value = [];
+  collectionItemsPage.value = 1;
+  collectionItemsNoMore.value = false;
+}
+
+function applyCollectionDetail(detail: any, fallback: any) {
+  const source = detail && Object.keys(detail).length > 0 ? detail : fallback;
+  collectionFavnum.value = Number(firstValue(source, ['favnum', 'favNum']) ?? collectionFavnum.value);
+  collectionFollownum.value = Number(firstValue(source, ['follownum', 'followNum']) ?? collectionFollownum.value);
+  collectionItemNum.value = Number(firstValue(source, ['itemNum']) ?? collectionItemNum.value);
+  collectionFollowed.value = toBool(
+    firstValue(source, ['isFollowed', 'isFollow', 'is_followed']) ??
+    firstValue(source.userAction, ['isFollowed', 'isFollow'])
+  );
+  collectionLiked.value = toBool(
+    firstValue(source, ['isLiked', 'isLike', 'is_liked']) ??
+    firstValue(source.userAction, ['isLiked', 'isLike'])
+  );
+  if (!collectionDetail.value.title && source.title) {
+    collectionDetail.value = { ...collectionDetail.value, title: source.title };
+  }
+  if (!collectionDetail.value.description && source.description) {
+    collectionDetail.value = { ...collectionDetail.value, description: source.description };
+  }
+  if (!collectionDetail.value.cover && source.cover) {
+    collectionDetail.value = { ...collectionDetail.value, cover: source.cover };
+  }
+}
+
+async function fetchCollectionDetail() {
+  if (!activeCollectionId.value) return;
+  try {
+    const res = await CoolapkTauriAPI.getCollectionDetail(activeCollectionId.value);
+    const detail = res && res.data ? res.data : {};
+    collectionDetail.value = { ...collectionDetail.value, ...detail };
+    applyCollectionDetail(detail, collections.value.find(c => String(c.id) === activeCollectionId.value) || {});
+  } catch (err) {
+    console.warn('获取收藏单详情失败', err);
+    applyCollectionDetail({}, collections.value.find(c => String(c.id) === activeCollectionId.value) || {});
+  }
+}
+
+async function toggleFollowCollection() {
+  if (!activeCollectionId.value || collectionFollowPending.value) return;
+  collectionFollowPending.value = true;
+  try {
+    const action = collectionFollowed.value ? CoolapkTauriAPI.unfollowCollection : CoolapkTauriAPI.followCollection;
+    const res = await action(activeCollectionId.value);
+    if (res && res.code === 200) {
+      collectionFollowed.value = !collectionFollowed.value;
+      collectionFollownum.value = Math.max(0, collectionFollownum.value + (collectionFollowed.value ? 1 : -1));
+    } else {
+      console.warn('关注操作失败', res);
+      alert('操作失败，请稍后重试');
+    }
+  } catch (err) {
+    console.warn('关注操作失败', err);
+    alert('操作失败，请检查网络');
+  } finally {
+    collectionFollowPending.value = false;
+  }
+}
+
+async function toggleLikeCollection() {
+  if (!activeCollectionId.value || collectionLikePending.value) return;
+  collectionLikePending.value = true;
+  try {
+    const action = collectionLiked.value ? CoolapkTauriAPI.unlikeCollection : CoolapkTauriAPI.likeCollection;
+    const res = await action(activeCollectionId.value);
+    if (res && res.code === 200) {
+      collectionLiked.value = !collectionLiked.value;
+      collectionFavnum.value = Math.max(0, collectionFavnum.value + (collectionLiked.value ? 1 : -1));
+    } else {
+      console.warn('点赞操作失败', res);
+      alert('操作失败，请稍后重试');
+    }
+  } catch (err) {
+    console.warn('点赞操作失败', err);
+    alert('操作失败，请检查网络');
+  } finally {
+    collectionLikePending.value = false;
+  }
+}
+
+async function fetchCollectionItems(isRefresh = false) {
+  if (!activeCollectionId.value) return;
+  if (collectionItemsLoading.value || (collectionItemsLoadingMore.value && !isRefresh)) return;
+
+  if (isRefresh) {
+    collectionItemsPage.value = 1;
+    collectionItemsNoMore.value = false;
+    collectionItems.value = [];
+    collectionItemsLoading.value = true;
+  } else {
+    if (collectionItemsNoMore.value) return;
+    collectionItemsLoadingMore.value = true;
+  }
+  collectionItemsError.value = '';
+
+  try {
+    const res = await CoolapkTauriAPI.getCollectionItemList(activeCollectionId.value, collectionItemsPage.value);
+    const newItems = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    if (newItems.length === 0) {
+      collectionItemsNoMore.value = true;
+    } else {
+      if (isRefresh) {
+        collectionItems.value = newItems;
+      } else {
+        const existingIds = new Set(collectionItems.value.map(i => i.id));
+        collectionItems.value.push(...newItems.filter((i: any) => !existingIds.has(i.id)));
+      }
+      collectionItemsPage.value++;
+    }
+  } catch (err: any) {
+    collectionItemsError.value = err?.message || '加载失败，请检查网络';
+  } finally {
+    collectionItemsLoading.value = false;
+    collectionItemsLoadingMore.value = false;
+  }
+}
+
+async function fetchCloudFavorites(isRefresh = false) {
+  const uid = authStore.user?.uid;
+  if (!uid) return;
+  if (loading.value || (loadingMore.value && !isRefresh)) return;
+
+  if (isRefresh) {
+    page.value = 1;
+    noMore.value = false;
+    cloudFeeds.value = [];
+    loading.value = true;
+  } else {
+    if (noMore.value) return;
+    loadingMore.value = true;
+  }
+  cloudError.value = '';
+
+  try {
+    const res = await CoolapkTauriAPI.getFavoriteList('feed', page.value);
+    const newFeeds = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    if (newFeeds.length === 0) {
+      noMore.value = true;
+    } else {
+      if (isRefresh) {
+        cloudFeeds.value = newFeeds;
+      } else {
+        const existingIds = new Set(cloudFeeds.value.map(i => i.id));
+        cloudFeeds.value.push(...newFeeds.filter((i: any) => !existingIds.has(i.id)));
+      }
+      page.value++;
+    }
+  } catch (err: any) {
+    cloudError.value = err?.message || '加载失败，请检查网络';
   } finally {
     loading.value = false;
-  }
-});
-
-function clearFavorites() {
-  if (confirm('确定要清空所有收藏内容吗？')) {
-    clearAllFavorites();
+    loadingMore.value = false;
   }
 }
+
+function handleScroll(e: Event) {
+  const target = e.target as HTMLElement;
+  const { scrollTop, clientHeight, scrollHeight } = target;
+  if (scrollTop + clientHeight >= scrollHeight - 120) {
+    if (activeSubTab.value === 'collections' && activeCollectionId.value) {
+      if (!collectionItemsLoading.value && !collectionItemsLoadingMore.value && !collectionItemsNoMore.value) {
+        fetchCollectionItems(false);
+      }
+    } else if (activeSubTab.value === 'all') {
+      if (!loading.value && !loadingMore.value && !noMore.value) {
+        fetchCloudFavorites(false);
+      }
+    }
+  }
+}
+
+watch(
+  () => authStore.user?.uid,
+  () => {
+    if (authStore.isLoggedIn) {
+      void fetchCloudFavorites(true);
+      void fetchCollections();
+    }
+  }
+);
+
+onMounted(() => {
+  if (authStore.isLoggedIn) {
+    void fetchCloudFavorites(true);
+    void fetchCollections();
+  }
+});
 </script>
 
 <style scoped>
@@ -130,7 +481,7 @@ function clearFavorites() {
 }
 
 .page-header {
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-4);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -140,10 +491,6 @@ function clearFavorites() {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.hidden-input {
-  display: none;
 }
 
 .header-main {
@@ -169,5 +516,209 @@ function clearFavorites() {
 .page-subtitle {
   font-size: var(--font-size-sub);
   color: var(--text-tertiary);
+}
+
+.cloud-sub-tabs {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.cloud-sub-tab {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 2px;
+}
+
+.cloud-sub-tab.active {
+  color: var(--brand-primary, #10b981);
+  font-weight: 700;
+  border-bottom: 2px solid var(--brand-primary, #10b981);
+}
+
+.collection-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.collection-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.collection-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.collection-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.collection-cover {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  background-color: var(--background);
+}
+
+.collection-cover-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  color: var(--brand-primary);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.2));
+}
+
+.collection-info {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.collection-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-meta {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.collection-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: var(--space-4);
+}
+
+.collection-detail-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-detail-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px;
+  margin-bottom: var(--space-4);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.collection-detail-cover {
+  flex-shrink: 0;
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  background-color: var(--background);
+}
+
+.collection-detail-cover-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--brand-primary);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.2));
+}
+
+.collection-detail-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.collection-detail-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-detail-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.collection-detail-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 2px;
+}
+
+.stat-item {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-item i {
+  color: var(--brand-primary);
+  font-size: 11px;
+}
+
+.collection-detail-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.login-hint {
+  margin-top: var(--space-3);
+  text-align: center;
+}
+
+.feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pagination-footer {
+  padding: 16px 0;
+  text-align: center;
+}
+
+.no-more {
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 </style>

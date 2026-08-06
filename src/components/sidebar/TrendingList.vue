@@ -59,7 +59,7 @@ async function fetchHot() {
 
 function openFeed(item: any) {
   if (item && item.id) {
-    appStore.openCommentDrawer(item.id);
+    appStore.openCommentDrawer(item.id, item);
   }
 }
 

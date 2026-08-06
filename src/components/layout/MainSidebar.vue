@@ -1,8 +1,7 @@
 <template>
   <aside :class="['main-sidebar', { 'is-collapsed': isCollapsed }]">
-    <!-- 侧边栏折叠/展开控制按钮 (带标题与精致图标) -->
+    <!-- 侧边栏折叠/展开控制按钮 (带精致图标) -->
     <div class="collapse-header">
-      <span v-if="!isCollapsed" class="collapse-header-title">菜单</span>
       <button
         class="collapse-toggle-btn"
         :title="isCollapsed ? '展开侧边栏' : '收起侧边栏'"
@@ -111,9 +110,12 @@ const allPrimaryNavs = [
   { key: 'apps', path: '/apps', label: '应用', icon: 'fas fa-cubes' },
   { key: 'games', path: '/games', label: '游戏', icon: 'fas fa-gamepad' },
   { key: 'topics', path: '/topics', label: '话题', icon: 'fas fa-hashtag' },
+  { key: 'reviews', path: '/reviews', label: '评测区', icon: 'fas fa-flask' },
+  { key: 'secondhand', path: '/secondhand', label: '二手市场', icon: 'fas fa-store' },
 ];
 
 const allSecondaryNavs = [
+  { key: 'notifications', path: '/notifications', label: '通知', icon: 'far fa-bell' },
   { key: 'favorites', path: '/favorites', label: '收藏', icon: 'far fa-bookmark' },
   { key: 'history', path: '/history', label: '历史', icon: 'far fa-clock' },
   { key: 'messages', path: '/messages', label: '消息', icon: 'far fa-comment-alt' },
@@ -161,7 +163,7 @@ function handleLogout() {
 .collapse-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: var(--space-3) var(--space-4);
   height: 40px;
   box-sizing: border-box;
@@ -231,6 +233,7 @@ function handleLogout() {
   border: none;
   background: transparent;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .nav-item:hover {
