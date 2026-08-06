@@ -156,6 +156,12 @@
             <h3 class="section-title">{{ isSelfUser ? '我关注的人' : '他关注的人' }}</h3>
             <i class="fas fa-chevron-right section-arrow"></i>
           </div>
+          <div v-if="followNodes.length > 0" class="follow-nodes-row custom-scrollbar-hidden">
+            <span class="node-chip node-chip-all">全部</span>
+            <span v-for="node in followNodes" :key="node.id" class="node-chip">
+              {{ node.title }}<span v-if="node.count > 0" class="node-count">{{ node.count }}</span>
+            </span>
+          </div>
           <div class="follow-users-grid custom-scrollbar-hidden" v-if="followingUsers.length > 0">
             <div v-for="user in followingUsers" :key="user.uid" class="follow-user-item">
               <AppAvatar :src="user.userAvatar" size="lg" />
@@ -434,6 +440,26 @@ const userFeedsPage = ref(1);
 const userFeedsLoadingMore = ref(false);
 const userFeedsNoMore = ref(false);
 
+const followNodes = ref<any[]>([]);
+
+async function fetchFollowNodes() {
+  const targetUid = effectiveUid.value;
+  if (!targetUid) return;
+  try {
+    const res = await CoolapkTauriAPI.getUserFollowNodes(targetUid);
+    const list = res?.data || res;
+    if (Array.isArray(list)) {
+      followNodes.value = list.map((n: any) => ({
+        id: n.id || n.nid,
+        title: n.title || n.name || '未命名分组',
+        count: Number(n.count || n.userCount || 0),
+      }));
+    }
+  } catch (e) {
+    console.warn('获取关注分组异常:', e);
+  }
+}
+
 async function fetchTabFeeds(isRefresh: boolean = true) {
   const targetUid = effectiveUid.value;
   if (!targetUid) return;
@@ -521,6 +547,7 @@ watch(effectiveUid, (newUid) => {
   if (newUid) {
     fetchUserProfile();
     fetchFollowingUsers();
+    fetchFollowNodes();
     fetchTabFeeds();
   }
 }, { immediate: true });
@@ -989,6 +1016,39 @@ watch(activeTab, () => {
   gap: 16px;
   overflow-x: auto;
   padding-bottom: 4px;
+}
+
+.follow-nodes-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.node-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--background);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  cursor: default;
+}
+
+.node-chip-all {
+  color: var(--brand-primary);
+  border-color: var(--brand-primary);
+  background: var(--brand-soft);
+  font-weight: var(--font-weight-medium);
+}
+
+.node-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .follow-user-item {

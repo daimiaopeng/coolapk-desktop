@@ -1,8 +1,14 @@
 <template>
   <div class="comment-composer">
+    <div v-if="replyTo" class="reply-target-bar">
+      <span class="reply-target-text">回复 <span class="reply-target-name">@{{ replyTo.username }}</span></span>
+      <button class="reply-target-clear" title="取消回复" @click="emit('cancelReply')">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
     <textarea
       v-model="content"
-      placeholder="写下你的精彩评论..."
+      :placeholder="replyTo ? `回复 @${replyTo.username}...` : '写下你的精彩评论...'"
       class="composer-textarea custom-scrollbar"
       rows="3"
     ></textarea>
@@ -24,6 +30,10 @@
         发布评论
       </AppButton>
     </div>
+
+    <div v-if="errorMsg" class="composer-error">
+      <i class="fas fa-exclamation-circle"></i> {{ errorMsg }}
+    </div>
   </div>
 </template>
 
@@ -31,27 +41,45 @@
 import { ref } from 'vue';
 import AppButton from '../common/AppButton.vue';
 import AppIconButton from '../common/AppIconButton.vue';
+import { CoolapkTauriAPI } from '../../api/coolapk';
+import { useAuthStore } from '../../stores/auth';
 
 const props = defineProps<{
   feedId: string | number;
+  replyTo?: { rid: string | number; username: string } | null;
 }>();
 
 const emit = defineEmits<{
   (e: 'success'): void;
+  (e: 'cancelReply'): void;
 }>();
+
+const authStore = useAuthStore();
 
 const content = ref('');
 const submitting = ref(false);
+const errorMsg = ref('');
 
 async function handleSubmit() {
   if (!content.value.trim() || submitting.value) return;
+
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+
   submitting.value = true;
+  errorMsg.value = '';
   try {
-    // 调用发评论 API
+    await CoolapkTauriAPI.replyFeed(
+      String(props.feedId),
+      content.value.trim(),
+      props.replyTo ? String(props.replyTo.rid) : undefined
+    );
     content.value = '';
     emit('success');
-  } catch (err) {
-    console.error('Failed to reply feed', err);
+  } catch (err: any) {
+    errorMsg.value = err?.message || '评论发布失败，请检查网络或登录状态';
   } finally {
     submitting.value = false;
   }
@@ -93,5 +121,45 @@ async function handleSubmit() {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+}
+
+.composer-error {
+  margin-top: var(--space-2);
+  font-size: 12px;
+  color: var(--danger, #f04444);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reply-target-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-primary);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  margin-bottom: var(--space-2);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.reply-target-name {
+  color: var(--brand-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.reply-target-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.reply-target-clear:hover {
+  color: var(--danger);
 }
 </style>
