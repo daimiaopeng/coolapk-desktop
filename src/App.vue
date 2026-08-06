@@ -19,18 +19,48 @@
         <p class="startup-update-version">
           {{ updateInfo.hasNew ? `酷安桌面版 ${updateInfo.latestVersion}` : '当前已是最新版本' }}
         </p>
-        <p class="startup-update-notes">{{ updateInfo.releaseNotes }}</p>
+        <p class="startup-update-notes" v-if="updateInfo.hasNew"><span class="startup-update-notes-label">更新内容：</span>{{ updateInfo.releaseNotes }}</p>
+        <p class="startup-update-notes" v-else>{{ updateInfo.releaseNotes }}</p>
         <div class="startup-update-actions">
-          <button class="startup-update-later" @click="updateInfo = null">{{ updateInfo.hasNew ? '稍后提醒' : '关闭' }}</button>
-          <button v-if="updateInfo.hasNew" class="startup-update-button" @click="openUpdate">前往下载更新</button>
+          <button v-if="!updateInfo.hasNew" class="startup-update-later" @click="updateInfo = null">关闭</button>
+          <button v-if="updateInfo.hasNew" class="startup-update-later" @click="ignoreThisVersion">忽略此版本</button>
+          <button v-if="updateInfo.hasNew" class="startup-update-later" @click="ignoreAllUpdates">忽略所有更新</button>
+          <button v-if="updateInfo.hasNew && updateInfo.installerUrl && isWindows" class="startup-update-button" @click="startBackgroundDownload(updateInfo)">后台下载更新</button>
+          <button v-if="updateInfo.hasNew" class="startup-update-later" @click="openUpdate">前往下载更新</button>
         </div>
       </div>
     </AppDialog>
+
+    <AppDialog :is-open="Boolean(readyInfo)" title="更新包已下载" :width="460" @close="readyInfo = null">
+      <div v-if="readyInfo" class="startup-update">
+        <p class="startup-update-version">酷安桌面版 {{ readyInfo.version }} 更新包已下载完成</p>
+        <p class="startup-update-notes">是否立即更新？更新将关闭当前窗口，全自动完成安装后重新打开软件。</p>
+        <div class="startup-update-actions">
+          <button class="startup-update-later" @click="readyInfo = null">稍后再说</button>
+          <button class="startup-update-button" @click="installNow">立即更新</button>
+        </div>
+      </div>
+    </AppDialog>
+
+    <AppDialog :is-open="Boolean(downloadError)" title="更新失败" :width="460" @close="downloadError = null">
+      <div class="startup-update">
+        <p class="startup-update-notes">{{ downloadError }}</p>
+        <div class="startup-update-actions">
+          <button class="startup-update-button" @click="downloadError = null">关闭</button>
+        </div>
+      </div>
+    </AppDialog>
+
+    <div v-if="downloading" class="update-download-pill">
+      <i class="fas fa-download"></i>
+      <span>正在后台下载更新 {{ downloading.percent }}%（{{ formatBytes(downloading.downloaded) }} / {{ formatBytes(downloading.total) }}）</span>
+    </div>
   </AppShell>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { listen } from '@tauri-apps/api/event';
 import AppShell from './components/layout/AppShell.vue';
 import CommentDrawer from './components/comments/CommentDrawer.vue';
 import PublishDialog from './components/overlays/PublishDialog.vue';
@@ -44,13 +74,38 @@ import { useSettingsStore } from './stores/settings';
 import { checkLatestRelease, type UpdateInfo } from './utils/updateChecker';
 import { CoolapkTauriAPI } from './api/coolapk';
 
+const PENDING_UPDATE_KEY = 'coolapk_pending_update';
+
+type ReadyInfo = { version: string; path: string };
+
+type DownloadProgress = { downloaded: number; total: number; percent: number };
+
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 const updateInfo = ref<UpdateInfo | null>(null);
+const readyInfo = ref<ReadyInfo | null>(null);
+const downloading = ref<DownloadProgress | null>(null);
+const downloadError = ref<string | null>(null);
+const isWindows = navigator.userAgent.includes('Windows');
+
+function formatBytes(bytes: number) {
+  if (!bytes) return '0 MB';
+  const mb = bytes / 1024 / 1024;
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(1)} MB`;
+}
 
 async function checkForUpdate(manual = false) {
   try {
     const result = await checkLatestRelease();
+    if (result.hasNew && !manual) {
+      if (settingsStore.settings.ignoreAllUpdates) return;
+      if (result.latestVersion && result.latestVersion === settingsStore.settings.ignoredUpdateVersion) return;
+      // 自动检查：有可用安装包时静默后台下载，完成后弹窗询问是否立即更新
+      if (result.installerUrl && isWindows) {
+        void startBackgroundDownload(result);
+        return;
+      }
+    }
     if (manual || result.hasNew) updateInfo.value = result;
   } catch {
     if (!manual) return;
@@ -62,6 +117,58 @@ async function checkForUpdate(manual = false) {
   }
 }
 
+async function startBackgroundDownload(info: UpdateInfo) {
+  const url = info.installerUrl;
+  if (!url) return;
+  updateInfo.value = null;
+  downloading.value = { downloaded: 0, total: 0, percent: 0 };
+  const unlisten = await listen<{ downloaded: number; total: number }>('update-download-progress', (event) => {
+    const { downloaded, total } = event.payload;
+    downloading.value = {
+      downloaded,
+      total,
+      percent: total ? Math.round((downloaded / total) * 100) : 0,
+    };
+  });
+  try {
+    const path = await CoolapkTauriAPI.downloadUpdate(url);
+    await unlisten();
+    downloading.value = null;
+    readyInfo.value = { version: info.latestVersion || '', path };
+    localStorage.setItem(PENDING_UPDATE_KEY, JSON.stringify(readyInfo.value));
+  } catch (err) {
+    await unlisten();
+    downloading.value = null;
+    downloadError.value = `更新包下载失败，请检查网络连接后重试。(${String(err)})`;
+  }
+}
+
+function installNow() {
+  const info = readyInfo.value;
+  if (!info) return;
+  localStorage.removeItem(PENDING_UPDATE_KEY);
+  readyInfo.value = null;
+  void (async () => {
+    try {
+      await CoolapkTauriAPI.installUpdate(info.path);
+      await CoolapkTauriAPI.quitApp();
+    } catch (err) {
+      downloadError.value = `启动安装程序失败：${String(err)}`;
+    }
+  })();
+}
+
+function ignoreThisVersion() {
+  const version = updateInfo.value?.latestVersion;
+  if (version) settingsStore.ignoreUpdateVersion(version);
+  updateInfo.value = null;
+}
+
+function ignoreAllUpdates() {
+  settingsStore.setIgnoreAllUpdates(true);
+  updateInfo.value = null;
+}
+
 function openUpdate() {
   const url = updateInfo.value?.downloadUrl;
   if (url) void CoolapkTauriAPI.openUrl(url);
@@ -70,7 +177,23 @@ function openUpdate() {
 
 onMounted(() => {
   authStore.initAuth();
-  if (settingsStore.settings.checkUpdateOnStartup) {
+
+  // 上次已下载但未安装的更新包：启动时再次询问
+  try {
+    const pendingRaw = localStorage.getItem(PENDING_UPDATE_KEY);
+    if (pendingRaw) {
+      const pending = JSON.parse(pendingRaw);
+      if (pending && pending.version && pending.path) {
+        readyInfo.value = pending;
+      } else {
+        localStorage.removeItem(PENDING_UPDATE_KEY);
+      }
+    }
+  } catch {
+    localStorage.removeItem(PENDING_UPDATE_KEY);
+  }
+
+  if (settingsStore.settings.checkUpdateOnStartup && !readyInfo.value) {
     void checkForUpdate();
   }
   window.addEventListener('check-for-update', () => void checkForUpdate(true));
@@ -108,8 +231,14 @@ html, body {
   white-space: pre-wrap;
 }
 
+.startup-update-notes-label {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 .startup-update-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 12px;
   margin-top: 24px;
@@ -132,5 +261,27 @@ html, body {
   color: white;
   background: var(--brand-green, #10b981);
   border: 1px solid var(--brand-green, #10b981);
+}
+
+.update-download-pill {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgba(20, 22, 26, 0.92);
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+}
+
+.update-download-pill i {
+  color: var(--brand-green, #10b981);
 }
 </style>

@@ -26,6 +26,9 @@
 import { ref } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { isFavorite } from '../../utils/favoritesStore';
+import { useAuthStore } from '../../stores/auth';
+
+const authStore = useAuthStore();
 
 const props = defineProps<{
   feedId: string | number;
@@ -54,6 +57,10 @@ const replyCount = ref(props.replynum || 0);
 const shareCount = ref(props.sharenum || 0);
 
 async function toggleLike() {
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
   try {
     if (isLiked.value) {
       isLiked.value = false;

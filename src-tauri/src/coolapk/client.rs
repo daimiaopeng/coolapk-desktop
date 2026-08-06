@@ -471,17 +471,18 @@ impl CoolapkClient {
 
         let sub_title = get_str_by_keys(obj, &["subTitle", "description", "target_row_title", "comment"]).unwrap_or_default();
         let score = get_str_by_keys(obj, &["score", "star", "rating"]).unwrap_or_else(|| "9.0".to_string());
-        let apk_size = get_str_by_keys(obj, &["apkSizeFormatted", "size", "apk_size"]).unwrap_or_default();
-        let down_num = get_str_by_keys(obj, &["downCountFormatted", "downnum", "download_count"]).unwrap_or_default();
-        let category = get_str_by_keys(obj, &["category_title", "category_name", "category", "tag"]).unwrap_or_else(|| "应用".to_string());
-        let version = get_str_by_keys(obj, &["apkVersionName", "version", "versionName"]).unwrap_or_default();
+        let apk_size = get_str_by_keys(obj, &["apksize", "apkSizeFormatted", "size", "apk_size"]).unwrap_or_default();
+        let down_num = get_str_by_keys(obj, &["downCount", "downCountFormatted", "downnum", "download_count"]).unwrap_or_default();
+        let category = get_str_by_keys(obj, &["catName", "category_title", "category_name", "category", "tag", "apkTypeName"]).unwrap_or_else(|| "应用".to_string());
+        let version = get_str_by_keys(obj, &["apkversionname", "apkVersionName", "version", "versionName"]).unwrap_or_default();
 
-        let apk_type = get_u64_by_keys(obj, &["apkType", "apk_type", "type"]);
+        // 酷安 APK 实体 apktype 字段：1=应用，2=游戏
+        let apk_type = get_u64_by_keys(obj, &["apktype", "apkType", "apk_type", "type"]);
         let title_lower = title.to_lowercase();
         let cat_lower = category.to_lowercase();
 
         // 明确的游戏类型判定
-        let is_explicit_game = apk_type == 1
+        let is_explicit_game = apk_type == 2
             || cat_lower.contains("游戏")
             || cat_lower.contains("手游")
             || cat_lower.contains("动作")
@@ -813,6 +814,8 @@ impl CoolapkClient {
                         continue;
                     }
 
+                    let user_action_like = obj.get("userAction").and_then(|ua| ua.get("like")).and_then(|v| v.as_i64()).unwrap_or(0);
+
                     cleaned_replies.push(json!({
                         "id": item_id,
                         "rid": item_rid,
@@ -827,6 +830,7 @@ impl CoolapkClient {
                         "pic": obj.get("pic").and_then(|v| v.as_str()).unwrap_or(""),
                         "infoHtml": obj.get("dateline_text").and_then(|v| v.as_str()).or_else(|| obj.get("infoHtml").and_then(|v| v.as_str())).unwrap_or(""),
                         "likenum": obj.get("likenum").and_then(|v| v.as_u64()).unwrap_or(0),
+                        "userAction": { "like": user_action_like },
                         "replyRowsCount": obj.get("replynum").and_then(|v| v.as_u64()).or_else(|| obj.get("replyRowsCount").and_then(|v| v.as_u64())).unwrap_or(0)
                     }));
                 }
@@ -919,28 +923,31 @@ impl CoolapkClient {
                         .map(value_to_string)
                         .unwrap_or_default();
 
-                    let reply_rows = obj.get("replyRows").cloned().unwrap_or(json!([]));
-                    let reply_rows_count = obj.get("replyRowsCount").and_then(|v| v.as_u64()).unwrap_or(0);
+        let reply_rows = obj.get("replyRows").cloned().unwrap_or(json!([]));
+        let reply_rows_count = obj.get("replyRowsCount").and_then(|v| v.as_u64()).unwrap_or(0);
 
-                    cleaned_replies.push(json!({
-                        "id": obj.get("id").and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_u64().map(|n| n.to_string()))).unwrap_or_default(),
-                        "fid": obj.get("fid").map(value_to_string).unwrap_or_default(),
-                        "rid": obj.get("rid").map(value_to_string).unwrap_or_default(),
-                        "rrid": obj.get("rrid").map(value_to_string).unwrap_or_default(),
-                        "uid": obj.get("uid").map(value_to_string).or_else(|| user_info.and_then(|u| u.get("uid")).map(value_to_string)).unwrap_or_default(),
-                        "username": username,
-                        "rusername": obj.get("rusername").and_then(|v| v.as_str()).unwrap_or(""),
-                        "userAvatar": avatar,
-                        "userLevel": user_level,
-                        "verifyTitle": user_info.and_then(|u| u.get("verify_title")).and_then(|v| v.as_str()).unwrap_or(""),
-                        "deviceTitle": device_title,
-                        "message": message,
-                        "pic": obj.get("pic").and_then(|v| v.as_str()).unwrap_or(""),
-                        "infoHtml": obj.get("dateline_text").and_then(|v| v.as_str()).or_else(|| obj.get("infoHtml").and_then(|v| v.as_str())).unwrap_or(""),
-                        "likenum": obj.get("likenum").and_then(|v| v.as_u64()).unwrap_or(0),
-                        "replyRows": reply_rows,
-                        "replyRowsCount": reply_rows_count
-                    }));
+        let user_action_like = obj.get("userAction").and_then(|ua| ua.get("like")).and_then(|v| v.as_i64()).unwrap_or(0);
+
+        cleaned_replies.push(json!({
+            "id": obj.get("id").and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_u64().map(|n| n.to_string()))).unwrap_or_default(),
+            "fid": obj.get("fid").map(value_to_string).unwrap_or_default(),
+            "rid": obj.get("rid").map(value_to_string).unwrap_or_default(),
+            "rrid": obj.get("rrid").map(value_to_string).unwrap_or_default(),
+            "uid": obj.get("uid").map(value_to_string).or_else(|| user_info.and_then(|u| u.get("uid")).map(value_to_string)).unwrap_or_default(),
+            "username": username,
+            "rusername": obj.get("rusername").and_then(|v| v.as_str()).unwrap_or(""),
+            "userAvatar": avatar,
+            "userLevel": user_level,
+            "verifyTitle": user_info.and_then(|u| u.get("verify_title")).and_then(|v| v.as_str()).unwrap_or(""),
+            "deviceTitle": device_title,
+            "message": message,
+            "pic": obj.get("pic").and_then(|v| v.as_str()).unwrap_or(""),
+            "infoHtml": obj.get("dateline_text").and_then(|v| v.as_str()).or_else(|| obj.get("infoHtml").and_then(|v| v.as_str())).unwrap_or(""),
+            "likenum": obj.get("likenum").and_then(|v| v.as_u64()).unwrap_or(0),
+            "userAction": { "like": user_action_like },
+            "replyRows": reply_rows,
+            "replyRowsCount": reply_rows_count
+        }));
                 }
             }
         }
@@ -962,50 +969,26 @@ impl CoolapkClient {
     }
 
     // 获取酷安游戏中心列表/热门与分类榜单
+    //
+    // 实测确认：酷安已废弃 #/game/* 系列 dataList 路由（返回空数据），
+    // 官方接口中唯一可用的游戏数据源是「游戏专项搜索」 GET /v6/search?type=game
+    // （返回实体 apktype=2 / apkTypeName=游戏），按分类关键词拉取。
     pub async fn get_game_list(&self, page: u32, game_type: &str) -> Result<Value, String> {
-
-        let page_url = match game_type {
-            "hot" => "#/game/gameRankList",
-            "new" => "#/game/newestList",
-            "single" => "#/game/singleGameRankList",
-            "online" => "#/game/onlineGameRankList",
-            _ => "#/game/gameRankList",
-        };
-
-        let raw = self
-            .api_get(
-                "/v6/page/dataList",
-                &[
-                    ("url", page_url.to_string()),
-                    ("page", page.to_string()),
-                ],
-            )
-            .await;
-
-        let apks = match raw {
-            Ok(ref json_val) => Self::extract_apk_list(json_val, "game"),
-            Err(_) => Vec::new(),
-        };
-
-        if !apks.is_empty() {
-            return Ok(json!({ "code": 200, "data": apks }));
-        }
-
-        // 如果榜单抓取为空，回退到对应的分类精准手游搜索（结合 isGame 强过滤）
         let query = match game_type {
-            "single" => "单机手游",
-            "online" => "网游手游",
+            "hot" => "手游",
+            "new" => "新游戏",
+            "single" => "单机游戏",
+            "online" => "网游",
             "casual" => "休闲游戏",
             "indie" => "独立游戏",
             _ => "手游",
         };
 
-
         let search_raw = self
             .api_get(
                 "/v6/search",
                 &[
-                    ("type", "apk".to_string()),
+                    ("type", "game".to_string()),
                     ("searchValue", query.to_string()),
                     ("page", page.to_string()),
                     ("show_flag", "1".to_string()),
@@ -1035,42 +1018,62 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": apks }))
     }
 
+    // 游戏专项搜索（仅返回游戏实体，type=game）
+    pub async fn search_games(&self, query: &str, page: u32) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/search",
+                &[
+                    ("type", "game".to_string()),
+                    ("searchValue", query.to_string()),
+                    ("page", page.to_string()),
+                    ("show_flag", "1".to_string()),
+                ],
+            )
+            .await?;
+
+        let apks = Self::extract_apk_list(&raw, "game");
+        Ok(json!({ "code": 200, "data": apks }))
+    }
+
     // 获取酷安应用中心列表/热门与分类榜单
+    //
+    // 实测确认：/v6/page/dataList?url=#/apk/rankList 与 #/apk/newestList 有效，
+    // 但 url 上的 type= 参数被服务端忽略（tools/social/media/theme 等均返回默认推荐榜），
+    // #/apk/category?catId=... 已废弃（返回空）。分类榜单改用应用搜索 type=apk 拉取。
     pub async fn get_app_list(&self, page: u32, cat: &str) -> Result<Value, String> {
         let page_url = match cat {
             "recommend" => "#/apk/rankList",
             "newest" => "#/apk/newestList",
-            "tools" => "#/apk/rankList?type=tools",
-            "social" => "#/apk/rankList?type=social",
-            "media" => "#/apk/rankList?type=media",
-            "beauty" => "#/apk/rankList?type=theme",
-            _ => "#/apk/rankList",
+            _ => "",
         };
 
-        let raw = self
-            .api_get(
-                "/v6/page/dataList",
-                &[
-                    ("url", page_url.to_string()),
-                    ("page", page.to_string()),
-                ],
-            )
-            .await;
+        if !page_url.is_empty() {
+            let raw = self
+                .api_get(
+                    "/v6/page/dataList",
+                    &[
+                        ("url", page_url.to_string()),
+                        ("page", page.to_string()),
+                    ],
+                )
+                .await;
 
-        let apks = match raw {
-            Ok(ref json_val) => Self::extract_apk_list(json_val, "app"),
-            Err(_) => Vec::new(),
-        };
+            let apks = match raw {
+                Ok(ref json_val) => Self::extract_apk_list(json_val, "app"),
+                Err(_) => Vec::new(),
+            };
 
-        if !apks.is_empty() {
-            return Ok(json!({ "code": 200, "data": apks }));
+            if !apks.is_empty() {
+                return Ok(json!({ "code": 200, "data": apks }));
+            }
         }
 
         let query = match cat {
             "tools" => "系统工具",
-            "social" => "微信 社交",
-            "media" => "播放器 影音",
-            "beauty" => "壁纸 主题",
+            "social" => "社交聊天",
+            "media" => "影音播放",
+            "beauty" => "主题美化",
             "newest" => "应用",
             _ => "常用应用",
         };
@@ -1410,24 +1413,50 @@ impl CoolapkClient {
 
     pub async fn send_private_message(&self, uid: &str, message: &str) -> Result<Value, String> {
         wrap_api_data(
-            self.api_post(
+            self.api_get(
                 "/v6/message/send",
-                &[("uid", uid.to_string())],
-                &[("message", message.to_string())],
+                &[("uid", uid.to_string()), ("message", message.to_string())],
             )
             .await?,
         )
     }
 
+    /// 点赞/取消点赞通用实现：酷安 v6 API 点赞必须使用 GET（POST 返回"请求方式错误"），
+    /// 且未登录时返回 status=401，这里显式转成错误以便前端回滚乐观更新。
+    async fn like_action(&self, path: &str, id: &str) -> Result<Value, String> {
+        let res = self.api_get(path, &[("id", id.to_string())]).await?;
+        if let Some(status) = res.get("status").and_then(|v| v.as_i64()) {
+            if status == 401 || status == 403 {
+                let msg = res
+                    .get("message")
+                    .and_then(Value::as_str)
+                    .unwrap_or("请先登录后再点赞")
+                    .to_string();
+                return Err(format!("{msg}（当前未登录或登录已失效）"));
+            }
+            if status < 0 {
+                let msg = res
+                    .get("message")
+                    .or_else(|| res.get("error"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("点赞失败")
+                    .to_string();
+                return Err(msg);
+            }
+        }
+        wrap_api_data(res)
+    }
+
     pub async fn like_feed(&self, feed_id: &str) -> Result<Value, String> {
-        self.post_id_action("/v6/feed/like", "id", feed_id).await
+        self.like_action("/v6/feed/like", feed_id).await
     }
 
     pub async fn unlike_feed(&self, feed_id: &str) -> Result<Value, String> {
-        self.post_id_action("/v6/feed/unlike", "id", feed_id).await
+        self.like_action("/v6/feed/unlike", feed_id).await
     }
 
     /// 发表评论；rid 非空时表示回复楼中楼（某条评论）
+    /// 注意：酷安 v6 写接口统一使用 GET（POST 返回"请求方式错误"）
     pub async fn reply_feed(
         &self,
         feed_id: &str,
@@ -1437,26 +1466,20 @@ impl CoolapkClient {
         let mut query: Vec<(&str, String)> = vec![
             ("id", feed_id.to_string()),
             ("type", "feed".to_string()),
+            ("message", message.to_string()),
         ];
         if let Some(rid) = rid {
             query.push(("rid", rid.to_string()));
         }
-        wrap_api_data(
-            self.api_post(
-                "/v6/feed/reply",
-                &query,
-                &[("message", message.to_string())],
-            )
-            .await?,
-        )
+        wrap_api_data(self.api_get("/v6/feed/reply", &query).await?)
     }
 
     pub async fn follow_user(&self, uid: &str) -> Result<Value, String> {
-        self.post_id_action("/v6/user/follow", "uid", uid).await
+        wrap_api_data(self.api_get("/v6/user/follow", &[("uid", uid.to_string())]).await?)
     }
 
     pub async fn unfollow_user(&self, uid: &str) -> Result<Value, String> {
-        self.post_id_action("/v6/user/unfollow", "uid", uid).await
+        wrap_api_data(self.api_get("/v6/user/unfollow", &[("uid", uid.to_string())]).await?)
     }
 
     pub async fn get_following_feeds(&self, page: u32) -> Result<Value, String> {
@@ -1516,9 +1539,8 @@ impl CoolapkClient {
 
     pub async fn create_feed(&self, message: &str) -> Result<Value, String> {
         wrap_api_data(
-            self.api_post(
+            self.api_get(
                 "/v6/feed/createFeed",
-                &[],
                 &[("message", message.to_string())],
             )
             .await?,
@@ -1655,6 +1677,7 @@ impl CoolapkClient {
         }
     }
 
+    #[allow(dead_code)]
     async fn post_id_action(&self, path: &str, field: &str, value: &str) -> Result<Value, String> {
         wrap_api_data(
             self.api_post(path, &[], &[(field, value.to_string())])
@@ -1727,164 +1750,10 @@ async fn response_json(response: reqwest::Response) -> Result<Value, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "client_tests.rs"]
+mod tests;
 
-    #[tokio::test]
-    #[ignore]
-    async fn test_reply_list_api() {
-        let client = CoolapkClient::new();
-        println!("=== Fetching feeds ===");
-        let feeds = match client.get_index_v8_feeds(1).await {
-            Ok(f) => f,
-            Err(e) => {
-                println!("Fetching feeds failed in CI: {e}");
-                return;
-            }
-        };
-        let feed_id = match feeds["data"]
-            .as_array()
-            .and_then(|arr| arr.iter().find(|f| f.get("replynum").and_then(|v| v.as_u64()).unwrap_or(0) > 0))
-            .and_then(|f| f.get("id").and_then(|v| v.as_str()))
-        {
-            Some(id) => id.to_string(),
-            None => {
-                println!("No valid feed with replynum found");
-                return;
-            }
-        };
-        println!("Target feed_id: {}", feed_id);
-
-        println!("=== Fetching top level replies ===");
-        let replies = match client.get_feed_replies(&feed_id, 1).await {
-            Ok(r) => r,
-            Err(e) => {
-                println!("Fetching feed replies failed in CI: {e}");
-                return;
-            }
-        };
-        let replies_arr = replies["data"].as_array().unwrap();
-        println!("Replies count: {}", replies_arr.len());
-
-        // 找到有楼中楼的评论
-        let mut target_cid = String::new();
-        for r in replies_arr.iter() {
-            let rrc = r.get("replyRowsCount").and_then(|v| v.as_u64()).unwrap_or(0);
-            if rrc > 2 {
-                target_cid = r.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_default();
-                println!("Found comment with {} sub-replies: id={}, author={}", rrc, target_cid, r.get("username").and_then(|v| v.as_str()).unwrap_or(""));
-                break;
-            }
-        }
-        if target_cid.is_empty() {
-            println!("No comment with >2 sub-replies found, skipping");
-            return;
-        }
-
-        // 测试 replyList API，打印原始 id/rid/rrid 值
-        let url = format!("https://api.coolapk.com/v6/feed/replyList?id={}&rid={}&page=1", feed_id, target_cid);
-        println!("\nTesting URL: {}", url);
-        let token = client.auth.get_app_token().unwrap();
-        let res = client.client.get(&url).header("X-App-Token", token).send().await.unwrap();
-        let json: Value = res.json().await.unwrap();
-        if let Some(arr) = json.get("data").and_then(Value::as_array) {
-            println!("Total items returned: {}", arr.len());
-            for (idx, item) in arr.iter().take(8).enumerate() {
-                let id = item.get("id");
-                let rid = item.get("rid");
-                let rrid = item.get("rrid");
-                let username = item.get("username").and_then(|v| v.as_str()).unwrap_or("");
-                println!("  [{}] id={:?}, rid={:?}, rrid={:?}, username={}", idx, id, rid, rrid, username);
-            }
-        } else {
-            println!("No data array in response");
-        }
-    }
-
-    /// 模拟「登录 → 保存 Cookie → 落盘 → 重启恢复 → 登出删除」完整链路（不依赖网络）
-    #[test]
-    fn test_login_cookie_persistence_flow() {
-        use std::path::PathBuf;
-
-        let dir = std::env::temp_dir().join(format!(
-            "coolapk_desktop_login_test_{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let cookie_file: PathBuf = dir.join("session_cookie.txt");
-
-        // 1. 首次启动：无持久化凭据
-        let client = CoolapkClient::new();
-        client.persist_cookie_to(cookie_file.clone());
-        assert_eq!(client.get_user_cookie(), None, "首次启动不应有 cookie");
-
-        // 2. 模拟 Webview 授权登录：save_cookie_securely 内部调用 set_user_cookie
-        let fake_cookie = "SESSID=abc123def456; uid=10086; Hm_lvt_xxx=1";
-        client.set_user_cookie(fake_cookie.to_string()).unwrap();
-        assert_eq!(client.get_user_cookie(), Some(fake_cookie.to_string()));
-        assert!(
-            cookie_file.exists(),
-            "登录后凭据应已写入持久化文件"
-        );
-        let on_disk = std::fs::read_to_string(&cookie_file).unwrap();
-        assert_eq!(on_disk, fake_cookie, "落盘内容应与登录凭据一致");
-
-        // 3. 模拟应用重启：新实例通过 persist_cookie_to 自动恢复
-        let restarted = CoolapkClient::new();
-        restarted.persist_cookie_to(cookie_file.clone());
-        assert_eq!(
-            restarted.get_user_cookie(),
-            Some(fake_cookie.to_string()),
-            "重启后应自动恢复登录凭据"
-        );
-
-        // 4. 模拟退出登录：clear_user_cookie 清空内存并删除文件
-        restarted.clear_user_cookie().unwrap();
-        assert_eq!(restarted.get_user_cookie(), None);
-        assert!(
-            !cookie_file.exists(),
-            "退出登录后持久化文件应被删除"
-        );
-
-        // 5. 清理：再次 set 后再 clear，验证空串路径不残留文件
-        restarted.set_user_cookie("SESSID=tmp".to_string()).unwrap();
-        assert!(cookie_file.exists());
-        restarted.set_user_cookie(String::new()).unwrap();
-        assert_eq!(restarted.get_user_cookie(), None);
-        assert!(!cookie_file.exists(), "空凭据也应删除持久化文件");
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// 模拟 Webview 登录脚本捕获到的真实 Cookie 形态（含中文/换行等脏字符），
-    /// 验证 set_user_cookie 的 ASCII 清洗与落盘逻辑不会崩坏
-    #[test]
-    fn test_login_cookie_dirty_input_sanitized() {
-        use std::path::PathBuf;
-
-        let dir = std::env::temp_dir().join(format!(
-            "coolapk_desktop_sanitize_test_{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let cookie_file: PathBuf = dir.join("session_cookie.txt");
-
-        let client = CoolapkClient::new();
-        client.persist_cookie_to(cookie_file.clone());
-
-        let dirty = "SESSID=abc;\r\n uid=10086; 昵称=oxygen的喵; other=\"v\"";
-        client.set_user_cookie(dirty.to_string()).unwrap();
-
-        let stored = client.get_user_cookie().unwrap();
-        assert!(!stored.contains('\r') && !stored.contains('\n'), "不应包含换行");
-        assert!(stored.contains("SESSID=abc") && stored.contains("uid=10086"));
-        // 落盘文件也必须是无换行的安全形态
-        let on_disk = std::fs::read_to_string(&cookie_file).unwrap();
-        assert!(!on_disk.contains('\r') && !on_disk.contains('\n'));
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
+#[cfg(test)]
+#[path = "api_tests.rs"]
+mod api_tests;
 

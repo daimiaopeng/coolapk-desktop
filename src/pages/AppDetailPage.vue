@@ -124,17 +124,27 @@ const isFollowed = ref(false);
 
 const logoUrl = computed(() => appInfo.value?.apkRomIcon || appInfo.value?.logo || appInfo.value?.icon || '');
 const appTitle = computed(() => appInfo.value?.title || appInfo.value?.shorttitle || packageName.value);
-const appVersion = computed(() => appInfo.value?.versionName || appInfo.value?.version || '');
+const appVersion = computed(() => appInfo.value?.apkversionname || appInfo.value?.versionName || appInfo.value?.version || '');
 const developerName = computed(() => appInfo.value?.developername || appInfo.value?.shorttitle || '酷安开发者');
-const apkSize = computed(() => appInfo.value?.apkSizeFormatted || appInfo.value?.size || '未知大小');
-const updateTime = computed(() => appInfo.value?.lastUpdateFormatted || appInfo.value?.update_time || '近期更新');
+const apkSize = computed(() => appInfo.value?.apksize || appInfo.value?.apkSizeFormatted || appInfo.value?.size || '未知大小');
+const updateTime = computed(() => {
+  const raw = appInfo.value?.lastupdate || appInfo.value?.lastUpdateFormatted || appInfo.value?.update_time;
+  if (typeof raw === 'number') {
+    const d = new Date(raw * 1000);
+    if (!isNaN(d.getTime())) {
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+  }
+  return raw || '近期更新';
+});
 
 const ratingScore = computed(() => appInfo.value?.score || appInfo.value?.rating || '8.5');
-const ratingCount = computed(() => appInfo.value?.score_count || appInfo.value?.rating_count || 1280);
-const downloadCount = computed(() => appInfo.value?.downCountFormatted || appInfo.value?.down_count || '10万+');
+const ratingCount = computed(() => appInfo.value?.votenum || appInfo.value?.score_count || appInfo.value?.rating_count || 1280);
+const downloadCount = computed(() => appInfo.value?.downCount || appInfo.value?.downCountFormatted || appInfo.value?.down_count || '10万+');
 
 const screenshots = computed<string[]>(() => {
-  const raw = appInfo.value?.screenArr || appInfo.value?.screenshot || appInfo.value?.screen || [];
+  const raw = appInfo.value?.screenList || appInfo.value?.screenshots || appInfo.value?.screenArr || appInfo.value?.screenshot || appInfo.value?.screen || [];
   if (Array.isArray(raw)) return raw;
   if (typeof raw === 'string') return raw.split(',').filter(Boolean);
   return [];

@@ -40,5 +40,7 @@ export interface AppSettings {
   imageQuality: ImageQuality;
   navVisibility?: NavVisibilitySettings;
   checkUpdateOnStartup: boolean;
+  ignoredUpdateVersion: string;
+  ignoreAllUpdates: boolean;
   closeToTray: boolean;
 }

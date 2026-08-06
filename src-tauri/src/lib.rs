@@ -10,8 +10,10 @@ use coolapk::client::CoolapkClient;
         get_user_follow_nodes,
         like_feed, list_chat_history, list_messages, login_by_account, login_by_mobile, open_url,
         reply_feed, save_cookie_securely, search_all, search_apks, search_feeds, send_private_message,
+        search_games,
         send_sms_vcode, unfollow_user, unlike_feed, open_login_webview, close_login_window,
         get_following_feeds, get_follow_user_list, get_user_cookie, AppState,
+        download_update, install_update, quit_app,
     };
 use tauri::{Manager, WindowEvent};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -104,6 +106,7 @@ pub fn run() {
             get_game_list,
             get_app_list,
             search_apks,
+            search_games,
 
             get_feed_detail,
             get_hot_replies,
@@ -143,7 +146,10 @@ pub fn run() {
             get_user_cookie,
             get_following_feeds,
             get_follow_user_list,
-            set_close_to_tray
+            set_close_to_tray,
+            download_update,
+            install_update,
+            quit_app
         ])
 
         .run(tauri::generate_context!())

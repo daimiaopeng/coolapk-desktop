@@ -178,7 +178,7 @@ async function loadData() {
 
   try {
     if (isSearching.value && searchQuery.value.trim()) {
-      const res = await CoolapkTauriAPI.searchApks(searchQuery.value.trim(), 1);
+      const res = await CoolapkTauriAPI.searchGames(searchQuery.value.trim(), 1);
       const list = res?.data || res || [];
       if (Array.isArray(list)) {
         gamesList.value = list.filter((item: any) => item.title || item.packageName);
