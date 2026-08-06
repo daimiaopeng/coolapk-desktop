@@ -11,7 +11,7 @@ use coolapk::client::CoolapkClient;
         like_feed, list_chat_history, list_messages, login_by_account, login_by_mobile, open_url,
         reply_feed, save_cookie_securely, search_all, search_apks, search_feeds, send_private_message,
         send_sms_vcode, unfollow_user, unlike_feed, open_login_webview, close_login_window,
-        get_following_feeds, get_follow_user_list, get_user_cookie, login_debug_report, AppState,
+        get_following_feeds, get_follow_user_list, get_user_cookie, AppState,
     };
 use tauri::{Manager, WindowEvent};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -140,9 +140,7 @@ pub fn run() {
             open_url,
             open_login_webview,
             close_login_window,
-            login_debug_report,
             get_user_cookie,
-            login_debug_report,
             get_following_feeds,
             get_follow_user_list,
             set_close_to_tray

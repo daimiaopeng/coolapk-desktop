@@ -378,12 +378,6 @@ pub fn get_user_cookie(state: State<'_, AppState>) -> Result<Option<String>, Str
     Ok(val)
 }
 
-/// 登录 webview 注入脚本上报的调试信息，仅用于排查登录链路
-#[tauri::command]
-pub fn login_debug_report(tag: String, msg: String) {
-    eprintln!("[login-debug:{}] {}", tag, msg);
-}
-
 /// 从主窗口当前 URL 推导应用自身源地址（dev 为 http://127.0.0.1:17520，打包后为 tauri 自定义协议源），
 /// 用于登录回跳 forward 与关窗判定，避免 dev/生产环境不一致。
 fn get_app_origin(app: &tauri::AppHandle) -> String {
@@ -414,6 +408,13 @@ fn extract_ck_from_url(url: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// 日志脱敏：只保留 scheme+host+path，剥离 query/hash（避免 ck 等凭据参数泄露到终端）
+fn redact_url(url: &str) -> String {
+    let without_frag = url.split('#').next().unwrap_or(url);
+    let base = without_frag.split('?').next().unwrap_or(without_frag);
+    base.to_string()
 }
 
 fn percent_decode(s: &str) -> String {
@@ -534,7 +535,7 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                         || url_str.contains("loginByCoolapk")
                         || url_str.contains("/auth/");
 
-                    eprintln!("[login-debug:monitor] url={} | app_origin={} | auth_flow={}", url_str, app_origin, is_auth_flow);
+                    eprintln!("[login-debug:monitor] url_origin={}", redact_url(url_str));
 
                     // 已回到本地回调页：凭据随 URL 带回，Rust 直接解析 ck 写入会话并立即关窗，
                     // 避免登录窗口加载完整 SPA 引发的渲染/进程问题；AuthCallbackView 仅作兜底
