@@ -16,12 +16,61 @@
         <span class="tech-badge">Token V3</span>
         <span class="tech-badge">Pinia</span>
       </div>
+
+      <div class="links-list">
+        <button
+          class="link-item"
+          type="button"
+          @click="CoolapkTauriAPI.openUrl('https://github.com/daimiaopeng/coolapk-desktop')"
+        >
+          <i class="fas fa-code-branch"></i>
+          <span>项目主页</span>
+          <i class="fas fa-chevron-right link-arrow"></i>
+        </button>
+        <button
+          class="link-item"
+          type="button"
+          @click="CoolapkTauriAPI.openUrl('https://github.com/daimiaopeng/coolapk-desktop/issues')"
+        >
+          <i class="fas fa-bug"></i>
+          <span>反馈问题</span>
+          <i class="fas fa-chevron-right link-arrow"></i>
+        </button>
+        <button
+          class="link-item"
+          type="button"
+          @click="CoolapkTauriAPI.openUrl('https://github.com/daimiaopeng')"
+        >
+          <i class="fas fa-user"></i>
+          <span>联系作者</span>
+          <i class="fas fa-chevron-right link-arrow"></i>
+        </button>
+        <button
+          class="link-item"
+          type="button"
+          @click="CoolapkTauriAPI.openUrl('mailto:daimiaopeng@gmail.com')"
+        >
+          <i class="fas fa-envelope"></i>
+          <span>邮箱：daimiaopeng@gmail.com</span>
+          <i class="fas fa-chevron-right link-arrow"></i>
+        </button>
+        <button
+          class="link-item"
+          type="button"
+          @click="CoolapkTauriAPI.openUrl('https://www.coolapk.com/u/oxygen%E7%9A%84%E5%96%B5')"
+        >
+          <i class="fas fa-smile"></i>
+          <span>酷安：oxygen的喵</span>
+          <i class="fas fa-chevron-right link-arrow"></i>
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { APP_VERSION } from '../../constants/version';
+import { CoolapkTauriAPI } from '../../api/coolapk';
 
 const appVersion = APP_VERSION;
 </script>
@@ -93,5 +142,51 @@ const appVersion = APP_VERSION;
   padding: 2px 8px;
   border-radius: var(--radius-pill);
   font-weight: var(--font-weight-medium);
+}
+
+.links-list {
+  width: 100%;
+  max-width: 420px;
+  margin-top: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.link-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.link-item:hover {
+  background-color: var(--brand-soft);
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+.link-item i:first-child {
+  width: 16px;
+  color: var(--brand-primary);
+}
+
+.link-item span {
+  flex: 1;
+}
+
+.link-arrow {
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 </style>

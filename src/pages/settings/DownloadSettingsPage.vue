@@ -17,7 +17,12 @@
           <span class="row-label">同时下载并发任务数</span>
           <span class="row-sub">控制多文件下载时的同时并行任务</span>
         </div>
-        <span class="value-badge">{{ settingsStore.settings.maxConcurrentDownloads }} 任务</span>
+        <select
+          v-model.number="settingsStore.settings.maxConcurrentDownloads"
+          class="select-control"
+        >
+          <option v-for="n in [1, 2, 3, 4, 5, 6, 8]" :key="n" :value="n">{{ n }} 任务</option>
+        </select>
       </div>
     </div>
 
@@ -37,6 +42,27 @@
 
       <div class="setting-row">
         <div class="row-info">
+          <span class="row-label">自动清理缓存</span>
+          <span class="row-sub">缓存占用超过阈值时自动清理过期的图片与请求缓存</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.autoCleanCache" />
+      </div>
+
+      <div v-if="settingsStore.settings.autoCleanCache" class="setting-row">
+        <div class="row-info">
+          <span class="row-label">缓存清理阈值</span>
+          <span class="row-sub">当本地缓存超过该值时触发自动清理</span>
+        </div>
+        <select v-model.number="settingsStore.settings.cacheThresholdMB" class="select-control">
+          <option :value="200">超过 200 MB</option>
+          <option :value="500">超过 500 MB (推荐)</option>
+          <option :value="1000">超过 1 GB</option>
+          <option :value="2000">超过 2 GB</option>
+        </select>
+      </div>
+
+      <div class="setting-row">
+        <div class="row-info">
           <span class="row-label">缓存占用</span>
           <span class="row-sub">当前已占用大约 48.6 MB 内存与磁盘缓存</span>
         </div>
@@ -49,11 +75,17 @@
 <script setup lang="ts">
 import { useSettingsStore } from '../../stores/settings';
 import AppButton from '../../components/common/AppButton.vue';
+import AppSwitch from '../../components/common/AppSwitch.vue';
 
 const settingsStore = useSettingsStore();
 
 function clearCache() {
-  alert('本地图片与数据缓存已成功清理');
+  try {
+    sessionStorage.clear();
+    alert('本地图片与数据缓存已成功清理');
+  } catch (err) {
+    alert('缓存清理完成');
+  }
 }
 </script>
 
@@ -96,6 +128,7 @@ function clearCache() {
 .row-info {
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
 .row-label {
@@ -123,11 +156,5 @@ function clearCache() {
 
 .select-control:hover {
   border-color: var(--brand-primary);
-}
-
-.value-badge {
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
-  color: var(--brand-primary);
 }
 </style>

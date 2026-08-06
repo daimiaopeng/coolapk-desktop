@@ -14,8 +14,37 @@ import { CoolapkTauriAPI } from '../api/coolapk';
 
 onMounted(async () => {
   try {
-    const cookies = document.cookie || "";
-    if (cookies) {
+    let cookies = document.cookie || "";
+
+    // 兜底：部分登录流程把凭据拼进跳转链接（query 或 hash），而 document.cookie 只对当前源可见，
+    // 跳回本地源后酷安域的 cookie 读不到，需要从 URL 提取
+    const query = new URLSearchParams(window.location.search);
+    const hashRaw = window.location.hash.replace(/^#\/?/, '');
+    const hashQuery = hashRaw.includes('?') ? hashRaw.slice(hashRaw.indexOf('?') + 1) : hashRaw;
+    const hash = new URLSearchParams(hashQuery);
+    const pick = (...keys: string[]) => {
+      for (const k of keys) {
+        const v = query.get(k) || hash.get(k);
+        if (v) return v;
+      }
+      return '';
+    };
+
+    // 注入脚本/监控端回跳时把完整 cookie 塞进 ck 参数（URLSearchParams 已自动解码）
+    const rawCk = pick('ck', 'cookies', 'cookie');
+    if (rawCk) {
+      cookies = rawCk;
+    }
+
+    const sessid = pick('SESSID', 'sessid', 'sessionid', 'sesskey');
+    const uid = pick('uid', 'userId', 'user_id');
+    const token = pick('token', 'auth_token');
+
+    if (sessid) {
+      cookies = `SESSID=${sessid}; uid=${uid}; token=${token}; ${cookies}`.replace(/;\s*;/, ';');
+    }
+
+    if (cookies && cookies.trim()) {
       await CoolapkTauriAPI.saveCookieSecurely(cookies);
     }
   } catch (e) {

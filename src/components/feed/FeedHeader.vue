@@ -14,7 +14,7 @@
       <div class="meta-row">
         <span v-if="recommendSource" class="source-tag">{{ recommendSource }}</span>
         <span class="dateline">{{ formatDateline(dateline) }}</span>
-        <span v-if="device" class="device-tag">· {{ device }}</span>
+        <span v-if="showDeviceInfo && device" class="device-tag">· {{ device }}</span>
       </div>
     </div>
 
@@ -34,7 +34,7 @@ import { useRouter } from 'vue-router';
 import AppAvatar from '../common/AppAvatar.vue';
 import AppIconButton from '../common/AppIconButton.vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   uid?: string | number;
   avatar?: string;
   username?: string;
@@ -44,7 +44,10 @@ const props = defineProps<{
   device?: string;
   rankIndex?: number;
   recommendSource?: string;
-}>();
+  showDeviceInfo?: boolean;
+}>(), {
+  showDeviceInfo: true,
+});
 
 const router = useRouter();
 

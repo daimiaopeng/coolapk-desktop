@@ -3,3 +3,19 @@
 @import './reset.css';
 @import './utilities.css';
 @import './transitions.css';
+
+/* 列表密度 (Feed Density) —— 由设置 store 的 data-density 驱动 */
+:root {
+  --feed-card-padding: 20px;
+  --feed-card-gap: 12px;
+}
+
+:root[data-density='comfortable'] {
+  --feed-card-padding: 24px;
+  --feed-card-gap: 16px;
+}
+
+:root[data-density='compact'] {
+  --feed-card-padding: 14px;
+  --feed-card-gap: 8px;
+}

@@ -25,6 +25,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { isFavorite } from '../../utils/favoritesStore';
 
 const props = defineProps<{
   feedId: string | number;
@@ -40,12 +41,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'open-comment'): void;
+  (e: 'toggle-fav'): void;
 }>();
 
 const isLiked = ref(props.userAction?.like === 1);
 const likeCount = ref(props.likenum || 0);
 
-const isFav = ref(props.userAction?.favorite === 1);
+const isFav = ref(props.userAction?.favorite === 1 || isFavorite(props.feedId));
 const favCount = ref(props.favnum || 0);
 
 const replyCount = ref(props.replynum || 0);
@@ -70,6 +72,7 @@ async function toggleLike() {
 function toggleFav() {
   isFav.value = !isFav.value;
   favCount.value += isFav.value ? 1 : -1;
+  emit('toggle-fav');
 }
 
 function shareFeed() {

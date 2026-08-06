@@ -32,6 +32,23 @@
     </div>
 
     <div class="setting-group">
+      <h4 class="group-title">主题强调色</h4>
+      <p class="group-sub">全局品牌主色调，侧边栏、按钮与链接等统一换色</p>
+      <div class="accent-options">
+        <div
+          v-for="c in accentColors"
+          :key="c.key"
+          :class="['accent-swatch', { 'is-active': settingsStore.settings.accentColor === c.key }]"
+          :style="{ '--swatch-color': c.color }"
+          @click="settingsStore.setAccent(c.key)"
+        >
+          <span class="swatch-dot"></span>
+          <span>{{ c.label }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="setting-group">
       <h4 class="group-title">页面缩放与字号</h4>
       <div class="setting-row">
         <div class="row-info">
@@ -42,6 +59,34 @@
           <button class="zoom-btn" @click="settingsStore.setZoom(settingsStore.settings.zoom - 10)">-</button>
           <span class="zoom-value">{{ settingsStore.settings.zoom }}%</span>
           <button class="zoom-btn" @click="settingsStore.setZoom(settingsStore.settings.zoom + 10)">+</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">正文字号</span>
+          <span class="row-sub">动态正文与标题的显示字号</span>
+        </div>
+        <div class="zoom-controls">
+          <button class="zoom-btn" @click="adjustFontSize(-1)">-</button>
+          <span class="zoom-value">{{ settingsStore.settings.fontSize }}px</span>
+          <button class="zoom-btn" @click="adjustFontSize(1)">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <h4 class="group-title">列表密度</h4>
+      <p class="group-sub">信息流卡片的留白与间距紧凑程度</p>
+      <div class="density-options">
+        <div
+          v-for="d in densityOptions"
+          :key="d.key"
+          :class="['density-card', { 'is-active': settingsStore.settings.density === d.key }]"
+          @click="settingsStore.settings.density = d.key"
+        >
+          <span class="density-icon">{{ d.icon }}</span>
+          <span>{{ d.label }}</span>
         </div>
       </div>
     </div>
@@ -83,6 +128,24 @@ import { useSettingsStore } from '../../stores/settings';
 import AppSwitch from '../../components/common/AppSwitch.vue';
 
 const settingsStore = useSettingsStore();
+
+const accentColors = [
+  { key: 'green', label: '酷安绿', color: '#10b768' },
+  { key: 'blue', label: '活力蓝', color: '#2f7bff' },
+  { key: 'violet', label: '优雅紫', color: '#7c5cff' },
+  { key: 'orange', label: '暖橙', color: '#f58220' },
+];
+
+const densityOptions = [
+  { key: 'comfortable', label: '舒适', icon: '▨' },
+  { key: 'standard', label: '标准', icon: '▦' },
+  { key: 'compact', label: '紧凑', icon: '▤' },
+];
+
+function adjustFontSize(delta: number) {
+  const next = Math.min(Math.max(settingsStore.settings.fontSize + delta, 12), 20);
+  settingsStore.settings.fontSize = next;
+}
 
 const navItems = [
   { key: 'home', label: '首页', icon: 'fas fa-home' },
@@ -243,6 +306,85 @@ function toggleNav(key: string) {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.accent-options {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.accent-swatch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-size: var(--font-size-sub);
+  color: var(--text-secondary);
+  transition: all var(--duration-fast) var(--ease-default);
+  user-select: none;
+}
+
+.accent-swatch:hover {
+  border-color: var(--swatch-color);
+  color: var(--text-primary);
+}
+
+.accent-swatch.is-active {
+  border-color: var(--swatch-color);
+  background-color: var(--brand-soft);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.swatch-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: var(--swatch-color);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.density-options {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.density-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  font-size: var(--font-size-sub);
+  color: var(--text-secondary);
+  transition: all var(--duration-fast) var(--ease-default);
+  user-select: none;
+}
+
+.density-card:hover {
+  border-color: var(--brand-primary);
+  color: var(--text-primary);
+}
+
+.density-card.is-active {
+  border-color: var(--brand-primary);
+  background-color: var(--brand-soft);
+  color: var(--brand-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.density-icon {
+  font-size: 18px;
+  letter-spacing: -1px;
 }
 
 .zoom-btn {

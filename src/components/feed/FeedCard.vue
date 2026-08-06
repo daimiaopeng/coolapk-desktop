@@ -10,6 +10,7 @@
       :device="feed.device_title || feed.deviceTitle"
       :rank-index="rankIndex"
       :recommend-source="feed.recommendSource || feed.targetType"
+      :show-device-info="showDeviceInfo"
     />
 
     <FeedContent
@@ -41,6 +42,7 @@
       :sharenum="feed.sharenum"
       :user-action="feed.userAction"
       @open-comment="toggleComments"
+      @toggle-fav="toggleFav"
     />
 
     <div v-if="showComments" class="inline-comment-wrapper" @click.stop>
@@ -57,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import type { FeedItem } from '../../types/feed';
 import FeedHeader from './FeedHeader.vue';
 import FeedContent from './FeedContent.vue';
@@ -66,6 +68,11 @@ import FeedActionBar from './FeedActionBar.vue';
 import FeedCommentSection from './FeedCommentSection.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkEmoji } from '../../utils/coolapkEmoji';
+import { isFavorite, addFavorite, removeFavorite } from '../../utils/favoritesStore';
+import { useSettingsStore } from '../../stores/settings';
+
+const settingsStore = useSettingsStore();
+const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
 
 const props = defineProps<{
   feed: FeedItem;
@@ -76,14 +83,28 @@ const showComments = ref(false);
 const comments = ref<any[]>([]);
 const commentsLoading = ref(false);
 
+function toggleFav() {
+  const id = String(props.feed.id);
+  if (isFavorite(id)) {
+    removeFavorite(id);
+  } else {
+    addFavorite(props.feed);
+  }
+}
+
 async function toggleComments() {
   showComments.value = !showComments.value;
   if (showComments.value && comments.value.length === 0) {
     commentsLoading.value = true;
     try {
-      let res = await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1);
-      if (!res || !res.data || !res.data.length) {
+      let res: any;
+      if (settingsStore.settings.commentSort === 'hot') {
         res = await CoolapkTauriAPI.getHotReplies(String(props.feed.id), 1);
+        if (!res || !res.data || !res.data.length) {
+          res = await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1);
+        }
+      } else {
+        res = await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1);
       }
       if (res && res.data) {
         comments.value = res.data;
@@ -121,8 +142,8 @@ function formatRichText(text: string) {
   background-color: var(--surface);
   border-radius: var(--radius-card);
   border: 1px solid var(--border);
-  padding: 20px;
-  margin-bottom: 12px;
+  padding: var(--feed-card-padding);
+  margin-bottom: var(--feed-card-gap);
   transition: background-color var(--duration-fast) var(--ease-default);
   cursor: pointer;
 }

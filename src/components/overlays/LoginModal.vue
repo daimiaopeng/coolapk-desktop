@@ -76,6 +76,12 @@
               <span>{{ errorMessage }}</span>
             </div>
 
+            <!-- 调试状态行 -->
+            <div v-if="debugStatus" class="status-alert alert-debug">
+              <i class="fas fa-bug alert-icon"></i>
+              <span>{{ debugStatus }}</span>
+            </div>
+
             <!-- 底部折叠：高级 / 备用登录选项 -->
             <div class="advanced-login-toggle">
               <button class="toggle-link" @click="showAdvanced = !showAdvanced">
@@ -306,30 +312,42 @@ const showAdvanced = ref(false);
 let statusPollTimer: any = null;
 
 function handleOpenWebAuth() {
+  console.log('[login-debug] handleOpenWebAuth -> openLoginWebview()');
+  debugStatus.value = '已调用 open_login_webview，等待登录窗口';
   CoolapkTauriAPI.openLoginWebview();
   successMessage.value = '已调起客户端嵌入式官方登录窗口。登录完成后窗口将自动关闭并完成凭据同步！';
-  
+  debugStatus.value = '登录窗口已调起，轮询检测登录状态中...';
+
   // 开启 15 秒轮询检测登录状态
   if (statusPollTimer) clearInterval(statusPollTimer);
   let attempts = 0;
   statusPollTimer = setInterval(async () => {
     attempts++;
+    console.log('[login-debug] poll attempt', attempts);
     const res = await authStore.checkStatus();
+    debugStatus.value = `轮询第 ${attempts} 次: checkStatus=${res ? 'true' : 'false'}`;
     if (res || attempts > 20) {
       clearInterval(statusPollTimer);
       statusPollTimer = null;
       if (res) {
         successMessage.value = '🎉 酷安账号凭据同步成功！欢迎回来，' + (authStore.user?.username || '酷友');
+        debugStatus.value = 'checkStatus=true，登录成功';
+      } else {
+        debugStatus.value = '轮询超时(30s)，未检测到登录凭据';
       }
     }
   }, 1500);
 }
 
 async function handleCheckWebLogin() {
+  console.log('[login-debug] handleCheckWebLogin start');
+  debugStatus.value = '开始同步校验...';
   isLoading.value = true;
   errorMessage.value = '';
   try {
     const isLoggedIn = await authStore.checkStatus();
+    console.log('[login-debug] checkStatus result =', isLoggedIn);
+    debugStatus.value = `checkStatus=${isLoggedIn ? 'true' : 'false'}`;
     if (isLoggedIn) {
       successMessage.value = '🎉 酷安账号凭据同步成功！欢迎回来，' + (authStore.user?.username || '酷友');
       setTimeout(() => {
@@ -341,6 +359,7 @@ async function handleCheckWebLogin() {
       errorMessage.value = '提示：因 Edge 系统内核沙箱隔离，网页 Cookie 暂未透传。请直接在下方粘贴抓包获得的 Cookie（包含 SESSID），一秒点击立即登录！';
     }
   } catch (e: any) {
+    console.log('[login-debug] checkStatus error =', e?.message || e);
     errorMessage.value = '同步校验失败: ' + (e?.message || e);
   } finally {
     isLoading.value = false;
@@ -351,6 +370,8 @@ async function handleCheckWebLogin() {
 let unlistenFn: any = null;
 import('@tauri-apps/api/event').then(({ listen }) => {
   listen('login-window-closed', () => {
+    console.log('[login-debug] received login-window-closed event');
+    debugStatus.value = '收到 login-window-closed 事件，触发同步校验';
     handleCheckWebLogin();
   }).then(unlisten => {
     unlistenFn = unlisten;
@@ -376,6 +397,7 @@ const isLoading = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
 const isRebinding = ref(false);
+const debugStatus = ref('');
 
 const isValidPhone = computed(() => {
   return /^1[3-9]\d{9}$/.test(mobilePhone.value.trim());
@@ -388,6 +410,7 @@ watch(
       errorMessage.value = '';
       successMessage.value = '';
       isRebinding.value = false;
+      debugStatus.value = '';
     }
   }
 );
@@ -952,6 +975,14 @@ onUnmounted(() => {
   background-color: rgba(240, 68, 68, 0.1);
   color: var(--danger, #f04444);
   border: 1px solid rgba(240, 68, 68, 0.2);
+}
+
+.alert-debug {
+  background-color: rgba(59, 130, 246, 0.08);
+  color: #3b82f6;
+  border: 1px dashed rgba(59, 130, 246, 0.35);
+  font-size: 11px;
+  word-break: break-all;
 }
 
 .alert-success {
