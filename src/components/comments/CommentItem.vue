@@ -13,9 +13,9 @@
       <div class="comment-body" v-html="comment.message"></div>
 
       <div class="comment-actions">
-        <button :class="['action-link', { 'is-liked': isLiked }]" @click="toggleLike">
+        <button :class="['action-link', 'like-btn', { 'is-liked': isLiked }]" @click="toggleLike">
           <i :class="[isLiked ? 'fas fa-heart' : 'far fa-heart']"></i>
-          <span>{{ likeCount > 0 ? likeCount : '赞' }}</span>
+          <span>{{ likeCount > 0 ? formatCount(likeCount) : '赞' }}</span>
         </button>
         <button class="action-link" @click="$emit('reply', comment)">
           <i class="far fa-comment"></i> 回复
@@ -27,6 +27,13 @@
         <div v-for="reply in displaySubReplies" :key="reply.id" class="sub-item">
           <span class="sub-username">{{ reply.username || reply.userInfo?.username || '酷友' }}:</span>
           <span class="sub-text" v-html="reply.message"></span>
+          <button
+            :class="['sub-like-btn', { 'is-liked': isSubLiked(reply) }]"
+            @click.stop="toggleSubLike(reply)"
+          >
+            <i :class="[isSubLiked(reply) ? 'fas fa-heart' : 'far fa-heart']"></i>
+            <span>{{ getSubLikeCount(reply) > 0 ? formatCount(getSubLikeCount(reply)) : '赞' }}</span>
+          </button>
         </div>
 
         <div v-if="subLoading" class="sub-loading">
@@ -59,6 +66,9 @@ import type { CommentItem as CommentType } from '../../types/comment';
 import AppAvatar from '../common/AppAvatar.vue';
 import LoadingState from '../common/LoadingState.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { useAuthStore } from '../../stores/auth';
+
+const authStore = useAuthStore();
 
 const props = defineProps<{
   comment: CommentType;
@@ -72,6 +82,55 @@ defineEmits<{
 
 const isLiked = ref(props.comment.userAction?.like === 1);
 const likeCount = ref(props.comment.likenum || 0);
+
+// 楼中楼点赞状态（本地维护，微博式点赞不需要登录态展示）
+const subLikeMap = ref(new Map<string | number, boolean>());
+const subLikeCountMap = ref(new Map<string | number, number>());
+
+function formatCount(n: number): string {
+  if (n >= 10000) {
+    return (n / 10000).toFixed(1).replace(/\.0$/, '') + '万';
+  }
+  if (n >= 1000) {
+    return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+  }
+  return String(n);
+}
+
+function isSubLiked(reply: any): boolean {
+  if (subLikeMap.value.has(reply.id)) return subLikeMap.value.get(reply.id) === true;
+  return reply.userAction?.like === 1;
+}
+
+function getSubLikeCount(reply: any): number {
+  if (subLikeCountMap.value.has(reply.id)) return subLikeCountMap.value.get(reply.id) ?? 0;
+  return reply.likenum || 0;
+}
+
+async function toggleSubLike(reply: any) {
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  const prev = isSubLiked(reply);
+  const next = !prev;
+  const count = getSubLikeCount(reply);
+  subLikeMap.value.set(reply.id, next);
+  subLikeCountMap.value.set(reply.id, Math.max(0, count + (next ? 1 : -1)));
+  try {
+    if (next) {
+      await CoolapkTauriAPI.likeFeed(String(reply.id));
+    } else {
+      await CoolapkTauriAPI.unlikeFeed(String(reply.id));
+    }
+    reply.userAction = { ...(reply.userAction || {}), like: next ? 1 : 0 };
+  } catch (err) {
+    // 请求失败回滚
+    subLikeMap.value.set(reply.id, prev);
+    subLikeCountMap.value.set(reply.id, count);
+    console.error('Failed to toggle sub reply like', err);
+  }
+}
 
 // 楼中楼状态
 const expanded = ref(false);
@@ -96,9 +155,32 @@ const canLoadMoreSub = computed(
   () => expanded.value && !subLoading.value && !subNoMore.value && !subError.value
 );
 
-function toggleLike() {
-  isLiked.value = !isLiked.value;
-  likeCount.value += isLiked.value ? 1 : -1;
+async function toggleLike() {
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  const prev = isLiked.value;
+  const next = !prev;
+  isLiked.value = next;
+  likeCount.value = Math.max(0, likeCount.value + (next ? 1 : -1));
+  try {
+    if (next) {
+      await CoolapkTauriAPI.likeFeed(String(props.comment.id));
+    } else {
+      await CoolapkTauriAPI.unlikeFeed(String(props.comment.id));
+    }
+    if (props.comment.userAction) {
+      props.comment.userAction.like = next ? 1 : 0;
+    } else {
+      props.comment.userAction = { like: next ? 1 : 0 };
+    }
+  } catch (err) {
+    // 请求失败回滚
+    isLiked.value = prev;
+    likeCount.value = Math.max(0, likeCount.value + (prev ? 1 : -1));
+    console.error('Failed to toggle like', err);
+  }
 }
 
 async function toggleExpand() {
@@ -247,6 +329,43 @@ async function loadSubReplies(reset: boolean) {
   color: var(--danger);
 }
 
+.like-btn.is-liked i {
+  animation: like-pop 0.3s ease;
+}
+
+.sub-like-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: baseline;
+  transition: color 0.15s ease;
+}
+
+.sub-like-btn:hover {
+  color: var(--danger);
+}
+
+.sub-like-btn.is-liked {
+  color: var(--danger);
+}
+
+.sub-like-btn.is-liked i {
+  animation: like-pop 0.3s ease;
+}
+
+@keyframes like-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
 .sub-comments {
   background-color: var(--background);
   border-radius: var(--radius-sm);
@@ -260,6 +379,9 @@ async function loadSubReplies(reset: boolean) {
 .sub-item {
   font-size: 13px;
   line-height: 1.45;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
 }
 
 .sub-username {

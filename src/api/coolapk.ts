@@ -98,6 +98,11 @@ export class CoolapkTauriAPI {
     return await safeFetch(`/search/apks?q=${encodeURIComponent(query)}&page=${page}`, 'search_apks', { query, page });
   }
 
+  // 游戏专项搜索（type=game，仅返回游戏实体）
+  static async searchGames(query: string, page: number = 1) {
+    return await safeFetch(`/search/games?q=${encodeURIComponent(query)}&page=${page}`, 'search_games', { query, page });
+  }
+
 
 
 
@@ -241,6 +246,18 @@ export class CoolapkTauriAPI {
     } catch {
       window.open(url, '_blank', 'noopener,noreferrer');
     }
+  }
+
+  static async downloadUpdate(url: string) {
+    return await invoke<string>('download_update', { url });
+  }
+
+  static async installUpdate(installerPath: string) {
+    await invoke('install_update', { installerPath });
+  }
+
+  static async quitApp() {
+    await invoke('quit_app');
   }
 
   static async openLoginWebview() {

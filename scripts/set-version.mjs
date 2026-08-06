@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const versionFile = path.join(root, 'src/constants/version.ts');
 const currentVersionText = fs.readFileSync(versionFile, 'utf8');
-const requestedVersion = process.argv[2];
+const requestedVersion = (process.argv[2] || '').replace(/^v/i, '');
 const version = requestedVersion || currentVersionText.match(/APP_VERSION\s*=\s*'([^']+)'/)?.[1];
 
 if (!/^\d+\.\d+\.\d+$/.test(version || '')) {

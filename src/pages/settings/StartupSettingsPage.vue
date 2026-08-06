@@ -26,6 +26,22 @@
         </div>
         <AppSwitch v-model="settingsStore.settings.checkUpdateOnStartup" />
       </div>
+
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">立即检查更新</span>
+          <span class="row-sub">手动检测最新版本并重新弹出更新提示</span>
+        </div>
+        <button class="check-update-button" type="button" @click="checkNow">检查更新</button>
+      </div>
+
+      <p v-if="updateTipHidden" class="tray-tip">
+        <i class="fas fa-info-circle"></i>
+        已忽略更新提醒（忽略此版本或忽略所有更新），更新提示将不再自动弹出。
+      </p>
+      <button v-if="updateTipHidden" class="reset-update-button" type="button" @click="reopenTip">
+        重新启用更新提醒
+      </button>
     </div>
 
     <div class="setting-group">
@@ -46,10 +62,24 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useSettingsStore } from '../../stores/settings';
 import AppSwitch from '../../components/common/AppSwitch.vue';
 
 const settingsStore = useSettingsStore();
+
+const updateTipHidden = computed(
+  () => settingsStore.settings.ignoreAllUpdates || Boolean(settingsStore.settings.ignoredUpdateVersion)
+);
+
+function checkNow() {
+  window.dispatchEvent(new Event('check-for-update'));
+}
+
+function reopenTip() {
+  settingsStore.resetUpdateNotifications();
+  window.dispatchEvent(new Event('check-for-update'));
+}
 </script>
 
 <style scoped>
@@ -128,5 +158,27 @@ const settingsStore = useSettingsStore();
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.check-update-button,
+.reset-update-button {
+  background-color: var(--brand-soft);
+  color: var(--brand-primary);
+  border: 1px solid var(--brand-green-border);
+  border-radius: var(--radius-control);
+  padding: 6px 16px;
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-default);
+}
+
+.check-update-button:hover,
+.reset-update-button:hover {
+  background-color: var(--brand-soft-hover);
+}
+
+.reset-update-button {
+  align-self: flex-start;
 }
 </style>

@@ -47,6 +47,8 @@ const defaultSettings: AppSettings = {
   imageQuality: 'hd',
   navVisibility: { ...defaultNavVisibility },
   checkUpdateOnStartup: true,
+  ignoredUpdateVersion: '',
+  ignoreAllUpdates: false,
   closeToTray: false,
 };
 
@@ -213,6 +215,19 @@ export const useSettingsStore = defineStore('settings', () => {
     settings.value.navVisibility[key] = !settings.value.navVisibility[key];
   }
 
+  function ignoreUpdateVersion(version: string) {
+    settings.value.ignoredUpdateVersion = version;
+  }
+
+  function setIgnoreAllUpdates(enabled: boolean) {
+    settings.value.ignoreAllUpdates = enabled;
+  }
+
+  function resetUpdateNotifications() {
+    settings.value.ignoredUpdateVersion = '';
+    settings.value.ignoreAllUpdates = false;
+  }
+
   return {
     settings,
     setTheme,
@@ -220,5 +235,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setZoom,
     setAccent,
     toggleNavVisibility,
+    ignoreUpdateVersion,
+    setIgnoreAllUpdates,
+    resetUpdateNotifications,
   };
 });

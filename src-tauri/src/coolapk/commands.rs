@@ -320,6 +320,15 @@ pub async fn search_apks(
 }
 
 #[tauri::command]
+pub async fn search_games(
+    state: State<'_, AppState>,
+    query: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.search_games(&query, page).await
+}
+
+#[tauri::command]
 pub async fn get_app_list(
     state: State<'_, AppState>,
     page: u32,
@@ -334,8 +343,8 @@ pub fn open_url(url: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", &url])
+        std::process::Command::new("explorer")
+            .arg(&url)
             .spawn()
             .map_err(|e| e.to_string())?;
     }
@@ -590,4 +599,77 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     });
 
     Ok(())
+}
+
+/// 后台静默下载更新安装包，实时向前端广播下载进度
+#[tauri::command]
+pub async fn download_update(app: tauri::AppHandle, url: String) -> Result<String, String> {
+    use tauri::Emitter;
+    use tokio::io::AsyncWriteExt;
+
+    let dir = std::env::temp_dir().join("coolapk-desktop-update");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let file_name = url
+        .rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty())
+        .unwrap_or("coolapk-desktop-setup.exe");
+    let path = dir.join(file_name);
+
+    let client = reqwest::Client::builder()
+        .user_agent("coolapk-desktop-updater")
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("下载失败：HTTP {}", response.status()));
+    }
+
+    let total = response.content_length().unwrap_or(0);
+    let mut file = tokio::fs::File::create(&path).await.map_err(|e| e.to_string())?;
+    let mut downloaded: u64 = 0;
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+        downloaded += chunk.len() as u64;
+        if total > 0 {
+            let _ = app.emit(
+                "update-download-progress",
+                serde_json::json!({ "downloaded": downloaded, "total": total }),
+            );
+        }
+    }
+    file.flush().await.map_err(|e| e.to_string())?;
+    // 服务端声明了文件大小时校验完整性，避免保存半成品安装包
+    if total > 0 && downloaded != total {
+        let _ = tokio::fs::remove_file(&path).await;
+        return Err(format!("下载中断：已下载 {downloaded}/{total} 字节"));
+    }
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// 以静默更新模式启动安装包：/S 静默、/UPDATE 跳过卸载、/R 安装完成后自动重新启动应用
+#[tauri::command]
+pub fn install_update(installer_path: String) -> Result<(), String> {
+    if !std::path::Path::new(&installer_path).exists() {
+        return Err("更新安装包不存在，可能已被清理，请重新下载".to_string());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new(&installer_path)
+            .args(["/S", "/UPDATE", "/R"])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = installer_path;
+    }
+    Ok(())
+}
+
+/// 退出整个应用（用于更新前关闭窗口）
+#[tauri::command]
+pub fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
 }

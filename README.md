@@ -85,7 +85,7 @@ npm run tauri build -- --bundles app,dmg
 
 推送以 `v` 开头的版本标签后，GitHub Actions 会自动构建全部平台，并创建公开的 GitHub Release，上传上述安装包。普通的 `main` 分支推送和 Pull Request 只执行构建检查，不会发布版本。
 
-发布前只需更新 `src/constants/version.ts`，然后运行版本同步命令并创建对应标签：
+发布前只需更新 `src/constants/version.ts` 并创建对应标签，GitHub Actions 会从标签自动同步版本号到全部构建文件：
 
 ```bash
 npm run version:set -- 1.2.3
@@ -93,6 +93,8 @@ npm run build
 git tag v1.2.3
 git push origin main v1.2.3
 ```
+
+安装包文件名（如 `coolapk-desktop_1.2.3_x64-setup.exe`）会带版本号；客户端自动更新只接受与标签版本一致的安装包，避免装错版本。
 
 ## 常用检查
 
