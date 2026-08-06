@@ -1,13 +1,7 @@
 {
-  "identifier": "login-window-remote",
-  "description": "允许酷安授权登录页（远程域）在登录窗口内调用 IPC：保存登录凭据、关闭登录窗口并触发登录态同步",
+  "identifier": "login-window-local",
+  "description": "仅允许登录窗口在本地回调源（AuthCallbackView 兜底保存凭据/关窗）调用 IPC；酷安远程授权页不再授予任何 IPC 能力",
   "windows": ["login_window"],
-  "remote": {
-    "urls": [
-      "https://account.coolapk.com/*",
-      "https://www.coolapk.com/*"
-    ]
-  },
   "permissions": [
     "core:default"
   ]

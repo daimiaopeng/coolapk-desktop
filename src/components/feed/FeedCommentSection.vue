@@ -68,7 +68,7 @@
           <div
             class="comment-text"
             v-html="formatRichText(c.message || c.replyRowsText || '')"
-            @click="setReplyTarget(c.username || c.userInfo?.username)"
+            @click="handleCommentTextClick($event, c)"
           ></div>
 
           <div class="comment-actions">
@@ -122,7 +122,7 @@
                   <span class="comment-time">{{ sub.infoHtml || sub.dateline || '' }}</span>
                 </div>
                 <!-- 子回复正文 -->
-                <div class="sub-reply-text" v-html="formatRichText(sub.message || '')"></div>
+                <div class="sub-reply-text" v-html="formatRichText(sub.message || '')" @click="handleAnchorClick"></div>
                 <div class="sub-reply-actions">
                   <button
                     type="button"
@@ -168,6 +168,7 @@ import { ref, computed } from 'vue';
 import Button from '../ui/Button.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
+import { handleAnchorClick } from '../../utils/anchorClick';
 
 const props = defineProps<{
   feedUid?: string | number;
@@ -306,6 +307,15 @@ function setReplyTarget(username?: string) {
     inputMsg.value = `回复 @${username}: `;
   }
   inputRef.value?.focus();
+}
+
+function handleCommentTextClick(e: MouseEvent, c: any) {
+  // 点中了评论内的链接则交给统一链接处理，否则视为点击评论（设置为回复对象）
+  if ((e.target as HTMLElement).closest('a')) {
+    handleAnchorClick(e);
+    return;
+  }
+  setReplyTarget(c.username || c.userInfo?.username);
 }
 
 /**

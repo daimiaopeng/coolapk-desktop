@@ -1,7 +1,8 @@
 import { APP_VERSION } from '../constants/version';
+import type { UpdateChannel } from '../types/settings';
 
 export { APP_VERSION };
-const RELEASES_URL = 'https://api.github.com/repos/daimiaopeng/coolapk-desktop/releases/latest';
+const RELEASES_URL = 'https://api.github.com/repos/daimiaopeng/coolapk-desktop/releases';
 
 export type UpdateInfo = {
   hasNew: boolean;
@@ -25,10 +26,23 @@ export function isNewerVersion(latest: string, current = APP_VERSION) {
   return false;
 }
 
-export async function checkLatestRelease(): Promise<UpdateInfo> {
-  const response = await fetch(RELEASES_URL, { headers: { Accept: 'application/vnd.github.v3+json' } });
+async function pickRelease(channel: UpdateChannel): Promise<any> {
+  const headers = { Accept: 'application/vnd.github.v3+json' };
+  if (channel === 'beta') {
+    // 测试版渠道：列出最近发布（含预发布），取最新一条
+    const response = await fetch(`${RELEASES_URL}?per_page=30`, { headers });
+    if (!response.ok) throw new Error(`GitHub API HTTP ${response.status}`);
+    const releases = await response.json();
+    if (!Array.isArray(releases) || releases.length === 0) throw new Error('未获取到任何发布版本');
+    return releases[0];
+  }
+  const response = await fetch(`${RELEASES_URL}/latest`, { headers });
   if (!response.ok) throw new Error(`GitHub API HTTP ${response.status}`);
-  const release = await response.json();
+  return await response.json();
+}
+
+export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Promise<UpdateInfo> {
+  const release = await pickRelease(channel);
   const tagName = release.tag_name || '';
   const hasNew = Boolean(tagName) && isNewerVersion(tagName);
 

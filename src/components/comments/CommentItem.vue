@@ -10,7 +10,7 @@
         <span class="dateline">{{ comment.dateline }}</span>
       </div>
 
-      <div class="comment-body" v-html="comment.message"></div>
+      <div class="comment-body" v-html="renderMessage(comment.message)" @click="handleAnchorClick"></div>
 
       <div class="comment-actions">
         <button :class="['action-link', 'like-btn', { 'is-liked': isLiked }]" @click="toggleLike">
@@ -26,7 +26,7 @@
       <div v-if="displaySubReplies.length > 0" class="sub-comments">
         <div v-for="reply in displaySubReplies" :key="reply.id" class="sub-item">
           <span class="sub-username">{{ reply.username || reply.userInfo?.username || '酷友' }}:</span>
-          <span class="sub-text" v-html="reply.message"></span>
+          <span class="sub-text" v-html="renderMessage(reply.message)" @click="handleAnchorClick"></span>
           <button
             :class="['sub-like-btn', { 'is-liked': isSubLiked(reply) }]"
             @click.stop="toggleSubLike(reply)"
@@ -67,6 +67,8 @@ import AppAvatar from '../common/AppAvatar.vue';
 import LoadingState from '../common/LoadingState.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
+import { renderCoolapkRichText } from '../../utils/richText';
+import { handleAnchorClick } from '../../utils/anchorClick';
 
 const authStore = useAuthStore();
 
@@ -95,6 +97,12 @@ function formatCount(n: number): string {
     return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
   }
   return String(n);
+}
+
+// 评论正文来自其他用户，必须安全化渲染（去标签/防注入）
+function renderMessage(message?: string): string {
+  if (!message) return '';
+  return renderCoolapkRichText(message);
 }
 
 function isSubLiked(reply: any): boolean {

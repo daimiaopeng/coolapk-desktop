@@ -1,0 +1,38 @@
+/**
+ * 判断动态是否为广告/推广内容：
+ *  - feedType/type 为 ad/advert/ads
+ *  - 存在 advert / isAd 字段或 extra_key 为 ad
+ *  - 标题以 [广告]、广告：/ 推广： 开头
+ */
+export function isAdFeed(item: any): boolean {
+  if (!item) return false;
+  const t = String(item.feedType || item.type || '').toLowerCase();
+  if (t === 'ad' || t === 'advert' || t === 'ads') return true;
+  if (item.advert || item.isAd) return true;
+  if (item.extra_key === 'ad') return true;
+  const title = String(item.title || '');
+  if (/^\[广告\]|^(广告|推广)\s*[:：]/i.test(title)) return true;
+  return false;
+}
+
+/**
+ * 判断动态文本（标题/正文）是否命中任一屏蔽关键词
+ */
+export function matchesBlockedKeywords(item: any, keywords: string[]): boolean {
+  if (!item || !Array.isArray(keywords) || keywords.length === 0) return false;
+  const text = `${item.title || ''} ${item.message || ''}`.toLowerCase();
+  for (const kw of keywords) {
+    const key = String(kw).trim().toLowerCase();
+    if (key && text.includes(key)) return true;
+  }
+  return false;
+}
+
+/**
+ * 列表过滤统一入口：广告卡片 + 关键词屏蔽
+ */
+export function shouldHideFeed(item: any, settings: { hideAdCards: boolean; blockedKeywords: string[] }): boolean {
+  if (settings.hideAdCards && isAdFeed(item)) return true;
+  if (matchesBlockedKeywords(item, settings.blockedKeywords)) return true;
+  return false;
+}

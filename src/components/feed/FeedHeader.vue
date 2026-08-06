@@ -31,6 +31,7 @@
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { useSettingsStore } from '../../stores/settings';
 import AppAvatar from '../common/AppAvatar.vue';
 import AppIconButton from '../common/AppIconButton.vue';
 
@@ -52,6 +53,7 @@ const props = withDefaults(defineProps<{
 });
 
 const router = useRouter();
+const settingsStore = useSettingsStore();
 
 function handleUserClick() {
   const targetUid = props.uid || props.username;
@@ -71,6 +73,11 @@ function handleSourceClick() {
 function formatDateline(time?: number | string): string {
   if (!time) return '刚刚';
   if (typeof time === 'string') return time;
+  if (settingsStore.settings.timeDisplay === 'absolute') {
+    const d = new Date(time * 1000);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
   const now = Math.floor(Date.now() / 1000);
   const diff = now - time;
   if (diff < 60) return '刚刚';

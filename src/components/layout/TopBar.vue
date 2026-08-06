@@ -48,6 +48,7 @@ import { useAppStore } from '../../stores/app';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { desktopNotify } from '../../utils/desktopNotify';
 import AppButton from '../common/AppButton.vue';
 import AppIconButton from '../common/AppIconButton.vue';
 import AppAvatar from '../common/AppAvatar.vue';
@@ -59,6 +60,7 @@ const settingsStore = useSettingsStore();
 
 const unreadNotificationCount = ref(0);
 let notifTimer: any = null;
+let lastNotifiedCount = 0;
 
 async function fetchNotificationCount() {
   if (!authStore.isLoggedIn) {
@@ -69,15 +71,44 @@ async function fetchNotificationCount() {
     const res: any = await CoolapkTauriAPI.getNotificationCount();
     const data = res?.data || res || {};
     const count = Number(data?.count ?? data?.fcount ?? data ?? 0);
-    unreadNotificationCount.value = Number.isFinite(count) && count > 0 ? count : 0;
+    const safeCount = Number.isFinite(count) && count > 0 ? count : 0;
+    // 未读数增加时发送桌面通知（跳过首次加载，避免启动即打扰）
+    if (
+      safeCount > 0 &&
+      lastNotifiedCount > 0 &&
+      safeCount > lastNotifiedCount &&
+      settingsStore.settings.desktopNotifications &&
+      (settingsStore.settings.notifyReplies || settingsStore.settings.notifyAt || settingsStore.settings.notifyPm)
+    ) {
+      void desktopNotify(
+        {
+          title: '酷安新通知',
+          body: `你有 ${safeCount} 条未读通知，点击查看详情。`,
+        },
+        settingsStore.settings.notificationSound
+      );
+    }
+    lastNotifiedCount = safeCount;
+    unreadNotificationCount.value = safeCount;
   } catch (e) {
     console.warn('获取通知未读数失败:', e);
   }
 }
 
+function startPolling() {
+  if (notifTimer) clearInterval(notifTimer);
+  if (!settingsStore.settings.desktopNotifications) {
+    // 未开启桌面通知时仍按最小频率刷新角标，避免完全失去未读提示
+    notifTimer = setInterval(fetchNotificationCount, 60000);
+    return;
+  }
+  const minutes = Math.max(1, Math.min(settingsStore.settings.notificationPollInterval || 1, 60));
+  notifTimer = setInterval(fetchNotificationCount, minutes * 60 * 1000);
+}
+
 onMounted(() => {
   fetchNotificationCount();
-  notifTimer = setInterval(fetchNotificationCount, 60000);
+  startPolling();
 });
 
 onUnmounted(() => {
@@ -87,6 +118,11 @@ onUnmounted(() => {
 watch(
   () => authStore.isLoggedIn,
   () => fetchNotificationCount()
+);
+
+watch(
+  () => settingsStore.settings.notificationPollInterval,
+  () => startPolling()
 );
 
 function navigateTo(path: string) {

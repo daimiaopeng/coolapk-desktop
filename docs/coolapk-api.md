@@ -22,14 +22,16 @@
 4. [动态与评论](#动态与评论)
 5. [用户](#用户)
 6. [话题](#话题)
-7. [应用（APK）](#应用apk)
-8. [数码（产品）](#数码产品)
-9. [看看号（官方号）](#看看号官方号)
-10. [通知与私信](#通知与私信)
-11. [登录鉴权](#登录鉴权)
-12. [写接口（点赞/关注/评论/发帖/发私信）](#写接口点赞关注评论发帖发私信)
-13. [已废弃接口汇总](#已废弃接口汇总)
-14. [测试方法](#测试方法)
+7. [问答 / 投票](#问答--投票)
+8. [应用（APK）](#应用apk)
+9. [数码（产品）](#数码产品)
+10. [收藏单 / 合集](#收藏单--合集)
+11. [看看号（官方号）](#看看号官方号)
+12. [通知与私信](#通知与私信)
+13. [登录鉴权](#登录鉴权)
+14. [写接口（点赞/关注/评论/发帖/发私信）](#写接口点赞关注评论发帖发私信)
+15. [已废弃接口汇总](#已废弃接口汇总)
+16. [测试方法](#测试方法)
 
 ---
 
@@ -199,6 +201,27 @@ TS 方法：`getTabConfig()`
 Rust 方法：`get_search_suggestions(query)`
 TS 方法：`getSearchSuggestions(query)`
 
+### GET `/v6/search/suggestSearchWordsNew`（type=app）— 应用联想 ✅ 可用 · 🆕 新接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| searchValue | str | 必要 | 输入前缀，返回应用联想词 |
+| type | str | 必要 | `app`（仅联想应用） |
+
+Rust 方法：`get_search_suggestions_app(query)`
+TS 方法：`getSearchSuggestionsApp(query)`
+
+### GET `/v6/search`（type=feedTopic）— 话题搜索 ✅ 可用 · 🆕 新接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| type | str | 必要 | `feedTopic` |
+| searchValue | str | 必要 | 话题关键词 |
+| page | num | 必要 | 页数，从 1 起 |
+
+Rust 方法：`search_feed_topics(query, page)`
+TS 方法：`searchFeedTopics(query, page)`
+
 ---
 
 ## 动态与评论
@@ -232,6 +255,58 @@ Rust 方法：`get_hot_replies(feed_id, page)` / `get_feed_replies` 首选路
 
 Rust 方法：`get_feed_replies` / `get_sub_replies(feed_id, reply_id, page)`
 
+### GET `/v6/feed/forwardList` — 转发列表 ✅ 可用 · 🆕 新接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| id | num | 必要 | 动态 ID |
+| type | str | 非必要 | 转发类型筛选 |
+| page | num | 必要 | 页数，从 1 起 |
+
+Rust 方法：`get_feed_forward_list(feed_id, page)`
+TS 方法：`getFeedForwardList(feed_id, page)`
+
+### GET `/v6/feed/likeList` — 点赞列表 ✅ 可用 · 🆕 新接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| id | num | 必要 | 动态 ID |
+| listType | str | 非必要 | `lastupdate_desc`（按最近更新排序） |
+| page | num | 必要 | 页数，从 1 起 |
+
+Rust 方法：`get_feed_like_list(feed_id, page)`
+TS 方法：`getFeedLikeList(feed_id, page)`
+
+### GET `/v6/feed/changeHistoryList` — 动态修改历史 ✅ 可用 · 🆕 新接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| id | num | 必要 | 动态 ID |
+
+Rust 方法：`get_feed_change_history(feed_id)`
+TS 方法：`getFeedChangeHistory(feed_id)`
+
+### GET `/v6/feed/searchTag` — 话题搜索 ✅ 可用 · 🆕 新接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| q | str | 必要 | 话题关键词 |
+| page | num | 必要 | 页数，从 1 起 |
+
+Rust 方法：`search_tags(query, page)`
+TS 方法：`searchTags(query, page)`
+
+### GET `/v6/feed/followTag|unFollowTag` — 关注/取消关注话题 🔒 需登录 · 🆕 新接入
+
+写接口（GET 方式，需登录 Cookie）。
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| tag | str | 必要 | 话题名称 |
+
+Rust 方法：`follow_tag(tag)` / `unfollow_tag(tag)`
+TS 方法：`followTag(tag)` / `unfollowTag(tag)`
+
 ---
 
 ## 用户
@@ -248,8 +323,11 @@ Rust 方法：`get_feed_replies` / `get_sub_replies(feed_id, reply_id, page)`
 | `GET /v6/user/favList` | ❌ 已废弃 | 🔌 `getUserFeeds(type=fav)` | uid, page |
 | `GET /v6/user/followList` | ✅ 可用 | 🔌 `getFollowUserList` | uid, page |
 | `GET /v6/user/customNodeList` | ❌ 已废弃 | 🔌 `getUserFollowNodes` | uid |
-| `GET /v6/account/loadConfig` | 🔒 需登录 | 未接入 | key=`my_page_card_config` |
+| `GET /v6/account/loadConfig` | 🔒 需登录 | 🆕 `getLoadConfig` | key=`my_page_card_config` |
 | `GET /v6/account/checkLoginInfo` | 🔒 需登录 | 🆕 `checkLoginInfo` | 无参数 |
+| `GET /v6/user/search` | ✅ 可用 | 🆕 `searchUsers` | q, page |
+| `GET /v6/user/hitHistoryList` | 🔒 需登录 | 🆕 `getHitHistory` | page |
+| `GET /v6/user/recentHistoryList` | 🔒 需登录 | 🆕 `getRecentHistory` | page |
 
 `checkLoginInfo` 是比 `user/space` 更轻量的登录态检测接口。
 
@@ -266,6 +344,32 @@ Rust 方法：`get_feed_replies` / `get_sub_replies(feed_id, reply_id, page)`
 | `GET /v6/topic/tagDetail` | ✅ 可用 | 🆕 `getTopicDetailV7` | tag（名称或 ID） |
 | `GET /v6/topic/tagFeedList` | ✅ 可用 | 🔌 `getTopicFeeds` | tag, page, listType |
 | `GET /v6/topic/tagList` | ✅ 可用 | 🔌 `getTopicHubData` | sort=hot/follow/new, page |
+| `GET /v6/topic/deviceFeedList` | ✅ 可用 | 🆕 `getDeviceFeedList` | tag, page, listType=`lastupdate_desc` |
+
+---
+
+## 问答 / 投票
+
+### GET `/v6/question/answerList` — 问答列表 ✅ 可用 · 🆕 新接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| id | num | 必要 | 问题 ID |
+| sort | str | 非必要 | 排序方式 |
+| page | num | 必要 | 页数，从 1 起 |
+
+Rust 方法：`get_question_answers(id, page)`
+TS 方法：`getQuestionAnswers(id, page)`
+
+### GET `/v6/vote/commentList` — 投票评论 ✅ 可用 · 🆕 新接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| fid | num | 必要 | 动态 ID |
+| page | num | 必要 | 页数，从 1 起 |
+
+Rust 方法：`get_vote_comments(fid, page)`
+TS 方法：`getVoteComments(fid, page)`
 
 ---
 
@@ -356,10 +460,57 @@ Rust 方法：`get_feed_replies` / `get_sub_replies(feed_id, reply_id, page)`
 | 接口 | 实测状态 | 集成 | 参数 |
 | - | - | - | - |
 | `GET /v6/product/detail` | ✅ 可用 | 🆕 `getProductDetail` | id（产品 ID） |
+| `GET /v6/product/detail?name=` | ✅ 可用 | 🆕 `getProductDetailByName` | name（产品名称） |
 | `GET /v6/page/dataList?url=/page?url=/product/feedList` | ✅ 可用 | 🆕 `getProductFeeds` | id, type, page |
 
 `getProductFeeds` 参数：type 取 `feed`（讨论）/ `answer`（问答）/ `article`（图文）/ `video`（视频）/ `trade`（交易）。
 测试用真实产品 ID：`5573`（三星 Galaxy Z Fold8）。
+
+---
+
+## 收藏单 / 合集
+
+> 以下接口均用登录 Cookie 实测：读接口全部返回数据（`collection/list` 我的账号实测返回 2 个收藏单），写接口需登录、GET 方式调用返回业务提示（如"不能重复关注"）。
+
+### GET `/v6/collection/list` — 收藏单列表 ✅ 可用 · 🔌 已接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| uid | num | 必要 | 用户 ID |
+| page | num | 必要 | 页数，从 1 起 |
+
+Rust 方法：`get_collection_list(uid, page)`
+TS 方法：`getCollectionList(uid, page)`
+
+### GET `/v6/collection/itemList` — 收藏单内容 ✅ 可用 · 🔌 已接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| id | num | 必要 | 收藏单 ID |
+| page | num | 必要 | 页数，从 1 起 |
+
+Rust 方法：`get_collection_item_list(id, page)`
+TS 方法：`getCollectionItemList(id, page)`
+
+### GET `/v6/collection/detail` — 收藏单详情 ✅ 可用 · 🆕 新接入
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| id | num | 必要 | 收藏单 ID |
+
+Rust 方法：`get_collection_detail(id)`
+TS 方法：`getCollectionDetail(id)`
+
+### GET `/v6/collection/follow|unFollow|like|unLike` — 收藏单关注/取消关注/点赞/取消点赞 🔒 需登录 · 🆕 新接入
+
+写接口（GET 方式，需登录 Cookie）。
+
+| 参数 | 类型 | 必要性 | 说明 |
+| - | - | - | - |
+| id | num | 必要 | 收藏单 ID |
+
+Rust 方法：`follow_collection(id)` / `unfollow_collection(id)` / `like_collection(id)` / `unlike_collection(id)`
+TS 方法：`followCollection(id)` / `unfollowCollection(id)` / `likeCollection(id)` / `unlikeCollection(id)`
 
 ---
 
@@ -369,6 +520,7 @@ Rust 方法：`get_feed_replies` / `get_sub_replies(feed_id, reply_id, page)`
 | - | - | - | - |
 | `GET /v6/dyh/detail` | ✅ 可用 | 🆕 `getDyhDetail` | dyhId |
 | `GET /v6/dyhArticle/list` | ✅ 可用 | 🆕 `getDyhFeeds` | dyhId, type=`all`/`square`, page |
+| `GET /v6/dyh/follow\|unFollow` | 🔒 需登录 | 🆕 `followDyh`/`unfollowDyh` | dyhId |
 
 测试用真实看看号 ID：`1429`（酷安瞎扯）。
 
@@ -415,6 +567,9 @@ Rust 方法：`get_feed_replies` / `get_sub_replies(feed_id, reply_id, page)`
 | `GET /v6/user/follow` | GET | 🔒 需登录 | 🔌 `followUser` | uid |
 | `GET /v6/user/unfollow` | GET | 🔒 需登录 | 🔌 `unfollowUser` | uid |
 | `GET /v6/message/send` | GET | 🔒 需登录 | 🔌 `sendPrivateMessage` | uid, message |
+| `GET /v6/collection/follow\|unFollow\|like\|unLike` | GET | 🔒 需登录 | 🆕 `followCollection`/`unfollowCollection`/`likeCollection`/`unlikeCollection` | id |
+| `GET /v6/feed/followTag\|unFollowTag` | GET | 🔒 需登录 | 🆕 `followTag`/`unfollowTag` | tag |
+| `GET /v6/dyh/follow\|unFollow` | GET | 🔒 需登录 | 🆕 `followDyh`/`unfollowDyh` | dyhId |
 
 ---
 
@@ -464,13 +619,13 @@ Rust 方法：`get_feed_replies` / `get_sub_replies(feed_id, reply_id, page)`
 
 | 接口 | 实测状态 | 集成 | 参数 |
 | - | - | - | - |
-| `GET /v6/user/blackList` | 🔒 需登录 | 未接入 | page |
-| `GET /v6/user/ignoreList` | 🔒 需登录 | 未接入 | page |
-| `GET /v6/user/limitList` | 🔒 需登录 | 未接入 | page |
-| `POST /v6/user/addToBlackList` | 🔒 需登录 | 未接入 | uid |
-| `POST /v6/user/removeFromBlackList` | 🔒 需登录 | 未接入 | uid |
-| `POST /v6/user/addToIgnoreList` | 🔒 需登录 | 未接入 | uid |
-| `POST /v6/user/removeFromIgnoreList` | 🔒 需登录 | 未接入 | uid |
+| `GET /v6/user/blackList` | 🔒 需登录 | ✅ 已接入 | page |
+| `GET /v6/user/ignoreList` | 🔒 需登录 | ✅ 已接入 | page |
+| `GET /v6/user/limitList` | 🔒 需登录 | ✅ 已接入 | page |
+| `GET /v6/user/addToBlackList` | 🔒 需登录 | ✅ 已接入 | uid（POST 返回 404 请求方式错误） |
+| `GET /v6/user/removeFromBlackList` | 🔒 需登录 | ✅ 已接入 | uid |
+| `GET /v6/user/addToIgnoreList` | 🔒 需登录 | ✅ 已接入 | uid |
+| `GET /v6/user/removeFromIgnoreList` | 🔒 需登录 | ✅ 已接入 | uid |
 
 ## 图片
 
@@ -515,7 +670,7 @@ Rust 方法：`get_feed_replies` / `get_sub_replies(feed_id, reply_id, page)`
 
 ## 测试方法
 
-完整可用性测试位于 `src-tauri/src/coolapk/api_tests.rs`，均为 `#[ignore]` 联网测试（共 6 个测试函数，覆盖 155+ 个探测用例）：
+完整可用性测试位于 `src-tauri/src/coolapk/api_tests.rs`，均为 `#[ignore]` 联网测试（共 8 个测试函数，覆盖 208+ 个探测用例）：
 
 ```bash
 # 全部文档化 API 探测（40 个端点，含可登录检测）
@@ -539,13 +694,16 @@ cargo test --lib probe_api2_and_static_endpoints -- --ignored --nocapture
 # 未文档化端点探测（31 个：album/headline/favorite/blacklist/gift 等）
 cargo test --lib probe_undocumented_endpoints -- --ignored --nocapture
 
-# 一键运行全部 API 测试（7 个测试函数）
+# UWP 收集文档补充端点探测（未登录探测 17 个接口：16 可用 + 1 需登录 + 0 废弃，2026-08-06 实测）
+cargo test --lib probe_uwp_collected_endpoints -- --ignored --nocapture
+
+# 一键运行全部 API 测试（8 个测试函数）
 cargo test --lib coolapk::client::api_tests:: -- --ignored --nocapture
 ```
 
 ### 2026-08-06 实测汇总
 
-**总览：7 个测试函数，191+ 个探测用例，覆盖 100+ 个不同接口端点**
+**总览：8 个测试函数，208+ 个探测用例，覆盖 110+ 个不同接口端点**
 
 | 分类 | 数量 | 可用 | 需登录 | 已废弃 | 被拦截 |
 | - | - | - | - | - | - |
@@ -555,6 +713,7 @@ cargo test --lib coolapk::client::api_tests:: -- --ignored --nocapture
 | 深度探测（api2/直连/排序等） | 25 | 11 | 1 | 10 | 3 |
 | 写接口方法探测 | 20 | 7（GET） | - | 3 | 10（POST） |
 | 未文档化端点 | 31 | 21 | 6 | 0 | 4 |
+| UWP 收集补充端点（收藏单/动态扩展/话题/问答投票/用户历史/搜索/产品/看看号） | 17 | 16 | 1 | 0 | 0 |
 
 **核心发现（更新）：**
 
@@ -570,3 +729,4 @@ cargo test --lib coolapk::client::api_tests:: -- --ignored --nocapture
 | **静态资源** | `avatar.coolapk.com` ✅ / `static.coolapk.com` ✅ / `image.coolapk.com` ❌ 问题（HTTP 567） |
 | **新发现可用接口** | `album/list`、`album/search`、`main/headline`、`main/updateList`、`feed/editorChoiceList`、`apk/discovererList`、`apk/recommendList`、`apk/giftList`、`apk/search?searchType=tag`、`picture/list?tag=` 等 20+ 个 |
 | **需登录新接口** | `favorite/list`、`user/blackList`、`user/ignoreList`、`user/limitList`、`account/accessToken` 等 |
+| **UWP 补充接口** | `collection/list`、`feed/forwardList`、`question/answerList`、`user/search`、`search?type=feedTopic` 等 16 个读接口均可用；写接口（收藏单关注/话题关注/看看号关注）需登录、GET 方式 |

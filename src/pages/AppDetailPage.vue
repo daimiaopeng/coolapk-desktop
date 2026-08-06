@@ -58,9 +58,17 @@
         </div>
 
         <div class="header-actions">
-          <AppButton variant="primary" size="md" icon="fas fa-download" @click="handleDownload">
-            立即下载 APK
-          </AppButton>
+          <div class="download-update-group">
+            <AppButton variant="primary" size="md" icon="fas fa-download" :loading="downloadLoading" @click="handleDownload">
+              立即下载
+            </AppButton>
+            <AppButton variant="secondary" size="md" icon="fas fa-qrcode" :loading="qrLoading" @click="handleShowQr">
+              二维码
+            </AppButton>
+            <AppButton variant="secondary" size="md" icon="fas fa-sync-alt" :loading="updateLoading" @click="handleCheckUpdate">
+              检查更新
+            </AppButton>
+          </div>
           <AppButton
             :variant="isFollowed ? 'secondary' : 'primary'"
             size="md"
@@ -71,6 +79,14 @@
           </AppButton>
         </div>
       </div>
+
+      <!-- 二维码弹层 -->
+      <AppDialog :is-open="!!qrImageUrl" title="手机扫码下载" :width="360" @close="closeQrModal">
+        <div class="qr-modal-body">
+          <AppImage :src="qrImageUrl" alt="下载二维码" image-class="qr-image" />
+          <p class="qr-hint">使用手机扫码即可下载安装该应用</p>
+        </div>
+      </AppDialog>
 
       <!-- Tab 导航 -->
       <div class="detail-tabs">
@@ -105,13 +121,13 @@
         <!-- 应用简介描述 -->
         <div class="section-card">
           <h3 class="section-title"><i class="fas fa-align-left icon"></i> 应用简介</h3>
-          <div class="description-body" v-html="formattedDescription"></div>
+          <div class="description-body" v-html="formattedDescription" @click="handleAnchorClick"></div>
         </div>
 
         <!-- 更新日志 -->
-        <div v-if="changeLog" class="section-card">
+        <div v-if="formattedChangeLog" class="section-card">
           <h3 class="section-title"><i class="fas fa-clock-rotate-left icon"></i> 新版更新日志</h3>
-          <div class="changelog-body" v-html="formattedChangeLog"></div>
+          <div class="changelog-body" v-html="formattedChangeLog" @click="handleAnchorClick"></div>
         </div>
       </template>
 
@@ -149,10 +165,13 @@ import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAppStore } from '../stores/app';
 import AppButton from '../components/common/AppButton.vue';
 import AppImage from '../components/common/AppImage.vue';
+import AppDialog from '../components/common/AppDialog.vue';
 import FeedCard from '../components/feed/FeedCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
+import { renderCoolapkRichText } from '../utils/richText';
+import { handleAnchorClick } from '../utils/anchorClick';
 
 const route = useRoute();
 const router = useRouter();
@@ -163,6 +182,11 @@ const packageName = computed(() => (route.params.packageName as string) || '');
 const loading = ref(false);
 const appInfo = ref<any>(null);
 const isFollowed = ref(false);
+
+const downloadLoading = ref(false);
+const qrLoading = ref(false);
+const updateLoading = ref(false);
+const qrImageUrl = ref('');
 
 const activeDetailTab = ref('detail');
 const detailTabs = [
@@ -206,12 +230,13 @@ const screenshots = computed<string[]>(() => {
 
 const formattedDescription = computed(() => {
   const text = appInfo.value?.description || appInfo.value?.intro || '暂无应用简介描述。';
-  return text.replace(/\n/g, '<br/>');
+  // 应用简介/更新日志是开发者可控内容，必须走安全化渲染（去标签防注入）
+  return renderCoolapkRichText(text);
 });
 
 const formattedChangeLog = computed(() => {
   const text = appInfo.value?.changeLog || appInfo.value?.changelog || '';
-  return text.replace(/\n/g, '<br/>');
+  return renderCoolapkRichText(text);
 });
 
 async function fetchAppDetail() {
@@ -289,9 +314,98 @@ function openViewer(idx: number) {
   }
 }
 
-function handleDownload() {
-  const downloadUrl = appInfo.value?.apkDownloadUrl || `https://www.coolapk.com/apk/${packageName.value}`;
-  CoolapkTauriAPI.openUrl(downloadUrl);
+function extractUrl(data: any, keys: string[]): string {
+  if (!data) return '';
+  if (typeof data === 'string') return data;
+  if (typeof data !== 'object') return '';
+  for (const key of keys) {
+    const v = data[key];
+    if (typeof v === 'string' && v) return v;
+  }
+  return '';
+}
+
+async function handleDownload() {
+  if (!packageName.value || downloadLoading.value) return;
+  downloadLoading.value = true;
+  try {
+    const res = await CoolapkTauriAPI.getApkUrl(packageName.value);
+    const data = res?.data ?? res;
+    const url = extractUrl(data, ['url', 'downloadUrl', 'download_url', 'apkDownloadUrl', 'apk_download_url']);
+    if (!url) {
+      alert('获取下载链接失败：接口未返回有效链接');
+      return;
+    }
+    CoolapkTauriAPI.openUrl(url, 'system');
+  } catch (err: any) {
+    alert(`获取下载链接失败：${err?.message || '请检查网络或登录状态'}`);
+  } finally {
+    downloadLoading.value = false;
+  }
+}
+
+async function handleShowQr() {
+  if (!packageName.value || qrLoading.value) return;
+  qrLoading.value = true;
+  try {
+    const res = await CoolapkTauriAPI.getApkQr(packageName.value);
+    const data = res?.data ?? res;
+    const imgUrl = extractUrl(data, ['url', 'qrUrl', 'qr_url', 'imageUrl', 'image_url', 'img', 'image']);
+    if (!imgUrl) {
+      alert('获取二维码失败：接口未返回图片链接');
+      return;
+    }
+    qrImageUrl.value = imgUrl;
+  } catch (err: any) {
+    alert(`获取二维码失败：${err?.message || '请检查网络或登录状态'}`);
+  } finally {
+    qrLoading.value = false;
+  }
+}
+
+function closeQrModal() {
+  qrImageUrl.value = '';
+}
+
+function formatUpdateResult(data: any): string {
+  if (data == null) return '已是最新版本';
+
+  let hasUpdate = false;
+  let firstItem: any = data;
+  if (Array.isArray(data)) {
+    hasUpdate = data.length > 0;
+    firstItem = data[0];
+  } else if (typeof data === 'object') {
+    hasUpdate = !!(data.hasUpdate || data.has_update);
+    if (data.versions && Array.isArray(data.versions) && data.versions.length > 0) {
+      hasUpdate = true;
+      firstItem = data.versions[0];
+    }
+  }
+
+  if (!hasUpdate) return '已是最新版本';
+
+  const versionName = firstItem?.versionName || firstItem?.version_name || firstItem?.apkversionname || firstItem?.version || '未知版本';
+  const size = firstItem?.size || firstItem?.apksize || firstItem?.apkSizeFormatted || '';
+  const changeLog = firstItem?.changeLog || firstItem?.changelog || firstItem?.message || '';
+  let text = `发现新版本：${versionName}`;
+  if (size) text += `（${size}）`;
+  if (changeLog) text += `\n更新日志：${changeLog}`;
+  return text;
+}
+
+async function handleCheckUpdate() {
+  if (!packageName.value || updateLoading.value) return;
+  updateLoading.value = true;
+  try {
+    const res = await CoolapkTauriAPI.checkUpdate(packageName.value);
+    const data = res?.data ?? res;
+    alert(formatUpdateResult(data));
+  } catch (err: any) {
+    alert(`检查更新失败：${err?.message || '请检查网络或登录状态'}`);
+  } finally {
+    updateLoading.value = false;
+  }
 }
 
 function toggleFollow() {
@@ -471,6 +585,34 @@ onMounted(() => fetchAppDetail());
   flex-direction: column;
   gap: var(--space-2);
   flex-shrink: 0;
+}
+
+.download-update-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.qr-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+}
+
+.qr-image {
+  width: 240px;
+  height: 240px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-light);
+  background-color: var(--background);
+}
+
+.qr-hint {
+  font-size: var(--font-size-sub);
+  color: var(--text-secondary);
+  margin: 0;
 }
 
 .detail-tabs {

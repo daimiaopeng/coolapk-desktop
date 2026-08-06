@@ -3,23 +3,39 @@
     <div
       v-for="(url, index) in processedImages"
       :key="index"
-      class="grid-item"
+      :class="[
+        'grid-item',
+        {
+          'has-natural-size': Boolean(imageRatios[url]),
+          'is-long-image': gridCount === 1 && isLongImage,
+        },
+      ]"
       @click.stop="openViewer(index)"
     >
-      <AppImage :src="getHdImageUrl(url)" alt="feed image" image-class="grid-img" />
+      <AppImage
+        :src="getHdImageUrl(url)"
+        alt="feed image"
+        image-class="grid-img"
+        @load="handleImageLoad(url, $event)"
+      />
       <div v-if="processedImages.length >= 3 && index === processedImages.length - 1" class="image-count-badge">
         {{ processedImages.length }}图
+      </div>
+      <div v-if="gridCount === 1 && isLongImage" class="long-image-badge">
+        <i class="fas fa-arrows-alt-v"></i>
+        <span>长图，点击查看完整图片</span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { useSettingsStore } from '../../stores/settings';
 import AppImage from '../common/AppImage.vue';
 import { getHdImageUrl } from '../../utils/image';
+import { CoolapkTauriAPI } from '../../api/coolapk';
 
 const props = defineProps<{
   images?: string[];
@@ -27,6 +43,8 @@ const props = defineProps<{
 
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
+const LONG_IMAGE_RATIO = 1.8;
+const imageRatios = ref<Record<string, number>>({});
 
 const processedImages = computed(() => {
   if (!props.images || !Array.isArray(props.images)) return [];
@@ -46,10 +64,31 @@ const gridCount = computed(() => {
   return Math.min(processedImages.value.length, 9);
 });
 
+const singleImageRatio = computed(() => {
+  const url = processedImages.value[0];
+  return url ? imageRatios.value[url] || 0 : 0;
+});
+
+const isLongImage = computed(() => singleImageRatio.value >= LONG_IMAGE_RATIO);
+
+function handleImageLoad(url: string, event: Event) {
+  const image = event.target as HTMLImageElement;
+  if (!image.naturalWidth || !image.naturalHeight) return;
+  imageRatios.value = {
+    ...imageRatios.value,
+    [url]: image.naturalWidth / image.naturalHeight,
+  };
+}
+
 function openViewer(index: number) {
-  if (props.images) {
-    appStore.openImageViewer(props.images, index);
+  if (!props.images) return;
+  // 系统查看器模式：直接用系统默认程序打开原图链接
+  if (settingsStore.settings.imageOpenMode === 'system') {
+    const url = props.images[index];
+    if (url) void CoolapkTauriAPI.openUrl(url, 'system');
+    return;
   }
+  appStore.openImageViewer(props.images, index);
 }
 </script>
 
@@ -64,6 +103,56 @@ function openViewer(index: number) {
 .count-1 {
   grid-template-columns: 1fr;
   max-width: 380px;
+}
+
+.count-1 .grid-item {
+  aspect-ratio: auto;
+  min-height: 180px;
+  max-height: 520px;
+}
+
+.count-1 .grid-item.has-natural-size:not(.is-long-image) {
+  min-height: 0;
+  max-height: none;
+}
+
+.count-1 .grid-img {
+  height: auto;
+}
+
+.count-1 .grid-img :deep(img) {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.count-1 .grid-item.is-long-image {
+  background: var(--background-secondary, #f0f0f0);
+}
+
+.count-1 .grid-item.is-long-image::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 72px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.62));
+  pointer-events: none;
+}
+
+.long-image-badge {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #ffffff;
+  font-size: 11px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
 }
 
 .count-2 {

@@ -19,3 +19,13 @@
   --feed-card-padding: 14px;
   --feed-card-gap: 8px;
 }
+
+/* 减少动态过渡效果：由设置 store 的 data-reduce-motion 驱动 */
+:root[data-reduce-motion='true'] *,
+:root[data-reduce-motion='true'] *::before,
+:root[data-reduce-motion='true'] *::after {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}

@@ -73,15 +73,15 @@
               <AppAvatar v-if="!isSelf(msg)" :src="getSessionPartnerAvatar(currentSession)" size="sm" class="msg-avatar" />
               <div class="message-content">
                 <!-- 纯图片消息 -->
-                <div v-if="getPicUrl(msg) && !getMessageText(msg)" class="msg-pic-only-card">
+                <div v-if="getPicUrl(msg) && !getMessageText(msg)" class="msg-pic-only-card" @click.stop="openMessageImage(msg)">
                   <AppImage :src="getPicUrl(msg)" image-class="msg-pure-img" />
                 </div>
                 <!-- 包含文本或文本+图片混合消息 -->
                 <div v-else class="bubble">
-                  <div v-if="getPicUrl(msg)" class="msg-pic-container">
+                  <div v-if="getPicUrl(msg)" class="msg-pic-container" @click.stop="openMessageImage(msg)">
                     <AppImage :src="getPicUrl(msg)" image-class="msg-img" />
                   </div>
-                  <div v-if="getMessageText(msg)" class="msg-text" v-html="renderMessageContent(msg)"></div>
+                  <div v-if="getMessageText(msg)" class="msg-text" v-html="renderMessageContent(msg)" @click="handleAnchorClick"></div>
                 </div>
                 <div class="msg-time">{{ formatTime(getDateline(msg)) }}</div>
               </div>
@@ -97,7 +97,7 @@
           <button class="toolbar-btn" title="表情" @click.stop="toggleEmojiPicker">
             <i class="far fa-face-smile"></i>
           </button>
-          <button class="toolbar-btn" title="发图" @click="triggerImageSelect">
+          <button class="toolbar-btn" title="发图" @click="triggerImageSelect" :disabled="sendingImage">
             <i class="far fa-image"></i>
           </button>
           <input type="file" ref="fileInputRef" accept="image/*" style="display: none;" @change="handleImageSelected" />
@@ -133,8 +133,8 @@
             variant="primary" 
             size="sm"
             @click="sendMessage"
-            :disabled="!inputText.trim() || sending"
-            :loading="sending"
+            :disabled="!inputText.trim() || sending || sendingImage"
+            :loading="sending || sendingImage"
           >发送</AppButton>
         </div>
       </div>
@@ -151,19 +151,22 @@
 import { ref, onMounted, nextTick, computed } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
+import { useAppStore } from '../stores/app';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import AppButton from '../components/common/AppButton.vue';
-import { renderCoolapkEmoji, EMOJI_MAP, EMOJI_BASE } from '../utils/coolapkEmoji';
+import { EMOJI_MAP, EMOJI_BASE } from '../utils/coolapkEmoji';
+import { renderCoolapkRichText } from '../utils/richText';
+import { handleAnchorClick } from '../utils/anchorClick';
 
 import { useRoute } from 'vue-router';
 
 // --- 状态管理 ---
 const route = useRoute();
 const authStore = useAuthStore();
-const currentUserUid = computed(() => authStore.user?.uid || authStore.uid);
+const currentUserUid = computed(() => authStore.user?.uid || '');
 
 const sessions = ref<any[]>([]);
 const loadingSessions = ref(false);
@@ -175,6 +178,7 @@ const chatHistoryCache = new Map<string, any[]>();
 
 const inputText = ref('');
 const sending = ref(false);
+const sendingImage = ref(false);
 const followingPartner = ref(false);
 
 const showEmojiPicker = ref(false);
@@ -223,6 +227,10 @@ const getPicUrl = (msg: any) => {
   if (!msg) return '';
   const pic = msg.message_pic || msg.pic || msg.image;
   if (!pic) return '';
+  // 私信图片消息走官方 showImage 接口（图片数据需登录态 + App Token 认证）
+  if (msg.message_pic && msg.id) {
+    return `https://api.coolapk.com/v6/message/showImage?id=${msg.id}&type=n`;
+  }
   if (pic.startsWith('/')) {
     return `https://image.coolapk.com${pic}`;
   }
@@ -233,8 +241,7 @@ const renderMessageContent = (msg: any) => {
   if (!msg) return '';
   const text = getMessageText(msg);
   if (!text) return '';
-  let htmlText = text.replace(/href="\/u\//g, 'href="https://www.coolapk.com/u/');
-  return renderCoolapkEmoji(htmlText);
+  return renderCoolapkRichText(text);
 };
 
 const getSystemNoticeText = (msg: any) => {
@@ -321,6 +328,17 @@ const selectSession = async (session: any) => {
   const ukey = session.ukey || session.id;
   if (!ukey) return;
 
+  // 0. 若有未读消息则标记已读（本地即时清零 + 服务端同步）
+  if (session.isnew == 1 || session.isNew) {
+    session.isnew = 0;
+    session.isNew = false;
+    try {
+      await CoolapkTauriAPI.readMessage(String(ukey));
+    } catch (err) {
+      console.error('标记会话已读失败', err);
+    }
+  }
+
   // 1. 如果缓存中已存在历史记录，直接使用，实现 0 延迟秒切无转圈
   if (chatHistoryCache.has(ukey)) {
     chatHistory.value = chatHistoryCache.get(ukey) || [];
@@ -399,12 +417,94 @@ const triggerImageSelect = () => {
   }
 };
 
-const handleImageSelected = (e: Event) => {
+const handleImageSelected = async (e: Event) => {
   const target = e.target as HTMLInputElement;
-  if (target.files && target.files[0]) {
-    const file = target.files[0];
-    alert(`已选择文件: ${file.name}\n(酷安官方私信接口暂未开放第三方向私信点对点上传图床功能)`);
+  const file = target.files && target.files[0];
+  if (!file) return;
+
+  if (!currentSession.value) {
+    alert('请先选择一个会话再发送图片');
+    target.value = '';
+    return;
   }
+  const targetUid = getSessionPartnerUid(currentSession.value);
+  if (!targetUid) {
+    alert('未识别到对方的合法酷安账号 UID');
+    target.value = '';
+    return;
+  }
+
+  sendingImage.value = true;
+  try {
+    // File → ArrayBuffer → Uint8Array → 上传图床
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const contentType = file.type || 'image/jpeg';
+    const fileName = file.name || `image.${contentType.split('/')[1] || 'jpg'}`;
+    const res = await CoolapkTauriAPI.uploadImage(bytes, fileName, contentType, 'message', String(targetUid));
+    const uploaded: any = res?.data || res;
+    let picPath = typeof uploaded === 'string' ? uploaded : (uploaded?.url || uploaded?.data || uploaded?.pic || '');
+
+    // 酷安 message_pic 字段存 /message/ 开头的相对路径
+    if (picPath && !picPath.startsWith('/')) {
+      const idx = String(picPath).indexOf('/message/');
+      picPath = idx >= 0 ? String(picPath).slice(idx) : String(picPath);
+    }
+    if (!picPath) {
+      throw new Error('图片上传成功但未获取到图片地址');
+    }
+
+    // 发送图片私信（返回的真实消息带服务端 id，图片显示依赖真实 id）
+    const sendRes = await CoolapkTauriAPI.sendPrivateImage(String(targetUid), picPath);
+    const realMsg = sendRes?.data && Array.isArray(sendRes.data) ? sendRes.data[0] : null;
+
+    const nowTimestamp = Math.floor(Date.now() / 1000);
+    if (realMsg) {
+      chatHistory.value.push({ ...realMsg, fromuid: currentUserUid.value, uid: targetUid });
+    } else {
+      // 乐观更新 UI（与酷安 API 字段一致：uid=接收者，fromuid=发送者）
+      chatHistory.value.push({
+        id: Date.now(),
+        uid: targetUid,
+        fromuid: currentUserUid.value,
+        message_pic: picPath,
+        dateline: nowTimestamp
+      });
+    }
+
+    // 同步写入缓存
+    const ukey = currentSession.value.ukey || currentSession.value.id;
+    if (ukey) {
+      chatHistoryCache.set(ukey, [...chatHistory.value]);
+    }
+
+    // 更新左侧列表摘要与时间
+    const sess = currentSession.value;
+    sess.message = '[图片]';
+    sess.lastMessage = '[图片]';
+    sess.summary = '[图片]';
+    sess.last_message = '[图片]';
+    sess.dateline = nowTimestamp;
+    sess.lastupdate = nowTimestamp;
+
+    scrollToBottom();
+  } catch (err: any) {
+    console.error('发送图片失败', err);
+    const errMsg = typeof err === 'string'
+      ? err
+      : (err?.message || JSON.stringify(err) || '图片发送失败，请确认网络与账号权限状态');
+    alert(errMsg);
+  } finally {
+    sendingImage.value = false;
+    if (target) target.value = '';
+  }
+};
+
+const appStore = useAppStore();
+
+const openMessageImage = (msg: any) => {
+  const url = getPicUrl(msg);
+  if (!url) return;
+  appStore.openImageViewer([url], 0);
 };
 
 const sendMessage = async () => {
@@ -420,14 +520,14 @@ const sendMessage = async () => {
     }
     
     // 调用后台原生 API 发送
-    await CoolapkTauriAPI.sendPrivateMessage(targetUid, text);
+    await CoolapkTauriAPI.sendPrivateMessage(String(targetUid), text);
     
-    // 乐观更新 UI
+    // 乐观更新 UI（与酷安 API 字段一致：uid=接收者，fromuid=发送者）
     const nowTimestamp = Math.floor(Date.now() / 1000);
     const newMsg = {
       id: Date.now(),
-      uid: currentUserUid.value,
-      fromuid: targetUid, // 在 isSelf 判断中：fromuid !== myUid 表示是我发给对方的消息
+      uid: targetUid,
+      fromuid: currentUserUid.value,
       message: text,
       dateline: nowTimestamp
     };
@@ -440,9 +540,14 @@ const sendMessage = async () => {
       chatHistoryCache.set(ukey, [...chatHistory.value]);
     }
     
-    // 更新左侧列表的摘要和时间
-    currentSession.value.lastMessage = text;
-    currentSession.value.dateline = nowTimestamp;
+    // 更新左侧列表的摘要和时间（列表渲染优先读 message 字段）
+    const sess = currentSession.value;
+    sess.message = text;
+    sess.lastMessage = text;
+    sess.summary = text;
+    sess.last_message = text;
+    sess.dateline = nowTimestamp;
+    sess.lastupdate = nowTimestamp;
     
     // 将当前会话置顶
     const idx = sessions.value.findIndex(s => (s.ukey && s.ukey === currentSession.value.ukey) || s.id === currentSession.value.id);
@@ -455,7 +560,10 @@ const sendMessage = async () => {
     scrollToBottom();
   } catch (err: any) {
     console.error('发送消息失败', err);
-    alert(err?.message || '消息发送失败，请确认网络与账号权限状态');
+    const errMsg = typeof err === 'string'
+      ? err
+      : (err?.message || JSON.stringify(err) || '消息发送失败，请确认网络与账号权限状态');
+    alert(errMsg);
   } finally {
     sending.value = false;
   }

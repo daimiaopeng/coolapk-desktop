@@ -7,7 +7,7 @@
       @click.stop="$emit('open-image', imgUrl)"
     >
       <img
-        :src="normalizeImg(imgUrl, 'feed')"
+        :src="safeSrc(imgUrl, 'feed')"
         alt="动态图片"
         class="feed-img"
         loading="lazy"
@@ -19,6 +19,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { sanitizeImageUrl } from '../../utils/image';
 
 const props = defineProps<{
   pics: string[];
@@ -28,6 +29,13 @@ const props = defineProps<{
 defineEmits<{
   (e: 'open-image', url: string): void;
 }>();
+
+// 协议白名单：<img> 是 WebView 原生加载（不走 Rust 代理），
+// file: 等异常 scheme 一律替换为空图，防止加载/探测本地文件
+function safeSrc(url: string, type: 'avatar' | 'feed'): string {
+  const normalized = props.normalizeImg(url, type);
+  return sanitizeImageUrl(normalized) ? normalized : '';
+}
 
 const gridClass = computed(() => {
   const count = props.pics.length;

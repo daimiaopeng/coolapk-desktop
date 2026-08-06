@@ -11,6 +11,21 @@ import type {
 } from '../types/settings';
 
 const STORAGE_KEY = 'coolapk_desktop_settings';
+const DEFAULT_ZOOM = 100;
+const MIN_ZOOM = 50;
+const MAX_ZOOM = 200;
+
+function clampZoom(zoom: number) {
+  const safeZoom = Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM;
+  return Math.min(Math.max(safeZoom, MIN_ZOOM), MAX_ZOOM);
+}
+
+function getSystemZoom() {
+  const devicePixelRatio = typeof window !== 'undefined' && Number.isFinite(window.devicePixelRatio)
+    ? window.devicePixelRatio
+    : 1;
+  return clampZoom(Math.round(devicePixelRatio * 100));
+}
 
 const defaultNavVisibility: NavVisibilitySettings = {
   home: true,
@@ -19,6 +34,9 @@ const defaultNavVisibility: NavVisibilitySettings = {
   apps: true,
   games: true,
   topics: true,
+  reviews: true,
+  secondhand: true,
+  notifications: true,
   favorites: true,
   history: true,
   messages: true,
@@ -29,7 +47,8 @@ const defaultSettings: AppSettings = {
   theme: 'system',
   density: 'standard',
   fontSize: 15,
-  zoom: 100,
+  zoom: DEFAULT_ZOOM,
+  zoomManuallySet: false,
   sidebarCollapsed: false,
   reduceMotion: false,
   inlineComments: false,
@@ -40,7 +59,7 @@ const defaultSettings: AppSettings = {
   autoPlayGif: true,
   showDeviceInfo: true,
   defaultHomeTab: 'index_v8',
-  downloadPath: 'C:\\Downloads\\Coolapk',
+  downloadPath: '',
   maxConcurrentDownloads: 3,
   autoCleanCache: true,
   cacheThresholdMB: 500,
@@ -50,6 +69,28 @@ const defaultSettings: AppSettings = {
   ignoredUpdateVersion: '',
   ignoreAllUpdates: false,
   closeToTray: false,
+  autostart: false,
+  startMinimized: false,
+  alwaysOnTop: false,
+  rememberWindowState: false,
+  notifyReplies: true,
+  notifyAt: true,
+  notifyPm: true,
+  desktopNotifications: false,
+  notificationSound: true,
+  notificationPollInterval: 1,
+  externalLinkMode: 'internal',
+  timeDisplay: 'relative',
+  hideAdCards: false,
+  blockedKeywords: [],
+  publishDeviceSignature: true,
+  deviceSignature: '酷安桌面版',
+  imageOpenMode: 'internal',
+  updateSpeedLimitKBps: 0,
+  proxyUrl: '',
+  notifyDownloadComplete: true,
+  updateChannel: 'stable',
+  experimentalFeatures: false,
 };
 
 type AccentPalette = {
@@ -87,14 +128,22 @@ export const useSettingsStore = defineStore('settings', () => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
+      const hasManualZoomFlag = typeof parsed.zoomManuallySet === 'boolean';
       settings.value = {
         ...defaultSettings,
         ...parsed,
+        // Older settings did not record this flag; non-default zoom values
+        // from those versions were necessarily chosen by the user.
+        zoomManuallySet: hasManualZoomFlag ? parsed.zoomManuallySet : Number(parsed.zoom) !== DEFAULT_ZOOM,
         navVisibility: { ...defaultNavVisibility, ...(parsed.navVisibility || {}) }
       };
     }
   } catch (err) {
     console.error('Failed to load settings from storage', err);
+  }
+
+  if (!settings.value.zoomManuallySet) {
+    settings.value.zoom = getSystemZoom();
   }
 
   // 持久化与生效应用
@@ -112,6 +161,10 @@ export const useSettingsStore = defineStore('settings', () => {
       applyFontSize(newVal.fontSize);
       applyZoom(newVal.zoom);
       syncCloseToTray(newVal.closeToTray);
+      syncAutostart(newVal.autostart);
+      syncAlwaysOnTop(newVal.alwaysOnTop);
+      syncStartupFlags(newVal);
+      applyReduceMotion(newVal.reduceMotion);
     },
     { deep: true, immediate: true }
   );
@@ -162,13 +215,17 @@ export const useSettingsStore = defineStore('settings', () => {
     document.documentElement.setAttribute('data-density', density);
   }
 
+  function applyReduceMotion(enabled: boolean) {
+    document.documentElement.setAttribute('data-reduce-motion', String(enabled));
+  }
+
   function applyFontSize(size: number) {
     const safe = Math.min(Math.max(size || 15, 12), 20);
     document.documentElement.style.setProperty('--font-size-body', `${safe}px`);
   }
 
   function applyZoom(zoom: number) {
-    const safeZoom = Math.min(Math.max(zoom || 100, 50), 200);
+    const safeZoom = clampZoom(zoom);
     const factor = safeZoom / 100;
     const appEl = document.getElementById('app');
     if (!appEl) return;
@@ -192,6 +249,42 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  function syncAutostart(enabled: boolean) {
+    // 非 Tauri 环境（浏览器预览/单元测试）下跳过
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) return;
+    import('@tauri-apps/plugin-autostart')
+      .then(async ({ enable, disable }) => {
+        if (enabled) {
+          await enable();
+        } else {
+          await disable();
+        }
+      })
+      .catch((err) => {
+        console.warn('同步开机自启动设置失败:', err);
+      });
+  }
+
+  function syncAlwaysOnTop(enabled: boolean) {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) return;
+    import('@tauri-apps/api/window')
+      .then(({ getCurrentWindow }) => getCurrentWindow().setAlwaysOnTop(enabled))
+      .catch((err) => {
+        console.warn('设置窗口置顶失败:', err);
+      });
+  }
+
+  function syncStartupFlags(s: AppSettings) {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) return;
+    invoke('set_startup_flags', {
+      startMinimized: s.startMinimized,
+      rememberWindowState: s.rememberWindowState,
+      alwaysOnTop: s.alwaysOnTop,
+    }).catch((err) => {
+      console.warn('同步启动参数失败:', err);
+    });
+  }
+
   function setTheme(mode: ThemeMode) {
     settings.value.theme = mode;
   }
@@ -201,7 +294,16 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function setZoom(zoom: number) {
-    settings.value.zoom = Math.min(Math.max(zoom, 50), 200);
+    settings.value.zoom = clampZoom(zoom);
+    settings.value.zoomManuallySet = true;
+  }
+
+  function refreshAutoZoom() {
+    if (settings.value.zoomManuallySet) return;
+    const systemZoom = getSystemZoom();
+    if (settings.value.zoom !== systemZoom) {
+      settings.value.zoom = systemZoom;
+    }
   }
 
   function setAccent(color: AccentColor) {
@@ -233,6 +335,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setTheme,
     toggleSidebar,
     setZoom,
+    refreshAutoZoom,
     setAccent,
     toggleNavVisibility,
     ignoreUpdateVersion,

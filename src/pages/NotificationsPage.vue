@@ -35,16 +35,12 @@
               <span class="notify-time">{{ formatTime(item.dateline) }}</span>
             </div>
             
-            <div v-if="getNote(item)" class="notify-action">
-              <span class="action-text">{{ getNote(item) }}</span>
-            </div>
-            
-            <div v-if="getMessage(item)" class="notify-message">
-              {{ getMessage(item) }}
-            </div>
-            
+            <div v-if="getNote(item)" class="notify-action" v-html="renderCoolapkRichText(getNote(item))" @click="handleNotifyClick($event, item)"></div>
+
+            <div v-if="getMessage(item)" class="notify-message" v-html="renderCoolapkRichText(getMessage(item))" @click="handleNotifyClick($event, item)"></div>
+
             <div v-if="getTarget(item)" class="notify-target">
-              <span class="target-title">{{ getTarget(item) }}</span>
+              <span class="target-title" v-html="renderCoolapkRichText(getTarget(item))" @click="handleNotifyClick($event, item)"></span>
             </div>
           </div>
         </div>
@@ -70,19 +66,23 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
+import { renderCoolapkRichText } from '../utils/richText';
+import { handleAnchorClick } from '../utils/anchorClick';
+import { useAppStore } from '../stores/app';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 
-// 分类 Tabs
+// 分类 Tabs（接口路径与官方 UWP 客户端一致）
 const tabs = [
-  { label: 'AT 提及', value: 'atme' },
-  { label: '评论回复', value: 'comment' },
-  { label: '点赞提醒', value: 'like' },
-  { label: '动态点赞', value: 'feedlike' }
+  { label: '评论回复', value: 'list' },
+  { label: '@ 提及', value: 'atMeList' },
+  { label: '评论 @', value: 'atCommentMeList' },
+  { label: '动态点赞', value: 'feedLikeList' },
+  { label: '新关注', value: 'contactsFollowList' }
 ];
 
-const currentTab = ref('atme');
+const currentTab = ref('list');
 const loading = ref(false);
 const items = ref<any[]>([]);
 const page = ref(1);
@@ -134,17 +134,38 @@ async function fetchNotifications() {
   }
 }
 
-// 数据提取工具函数，容错处理
+// 数据提取工具函数，容错处理（兼容不同通知类型字段：
+// 通用 userInfo / 关注类 fromUserInfo / 点赞类 likeUserInfo / 私信类 messageUserInfo）
 function getAvatar(item: any): string {
-  return item.userAvatar || item.userInfo?.userAvatar || item.pic || '';
+  return (
+    item.userAvatar ||
+    item.userInfo?.userAvatar ||
+    item.fromUserAvatar ||
+    item.fromUserInfo?.userAvatar ||
+    item.likeAvatar ||
+    item.likeUserInfo?.userAvatar ||
+    item.messageUserInfo?.userAvatar ||
+    item.pic ||
+    ''
+  );
 }
 
 function getUsername(item: any): string {
-  return item.username || item.userInfo?.username || item.title || '匿名用户';
+  return (
+    item.username ||
+    item.userInfo?.username ||
+    item.fromusername ||
+    item.fromUserInfo?.username ||
+    item.likeUsername ||
+    item.likeUserInfo?.username ||
+    item.messageUserInfo?.username ||
+    item.title ||
+    '匿名用户'
+  );
 }
 
 function getNote(item: any): string {
-  return item.note || item.message_title || '';
+  return item.note || item.message_title || item.feedInfo?.message_title || '';
 }
 
 function getMessage(item: any): string {
@@ -153,6 +174,8 @@ function getMessage(item: any): string {
   if (item.replyRows && Array.isArray(item.replyRows) && item.replyRows[0]) {
     return item.replyRows[0].message || '';
   }
+  if (item.feedInfo?.message) return item.feedInfo.message;
+  if (item.targetRow?.message) return item.targetRow.message;
   return '';
 }
 
@@ -160,6 +183,7 @@ function getTarget(item: any): string {
   // 目标标题，比如回复了哪篇文章
   if (item.targetTitle) return item.targetTitle;
   if (item.feedInfo?.message_title) return item.feedInfo.message_title;
+  if (item.feedInfo?.title) return item.feedInfo.title;
   return '';
 }
 
@@ -179,6 +203,24 @@ function formatTime(dateline: any): string {
     });
   }
   return String(dateline);
+}
+
+function renderSafeHtml(text: string): string {
+  return renderCoolapkRichText(text);
+}
+
+// 通知内链接点击：动态链接携带通知上下文打开抽屉（详情优先用上下文渲染），其余走统一处理
+function handleNotifyClick(e: Event, item: any) {
+  const anchor = (e.target as HTMLElement).closest('a');
+  if (!anchor?.href) return;
+  const href = anchor.getAttribute('href') || '';
+  const feedMatch = href.match(/^\/feed\/(\d+)/);
+  if (feedMatch?.[1]) {
+    e.preventDefault();
+    useAppStore().openCommentDrawer(feedMatch[1], item);
+    return;
+  }
+  handleAnchorClick(e);
 }
 
 onMounted(() => {
@@ -333,6 +375,13 @@ onMounted(() => {
   font-size: var(--font-size-body);
   color: var(--text-primary);
   line-height: 1.5;
+}
+
+.notify-message a,
+.notify-action a {
+  color: var(--brand-primary);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .notify-message {

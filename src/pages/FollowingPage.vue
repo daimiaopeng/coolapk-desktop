@@ -124,10 +124,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
+import { useSettingsStore } from '../stores/settings';
+import { shouldHideFeed } from '../utils/feedFilter';
 import FeedCard from '../components/feed/FeedCard.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppButton from '../components/common/AppButton.vue';
@@ -136,6 +138,7 @@ import EmptyState from '../components/common/EmptyState.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
+const settingsStore = useSettingsStore();
 
 const activeTab = ref<'feeds' | 'users'>('feeds');
 const loading = ref(false);
@@ -205,7 +208,7 @@ async function loadFollowingFeeds(isRefresh: boolean = false) {
       ? await CoolapkTauriAPI.getUserFeeds(selectedUid.value, page.value, 'feed')
       : await CoolapkTauriAPI.getFollowingFeeds(page.value);
 
-    const list = extractList(res);
+    const list = extractList(res).filter((i: any) => !shouldHideFeed(i, settingsStore.settings));
     if (list.length < 3) {
       noMore.value = true;
     }
@@ -228,7 +231,7 @@ async function loadFollowingFeeds(isRefresh: boolean = false) {
 
 async function loadFollowUsers() {
   try {
-    const myUid = authStore.user?.uid || '1451266';
+    const myUid = String(authStore.user?.uid || '1451266');
     const res = await CoolapkTauriAPI.getFollowUserList(myUid, 1);
     users.value = extractList(res);
   } catch (err) {
@@ -262,15 +265,22 @@ function onScrollEvent(e: Event) {
   }
 }
 
+const onRefreshFeeds = () => {
+  if (!loading.value && !loadingMore.value && activeTab.value === 'feeds') {
+    loadFollowingFeeds(true);
+  }
+};
+
 onMounted(() => {
   loadFollowUsers();
   loadFollowingFeeds(true);
   window.addEventListener('scroll', onScrollEvent, true);
+  window.addEventListener('refresh-feeds', onRefreshFeeds);
 });
 
-import { onUnmounted } from 'vue';
 onUnmounted(() => {
   window.removeEventListener('scroll', onScrollEvent, true);
+  window.removeEventListener('refresh-feeds', onRefreshFeeds);
 });
 </script>
 

@@ -152,7 +152,7 @@ function handleEnterSearch() {
 function selectResult(item: any) {
   appStore.closeSearch();
   if (item.id) {
-    appStore.openCommentDrawer(item.id);
+    appStore.openCommentDrawer(item.id, item);
   }
 }
 

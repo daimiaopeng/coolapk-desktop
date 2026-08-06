@@ -103,6 +103,10 @@ const rawUrl = computed(() => viewerData.value?.urls[currentIndex.value] || '');
 
 const currentUrl = computed(() => {
   if (!rawUrl.value) return '';
+  // 私信图片等走 API 接口的图片（showImage）不做缩略图后缀处理
+  if (rawUrl.value.includes('/v6/message/showImage') || rawUrl.value.includes('api.coolapk.com')) {
+    return rawUrl.value;
+  }
   if (originalLoadedMap.value[currentIndex.value]) {
     return getOriginalImageUrl(rawUrl.value);
   }

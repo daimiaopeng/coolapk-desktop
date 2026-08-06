@@ -39,8 +39,8 @@
   --space-10: 40px;
 
   /* 布局尺寸定义 */
-  --sidebar-width: 175px;
-  --sidebar-collapsed-width: 64px;
+  --sidebar-width: 210px;
+  --sidebar-collapsed-width: 56px;
   --feed-max-width: 720px;
   --right-sidebar-width: 270px;
   --topbar-height: 72px;

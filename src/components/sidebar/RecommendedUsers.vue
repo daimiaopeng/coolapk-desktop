@@ -2,30 +2,82 @@
   <div class="sidebar-card">
     <div class="card-header">
       <h3 class="card-title"><i class="fas fa-user-plus icon-user"></i> 推荐酷友</h3>
+      <button class="refresh-btn" title="刷新推荐" @click="fetchUsers">
+        <i class="fas fa-sync-alt"></i>
+      </button>
     </div>
-    <div class="user-list">
-      <div v-for="user in users" :key="user.uid" class="user-item">
-        <AppAvatar :src="user.avatar" size="sm" />
+    <div v-if="loading" class="loading-wrapper">
+      <LoadingState text="正在获取推荐用户" />
+    </div>
+    <div v-else-if="users.length === 0" class="empty-wrapper">
+      <EmptyState title="暂无推荐" />
+    </div>
+    <div v-else class="user-list">
+      <div
+        v-for="user in users"
+        :key="user.uid"
+        class="user-item"
+        :title="user.username"
+        @click="openUser(user)"
+      >
+        <AppAvatar :src="user.avatar" size="sm" :alt="user.username" />
         <div class="user-info">
-          <span class="user-name">{{ user.name }}</span>
-          <span class="user-desc">{{ user.desc }}</span>
+          <span class="user-name">{{ user.username }}</span>
+          <span class="user-desc">{{ user.verifyTitle || '酷安用户' }}</span>
         </div>
-        <AppButton variant="soft" size="sm">关注</AppButton>
+        <AppButton variant="soft" size="sm" @click.stop="toggleFollow(user)">{{ user.following ? '已关注' : '关注' }}</AppButton>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import AppAvatar from '../common/AppAvatar.vue';
 import AppButton from '../common/AppButton.vue';
+import LoadingState from '../common/LoadingState.vue';
+import EmptyState from '../common/EmptyState.vue';
+import { CoolapkTauriAPI } from '../../api/coolapk';
 
-const users = ref([
-  { uid: 1, name: '酷安小编', desc: '官方动态发布', avatar: '' },
-  { uid: 2, name: '极客实验室', desc: '前沿数码评测', avatar: '' },
-  { uid: 3, name: '桌面美化社', desc: '分享极简桌面', avatar: '' },
-]);
+const router = useRouter();
+const users = ref<any[]>([]);
+const loading = ref(false);
+
+async function fetchUsers() {
+  loading.value = true;
+  try {
+    const res = await CoolapkTauriAPI.getRecommendUsers();
+    if (res && res.data && Array.isArray(res.data)) {
+      users.value = res.data.slice(0, 5);
+    }
+  } catch (err) {
+    console.error('Failed to fetch recommend users', err);
+  } finally {
+    loading.value = false;
+  }
+}
+
+function openUser(user: any) {
+  if (user.uid) {
+    router.push(`/user/${user.uid}`);
+  }
+}
+
+async function toggleFollow(user: any) {
+  try {
+    if (user.following) {
+      await CoolapkTauriAPI.unfollowUser(String(user.uid));
+    } else {
+      await CoolapkTauriAPI.followUser(String(user.uid));
+    }
+    user.following = !user.following;
+  } catch (err) {
+    console.error('关注操作失败', err);
+  }
+}
+
+onMounted(fetchUsers);
 </script>
 
 <style scoped>
@@ -54,6 +106,22 @@ const users = ref([
 
 .icon-user {
   color: var(--info);
+}
+
+.refresh-btn {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  padding: 4px;
+  border-radius: var(--radius-xs);
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.refresh-btn:hover {
+  color: var(--brand-primary);
+}
+
+.loading-wrapper, .empty-wrapper {
+  padding: 12px 0;
 }
 
 .user-list {

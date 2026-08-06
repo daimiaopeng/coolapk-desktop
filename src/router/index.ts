@@ -10,6 +10,7 @@ import FavoritesPage from '../pages/FavoritesPage.vue';
 import HistoryPage from '../pages/HistoryPage.vue';
 import FollowingPage from '../pages/FollowingPage.vue';
 import UserPage from '../pages/UserPage.vue';
+import BlackListPage from '../pages/BlackListPage.vue';
 import TopicPage from '../pages/TopicPage.vue';
 import TopicsHubPage from '../pages/TopicsHubPage.vue';
 import AppDetailPage from '../pages/AppDetailPage.vue';
@@ -17,6 +18,9 @@ import ProductPage from '../pages/ProductPage.vue';
 import DyhPage from '../pages/DyhPage.vue';
 import AlbumPage from '../pages/AlbumPage.vue';
 import HeadlinePage from '../pages/HeadlinePage.vue';
+import ReviewPage from '../pages/ReviewPage.vue';
+import SecondHandPage from '../pages/SecondHandPage.vue';
+import ExternalPage from '../pages/ExternalPage.vue';
 import SettingsLayout from '../pages/settings/SettingsLayout.vue';
 import AccountSettingsPage from '../pages/settings/AccountSettingsPage.vue';
 import NotificationSettingsPage from '../pages/settings/NotificationSettingsPage.vue';
@@ -41,10 +45,14 @@ const routes = [
   { path: '/favorites', name: 'Favorites', component: FavoritesPage },
   { path: '/history', name: 'History', component: HistoryPage },
   { path: '/following', name: 'Following', component: FollowingPage },
+  { path: '/reviews', name: 'Reviews', component: ReviewPage },
+  { path: '/secondhand', name: 'SecondHand', component: SecondHandPage },
+  { path: '/external', name: 'External', component: ExternalPage },
   { path: '/search', name: 'Search', component: SearchPage },
   { path: '/notifications', name: 'Notifications', component: NotificationsPage },
   { path: '/messages', name: 'Messages', component: MessagesPage },
   { path: '/user/:uid', name: 'User', component: UserPage },
+  { path: '/blacklist', name: 'BlackList', component: BlackListPage },
   { path: '/topic/:tag', name: 'Topic', component: TopicPage },
   { path: '/app/:packageName', name: 'AppDetail', component: AppDetailPage },
   { path: '/product/:productId', name: 'Product', component: ProductPage },

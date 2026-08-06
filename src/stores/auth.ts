@@ -103,11 +103,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     // 3. 校验成功，持久化并更新内存 Store
+    // 安全说明：登录 Cookie 只写入 Rust 侧（session_cookie.txt），
+    // 绝不写入 localStorage —— 否则任一 XSS 都可直接窃取 SESSID
     rawCookie.value = trimmed;
     user.value = profile;
     isLoggedIn.value = true;
 
-    localStorage.setItem('coolapk_cookie', trimmed);
     localStorage.setItem('coolapk_user', JSON.stringify(profile));
 
     return profile;
@@ -130,66 +131,58 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * 应用启动时自动载入持久化的凭据与登录状态
+   * 应用启动时自动载入 Rust 侧持久化的凭据并校验登录状态
+   * （凭据只允许存在于 Rust 侧，前端不持久化、不读取原文）
    */
   async function initAuth() {
-    let savedCookie = localStorage.getItem('coolapk_cookie');
+    // 历史遗留清理：旧版本把 Cookie 明文存在 localStorage，启动时一律清除
+    try {
+      localStorage.removeItem('coolapk_cookie');
+    } catch {
+      // 忽略清理异常
+    }
     const savedUser = localStorage.getItem('coolapk_user');
 
-    // 本地无持久化凭据时，兜底读取 Rust 侧落盘的 Cookie（Webview 授权登录持久化的来源）
-    if (!savedCookie || !savedCookie.trim()) {
-      try {
-        const persisted = await CoolapkTauriAPI.getUserCookie();
-        if (persisted && persisted.trim()) {
-          savedCookie = persisted.trim();
-          localStorage.setItem('coolapk_cookie', savedCookie);
+    // 凭据由 Rust 侧在启动时自动载入（persist_cookie_to），
+    // 这里直接校验 Rust 内存态中的 Cookie 即可恢复登录态
+    try {
+      const res = await CoolapkTauriAPI.checkLoginStatus();
+      const data = res?.data || res || {};
+      if (data && (data.uid || data.username)) {
+        const uid = String(data.uid || user.value?.uid || '');
+        let userAvatar = data.userAvatar || data.avatar || data.user_avatar || '';
+        if (!userAvatar && uid) {
+          userAvatar = getAvatarUrlByUid(uid);
         }
-      } catch (e) {
-        console.warn('读取 Rust 持久化 Cookie 失败:', e);
+        const updatedProfile: UserProfile = {
+          uid,
+          username: data.username || user.value?.username || '酷友',
+          userAvatar: userAvatar || user.value?.userAvatar || '',
+          level: Number(data.level || user.value?.level || 1),
+          bio: data.bio || data.sign || user.value?.bio || ''
+        };
+        user.value = updatedProfile;
+        isLoggedIn.value = true;
+        localStorage.setItem('coolapk_user', JSON.stringify(updatedProfile));
       }
+    } catch (e) {
+      // 静默恢复失败：可能是未登录或网络异常，保留离线 UI 兜底
+      console.warn('静默恢复并同步 Cookie 状态:', e);
     }
 
-    if (savedCookie && savedCookie.trim()) {
-      rawCookie.value = savedCookie;
-      if (savedUser) {
-        try {
-          const parsed = JSON.parse(savedUser);
-          if (parsed && parsed.uid) {
-            if (!parsed.userAvatar) {
-              parsed.userAvatar = getAvatarUrlByUid(parsed.uid);
-            }
-            user.value = parsed;
-            isLoggedIn.value = true;
-          }
-        } catch {
-          // 忽略解析错误
-        }
-      }
-
-      // 自动静默发送到底层 Rust 引擎
+    // 校验失败时，用缓存的用户资料兜底恢复界面（非敏感信息）
+    if (!isLoggedIn.value && savedUser) {
       try {
-        await CoolapkTauriAPI.saveCookie(savedCookie);
-        const res = await CoolapkTauriAPI.checkLoginStatus();
-        const data = res?.data || res || {};
-        if (data && (data.uid || data.username)) {
-          const uid = String(data.uid || user.value?.uid || '');
-          let userAvatar = data.userAvatar || data.avatar || data.user_avatar || '';
-          if (!userAvatar && uid) {
-            userAvatar = getAvatarUrlByUid(uid);
+        const parsed = JSON.parse(savedUser);
+        if (parsed && parsed.uid) {
+          if (!parsed.userAvatar) {
+            parsed.userAvatar = getAvatarUrlByUid(parsed.uid);
           }
-          const updatedProfile: UserProfile = {
-            uid,
-            username: data.username || user.value?.username || '酷友',
-            userAvatar: userAvatar || user.value?.userAvatar || '',
-            level: Number(data.level || user.value?.level || 1),
-            bio: data.bio || data.sign || user.value?.bio || ''
-          };
-          user.value = updatedProfile;
+          user.value = parsed;
           isLoggedIn.value = true;
-          localStorage.setItem('coolapk_user', JSON.stringify(updatedProfile));
         }
-      } catch (e) {
-        console.warn('静默恢复并同步 Cookie 状态:', e);
+      } catch {
+        // 忽略解析错误
       }
     }
   }
@@ -228,7 +221,6 @@ export const useAuthStore = defineStore('auth', () => {
 
     const tokenStr = `SESSID=${sessid}; uid=${uid}`;
     rawCookie.value = tokenStr;
-    localStorage.setItem('coolapk_cookie', tokenStr);
     await CoolapkTauriAPI.saveCookie(tokenStr);
 
     return profile;
@@ -279,7 +271,6 @@ export const useAuthStore = defineStore('auth', () => {
 
     const tokenStr = `SESSID=${sessid}; uid=${uid}`;
     rawCookie.value = tokenStr;
-    localStorage.setItem('coolapk_cookie', tokenStr);
     await CoolapkTauriAPI.saveCookie(tokenStr);
 
     return profile;
@@ -304,18 +295,10 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
   /**
    * 校验当前凭据是否仍有效，并同步刷新用户资料。
-   * 优先用本地持久化 cookie 同步到 Rust；若本地为空，则直接校验 Rust 内存态中的
-   * cookie（Webview 授权登录路径 save_cookie_securely 只写 Rust，不写 localStorage）。
+   * 凭据只存在于 Rust 侧（Webview 授权登录路径 save_cookie_securely 只写 Rust），
+   * 这里直接让 Rust 带凭据校验，前端不读取 Cookie 原文。
    */
   async function checkStatus(): Promise<boolean> {
-    const savedCookie = localStorage.getItem('coolapk_cookie');
-    if (savedCookie && savedCookie.trim()) {
-      try {
-        await CoolapkTauriAPI.saveCookie(savedCookie);
-      } catch (e) {
-        console.warn('checkStatus 同步本地 Cookie 失败:', e);
-      }
-    }
     try {
       let res: any;
       try {
@@ -343,7 +326,6 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
         };
         user.value = profile;
         isLoggedIn.value = true;
-        rawCookie.value = savedCookie || rawCookie.value;
         localStorage.setItem('coolapk_user', JSON.stringify(profile));
         return true;
       }

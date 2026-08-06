@@ -112,6 +112,8 @@
             :key="item.id || idx"
             :feed="item"
             :rank-index="activeTab === 'hot' ? idx + 1 : undefined"
+            :class="{ 'feed-card-focused': idx === navIndex }"
+            :ref="(el) => setCardRef(el, idx)"
           />
 
           <div v-if="loadingMore" class="loading-more">
@@ -126,7 +128,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FeedTabs from '../components/feed/FeedTabs.vue';
 import FeedCard from '../components/feed/FeedCard.vue';
@@ -137,6 +139,7 @@ import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
+import { shouldHideFeed } from '../utils/feedFilter';
 
 const settingsStore = useSettingsStore();
 
@@ -189,8 +192,11 @@ const hotKeywords = ref<string[]>([
 function syncTabFromRoute() {
   const path = route.path;
   switch (path) {
+    case '/':
+      activeTab.value = settingsStore.settings.defaultHomeTab;
+      break;
     case '/feeds':
-      activeTab.value = 'latest';
+      activeTab.value = settingsStore.settings.defaultHomeTab;
       break;
     case '/discover':
       activeTab.value = 'digest';
@@ -274,7 +280,7 @@ async function prefetchNextPage() {
     const nextP = page.value;
     const res: any = await fetchTabApi(activeTab.value, nextP);
     if (res && res.data && Array.isArray(res.data)) {
-      const validItems = res.data.filter((item: any) => item.id && (item.message || item.title || item.pic));
+      const validItems = res.data.filter((item: any) => item.id && (item.message || item.title || item.pic) && !shouldHideFeed(item, settingsStore.settings));
       if (validItems.length > 0) {
         prefetchBuffer.value = validItems;
         prefetchPage.value = nextP + 1;
@@ -312,7 +318,7 @@ async function loadFeeds(isRefresh: boolean = false) {
     } else {
       const res: any = await fetchTabApi(activeTab.value, page.value);
       if (res && res.data && Array.isArray(res.data)) {
-        validItems = res.data.filter((item: any) => item.id && (item.message || item.title || item.pic));
+        validItems = res.data.filter((item: any) => item.id && (item.message || item.title || item.pic) && !shouldHideFeed(item, settingsStore.settings));
       }
       page.value++;
     }
@@ -388,10 +394,45 @@ watch(activeTab, () => {
   loadFeeds(true);
 });
 
+const navIndex = ref(-1);
+const cardEls: (HTMLElement | null)[] = [];
+
+function setCardRef(el: unknown, idx: number) {
+  cardEls[idx] = (el as HTMLElement | null) || null;
+}
+
+function handleFeedNav(delta: number) {
+  if (feeds.value.length === 0) return;
+  let next = navIndex.value + delta;
+  if (next < 0) next = 0;
+  if (next >= feeds.value.length) next = feeds.value.length - 1;
+  if (next === navIndex.value && delta > 0) return;
+  navIndex.value = next;
+  const el = cardEls[next];
+  if (el) {
+    el.scrollIntoView({ behavior: settingsStore.settings.reduceMotion ? 'auto' : 'smooth', block: 'center' });
+  }
+}
+
+const onNavNext = () => handleFeedNav(1);
+const onNavPrev = () => handleFeedNav(-1);
+const onRefreshFeeds = () => {
+  if (!loading.value && !loadingMore.value) loadFeeds(true);
+};
+
 onMounted(() => {
   fetchTabConfig();
   syncTabFromRoute();
   loadFeeds(true);
+  window.addEventListener('feed-nav-next', onNavNext);
+  window.addEventListener('feed-nav-prev', onNavPrev);
+  window.addEventListener('refresh-feeds', onRefreshFeeds);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('feed-nav-next', onNavNext);
+  window.removeEventListener('feed-nav-prev', onNavPrev);
+  window.removeEventListener('refresh-feeds', onRefreshFeeds);
 });
 </script>
 
@@ -655,7 +696,16 @@ onMounted(() => {
 }
 
 .skeleton-padding, .error-padding, .empty-padding, .feed-list-padding {
+  display: flex;
+  flex-direction: column;
+  gap: var(--feed-card-gap, 12px);
   padding: var(--space-4);
+}
+
+.feed-card-focused {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-card);
 }
 
 .loading-more {
