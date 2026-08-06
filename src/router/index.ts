@@ -13,6 +13,10 @@ import UserPage from '../pages/UserPage.vue';
 import TopicPage from '../pages/TopicPage.vue';
 import TopicsHubPage from '../pages/TopicsHubPage.vue';
 import AppDetailPage from '../pages/AppDetailPage.vue';
+import ProductPage from '../pages/ProductPage.vue';
+import DyhPage from '../pages/DyhPage.vue';
+import AlbumPage from '../pages/AlbumPage.vue';
+import HeadlinePage from '../pages/HeadlinePage.vue';
 import SettingsLayout from '../pages/settings/SettingsLayout.vue';
 import AccountSettingsPage from '../pages/settings/AccountSettingsPage.vue';
 import NotificationSettingsPage from '../pages/settings/NotificationSettingsPage.vue';
@@ -43,6 +47,10 @@ const routes = [
   { path: '/user/:uid', name: 'User', component: UserPage },
   { path: '/topic/:tag', name: 'Topic', component: TopicPage },
   { path: '/app/:packageName', name: 'AppDetail', component: AppDetailPage },
+  { path: '/product/:productId', name: 'Product', component: ProductPage },
+  { path: '/dyh/:dyhId', name: 'Dyh', component: DyhPage },
+  { path: '/album/:albumId', name: 'AlbumDetail', component: AlbumPage },
+  { path: '/headline', name: 'Headline', component: HeadlinePage },
   {
     path: '/settings',
     component: SettingsLayout,

@@ -12,6 +12,81 @@ pub async fn get_index_v8_feeds(state: State<'_, AppState>, page: u32) -> Result
 }
 
 #[tauri::command]
+pub async fn get_tab_config(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_tab_config().await
+}
+
+#[tauri::command]
+pub async fn get_search_suggestions(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Value, String> {
+    state.client.get_search_suggestions(&query).await
+}
+
+#[tauri::command]
+pub async fn get_topic_detail_v7(state: State<'_, AppState>, tag: String) -> Result<Value, String> {
+    state.client.get_topic_detail_v7(&tag).await
+}
+
+#[tauri::command]
+pub async fn get_product_detail(
+    state: State<'_, AppState>,
+    product_id: String,
+) -> Result<Value, String> {
+    state.client.get_product_detail(&product_id).await
+}
+
+#[tauri::command]
+pub async fn get_product_feeds(
+    state: State<'_, AppState>,
+    product_id: String,
+    feed_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_product_feeds(&product_id, &feed_type, page)
+        .await
+}
+
+#[tauri::command]
+pub async fn get_dyh_detail(state: State<'_, AppState>, dyh_id: String) -> Result<Value, String> {
+    state.client.get_dyh_detail(&dyh_id).await
+}
+
+#[tauri::command]
+pub async fn get_dyh_feeds(
+    state: State<'_, AppState>,
+    dyh_id: String,
+    feed_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_dyh_feeds(&dyh_id, &feed_type, page)
+        .await
+}
+
+#[tauri::command]
+pub async fn get_apk_feeds(
+    state: State<'_, AppState>,
+    package_name: String,
+    sort_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_apk_feeds(&package_name, &sort_type, page)
+        .await
+}
+
+#[tauri::command]
+pub async fn check_login_info(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.check_login_info().await
+}
+
+#[tauri::command]
 pub async fn get_hot_feeds(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.get_hot_feeds(page).await
 }
@@ -672,4 +747,85 @@ pub fn install_update(installer_path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
+}
+
+// === 应用集 ===
+#[tauri::command]
+pub async fn get_album_list(state: State<'_, AppState>, list_type: String, page: u32) -> Result<Value, String> {
+    state.client.get_album_list(&list_type, page).await
+}
+
+#[tauri::command]
+pub async fn search_albums(state: State<'_, AppState>, query: String, page: u32) -> Result<Value, String> {
+    state.client.search_albums(&query, page).await
+}
+
+#[tauri::command]
+pub async fn get_album_detail(state: State<'_, AppState>, album_id: String) -> Result<Value, String> {
+    state.client.get_album_detail(&album_id).await
+}
+
+#[tauri::command]
+pub async fn get_album_replies(state: State<'_, AppState>, album_id: String, page: u32) -> Result<Value, String> {
+    state.client.get_album_replies(&album_id, page).await
+}
+
+// === 头条/编辑精选 ===
+#[tauri::command]
+pub async fn get_headline_feeds(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+    state.client.get_headline_feeds(page).await
+}
+
+#[tauri::command]
+pub async fn get_update_list(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+    state.client.get_update_list(page).await
+}
+
+#[tauri::command]
+pub async fn get_editor_choice_feeds(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+    state.client.get_editor_choice_feeds(page).await
+}
+
+// === 应用额外 ===
+#[tauri::command]
+pub async fn get_apk_discoverers(state: State<'_, AppState>, package_name: String, page: u32) -> Result<Value, String> {
+    state.client.get_apk_discoverers(&package_name, page).await
+}
+
+#[tauri::command]
+pub async fn get_apk_recommend_list(state: State<'_, AppState>, apk_type: String, title: String, page: u32) -> Result<Value, String> {
+    state.client.get_apk_recommend_list(&apk_type, &title, page).await
+}
+
+#[tauri::command]
+pub async fn get_apk_gift_list(state: State<'_, AppState>, apk_id: Option<String>, page: u32) -> Result<Value, String> {
+    state.client.get_apk_gift_list(apk_id.as_deref(), page).await
+}
+
+#[tauri::command]
+pub async fn get_download_version_list(state: State<'_, AppState>, package_name: String) -> Result<Value, String> {
+    state.client.get_download_version_list(&package_name).await
+}
+
+// === 图片 ===
+#[tauri::command]
+pub async fn get_picture_list(state: State<'_, AppState>, tag: String, page: u32) -> Result<Value, String> {
+    state.client.get_picture_list(&tag, page).await
+}
+
+// === 用户 ===
+#[tauri::command]
+pub async fn get_user_rating_list(state: State<'_, AppState>, uid: String, page: u32) -> Result<Value, String> {
+    state.client.get_user_rating_list(&uid, page).await
+}
+
+// === 搜索 ===
+#[tauri::command]
+pub async fn search_apks_by_developer(state: State<'_, AppState>, developer: String, page: u32) -> Result<Value, String> {
+    state.client.search_apks_by_developer(&developer, page).await
+}
+
+#[tauri::command]
+pub async fn search_apks_by_tag(state: State<'_, AppState>, tag: String, apk_type: String, page: u32) -> Result<Value, String> {
+    state.client.search_apks_by_tag(&tag, &apk_type, page).await
 }

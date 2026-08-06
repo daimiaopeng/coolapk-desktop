@@ -11,6 +11,8 @@
       :rank-index="rankIndex"
       :recommend-source="feed.recommendSource || feed.targetType"
       :show-device-info="showDeviceInfo"
+      :entity-type="feed.entityType"
+      :entity-id="feed.entityId || feed.id"
     />
 
     <FeedContent
@@ -60,6 +62,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import type { FeedItem } from '../../types/feed';
 import FeedHeader from './FeedHeader.vue';
 import FeedContent from './FeedContent.vue';
@@ -72,6 +75,7 @@ import { isFavorite, addFavorite, removeFavorite } from '../../utils/favoritesSt
 import { useSettingsStore } from '../../stores/settings';
 
 const settingsStore = useSettingsStore();
+const router = useRouter();
 const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
 
 const props = defineProps<{
@@ -122,6 +126,30 @@ function handleCardClick(e: MouseEvent) {
   if (target.closest('a') || target.closest('button') || target.closest('.grid-item') || target.closest('.inline-comment-wrapper')) {
     return;
   }
+
+  const entityType = props.feed.entityType;
+  if (entityType === 'product') {
+    const productId = props.feed.entityId || props.feed.id;
+    if (productId) {
+      router.push(`/product/${productId}`);
+      return;
+    }
+  }
+  if (entityType === 'dyh') {
+    const dyhId = props.feed.entityId || props.feed.id;
+    if (dyhId) {
+      router.push(`/dyh/${dyhId}`);
+      return;
+    }
+  }
+  if (entityType === 'album') {
+    const albumId = props.feed.entityId || props.feed.id;
+    if (albumId) {
+      router.push(`/album/${albumId}`);
+      return;
+    }
+  }
+
   toggleComments();
 }
 

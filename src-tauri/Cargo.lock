@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "coolapk_desktop"
-version = "1.3.2"
+version = "1.3.5"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

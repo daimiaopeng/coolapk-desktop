@@ -13,15 +13,18 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { computed } from 'vue';
+
+const props = defineProps<{
   activeKey: string;
+  dynamicTabs?: { key: string; label: string }[];
 }>();
 
 defineEmits<{
   (e: 'update:activeKey', key: string): void;
 }>();
 
-const tabs = [
+const defaultTabs = [
   { key: 'index_v8', label: '推荐' },
   { key: 'digest', label: '头条' },
   { key: 'hot', label: '热榜' },
@@ -29,6 +32,13 @@ const tabs = [
   { key: 'cool_picture', label: '酷图' },
   { key: 'secondhand', label: '二手' },
 ];
+
+const tabs = computed(() => {
+  if (props.dynamicTabs && props.dynamicTabs.length > 0) {
+    return props.dynamicTabs;
+  }
+  return defaultTabs;
+});
 </script>
 
 <style scoped>

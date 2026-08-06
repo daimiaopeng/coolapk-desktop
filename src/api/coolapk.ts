@@ -54,6 +54,49 @@ export class CoolapkTauriAPI {
     return await safeFetch(`/feeds/index_v8?page=${page}`, 'get_index_v8_feeds', { page });
   }
 
+  // 1.1 首页 Tab 配置（关注/热榜/快讯/话题频道 + 热门搜索）
+  static async getTabConfig() {
+    return await invokeNative('get_tab_config');
+  }
+
+  // 1.2 搜索候选词（输入联想）
+  static async getSearchSuggestions(query: string) {
+    return await invokeNative('get_search_suggestions', { query });
+  }
+
+  // 1.3 话题详情（旧版 tagDetail，字段与新版互补）
+  static async getTopicDetailV7(tag: string) {
+    return await invokeNative('get_topic_detail_v7', { tag });
+  }
+
+  // 1.4 产品（数码）详情与所属动态
+  static async getProductDetail(productId: string) {
+    return await invokeNative('get_product_detail', { productId });
+  }
+
+  static async getProductFeeds(productId: string, feedType: string = 'feed', page: number = 1) {
+    return await invokeNative('get_product_feeds', { productId, feedType, page });
+  }
+
+  // 1.5 看看号（官方号）详情与动态
+  static async getDyhDetail(dyhId: string) {
+    return await invokeNative('get_dyh_detail', { dyhId });
+  }
+
+  static async getDyhFeeds(dyhId: string, feedType: string = 'all', page: number = 1) {
+    return await invokeNative('get_dyh_feeds', { dyhId, feedType, page });
+  }
+
+  // 1.6 应用所属动态（点评/讨论）
+  static async getApkFeeds(packageName: string, sortType: string = 'lastupdate_desc', page: number = 1) {
+    return await invokeNative('get_apk_feeds', { packageName, sortType, page });
+  }
+
+  // 1.7 轻量登录态检查
+  static async checkLoginInfo() {
+    return await invokeNative('check_login_info');
+  }
+
   // 2. 24H 热榜
   static async getHotFeeds(page: number = 1) {
     return await safeFetch(`/feeds/hot?page=${page}`, 'get_hot_feeds', { page });
@@ -292,5 +335,66 @@ export class CoolapkTauriAPI {
 
   static async getUserFollowNodes(uid: string) {
     return await invokeNative('get_user_follow_nodes', { uid });
+  }
+
+  // === 专辑/应用集 ===
+  static async getAlbumList(listType: string = 'hot', page: number = 1) {
+    return await invokeNative('get_album_list', { listType, page })
+  }
+
+  static async searchAlbums(query: string, page: number = 1) {
+    return await invokeNative('search_albums', { query, page })
+  }
+
+  static async getAlbumDetail(albumId: string) {
+    return await invokeNative('get_album_detail', { albumId })
+  }
+
+  static async getAlbumReplies(albumId: string, page: number = 1) {
+    return await invokeNative('get_album_replies', { albumId, page })
+  }
+
+  // === 头条/编辑精选 ===
+  static async getHeadlineFeeds(page: number = 1) {
+    return await invokeNative('get_headline_feeds', { page })
+  }
+
+  static async getUpdateList(page: number = 1) {
+    return await invokeNative('get_update_list', { page })
+  }
+
+  static async getEditorChoiceFeeds(page: number = 1) {
+    return await invokeNative('get_editor_choice_feeds', { page })
+  }
+
+  // === 应用补充 ===
+  static async getApkDiscoverers(packageName: string, page: number = 1) {
+    return await invokeNative('get_apk_discoverers', { packageName, page })
+  }
+
+  static async getApkRecommendList(apkType: string = '1', title: string = '推荐', page: number = 1) {
+    return await invokeNative('get_apk_recommend_list', { apkType, title, page })
+  }
+
+  static async getApkGiftList(apkId: string | null = null, page: number = 1) {
+    return await invokeNative('get_apk_gift_list', { apkId, page })
+  }
+
+  static async getDownloadVersionList(packageName: string) {
+    return await invokeNative('get_download_version_list', { packageName })
+  }
+
+  // === 图片 ===
+  static async getPictureList(tag: string, page: number = 1) {
+    return await invokeNative('get_picture_list', { tag, page })
+  }
+
+  // === 搜索补充 ===
+  static async searchApksByDeveloper(developer: string, page: number = 1) {
+    return await invokeNative('search_apks_by_developer', { developer, page })
+  }
+
+  static async searchApksByTag(tag: string, apkType: string = '1', page: number = 1) {
+    return await invokeNative('search_apks_by_tag', { tag, apkType, page })
   }
 }

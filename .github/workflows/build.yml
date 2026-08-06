@@ -21,11 +21,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ─── 测试（每次推送都跑） ───
-  test:
-    name: 测试
+  # ─── 前端测试矩阵（多代理并行） ───
+  frontend-tests:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 前端单元测试
+            task: unit
+          - name: 前端类型检查
+            task: typecheck
+          - name: 前端构建检查
+            task: build
     steps:
       - uses: actions/checkout@v4
 
@@ -34,6 +44,35 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 安装 Linux 依赖 (Tauri)
+        if: matrix.task == 'build'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
+
+      - name: 运行单元测试
+        if: matrix.task == 'unit'
+        run: npm test
+
+      - name: 运行类型检查
+        if: matrix.task == 'typecheck'
+        run: npm run typecheck
+
+      - name: 前端构建
+        if: matrix.task == 'build'
+        run: npm run build
+
+  # ─── Rust 测试 ───
+  rust-tests:
+    name: Rust 测试
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
 
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
@@ -48,24 +87,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
 
-      - name: 安装前端依赖
-        run: npm ci
-
-      - name: 前端构建
-        run: npm run build
-
       - name: Rust 测试
         working-directory: src-tauri
         run: cargo test --lib
-
-      - name: 总结
-        if: success() || failure()
-        run: |
-          echo "## 测试结果" >> $GITHUB_STEP_SUMMARY
-          echo "| 步骤 | 状态 |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Rust 单元测试 | ✅ 通过 |" >> $GITHUB_STEP_SUMMARY
-          echo "| 前端构建检查 | ✅ 通过 |" >> $GITHUB_STEP_SUMMARY
 
   # ─── 构建（仅 tag / 手动触发） ───
   build:

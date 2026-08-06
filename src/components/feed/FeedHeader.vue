@@ -12,7 +12,7 @@
         <span v-if="verifyTitle" class="verify-badge">{{ verifyTitle }}</span>
       </div>
       <div class="meta-row">
-        <span v-if="recommendSource" class="source-tag">{{ recommendSource }}</span>
+        <span v-if="recommendSource" :class="['source-tag', { clickable: entityType === 'product' || entityType === 'dyh' }]" @click.stop="handleSourceClick">{{ recommendSource }}</span>
         <span class="dateline">{{ formatDateline(dateline) }}</span>
         <span v-if="showDeviceInfo && device" class="device-tag">· {{ device }}</span>
       </div>
@@ -45,6 +45,8 @@ const props = withDefaults(defineProps<{
   rankIndex?: number;
   recommendSource?: string;
   showDeviceInfo?: boolean;
+  entityType?: string;
+  entityId?: string | number;
 }>(), {
   showDeviceInfo: true,
 });
@@ -55,6 +57,14 @@ function handleUserClick() {
   const targetUid = props.uid || props.username;
   if (targetUid) {
     router.push(`/user/${targetUid}`);
+  }
+}
+
+function handleSourceClick() {
+  if (props.entityType === 'product' && props.entityId) {
+    router.push(`/product/${props.entityId}`);
+  } else if (props.entityType === 'dyh' && props.entityId) {
+    router.push(`/dyh/${props.entityId}`);
   }
 }
 
@@ -146,6 +156,15 @@ function formatDateline(time?: number | string): string {
   background-color: var(--brand-soft, rgba(16, 185, 129, 0.1));
   padding: 0 4px;
   border-radius: 3px;
+}
+
+.source-tag.clickable {
+  cursor: pointer;
+}
+
+.source-tag.clickable:hover {
+  text-decoration: underline;
+  opacity: 0.85;
 }
 
 .device-tag {

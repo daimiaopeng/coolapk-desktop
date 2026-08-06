@@ -1,5 +1,17 @@
 use super::*;
 
+/// 设备码必须跨调用稳定（同一机器同一结果），酷安据此识别设备；
+/// 若每次生成不同码，写接口（点赞/评论）会被判定为网络环境异常
+#[test]
+fn test_device_code_is_stable() {
+    let a = load_or_create_device_code();
+    let b = load_or_create_device_code();
+    assert_eq!(a, b, "同一台机器上设备码应保持稳定");
+    assert!(!a.is_empty());
+    // 设备码应是合法的 header 值
+    assert!(HeaderValue::from_str(&a).is_ok(), "设备码必须是合法 HTTP header 值");
+}
+
 #[tokio::test]
 #[ignore]
 async fn test_reply_list_api() {

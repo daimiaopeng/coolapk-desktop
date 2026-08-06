@@ -71,6 +71,27 @@
             @click="setReplyTarget(c.username || c.userInfo?.username)"
           ></div>
 
+          <div class="comment-actions">
+            <button
+              type="button"
+              :class="['comment-like-btn', { 'is-liked': isLiked(c) }]"
+              :disabled="isLikePending(c)"
+              aria-label="点赞评论"
+              @click.stop="toggleLike(c)"
+            >
+              <i :class="[isLiked(c) ? 'fa-solid fa-heart' : 'fa-regular fa-heart']"></i>
+              <span>{{ getLikeCount(c) > 0 ? formatLikeCount(getLikeCount(c)) : '赞' }}</span>
+            </button>
+            <button
+              type="button"
+              class="comment-reply-btn"
+              @click.stop="setReplyTarget(c.username || c.userInfo?.username)"
+            >
+              <i class="fa-regular fa-comment"></i>
+              回复
+            </button>
+          </div>
+
           <!-- 2. 带竖线的多层级楼中楼回复 -->
           <div v-if="c.replyRows && c.replyRows.length > 0" class="sub-reply-thread">
             <div
@@ -102,6 +123,18 @@
                 </div>
                 <!-- 子回复正文 -->
                 <div class="sub-reply-text" v-html="formatRichText(sub.message || '')"></div>
+                <div class="sub-reply-actions">
+                  <button
+                    type="button"
+                    :class="['comment-like-btn', 'sub-like-btn', { 'is-liked': isLiked(sub) }]"
+                    :disabled="isLikePending(sub)"
+                    aria-label="点赞回复"
+                    @click.stop="toggleLike(sub)"
+                  >
+                    <i :class="[isLiked(sub) ? 'fa-solid fa-heart' : 'fa-regular fa-heart']"></i>
+                    <span>{{ getLikeCount(sub) > 0 ? formatLikeCount(getLikeCount(sub)) : '赞' }}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -134,6 +167,7 @@
 import { ref, computed } from 'vue';
 import Button from '../ui/Button.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { useAuthStore } from '../../stores/auth';
 
 const props = defineProps<{
   feedUid?: string | number;
@@ -148,10 +182,88 @@ const emit = defineEmits<{
   (e: 'send-comment', text: string): void;
 }>();
 
+const authStore = useAuthStore();
 const inputMsg = ref('');
 const sending = ref(false);
 const inputRef = ref<HTMLInputElement | null>(null);
 const replyTargetUser = ref('');
+
+type LikeState = { liked: boolean; count: number };
+
+const likeStates = ref<Record<string, LikeState>>({});
+const likePending = ref<Record<string, boolean>>({});
+
+function itemKey(item: any): string {
+  return String(item?.id ?? `${item?.uid ?? 'unknown'}:${item?.dateline ?? item?.infoHtml ?? ''}`);
+}
+
+function initialLikeState(item: any): LikeState {
+  const like = item?.userAction?.like;
+  const count = Number(item?.likenum ?? item?.likeNum ?? item?.like_num ?? 0);
+  return {
+    liked: like === 1 || like === '1' || like === true,
+    count: Number.isFinite(count) ? Math.max(0, count) : 0,
+  };
+}
+
+function getLikeState(item: any): LikeState {
+  const key = itemKey(item);
+  return likeStates.value[key] || initialLikeState(item);
+}
+
+function isLiked(item: any): boolean {
+  return getLikeState(item).liked;
+}
+
+function getLikeCount(item: any): number {
+  return getLikeState(item).count;
+}
+
+function isLikePending(item: any): boolean {
+  return likePending.value[itemKey(item)] === true;
+}
+
+function formatLikeCount(count: number): string {
+  if (count >= 10000) return `${(count / 10000).toFixed(1).replace(/\.0$/, '')}万`;
+  if (count >= 1000) return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  return String(count);
+}
+
+async function toggleLike(item: any) {
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+
+  const id = item?.id;
+  if (id === undefined || id === null || String(id).trim() === '') return;
+
+  const key = itemKey(item);
+  if (isLikePending(item)) return;
+
+  const previous = getLikeState(item);
+  const next: LikeState = {
+    liked: !previous.liked,
+    count: Math.max(0, previous.count + (previous.liked ? -1 : 1)),
+  };
+  likeStates.value = { ...likeStates.value, [key]: next };
+  likePending.value = { ...likePending.value, [key]: true };
+
+  try {
+    if (next.liked) {
+      await CoolapkTauriAPI.likeFeed(String(id));
+    } else {
+      await CoolapkTauriAPI.unlikeFeed(String(id));
+    }
+  } catch (error) {
+    likeStates.value = { ...likeStates.value, [key]: previous };
+    console.error('Failed to toggle comment like', error);
+  } finally {
+    const pending = { ...likePending.value };
+    delete pending[key];
+    likePending.value = pending;
+  }
+}
 
 // 维护楼中楼展开的 ID 集合 (Set)
 const expandedFloorIds = ref<Set<string>>(new Set());
@@ -417,6 +529,58 @@ function handleSend() {
   line-height: 1.6;
   word-break: break-word;
   cursor: pointer;
+}
+
+.comment-actions,
+.sub-reply-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 5px;
+}
+
+.comment-like-btn,
+.comment-reply-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted, #98a2b3);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.comment-like-btn:hover,
+.comment-reply-btn:hover,
+.comment-like-btn.is-liked {
+  color: var(--brand-green, #10b966);
+}
+
+.comment-like-btn.is-liked i {
+  animation: comment-like-pop 0.25s ease;
+}
+
+.comment-like-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.sub-reply-actions {
+  margin-top: 3px;
+}
+
+.sub-like-btn {
+  font-size: 0.7rem;
+}
+
+@keyframes comment-like-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
 }
 
 /* 竖线多层级楼中楼 (Threaded Sub-replies) */
