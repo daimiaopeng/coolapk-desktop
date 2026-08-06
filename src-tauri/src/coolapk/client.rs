@@ -1,5 +1,6 @@
 use crate::coolapk::auth::CoolapkAuth;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use md5::{Digest, Md5};
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
 use reqwest::{Client, Method};
 use serde_json::{json, Value};
@@ -56,8 +57,12 @@ fn get_str_by_keys(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> Optio
 }
 
 impl CoolapkClient {
+    /// 生成或复用持久化设备码。
+    /// 酷安对写操作（点赞/评论/关注等）会校验设备指纹一致性，
+    /// 每次启动更换设备码会导致写请求被判为"网络环境异常"。
+    /// 首次启动生成随机码并保存到文件，之后启动复用同一设备码。
     pub fn new() -> Self {
-        let device_code = ephemeral_device_code();
+        let device_code = load_or_create_device_code();
         let mut headers = HeaderMap::new();
         headers.insert(
             USER_AGENT,
@@ -1677,6 +1682,120 @@ impl CoolapkClient {
         }
     }
 
+    /// 获取首页 Tab 配置（关注/头条/热榜/快讯/话题等频道 + 热门搜索）
+    /// 数据来源: GET /v6/main/init
+    pub async fn get_tab_config(&self) -> Result<Value, String> {
+        wrap_api_data(self.api_get("/v6/main/init", &[]).await?)
+    }
+
+    /// 搜索候选词（输入联想）
+    /// 数据来源: GET /v6/search/suggestSearchWordsNew
+    pub async fn get_search_suggestions(&self, query: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get(
+                "/v6/search/suggestSearchWordsNew",
+                &[("searchValue", query.to_string())],
+            )
+            .await?,
+        )
+    }
+
+    /// 话题详情（旧版 tagDetail，仍可用，部分场景返回字段与 newTagDetail 互补）
+    /// 数据来源: GET /v6/topic/tagDetail
+    pub async fn get_topic_detail_v7(&self, tag: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get("/v6/topic/tagDetail", &[("tag", tag.to_string())])
+                .await?,
+        )
+    }
+
+    /// 产品（数码）详情
+    /// 数据来源: GET /v6/product/detail
+    pub async fn get_product_detail(&self, product_id: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get("/v6/product/detail", &[("id", product_id.to_string())])
+                .await?,
+        )
+    }
+
+    /// 产品（数码）所属动态列表（讨论/问答/图文/视频/交易）
+    /// 数据来源: GET /v6/page/dataList?url=/page?url=/product/feedList
+    pub async fn get_product_feeds(&self, product_id: &str, feed_type: &str, page: u32) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/page/dataList",
+                &[
+                    ("url", "/page?url=/product/feedList".to_string()),
+                    ("id", product_id.to_string()),
+                    ("type", feed_type.to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 看看号（官方号）详情
+    /// 数据来源: GET /v6/dyh/detail
+    pub async fn get_dyh_detail(&self, dyh_id: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get("/v6/dyh/detail", &[("dyhId", dyh_id.to_string())])
+                .await?,
+        )
+    }
+
+    /// 看看号（官方号）动态列表
+    /// 数据来源: GET /v6/dyhArticle/list
+    pub async fn get_dyh_feeds(
+        &self,
+        dyh_id: &str,
+        feed_type: &str,
+        page: u32,
+    ) -> Result<Value, String> {
+        let feed_type = match feed_type {
+            "square" => "square",
+            _ => "all",
+        };
+        let raw = self
+            .api_get(
+                "/v6/dyhArticle/list",
+                &[
+                    ("dyhId", dyh_id.to_string()),
+                    ("type", feed_type.to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 应用所属动态列表（点评/讨论）
+    /// 数据来源: GET /v6/page/dataList?url=#/feed/apkCommentList
+    pub async fn get_apk_feeds(&self, package_name: &str, sort_type: &str, page: u32) -> Result<Value, String> {
+        let sort = match sort_type {
+            "lastupdate_desc" | "dateline_desc" | "popular" => sort_type,
+            _ => "lastupdate_desc",
+        };
+        let raw = self
+            .api_get(
+                "/v6/page/dataList",
+                &[
+                    ("url", "#/feed/apkCommentList".to_string()),
+                    ("id", package_name.to_string()),
+                    ("sort", sort.to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 检查登录态（比 user/space 更轻量的专用接口）
+    /// 数据来源: GET /v6/account/checkLoginInfo
+    pub async fn check_login_info(&self) -> Result<Value, String> {
+        wrap_api_data(self.api_get("/v6/account/checkLoginInfo", &[]).await?)
+    }
+
     #[allow(dead_code)]
     async fn post_id_action(&self, path: &str, field: &str, value: &str) -> Result<Value, String> {
         wrap_api_data(
@@ -1684,14 +1803,140 @@ impl CoolapkClient {
                 .await?,
         )
     }
+
+    /// 应用集列表
+    /// 数据来源: GET /v6/album/list
+    pub async fn get_album_list(&self, list_type: &str, page: u32) -> Result<Value, String> {
+        let raw = self.api_get("/v6/album/list", &[("listType", list_type.to_string()), ("page", page.to_string())]).await?;
+        Ok(json!({ "code": 200, "data": raw.get("data").cloned().unwrap_or(json!([])) }))
+    }
+
+    /// 搜索应用集
+    /// 数据来源: GET /v6/album/search
+    pub async fn search_albums(&self, query: &str, page: u32) -> Result<Value, String> {
+        let raw = self.api_get("/v6/album/search", &[("q", query.to_string()), ("page", page.to_string())]).await?;
+        Ok(json!({ "code": 200, "data": raw.get("data").cloned().unwrap_or(json!([])) }))
+    }
+
+    /// 应用集详情
+    /// 数据来源: GET /v6/album/detail
+    pub async fn get_album_detail(&self, album_id: &str) -> Result<Value, String> {
+        wrap_api_data(self.api_get("/v6/album/detail", &[("id", album_id.to_string())]).await?)
+    }
+
+    /// 应用集评论
+    /// 数据来源: GET /v6/album/replyList
+    pub async fn get_album_replies(&self, album_id: &str, page: u32) -> Result<Value, String> {
+        wrap_api_data(self.api_get("/v6/album/replyList", &[("id", album_id.to_string()), ("page", page.to_string())]).await?)
+    }
+
+    /// 头条列表
+    /// 数据来源: GET /v6/main/headline
+    pub async fn get_headline_feeds(&self, page: u32) -> Result<Value, String> {
+        let raw = self.api_get("/v6/main/headline", &[("page", page.to_string())]).await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 更新列表
+    /// 数据来源: GET /v6/main/updateList
+    pub async fn get_update_list(&self, page: u32) -> Result<Value, String> {
+        let raw = self.api_get("/v6/main/updateList", &[("page", page.to_string())]).await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 编辑精选
+    /// 数据来源: GET /v6/feed/editorChoiceList
+    pub async fn get_editor_choice_feeds(&self, page: u32) -> Result<Value, String> {
+        let raw = self.api_get("/v6/feed/editorChoiceList", &[("page", page.to_string())]).await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 应用发现者列表
+    /// 数据来源: GET /v6/apk/discovererList
+    pub async fn get_apk_discoverers(&self, package_name: &str, page: u32) -> Result<Value, String> {
+        wrap_api_data(self.api_get("/v6/apk/discovererList", &[("id", package_name.to_string()), ("page", page.to_string())]).await?)
+    }
+
+    /// 推荐应用列表
+    /// 数据来源: GET /v6/apk/recommendList
+    pub async fn get_apk_recommend_list(&self, apk_type: &str, title: &str, page: u32) -> Result<Value, String> {
+        let raw = self.api_get("/v6/apk/recommendList", &[("apkType", apk_type.to_string()), ("title", title.to_string()), ("page", page.to_string())]).await?;
+        let apks = Self::extract_apk_list(&raw, "all");
+        Ok(json!({ "code": 200, "data": apks }))
+    }
+
+    /// 应用礼品列表
+    /// 数据来源: GET /v6/apk/giftList
+    pub async fn get_apk_gift_list(&self, apk_id: Option<&str>, page: u32) -> Result<Value, String> {
+        let mut params: Vec<(&str, String)> = vec![("page", page.to_string())];
+        if let Some(apk_id) = apk_id {
+            params.push(("apkId", apk_id.to_string()));
+        }
+        wrap_api_data(self.api_get("/v6/apk/giftList", &params).await?)
+    }
+
+    /// 下载版本列表
+    /// 数据来源: GET /v6/apk/downloadVersionList
+    pub async fn get_download_version_list(&self, package_name: &str) -> Result<Value, String> {
+        wrap_api_data(self.api_get("/v6/apk/downloadVersionList", &[("id", package_name.to_string())]).await?)
+    }
+
+    /// 图片列表(按标签)
+    /// 数据来源: GET /v6/picture/list
+    pub async fn get_picture_list(&self, tag: &str, page: u32) -> Result<Value, String> {
+        let raw = self.api_get("/v6/picture/list", &[("tag", tag.to_string()), ("page", page.to_string())]).await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 用户评分列表
+    /// 数据来源: GET /v6/user/apkRatingList
+    pub async fn get_user_rating_list(&self, uid: &str, page: u32) -> Result<Value, String> {
+        let raw = self.api_get("/v6/user/apkRatingList", &[("uid", uid.to_string()), ("page", page.to_string())]).await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 按开发者搜索应用
+    /// 数据来源: GET /v6/apk/search?searchType=developer
+    pub async fn search_apks_by_developer(&self, developer: &str, page: u32) -> Result<Value, String> {
+        let raw = self.api_get("/v6/apk/search", &[("searchType", "developer".to_string()), ("developer", developer.to_string()), ("page", page.to_string())]).await?;
+        let apks = Self::extract_apk_list(&raw, "all");
+        Ok(json!({ "code": 200, "data": apks }))
+    }
+
+    /// 按标签搜索应用
+    /// 数据来源: GET /v6/apk/search?searchType=tag
+    pub async fn search_apks_by_tag(&self, tag: &str, apk_type: &str, page: u32) -> Result<Value, String> {
+        let raw = self.api_get("/v6/apk/search", &[("searchType", "tag".to_string()), ("tag", tag.to_string()), ("apkType", apk_type.to_string()), ("page", page.to_string())]).await?;
+        let apks = Self::extract_apk_list(&raw, "all");
+        Ok(json!({ "code": 200, "data": apks }))
+    }
 }
 
-fn ephemeral_device_code() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    BASE64.encode(format!("coolapk-desktop:{nanos}:{}", std::process::id()))
+/// 生成稳定的设备码：基于机器身份（主机名 + 用户名 + 固定盐）派生，
+/// 同一台机器上每次启动结果一致，避免酷安把频繁变更的设备指纹
+/// 判定为"网络环境异常"而拒绝点赞/评论等写操作。
+fn load_or_create_device_code() -> String {
+    let identity = std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .or_else(|_| std::env::var("HOST"))
+        .unwrap_or_else(|_| "unknown-host".to_string());
+    let user = std::env::var("USERNAME")
+        .or_else(|_| std::env::var("USER"))
+        .unwrap_or_else(|_| "unknown-user".to_string());
+    let salt = "coolapk-desktop:v1";
+
+    let mut hasher = Md5::new();
+    hasher.update(format!("{salt}|{identity}|{user}").as_bytes());
+    let digest = hasher.finalize();
+
+    // 仿照官方 Android 设备码格式（字母数字），保持稳定
+    let b64 = BASE64.encode(digest);
+    let code = format!(
+        "coolapk-desktop:{}:{}",
+        b64.trim_end_matches('=').chars().take(24).collect::<String>(),
+        user.chars().take(8).collect::<String>()
+    );
+    code
 }
 
 fn value_to_string(value: &Value) -> String {
@@ -1756,4 +2001,3 @@ mod tests;
 #[cfg(test)]
 #[path = "api_tests.rs"]
 mod api_tests;
-

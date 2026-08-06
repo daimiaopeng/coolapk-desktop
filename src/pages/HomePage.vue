@@ -1,7 +1,7 @@
 <template>
   <div class="home-page-layout">
     <div class="main-feed-column">
-      <FeedTabs v-model:active-key="activeTab" />
+      <FeedTabs v-model:active-key="activeTab" :dynamic-tabs="dynamicTabs" />
 
       <div class="feed-scroll-container custom-scrollbar" @scroll="handleScroll">
         <!-- 1. 头条 Tab (`digest`) 专属：今日酷安日历 & 金刚位入口 & 关照关注栏 -->
@@ -149,6 +149,17 @@ const loading = ref(false);
 const loadingMore = ref(false);
 const noMore = ref(false);
 const error = ref('');
+const dynamicTabs = ref<{ key: string; label: string }[]>([]);
+
+const knownTabMap: Record<string, string> = {
+  '关注': 'index_v8',
+  '推荐': 'index_v8',
+  '头条': 'digest',
+  '热榜': 'hot',
+  '快讯': 'latest',
+  '酷图': 'cool_picture',
+  '二手': 'secondhand',
+};
 
 // 实时日期计算（对应截图4 “今日酷安”日历块）
 const now = new Date();
@@ -213,6 +224,37 @@ function syncTabFromRoute() {
 const prefetchBuffer = ref<any[]>([]);
 const prefetchPage = ref(2);
 const isPrefetching = ref(false);
+
+async function fetchTabConfig() {
+  try {
+    const res: any = await CoolapkTauriAPI.getTabConfig();
+    const data = res?.data || [];
+    const configCard = data.find(
+      (item: any) => item.entityTemplate === 'configCard' && (item.title || '').includes('TAB配置')
+    );
+    if (configCard && configCard.entities && Array.isArray(configCard.entities)) {
+      const tabs = configCard.entities
+        .filter((e: any) => e.title)
+        .map((e: any) => {
+          const label = e.title;
+          const mappedKey = knownTabMap[label] || deriveTabKey(e.url);
+          return { key: mappedKey, label };
+        });
+      if (tabs.length > 0) {
+        dynamicTabs.value = tabs;
+      }
+    }
+  } catch (err) {
+    console.warn('获取 Tab 配置失败，使用默认配置', err);
+  }
+}
+
+function deriveTabKey(url: string): string {
+  if (!url) return '';
+  const clean = url.replace(/\?.*$/, '').replace(/\/$/, '');
+  const segments = clean.split('/').filter(Boolean);
+  return segments[segments.length - 1] || clean;
+}
 
 async function fetchTabApi(tab: string, p: number) {
   switch (tab) {
@@ -347,6 +389,7 @@ watch(activeTab, () => {
 });
 
 onMounted(() => {
+  fetchTabConfig();
   syncTabFromRoute();
   loadFeeds(true);
 });

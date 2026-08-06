@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container custom-scrollbar">
+  <div class="page-container custom-scrollbar" @scroll="handleDiscussionsScroll">
     <!-- 顶栏返回工具条 -->
     <div class="detail-nav-bar">
       <button class="back-btn" @click="handleGoBack">
@@ -18,7 +18,7 @@
     </div>
 
     <div v-else class="app-detail-content">
-      <!-- 头部应用主信息卡片 -->
+      <!-- 头部应用主信息卡片 (所有 Tab 共享) -->
       <div class="app-header-card">
 
         <AppImage :src="logoUrl" alt="App Logo" image-class="app-large-icon" />
@@ -72,45 +72,87 @@
         </div>
       </div>
 
-      <!-- 应用截图列表横滑区域 -->
-      <div v-if="screenshots.length > 0" class="section-card">
-        <h3 class="section-title"><i class="fas fa-images icon"></i> 应用截图</h3>
-        <div class="screenshot-carousel custom-scrollbar">
-          <div
-            v-for="(img, idx) in screenshots"
-            :key="idx"
-            class="screenshot-item"
-            @click="openViewer(idx)"
-          >
-            <AppImage :src="img" image-class="screenshot-img" />
+      <!-- Tab 导航 -->
+      <div class="detail-tabs">
+        <button
+          v-for="tab in detailTabs"
+          :key="tab.key"
+          :class="['detail-tab-item', { 'is-active': activeDetailTab === tab.key }]"
+          @click="selectDetailTab(tab.key)"
+        >
+          <span>{{ tab.label }}</span>
+          <span v-if="activeDetailTab === tab.key" class="tab-indicator"></span>
+        </button>
+      </div>
+
+      <!-- Tab: 应用详情 -->
+      <template v-if="activeDetailTab === 'detail'">
+        <!-- 应用截图列表横滑区域 -->
+        <div v-if="screenshots.length > 0" class="section-card">
+          <h3 class="section-title"><i class="fas fa-images icon"></i> 应用截图</h3>
+          <div class="screenshot-carousel custom-scrollbar">
+            <div
+              v-for="(img, idx) in screenshots"
+              :key="idx"
+              class="screenshot-item"
+              @click="openViewer(idx)"
+            >
+              <AppImage :src="img" image-class="screenshot-img" />
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- 应用简介描述 -->
-      <div class="section-card">
-        <h3 class="section-title"><i class="fas fa-align-left icon"></i> 应用简介</h3>
-        <div class="description-body" v-html="formattedDescription"></div>
-      </div>
+        <!-- 应用简介描述 -->
+        <div class="section-card">
+          <h3 class="section-title"><i class="fas fa-align-left icon"></i> 应用简介</h3>
+          <div class="description-body" v-html="formattedDescription"></div>
+        </div>
 
-      <!-- 更新日志 -->
-      <div v-if="changeLog" class="section-card">
-        <h3 class="section-title"><i class="fas fa-clock-rotate-left icon"></i> 新版更新日志</h3>
-        <div class="changelog-body" v-html="formattedChangeLog"></div>
-      </div>
+        <!-- 更新日志 -->
+        <div v-if="changeLog" class="section-card">
+          <h3 class="section-title"><i class="fas fa-clock-rotate-left icon"></i> 新版更新日志</h3>
+          <div class="changelog-body" v-html="formattedChangeLog"></div>
+        </div>
+      </template>
+
+      <!-- Tab: 讨论 -->
+      <template v-if="activeDetailTab === 'discussions'">
+        <div v-if="discussionsLoading && discussionFeeds.length === 0" class="loading-wrapper">
+          <LoadingState text="正在加载讨论..." />
+        </div>
+
+        <div v-else-if="discussionsError && discussionFeeds.length === 0" class="error-wrapper">
+          <ErrorState title="加载讨论失败" :message="discussionsError" @retry="loadDiscussions(false)" />
+        </div>
+
+        <div v-else-if="discussionFeeds.length === 0" class="empty-wrapper">
+          <EmptyState title="暂无讨论" description="快来发布第一条讨论吧" />
+        </div>
+
+        <div v-else class="feed-list">
+          <FeedCard v-for="item in discussionFeeds" :key="item.id" :feed="item" />
+
+          <div class="pagination-footer">
+            <LoadingState v-if="discussionsLoading && discussionsPage > 1" text="加载更多中..." />
+            <div v-else-if="discussionsNoMore" class="no-more">没有更多讨论了</div>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAppStore } from '../stores/app';
 import AppButton from '../components/common/AppButton.vue';
 import AppImage from '../components/common/AppImage.vue';
+import FeedCard from '../components/feed/FeedCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+import ErrorState from '../components/common/ErrorState.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -121,6 +163,18 @@ const packageName = computed(() => (route.params.packageName as string) || '');
 const loading = ref(false);
 const appInfo = ref<any>(null);
 const isFollowed = ref(false);
+
+const activeDetailTab = ref('detail');
+const detailTabs = [
+  { key: 'detail', label: '应用详情' },
+  { key: 'discussions', label: '讨论' },
+];
+
+const discussionFeeds = ref<any[]>([]);
+const discussionsPage = ref(1);
+const discussionsLoading = ref(false);
+const discussionsNoMore = ref(false);
+const discussionsError = ref('');
 
 const logoUrl = computed(() => appInfo.value?.apkRomIcon || appInfo.value?.logo || appInfo.value?.icon || '');
 const appTitle = computed(() => appInfo.value?.title || appInfo.value?.shorttitle || packageName.value);
@@ -176,6 +230,59 @@ async function fetchAppDetail() {
   }
 }
 
+async function loadDiscussions(reset: boolean = false) {
+  if (!packageName.value || discussionsLoading.value) return;
+  if (!reset && discussionsNoMore.value) return;
+
+  if (reset) {
+    discussionsPage.value = 1;
+    discussionsNoMore.value = false;
+    discussionFeeds.value = [];
+    discussionsError.value = '';
+  }
+
+  discussionsLoading.value = true;
+
+  try {
+    const res = await CoolapkTauriAPI.getApkFeeds(packageName.value, 'lastupdate_desc', discussionsPage.value);
+    const data = res?.data || [];
+    const items = Array.isArray(data) ? data : [];
+
+    if (items.length === 0) {
+      discussionsNoMore.value = true;
+    } else {
+      if (reset) {
+        discussionFeeds.value = items;
+      } else {
+        discussionFeeds.value.push(...items);
+      }
+      discussionsPage.value++;
+    }
+  } catch (err: any) {
+    discussionsError.value = err?.message || '加载讨论失败';
+  } finally {
+    discussionsLoading.value = false;
+  }
+}
+
+function selectDetailTab(key: string) {
+  activeDetailTab.value = key;
+  if (key === 'discussions' && discussionFeeds.value.length === 0) {
+    loadDiscussions(true);
+  }
+}
+
+function handleDiscussionsScroll(e: Event) {
+  if (activeDetailTab.value !== 'discussions') return;
+  const el = e.target as HTMLElement;
+  if (!el) return;
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+    if (!discussionsLoading.value && !discussionsNoMore.value) {
+      loadDiscussions(false);
+    }
+  }
+}
+
 function openViewer(idx: number) {
   if (screenshots.value.length > 0) {
     appStore.openImageViewer(screenshots.value, idx);
@@ -199,6 +306,14 @@ function handleGoBack() {
   }
 }
 
+watch(packageName, () => {
+  activeDetailTab.value = 'detail';
+  discussionFeeds.value = [];
+  discussionsPage.value = 1;
+  discussionsNoMore.value = false;
+  discussionsError.value = '';
+  fetchAppDetail();
+});
 
 onMounted(() => fetchAppDetail());
 </script>
@@ -356,6 +471,46 @@ onMounted(() => fetchAppDetail());
   flex-direction: column;
   gap: var(--space-2);
   flex-shrink: 0;
+}
+
+.detail-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-height: 42px;
+  padding: 0 var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-tab-item {
+  position: relative;
+  height: 42px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.detail-tab-item:hover,
+.detail-tab-item.is-active {
+  color: var(--brand-primary);
+}
+
+.detail-tab-item.is-active {
+  font-weight: var(--font-weight-semibold);
+}
+
+.tab-indicator {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--brand-primary);
 }
 
 .section-card {

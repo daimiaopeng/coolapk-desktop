@@ -26,53 +26,15 @@
         </div>
       </div>
 
-      <CommentComposer
-        :feed-id="feedId"
-        :reply-to="replyTo"
-        @success="onComposerSuccess"
-        @cancel-reply="replyTo = null"
+      <FeedCommentSection
+        :feed-uid="feedId"
+        :feed-username="feedDetail?.userInfo?.username || feedDetail?.username"
+        :comments="comments"
+        :loading="loading"
+        :normalize-img="normalizeImg"
+        :format-rich-text="formatRichText"
+        @send-comment="sendComment"
       />
-
-      <div class="comments-filter-header">
-        <span class="total-count">全部评论</span>
-        <div class="filter-tabs">
-          <button
-            :class="['filter-btn', { 'is-active': sortType === 'hot' }]"
-            @click="setSort('hot')"
-          >
-            按热度
-          </button>
-          <button
-            :class="['filter-btn', { 'is-active': sortType === 'latest' }]"
-            @click="setSort('latest')"
-          >
-            按时间
-          </button>
-        </div>
-      </div>
-
-      <div v-if="loading" class="loading-wrapper">
-        <LoadingState text="正在获取精彩评论" />
-      </div>
-
-      <div v-else-if="error" class="error-wrapper">
-        <ErrorState title="获取评论失败" :message="error" @retry="fetchReplies" />
-      </div>
-
-      <div v-else-if="comments.length === 0" class="empty-wrapper">
-        <EmptyState title="暂无评论" description="抢沙发，发表第一条评论吧！" />
-      </div>
-
-      <div v-else class="comment-list">
-        <CommentItem
-          v-for="item in comments"
-          :key="item.id"
-          :comment="item"
-          :feed-id="feedId"
-          :is-louzhu="isLouzhu(item)"
-          @reply="replyTo = { rid: item.id, username: item.username || item.userInfo?.username || '酷友' }"
-        />
-      </div>
     </div>
   </AppDrawer>
 </template>
@@ -84,12 +46,10 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useSettingsStore } from '../../stores/settings';
 import AppDrawer from '../common/AppDrawer.vue';
 import AppAvatar from '../common/AppAvatar.vue';
-import CommentComposer from './CommentComposer.vue';
-import CommentItem from './CommentItem.vue';
 import LoadingState from '../common/LoadingState.vue';
-import EmptyState from '../common/EmptyState.vue';
-import ErrorState from '../common/ErrorState.vue';
 import FeedImageGrid from '../feed/FeedImageGrid.vue';
+import FeedCommentSection from '../feed/FeedCommentSection.vue';
+import { renderCoolapkEmoji } from '../../utils/coolapkEmoji';
 
 const appStore = useAppStore();
 
@@ -103,21 +63,9 @@ const sortType = ref<'hot' | 'latest'>(useSettingsStore().settings.commentSort |
 
 const detailLoading = ref(false);
 const feedDetail = ref<any>(null);
-const replyTo = ref<{ rid: string | number; username: string } | null>(null);
 
 function close() {
   appStore.closeCommentDrawer();
-}
-
-function isLouzhu(comment: any): boolean {
-  const feedUid = feedDetail.value?.uid ?? feedDetail.value?.userInfo?.uid;
-  const commentUid = comment.uid ?? comment.userInfo?.uid;
-  return !!feedUid && String(feedUid) === String(commentUid);
-}
-
-function onComposerSuccess() {
-  replyTo.value = null;
-  fetchReplies();
 }
 
 function formatDateline(ts: any): string {
@@ -135,6 +83,27 @@ function getDetailImages(feed: any): string[] {
   if (Array.isArray(arr) && arr.length) return arr;
   if (feed.pic) return [feed.pic];
   return [];
+}
+
+function normalizeImg(url: string) {
+  return url;
+}
+
+function formatRichText(text: string) {
+  if (!text) return '';
+  let html = text.replace(/\n/g, '<br/>');
+  html = renderCoolapkEmoji(html);
+  return html;
+}
+
+async function sendComment(text: string) {
+  if (!feedId.value) return;
+  try {
+    await CoolapkTauriAPI.replyFeed(String(feedId.value), text);
+    fetchReplies();
+  } catch (err: any) {
+    console.error('评论发布失败:', err);
+  }
 }
 
 async function fetchFeedDetail() {
@@ -177,25 +146,13 @@ async function fetchReplies() {
   }
 }
 
-function refreshReplies() {
-  fetchReplies();
-}
-
-function setSort(type: 'hot' | 'latest') {
-  sortType.value = type;
-  useSettingsStore().settings.commentSort = type;
-  fetchReplies();
-}
-
 watch(feedId, (newId) => {
   if (newId) {
-    replyTo.value = null;
     fetchFeedDetail();
     fetchReplies();
   } else {
     comments.value = [];
     feedDetail.value = null;
-    replyTo.value = null;
   }
 });
 </script>
@@ -259,40 +216,5 @@ watch(feedId, (newId) => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-}
-
-.comments-filter-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: var(--space-3);
-  margin-bottom: var(--space-2);
-  border-bottom: 1px solid var(--border);
-}
-
-.total-count {
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.filter-tabs {
-  display: flex;
-  gap: var(--space-1);
-}
-
-.filter-btn {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  padding: 2px 8px;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  cursor: pointer;
-}
-
-.filter-btn.is-active {
-  color: var(--brand-primary);
-  background-color: var(--brand-soft);
-  font-weight: var(--font-weight-medium);
 }
 </style>

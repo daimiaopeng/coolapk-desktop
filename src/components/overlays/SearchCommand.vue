@@ -20,6 +20,18 @@
             <kbd class="esc-kbd">ESC</kbd>
           </div>
 
+          <div v-if="searchSuggestions.length > 0 && query" class="suggestion-list custom-scrollbar">
+            <div
+              v-for="(item, i) in searchSuggestions"
+              :key="i"
+              class="suggestion-item"
+              @mousedown.prevent="selectSuggestion(item.title)"
+            >
+              <i class="fas fa-search suggestion-icon"></i>
+              <span class="suggestion-text">{{ item.title }}</span>
+            </div>
+          </div>
+
           <div class="search-results custom-scrollbar">
             <div v-if="loading" class="loading-wrapper">
               <LoadingState text="搜索中..." />
@@ -78,6 +90,7 @@ const router = useRouter();
 const query = ref('');
 const loading = ref(false);
 const results = ref<any[]>([]);
+const searchSuggestions = ref<{ title: string }[]>([]);
 const searchInput = ref<HTMLInputElement | null>(null);
 
 const suggestions = ['小米15', 'RTX 5090', 'iOS 18', '酷安桌面版', '鸿蒙OS'];
@@ -86,6 +99,7 @@ watch(() => appStore.isSearchOpen, (open) => {
   if (open) {
     query.value = '';
     results.value = [];
+    searchSuggestions.value = [];
     nextTick(() => searchInput.value?.focus());
   }
 });
@@ -95,14 +109,21 @@ watch(query, (val) => {
   if (timer) clearTimeout(timer);
   if (!val.trim()) {
     results.value = [];
+    searchSuggestions.value = [];
     return;
   }
   timer = setTimeout(async () => {
     loading.value = true;
     try {
-      const res = await CoolapkTauriAPI.searchAll(val.trim(), 1);
-      if (res && res.data) {
-        results.value = res.data.slice(0, 8);
+      const [searchRes, suggestRes] = await Promise.all([
+        CoolapkTauriAPI.searchAll(val.trim(), 1),
+        CoolapkTauriAPI.getSearchSuggestions(val.trim())
+      ]);
+      if (searchRes && searchRes.data) {
+        results.value = searchRes.data.slice(0, 8);
+      }
+      if (suggestRes?.data && Array.isArray(suggestRes.data)) {
+        searchSuggestions.value = suggestRes.data;
       }
     } catch (err) {
       console.error('Search error', err);
@@ -114,6 +135,12 @@ watch(query, (val) => {
 
 function applySearch(tag: string) {
   query.value = tag;
+}
+
+function selectSuggestion(title: string) {
+  query.value = title;
+  searchSuggestions.value = [];
+  handleEnterSearch();
 }
 
 function handleEnterSearch() {
@@ -299,6 +326,40 @@ onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown));
 .result-sub {
   font-size: var(--font-size-caption);
   color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-list {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-default);
+}
+
+.suggestion-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.suggestion-icon {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.suggestion-text {
+  font-size: var(--font-size-sub);
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

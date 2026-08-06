@@ -317,8 +317,17 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
       }
     }
     try {
-      const res = await withTimeout(CoolapkTauriAPI.checkLoginStatus(), 10000);
-      const data = res?.data || res || {};
+      let res: any;
+      try {
+        res = await withTimeout(CoolapkTauriAPI.checkLoginInfo(), 8000);
+      } catch {
+        res = null;
+      }
+      let data = res?.data || res || {};
+      if (!data || (!data.uid && !data.username)) {
+        const fallbackRes = await withTimeout(CoolapkTauriAPI.checkLoginStatus(), 10000);
+        data = fallbackRes?.data || fallbackRes || {};
+      }
       if (data && (data.uid || data.username)) {
         const uid = String(data.uid || user.value?.uid || '');
         let userAvatar = data.userAvatar || data.avatar || data.user_avatar || '';
