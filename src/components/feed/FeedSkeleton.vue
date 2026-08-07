@@ -53,8 +53,9 @@ withDefaults(
   width: 44px;
   height: 44px;
   border-radius: 50%;
+  position: relative;
+  overflow: hidden;
   background-color: var(--background-secondary);
-  animation: skeleton-pulse 1.5s infinite ease-in-out;
 }
 
 .skeleton-user-meta {
@@ -67,8 +68,28 @@ withDefaults(
 .skeleton-line {
   height: 12px;
   border-radius: 4px;
+  position: relative;
+  overflow: hidden;
   background-color: var(--background-secondary);
-  animation: skeleton-pulse 1.5s infinite ease-in-out;
+}
+
+.skeleton-avatar::after,
+.skeleton-line::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.25) 20%,
+    rgba(255, 255, 255, 0.45) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: skeleton-shimmer 1.6s infinite ease-in-out;
 }
 
 .line-name { width: 120px; height: 14px; }
@@ -77,9 +98,9 @@ withDefaults(
 .line-3-4 { width: 75%; height: 14px; margin-bottom: 8px; }
 .line-1-2 { width: 40%; height: 14px; }
 
-@keyframes skeleton-pulse {
-  0% { opacity: 0.6; }
-  50% { opacity: 1; }
-  100% { opacity: 0.6; }
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 </style>

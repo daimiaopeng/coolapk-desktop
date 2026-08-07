@@ -220,6 +220,7 @@ function handleLogout() {
 }
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
   height: 42px;
@@ -245,6 +246,18 @@ function handleLogout() {
   background-color: var(--brand-soft);
   color: var(--brand-primary);
   font-weight: var(--font-weight-semibold);
+}
+
+.nav-item.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3.5px;
+  height: 18px;
+  background-color: var(--brand-primary);
+  border-radius: 0 4px 4px 0;
 }
 
 .nav-icon {
@@ -284,14 +297,18 @@ function handleLogout() {
 }
 
 .sidebar-footer {
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-3);
   border-top: 1px solid var(--border-light);
 }
 
 .app-info {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 4px;
+  background-color: var(--background, #f5f7f9);
+  border: 1px solid var(--border-light, #e4e9ef);
+  border-radius: var(--radius-control, 8px);
+  padding: 8px 12px;
 }
 
 .version-text {

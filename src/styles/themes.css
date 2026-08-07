@@ -38,16 +38,16 @@
   --brand-primary: #22c875;
   --brand-hover: #32d984;
   --brand-active: #16af65;
-  --brand-soft: #173a29;
-  --brand-soft-hover: #1d4933;
+  --brand-soft: rgba(34, 200, 117, 0.15);
+  --brand-soft-hover: rgba(34, 200, 117, 0.25);
 
-  --background: #0f1113;
-  --background-secondary: #151719;
+  --background: #0e1012;
+  --background-secondary: #14171a;
 
-  --surface: #191b1e;
-  --surface-hover: #202327;
-  --surface-active: #272a2f;
-  --surface-elevated: #202327;
+  --surface: #181b1e;
+  --surface-hover: #212429;
+  --surface-active: #292d33;
+  --surface-elevated: #212429;
 
   --text-primary: #f4f5f6;
   --text-secondary: #b2b6bc;
@@ -55,11 +55,11 @@
   --text-disabled: #545960;
   --text-inverse: #ffffff;
 
-  --border: #2a2d31;
-  --border-light: #23262a;
-  --divider: #25282c;
+  --border: #292c31;
+  --border-light: #222529;
+  --divider: #23262a;
 
-  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.45);
-  --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.35);
-  --shadow-drawer: -8px 0 24px rgba(0, 0, 0, 0.4);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.55);
+  --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-drawer: -8px 0 24px rgba(0, 0, 0, 0.45);
 }

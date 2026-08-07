@@ -199,9 +199,31 @@ function handleUserClick() {
   overflow: hidden;
 }
 
+.top-bar-right .app-button {
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
+  transition: transform var(--duration-fast) var(--ease-default),
+              box-shadow var(--duration-fast) var(--ease-default),
+              background-color var(--duration-fast) var(--ease-default);
+}
+
+.top-bar-right .app-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.38);
+}
+
 .search-input-wrapper:hover {
   border-color: var(--brand-primary);
   background-color: var(--surface);
+}
+
+.search-input-wrapper:hover .search-icon {
+  color: var(--brand-primary);
+  transform: scale(1.1);
+}
+
+.search-input-wrapper:hover .shortcut-kbd {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
 }
 
 .search-icon {
@@ -209,6 +231,7 @@ function handleUserClick() {
   margin-right: var(--space-3);
   font-size: 14px;
   flex-shrink: 0;
+  transition: transform var(--duration-fast), color var(--duration-fast);
 }
 
 .placeholder-text {
@@ -230,6 +253,7 @@ function handleUserClick() {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   white-space: nowrap;
   flex-shrink: 0;
+  transition: all var(--duration-fast);
 }
 
 .top-bar-right {
