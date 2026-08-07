@@ -31,9 +31,29 @@
               </div>
             </div>
 
+            <!-- 已保存的其他账户：快速切换 -->
+            <div v-if="otherAccounts.length > 0" class="account-switch-section">
+              <span class="section-label">切换账号</span>
+              <div class="account-switch-list">
+                <div
+                  v-for="acc in otherAccounts"
+                  :key="acc.uid"
+                  class="account-switch-item"
+                  @click="handleSwitchAccount(acc)"
+                >
+                  <AppAvatar :src="acc.userAvatar" size="sm" />
+                  <div class="switch-item-info">
+                    <span class="switch-item-name">{{ acc.username || `酷友_${String(acc.uid).slice(-4)}` }}</span>
+                    <span class="switch-item-uid">UID: {{ acc.uid }}</span>
+                  </div>
+                  <i class="fas fa-right-left switch-icon"></i>
+                </div>
+              </div>
+            </div>
+
             <div class="logged-actions">
               <AppButton variant="secondary" icon="fas fa-user-gear" @click="isRebinding = true">
-                切换/重新登录账号
+                新增/重新登录账号
               </AppButton>
               <AppButton variant="danger" icon="fas fa-right-from-bracket" @click="handleLogout">
                 退出登录
@@ -100,155 +120,10 @@
                   <i class="fas fa-key tab-icon"></i>
                   <span>Cookie 凭据导入</span>
                 </button>
-                <button
-                  :class="['tab-item', { active: activeTab === 'account' }]"
-                  @click="switchTab('account')"
-                >
-                  <i class="fas fa-user-lock tab-icon"></i>
-                  <span>账号密码</span>
-                </button>
-                <button
-                  :class="['tab-item', { active: activeTab === 'mobile' }]"
-                  @click="switchTab('mobile')"
-                >
-                  <i class="fas fa-mobile-screen-button tab-icon"></i>
-                  <span>手机验证码</span>
-                </button>
               </div>
 
-            <!-- TAB 1: 手机号 + 验证码登录 -->
-            <div v-if="activeTab === 'mobile'" class="tab-pane">
-              <div class="form-item">
-                <label class="form-label">手机号码</label>
-                <div class="input-with-prefix">
-                  <span class="phone-prefix">+86</span>
-                  <input
-                    v-model="mobilePhone"
-                    type="tel"
-                    maxlength="11"
-                    class="form-input"
-                    placeholder="请输入 11 位手机号码"
-                    @keyup.enter="handleSendVcode"
-                  />
-                </div>
-              </div>
-
-              <div class="form-item">
-                <label class="form-label">短信验证码</label>
-                <div class="vcode-input-group">
-                  <input
-                    v-model="smsCode"
-                    type="text"
-                    maxlength="6"
-                    class="form-input"
-                    placeholder="请输入短信验证码"
-                    @keyup.enter="handleMobileLogin"
-                  />
-                  <button
-                    class="send-vcode-btn"
-                    :disabled="isSendingCode || countdown > 0 || !isValidPhone"
-                    @click="handleSendVcode"
-                  >
-                    {{ countdown > 0 ? `${countdown}s 后重新获取` : (isSendingCode ? '发送中...' : '获取验证码') }}
-                  </button>
-                </div>
-              </div>
-
-              <!-- 错误或提示反馈 -->
-              <div v-if="errorMessage" class="status-alert alert-error">
-                <i class="fas fa-exclamation-circle alert-icon"></i>
-                <div class="alert-content">
-                  <span>{{ errorMessage }}</span>
-                  <div class="alert-action-link" @click="switchTab('account')">
-                    若因酷安风控无法收取短信，可点此尝试【账号密码】或【SESSID】登录
-                  </div>
-                </div>
-              </div>
-              <div v-else-if="successMessage" class="status-alert alert-success">
-                <i class="fas fa-check-circle alert-icon"></i>
-                <span>{{ successMessage }}</span>
-              </div>
-
-              <div class="dialog-actions">
-                <AppButton
-                  v-if="isRebinding && authStore.isLoggedIn"
-                  variant="secondary"
-                  @click="isRebinding = false"
-                >
-                  取消
-                </AppButton>
-                <AppButton
-                  variant="primary"
-                  icon="fas fa-arrow-right-to-bracket"
-                  :loading="isLoading"
-                  :disabled="!isValidPhone || !smsCode.trim()"
-                  @click="handleMobileLogin"
-                >
-                  {{ isLoading ? '登录中...' : '登录 / 注册' }}
-                </AppButton>
-              </div>
-            </div>
-
-            <!-- TAB 2: 账号密码登录 -->
-            <div v-else-if="activeTab === 'account'" class="tab-pane">
-              <div class="form-item">
-                <label class="form-label">酷安账号 / 手机号 / 邮箱</label>
-                <input
-                  v-model="accountName"
-                  type="text"
-                  class="form-input"
-                  placeholder="请输入手机号、酷安用户名或邮箱"
-                />
-              </div>
-
-              <div class="form-item">
-                <label class="form-label">登录密码</label>
-                <div class="password-input-wrapper">
-                  <input
-                    v-model="accountPassword"
-                    :type="showPassword ? 'text' : 'password'"
-                    class="form-input"
-                    placeholder="请输入密码"
-                    @keyup.enter="handleAccountLogin"
-                  />
-                  <button class="toggle-pwd-btn" @click="showPassword = !showPassword">
-                    <i :class="showPassword ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
-                  </button>
-                </div>
-              </div>
-
-              <!-- 错误或提示反馈 -->
-              <div v-if="errorMessage" class="status-alert alert-error">
-                <i class="fas fa-exclamation-circle alert-icon"></i>
-                <span>{{ errorMessage }}</span>
-              </div>
-              <div v-else-if="successMessage" class="status-alert alert-success">
-                <i class="fas fa-check-circle alert-icon"></i>
-                <span>{{ successMessage }}</span>
-              </div>
-
-              <div class="dialog-actions">
-                <AppButton
-                  v-if="isRebinding && authStore.isLoggedIn"
-                  variant="secondary"
-                  @click="isRebinding = false"
-                >
-                  取消
-                </AppButton>
-                <AppButton
-                  variant="primary"
-                  icon="fas fa-shield-halved"
-                  :loading="isLoading"
-                  :disabled="!accountName.trim() || !accountPassword.trim()"
-                  @click="handleAccountLogin"
-                >
-                  {{ isLoading ? '安全验证中...' : '立即登录' }}
-                </AppButton>
-              </div>
-            </div>
-
-            <!-- TAB 3: Cookie / SESSID 快速快捷登录 -->
-            <div v-else class="tab-pane">
+            <!-- TAB: Cookie / SESSID 快速快捷登录 -->
+            <div class="tab-pane">
               <div class="form-item">
                 <label class="form-label">SESSID 或 Cookie 字符串</label>
                 <textarea
@@ -306,7 +181,7 @@ import AppAvatar from '../common/AppAvatar.vue';
 
 const authStore = useAuthStore();
 
-const activeTab = ref<'mobile' | 'account' | 'cookie'>('cookie');
+const activeTab = ref<'cookie'>('cookie');
 const showAdvanced = ref(false);
 
 let statusPollTimer: any = null;
@@ -379,16 +254,7 @@ import('@tauri-apps/api/event').then(({ listen }) => {
 });
 
 // 手机号登录表单
-const mobilePhone = ref('');
-const smsCode = ref('');
-const isSendingCode = ref(false);
-const countdown = ref(0);
-let timer: any = null;
-
 // 账号密码登录表单
-const accountName = ref('');
-const accountPassword = ref('');
-const showPassword = ref(false);
 
 // Cookie凭据表单
 const rawCookieInput = ref('');
@@ -403,6 +269,32 @@ const isValidPhone = computed(() => {
   return /^1[3-9]\d{9}$/.test(mobilePhone.value.trim());
 });
 
+// 已保存的其他账户（排除当前登录的）
+const otherAccounts = computed(() => {
+  const currentUid = String(authStore.user?.uid || '');
+  return authStore.accounts.filter((acc: any) => String(acc.uid) !== currentUid);
+});
+
+async function handleSwitchAccount(acc: any) {
+  if (switchingUid.value) return;
+  switchingUid.value = String(acc.uid);
+  errorMessage.value = '';
+  successMessage.value = '';
+  try {
+    const profile = await authStore.loginAs(String(acc.uid));
+    successMessage.value = `已切换到账号：${profile.username}`;
+    setTimeout(() => {
+      authStore.closeLoginModal();
+    }, 800);
+  } catch (err: any) {
+    errorMessage.value = err?.message || '切换账号失败，凭据可能已过期';
+  } finally {
+    switchingUid.value = '';
+  }
+}
+
+const switchingUid = ref('');
+
 watch(
   () => authStore.isLoginModalOpen,
   (isOpen) => {
@@ -411,11 +303,12 @@ watch(
       successMessage.value = '';
       isRebinding.value = false;
       debugStatus.value = '';
+      authStore.loadAccounts();
     }
   }
 );
 
-function switchTab(tab: 'mobile' | 'account' | 'cookie') {
+function switchTab(tab: 'cookie') {
   activeTab.value = tab;
   errorMessage.value = '';
   successMessage.value = '';
@@ -423,77 +316,6 @@ function switchTab(tab: 'mobile' | 'account' | 'cookie') {
 
 function handleClose() {
   authStore.closeLoginModal();
-}
-
-// 发送短信验证码
-async function handleSendVcode() {
-  if (!isValidPhone.value || countdown.value > 0 || isSendingCode.value) return;
-
-  isSendingCode.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
-
-  try {
-    await authStore.sendSmsCode(mobilePhone.value);
-    successMessage.value = '验证码指令已下发，请查收手机短信';
-
-    // 启动 60s 倒计时
-    countdown.value = 60;
-    timer = setInterval(() => {
-      if (countdown.value > 0) {
-        countdown.value--;
-      } else {
-        clearInterval(timer);
-        timer = null;
-      }
-    }, 1000);
-  } catch (err: any) {
-    errorMessage.value = err?.message || err || '发送失败：酷安接口风控拦截或网络DNS限制';
-  } finally {
-    isSendingCode.value = false;
-  }
-}
-
-// 手机号验证码登录
-async function handleMobileLogin() {
-  if (!isValidPhone.value || !smsCode.value.trim() || isLoading.value) return;
-
-  isLoading.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
-
-  try {
-    const profile = await authStore.loginWithMobile(mobilePhone.value, smsCode.value);
-    successMessage.value = `登录成功！欢迎回来，${profile.username}`;
-    setTimeout(() => {
-      authStore.closeLoginModal();
-    }, 1000);
-  } catch (err: any) {
-    errorMessage.value = err?.message || err || '手机号登录失败，请检查验证码';
-  } finally {
-    isLoading.value = false;
-  }
-}
-
-// 账号密码登录
-async function handleAccountLogin() {
-  if (!accountName.value.trim() || !accountPassword.value.trim() || isLoading.value) return;
-
-  isLoading.value = true;
-  errorMessage.value = '';
-  successMessage.value = '';
-
-  try {
-    const profile = await authStore.loginWithAccount(accountName.value, accountPassword.value);
-    successMessage.value = `登录成功！欢迎回来，${profile.username}`;
-    setTimeout(() => {
-      authStore.closeLoginModal();
-    }, 1000);
-  } catch (err: any) {
-    errorMessage.value = err?.message || err || '账号或密码错误，请核对后重试';
-  } finally {
-    isLoading.value = false;
-  }
 }
 
 // Cookie 凭据导入登录
@@ -519,10 +341,6 @@ async function handleCookieLogin() {
 
 async function handleLogout() {
   await authStore.logout();
-  mobilePhone.value = '';
-  smsCode.value = '';
-  accountName.value = '';
-  accountPassword.value = '';
   rawCookieInput.value = '';
   successMessage.value = '';
   errorMessage.value = '';
@@ -530,7 +348,6 @@ async function handleLogout() {
 }
 
 onUnmounted(() => {
-  if (timer) clearInterval(timer);
   if (statusPollTimer) clearInterval(statusPollTimer);
   if (unlistenFn) unlistenFn();
 });
@@ -677,6 +494,69 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3);
+}
+
+/* 已保存账户快速切换区 */
+.account-switch-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.section-label {
+  font-size: var(--font-size-caption);
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-medium);
+}
+
+.account-switch-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.account-switch-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background-color: var(--background);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.account-switch-item:hover {
+  border-color: var(--brand-primary);
+  background-color: var(--surface-hover);
+}
+
+.switch-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.switch-item-name {
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.switch-item-uid {
+  font-size: var(--font-size-caption);
+  color: var(--text-tertiary);
+}
+
+.switch-icon {
+  color: var(--text-tertiary);
+  font-size: 13px;
 }
 
 /* 登录表单 */

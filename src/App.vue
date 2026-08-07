@@ -210,7 +210,9 @@ onMounted(() => {
     localStorage.removeItem(PENDING_UPDATE_KEY);
   }
 
-  if (settingsStore.settings.checkUpdateOnStartup && !readyInfo.value) {
+  // 本地调试（vite dev）跳过自动更新检查，避免误弹更新提示或静默下载安装包；
+  // 设置页的"立即检查更新"手动触发不受影响
+  if (!import.meta.env.DEV && settingsStore.settings.checkUpdateOnStartup && !readyInfo.value) {
     void checkForUpdate();
   }
   window.addEventListener('check-for-update', () => void checkForUpdate(true));

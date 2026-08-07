@@ -17,6 +17,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<UserProfile | null>(null);
   const rawCookie = ref('');
   const isLoginModalOpen = ref(false);
+  const accounts = ref<any[]>([]);
 
   function getAvatarUrlByUid(uidStr: string): string {
     const s = String(uidStr).trim();
@@ -103,7 +104,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     // 3. 校验成功，持久化并更新内存 Store
-    // 安全说明：登录 Cookie 只写入 Rust 侧（session_cookie.txt），
+    // 安全说明：登录 Cookie 只写入 Rust 侧（accounts.json），
     // 绝不写入 localStorage —— 否则任一 XSS 都可直接窃取 SESSID
     rawCookie.value = trimmed;
     user.value = profile;
@@ -111,7 +112,27 @@ export const useAuthStore = defineStore('auth', () => {
 
     localStorage.setItem('coolapk_user', JSON.stringify(profile));
 
+    // 保存到多账户库
+    await saveProfileToAccounts(profile, trimmed);
+
     return profile;
+  }
+
+  /**
+   * 登录成功后把账户（含 Cookie 凭据）保存到 Rust 侧多账户库
+   */
+  async function saveProfileToAccounts(profile: UserProfile, cookie: string) {
+    try {
+      await CoolapkTauriAPI.saveAccount(
+        String(profile.uid),
+        profile.username || '',
+        profile.userAvatar || '',
+        cookie
+      );
+      await loadAccounts();
+    } catch (e) {
+      console.warn('保存账户到多账户库失败:', e);
+    }
   }
 
   /**
@@ -119,7 +140,11 @@ export const useAuthStore = defineStore('auth', () => {
    */
   async function logout() {
     try {
-      await CoolapkTauriAPI.clearCookie();
+      if (user.value?.uid) {
+        await CoolapkTauriAPI.removeAccount(String(user.value.uid));
+      } else {
+        await CoolapkTauriAPI.clearCookie();
+      }
     } catch (e) {
       console.warn('清除底层 Cookie 失败:', e);
     }
@@ -128,6 +153,42 @@ export const useAuthStore = defineStore('auth', () => {
     rawCookie.value = '';
     localStorage.removeItem('coolapk_cookie');
     localStorage.removeItem('coolapk_user');
+    await loadAccounts();
+  }
+
+  /**
+   * 加载已保存的多账户列表
+   */
+  async function loadAccounts() {
+    try {
+      const res = await CoolapkTauriAPI.listAccounts();
+      accounts.value = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    } catch (e) {
+      console.warn('加载账户列表失败:', e);
+      accounts.value = [];
+    }
+  }
+
+  /**
+   * 切换到已保存的账户
+   */
+  async function loginAs(uid: string): Promise<UserProfile> {
+    const res = await CoolapkTauriAPI.loginAs(String(uid));
+    const data = res?.data || {};
+    if (!data.uid) {
+      throw new Error('切换账户失败，凭据无效或已过期');
+    }
+    const profile: UserProfile = {
+      uid: String(data.uid),
+      username: data.username || `酷友_${String(data.uid).slice(-4)}`,
+      userAvatar: data.userAvatar || getAvatarUrlByUid(String(data.uid)),
+      level: 1
+    };
+    user.value = profile;
+    isLoggedIn.value = true;
+    localStorage.setItem('coolapk_user', JSON.stringify(profile));
+    await loadAccounts();
+    return profile;
   }
 
   /**
@@ -135,6 +196,8 @@ export const useAuthStore = defineStore('auth', () => {
    * （凭据只允许存在于 Rust 侧，前端不持久化、不读取原文）
    */
   async function initAuth() {
+    // 加载多账户列表
+    await loadAccounts();
     // 历史遗留清理：旧版本把 Cookie 明文存在 localStorage，启动时一律清除
     try {
       localStorage.removeItem('coolapk_cookie');
@@ -272,6 +335,7 @@ export const useAuthStore = defineStore('auth', () => {
     const tokenStr = `SESSID=${sessid}; uid=${uid}`;
     rawCookie.value = tokenStr;
     await CoolapkTauriAPI.saveCookie(tokenStr);
+    await saveProfileToAccounts(profile, tokenStr);
 
     return profile;
   }
@@ -341,6 +405,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
     user,
     rawCookie,
     isLoginModalOpen,
+    accounts,
     openLoginModal,
     closeLoginModal,
     loginWithCookie,
@@ -350,7 +415,9 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
     saveCookie,
     checkStatus,
     logout,
-    initAuth
+    initAuth,
+    loadAccounts,
+    loginAs
   };
 });
 

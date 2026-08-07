@@ -197,6 +197,8 @@ impl CoolapkClient {
     }
 
     /// 绑定 Cookie 持久化文件路径，并载入上次保存的登录凭据
+    /// 凭据统一存 JSON（accounts.json，含全部账户与当前登录 uid），
+    /// 兼容迁移旧版 session_cookie.txt。
     pub fn persist_cookie_to(&self, path: PathBuf) {
         {
             let mut guard = match self.cookie_file.write() {
@@ -205,33 +207,235 @@ impl CoolapkClient {
             };
             *guard = Some(path.clone());
         }
+
+        let dir = path.parent().map(|p| p.to_path_buf());
+        let accounts_path = dir.as_ref().map(|d| d.join("accounts.json"));
+        if let Some(ap) = accounts_path {
+            if let Ok(content) = std::fs::read_to_string(&ap) {
+                if let Ok(root) = serde_json::from_str::<Value>(&content) {
+                    let last_uid = root
+                        .get("lastLoginUid")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let cookie = root
+                        .get("accounts")
+                        .and_then(|a| a.as_array())
+                        .and_then(|arr| {
+                            arr.iter().find(|a| {
+                                a.get("uid").and_then(|v| v.as_str()) == Some(last_uid.as_str())
+                            })
+                        })
+                        .and_then(|a| a.get("cookie"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if !cookie.is_empty() {
+                        if let Ok(mut stored) = self.user_cookie.write() {
+                            *stored = Some(cookie);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 旧版 txt 迁移：首次升级时把 txt 中的 cookie 转为 JSON 账户
         if let Ok(content) = std::fs::read_to_string(&path) {
             let content = content.trim().to_string();
             if !content.is_empty() {
-                if let Ok(mut stored) = self.user_cookie.write() {
-                    *stored = Some(content);
+                let uid = content
+                    .split(';')
+                    .find_map(|kv| {
+                        let mut parts = kv.trim().splitn(2, '=');
+                        match (parts.next(), parts.next()) {
+                            (Some("uid"), Some(v)) => Some(v.trim().to_string()),
+                            _ => None,
+                        }
+                    })
+                    .unwrap_or_default();
+                if !uid.is_empty() {
+                    let entry = json!({
+                        "uid": uid,
+                        "username": "",
+                        "userAvatar": "",
+                        "cookie": content,
+                    });
+                    let root = json!({
+                        "lastLoginUid": uid,
+                        "accounts": [entry],
+                    });
+                    if let Some(dir) = dir {
+                        if let Ok(json_str) = serde_json::to_string_pretty(&root) {
+                            let _ = std::fs::write(dir.join("accounts.json"), json_str);
+                        }
+                    }
+                    if let Ok(mut stored) = self.user_cookie.write() {
+                        *stored = Some(content);
+                    }
                 }
+                let _ = std::fs::remove_file(&path);
             }
         }
     }
 
-    fn save_cookie_file(&self, cookie: &str) {
-        let path = match self.cookie_file.read() {
-            Ok(guard) => guard.clone(),
-            Err(_) => return,
-        };
-        if let Some(path) = path {
-            if cookie.is_empty() {
-                let _ = std::fs::remove_file(&path);
-            } else {
-                let _ = std::fs::write(&path, cookie);
-            }
-        }
+    #[allow(dead_code)]
+    fn save_cookie_file(&self, _cookie: &str) {
+        // 凭据统一由 accounts.json 管理，旧 txt 文件不再写入
     }
 
     /// 读取当前登录凭据（可能为 None）
     pub fn get_user_cookie(&self) -> Option<String> {
         self.user_cookie.read().ok().and_then(|g| g.clone())
+    }
+
+    /// 账户库文件路径（与 session_cookie.txt 同目录，统一 JSON 存储）
+    fn accounts_file_path(&self) -> Option<std::path::PathBuf> {
+        let path = self.cookie_file.read().ok()?.clone()?;
+        let dir = path.parent()?.to_path_buf();
+        Some(dir.join("accounts.json"))
+    }
+
+    /// 读取账户库根对象（{ lastLoginUid, accounts: [...] }）
+    fn load_accounts_root(&self) -> Value {
+        let Some(path) = self.accounts_file_path() else {
+            return json!({ "lastLoginUid": "", "accounts": [] });
+        };
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+            .unwrap_or_else(|| json!({ "lastLoginUid": "", "accounts": [] }))
+    }
+
+    fn save_accounts_root(&self, root: &Value) {
+        if let Some(path) = self.accounts_file_path() {
+            if let Ok(json) = serde_json::to_string_pretty(root) {
+                let _ = std::fs::write(&path, json);
+            }
+        }
+    }
+
+    /// 读取全部已保存账户（uid/username/userAvatar/cookie）
+    fn load_accounts(&self) -> Vec<Value> {
+        self.load_accounts_root()
+            .get("accounts")
+            .and_then(|a| a.as_array().cloned())
+            .unwrap_or_default()
+    }
+
+    fn save_accounts(&self, accounts: &[Value]) {
+        let last_uid = self
+            .load_accounts_root()
+            .get("lastLoginUid")
+            .cloned()
+            .unwrap_or_default();
+        let root = json!({ "lastLoginUid": last_uid, "accounts": accounts });
+        self.save_accounts_root(&root);
+    }
+
+    fn set_last_login_uid(&self, uid: &str) {
+        let mut root = self.load_accounts_root();
+        root["lastLoginUid"] = json!(uid);
+        self.save_accounts_root(&root);
+    }
+
+    /// 列出已保存的账户（不含 Cookie 原文，仅展示信息）
+    pub async fn list_accounts(&self) -> Result<Value, String> {
+        let accounts = self.load_accounts();
+        let list: Vec<Value> = accounts
+            .iter()
+            .map(|a| {
+                json!({
+                    "uid": a.get("uid").cloned().unwrap_or_default(),
+                    "username": a.get("username").cloned().unwrap_or_default(),
+                    "userAvatar": a.get("userAvatar").cloned().unwrap_or_default(),
+                })
+            })
+            .collect();
+        Ok(json!({ "code": 200, "data": list }))
+    }
+
+    /// 切换登录到已保存的账户
+    pub async fn login_as(&self, uid: &str) -> Result<Value, String> {
+        let accounts = self.load_accounts();
+        let target = accounts
+            .iter()
+            .find(|a| a.get("uid").and_then(|v| v.as_str()) == Some(uid))
+            .cloned()
+            .ok_or_else(|| "未找到该账户的已保存凭据".to_string())?;
+        let cookie = target
+            .get("cookie")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if cookie.is_empty() {
+            return Err("该账户凭据为空".to_string());
+        }
+        self.set_user_cookie(cookie)?;
+        self.set_last_login_uid(uid);
+        Ok(json!({
+            "code": 200,
+            "data": {
+                "uid": target.get("uid").cloned().unwrap_or_default(),
+                "username": target.get("username").cloned().unwrap_or_default(),
+                "userAvatar": target.get("userAvatar").cloned().unwrap_or_default(),
+            }
+        }))
+    }
+
+    /// 保存（或更新）一个账户并切换为当前登录
+    pub async fn save_account(
+        &self,
+        uid: &str,
+        username: &str,
+        user_avatar: &str,
+        cookie: &str,
+    ) -> Result<Value, String> {
+        let mut accounts = self.load_accounts();
+        let entry = json!({
+            "uid": uid,
+            "username": username,
+            "userAvatar": user_avatar,
+            "cookie": cookie,
+        });
+        if let Some(pos) = accounts
+            .iter()
+            .position(|a| a.get("uid").and_then(|v| v.as_str()) == Some(uid))
+        {
+            accounts[pos] = entry;
+        } else {
+            accounts.push(entry);
+        }
+        self.save_accounts(&accounts);
+        self.set_user_cookie(cookie.to_string())?;
+        self.set_last_login_uid(uid);
+        Ok(json!({
+            "code": 200,
+            "data": { "uid": uid, "username": username, "userAvatar": user_avatar }
+        }))
+    }
+
+    /// 删除一个已保存的账户；若删除的是当前登录账户则同时清空登录态
+    pub async fn remove_account(&self, uid: &str) -> Result<Value, String> {
+        let mut accounts = self.load_accounts();
+        accounts.retain(|a| a.get("uid").and_then(|v| v.as_str()) != Some(uid));
+        self.save_accounts(&accounts);
+
+        let current = self.get_user_cookie().unwrap_or_default();
+        let current_uid = current
+            .split(';')
+            .find_map(|kv| {
+                let mut parts = kv.trim().splitn(2, '=');
+                match (parts.next(), parts.next()) {
+                    (Some("uid"), Some(v)) => Some(v.trim().to_string()),
+                    _ => None,
+                }
+            })
+            .unwrap_or_default();
+        if current_uid == uid {
+            self.clear_user_cookie()?;
+        }
+        Ok(json!({ "code": 200, "data": true }))
     }
 
     pub fn set_user_cookie(&self, cookie: String) -> Result<(), String> {
@@ -257,7 +461,32 @@ impl CoolapkClient {
         } else {
             Some(safe_ascii.clone())
         };
-        self.save_cookie_file(&safe_ascii);
+        // 同步 JSON 账户库：更新该 uid 的 cookie 并记为当前登录
+        if !safe_ascii.is_empty() {
+            let uid = safe_ascii
+                .split(';')
+                .find_map(|kv| {
+                    let mut parts = kv.trim().splitn(2, '=');
+                    match (parts.next(), parts.next()) {
+                        (Some("uid"), Some(v)) => Some(v.trim().to_string()),
+                        _ => None,
+                    }
+                })
+                .unwrap_or_default();
+            if !uid.is_empty() {
+                let mut accounts = self.load_accounts();
+                if let Some(pos) = accounts
+                    .iter()
+                    .position(|a| a.get("uid").and_then(|v| v.as_str()) == Some(uid.as_str()))
+                {
+                    if let Some(obj) = accounts[pos].as_object_mut() {
+                        obj.insert("cookie".to_string(), json!(safe_ascii));
+                    }
+                    self.save_accounts(&accounts);
+                    self.set_last_login_uid(&uid);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -2729,7 +2958,16 @@ impl CoolapkClient {
             .write()
             .map_err(|_| "failed to lock login state".to_string())?;
         *stored = None;
-        self.save_cookie_file("");
+        // 清空当前登录标记（保留账户记录，便于下次快速切换）
+        let mut root = self.load_accounts_root();
+        root["lastLoginUid"] = json!("");
+        self.save_accounts_root(&root);
+        // 清理旧版 txt 遗留文件
+        if let Some(path) = self.cookie_file.read().ok().and_then(|g| g.clone()) {
+            if path.exists() {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
         Ok(())
     }
 
