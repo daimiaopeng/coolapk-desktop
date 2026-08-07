@@ -21,10 +21,11 @@ function clampZoom(zoom: number) {
 }
 
 function getSystemZoom() {
-  const devicePixelRatio = typeof window !== 'undefined' && Number.isFinite(window.devicePixelRatio)
-    ? window.devicePixelRatio
-    : 1;
-  return clampZoom(Math.round(devicePixelRatio * 100));
+  // 桌面端 WebView2 已按系统显示缩放（DPI）自动渲染，CSS 像素即逻辑像素，
+  // 与系统所有应用保持一致。若再按 devicePixelRatio 额外放大，
+  // 会与系统缩放双重叠加（如 150% × 150%）导致界面过大，
+  // 因此自动基准固定为 100%，需要更大或更小由用户手动微调。
+  return DEFAULT_ZOOM;
 }
 
 const defaultNavVisibility: NavVisibilitySettings = {
@@ -132,9 +133,9 @@ export const useSettingsStore = defineStore('settings', () => {
       settings.value = {
         ...defaultSettings,
         ...parsed,
-        // Older settings did not record this flag; non-default zoom values
-        // from those versions were necessarily chosen by the user.
-        zoomManuallySet: hasManualZoomFlag ? parsed.zoomManuallySet : Number(parsed.zoom) !== DEFAULT_ZOOM,
+        // 旧版本没有记录手动缩放标志：早期版本的"自动"值（devicePixelRatio×100）
+        // 会与系统 DPI 双重放大导致界面过大，因此一律视为自动，按新算法重置为 100%。
+        zoomManuallySet: hasManualZoomFlag ? parsed.zoomManuallySet : false,
         navVisibility: { ...defaultNavVisibility, ...(parsed.navVisibility || {}) }
       };
     }

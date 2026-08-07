@@ -707,6 +707,35 @@ pub fn clear_user_cookie(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn list_accounts(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.list_accounts().await
+}
+
+#[tauri::command]
+pub async fn login_as(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
+    state.client.login_as(&uid).await
+}
+
+#[tauri::command]
+pub async fn save_account(
+    state: State<'_, AppState>,
+    uid: String,
+    username: String,
+    user_avatar: String,
+    cookie: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .save_account(&uid, &username, &user_avatar, &cookie)
+        .await
+}
+
+#[tauri::command]
+pub async fn remove_account(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
+    state.client.remove_account(&uid).await
+}
+
+#[tauri::command]
 pub async fn login_by_account(
     state: State<'_, AppState>,
     account: String,

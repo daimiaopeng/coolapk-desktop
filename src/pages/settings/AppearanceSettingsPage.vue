@@ -54,7 +54,7 @@
         <div class="row-info">
           <span class="row-label">界面缩放比例 (Ctrl + / -)</span>
           <span class="row-sub">
-            {{ settingsStore.settings.zoomManuallySet ? '使用手动设置的整体桌面缩放比例' : '跟随系统显示缩放比例自动调整' }}
+            {{ settingsStore.settings.zoomManuallySet ? `手动缩放 ${settingsStore.settings.zoom}%` : '默认 100%：系统显示缩放已自动适配，无需额外放大' }}
           </span>
         </div>
         <div class="zoom-controls">

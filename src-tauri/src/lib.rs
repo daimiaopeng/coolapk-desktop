@@ -2,7 +2,11 @@ pub mod coolapk;
 
 use coolapk::client::CoolapkClient;
     use coolapk::commands::{
-        check_login_status, clear_user_cookie, create_feed, follow_user, get_app_detail, get_app_list,
+        check_login_status,
+        list_accounts,
+        login_as,
+        save_account,
+        remove_account, clear_user_cookie, create_feed, follow_user, get_app_detail, get_app_list,
         get_board_feeds, get_cool_picture_rank, get_digest_feeds, get_feed_detail, get_feed_replies,
         get_game_list, get_hot_feeds, get_hot_replies, get_image_data_url, get_index_v8_feeds, get_latest_feeds,
         get_notification_count, get_notifications, get_secondhand_feeds, get_sub_replies,
@@ -399,6 +403,10 @@ pub fn run() {
             create_feed,
             save_cookie_securely,
             check_login_status,
+        list_accounts,
+        login_as,
+        save_account,
+        remove_account,
             clear_user_cookie,
             login_by_account,
             send_sms_vcode,

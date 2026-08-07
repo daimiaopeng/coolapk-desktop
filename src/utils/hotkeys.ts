@@ -1,17 +1,20 @@
 import { useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
+import { useSettingsStore } from '../stores/settings';
 
 /**
  * 全局快捷键注册：
  *  - Ctrl+N 发布动态
  *  - Ctrl+, 打开设置
  *  - Ctrl+R 刷新当前信息流（派发 refresh-feeds 事件，由列表页监听）
+ *  - Ctrl+ / Ctrl- 调整界面缩放
  *  - J / K 上下一条动态（派发 feed-nav-next / feed-nav-prev，由首页监听）
  *  - Ctrl+K / Esc 由 SearchCommand 及各浮层组件自行处理
  * 焦点在输入框/文本域/下拉框时忽略 J/K 等单键快捷键。
  */
 export function registerGlobalHotkeys() {
   const router = useRouter();
+  const settingsStore = useSettingsStore();
 
   function isTypingTarget(e: KeyboardEvent): boolean {
     const target = e.target as HTMLElement | null;
@@ -43,6 +46,18 @@ export function registerGlobalHotkeys() {
     if (ctrl && e.key.toLowerCase() === 'r') {
       e.preventDefault();
       window.dispatchEvent(new Event('refresh-feeds'));
+      return;
+    }
+
+    if (ctrl && (e.key === '+' || e.key === '=')) {
+      e.preventDefault();
+      settingsStore.setZoom(settingsStore.settings.zoom + 10);
+      return;
+    }
+
+    if (ctrl && e.key === '-') {
+      e.preventDefault();
+      settingsStore.setZoom(settingsStore.settings.zoom - 10);
       return;
     }
 

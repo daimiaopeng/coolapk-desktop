@@ -83,9 +83,9 @@ async fn test_reply_list_api() {
     }
 }
 
-/// 模拟「登录 → 保存 Cookie → 落盘 → 重启恢复 → 登出删除」完整链路（不依赖网络）
-#[test]
-fn test_login_cookie_persistence_flow() {
+/// 模拟「登录 → 保存 Cookie → 落盘 JSON → 重启恢复 → 登出」完整链路（不依赖网络）
+#[tokio::test]
+async fn test_login_cookie_persistence_flow() {
     use std::path::PathBuf;
 
     let dir = std::env::temp_dir().join(format!(
@@ -95,6 +95,7 @@ fn test_login_cookie_persistence_flow() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let cookie_file: PathBuf = dir.join("session_cookie.txt");
+    let accounts_file: PathBuf = dir.join("accounts.json");
 
     // 1. 首次启动：无持久化凭据
     let client = CoolapkClient::new();
@@ -103,16 +104,24 @@ fn test_login_cookie_persistence_flow() {
 
     // 2. 模拟 Webview 授权登录：save_cookie_securely 内部调用 set_user_cookie
     let fake_cookie = "SESSID=abc123def456; uid=10086; Hm_lvt_xxx=1";
-    client.set_user_cookie(fake_cookie.to_string()).unwrap();
+    client
+        .save_account("10086", "测试用户", "", fake_cookie)
+        .await
+        .unwrap();
     assert_eq!(client.get_user_cookie(), Some(fake_cookie.to_string()));
     assert!(
-        cookie_file.exists(),
-        "登录后凭据应已写入持久化文件"
+        accounts_file.exists(),
+        "登录后凭据应已写入 JSON 账户库"
     );
-    let on_disk = std::fs::read_to_string(&cookie_file).unwrap();
-    assert_eq!(on_disk, fake_cookie, "落盘内容应与登录凭据一致");
+    let root: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&accounts_file).unwrap()).unwrap();
+    assert_eq!(
+        root["lastLoginUid"].as_str(),
+        Some("10086"),
+        "JSON 库应记录当前登录 uid"
+    );
 
-    // 3. 模拟应用重启：新实例通过 persist_cookie_to 自动恢复
+    // 3. 模拟应用重启：新实例通过 persist_cookie_to 从 JSON 自动恢复
     let restarted = CoolapkClient::new();
     restarted.persist_cookie_to(cookie_file.clone());
     assert_eq!(
@@ -121,20 +130,17 @@ fn test_login_cookie_persistence_flow() {
         "重启后应自动恢复登录凭据"
     );
 
-    // 4. 模拟退出登录：clear_user_cookie 清空内存并删除文件
+    // 4. 模拟退出登录：clear_user_cookie 清空内存与当前登录标记（账户记录保留）
     restarted.clear_user_cookie().unwrap();
     assert_eq!(restarted.get_user_cookie(), None);
-    assert!(
-        !cookie_file.exists(),
-        "退出登录后持久化文件应被删除"
+    let root2: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&accounts_file).unwrap()).unwrap();
+    assert_eq!(root2["lastLoginUid"].as_str(), Some(""), "登出后当前登录标记应清空");
+    assert_eq!(
+        root2["accounts"].as_array().map(|a| a.len()),
+        Some(1),
+        "账户记录应保留，便于下次快速切换"
     );
-
-    // 5. 清理：再次 set 后再 clear，验证空串路径不残留文件
-    restarted.set_user_cookie("SESSID=tmp".to_string()).unwrap();
-    assert!(cookie_file.exists());
-    restarted.set_user_cookie(String::new()).unwrap();
-    assert_eq!(restarted.get_user_cookie(), None);
-    assert!(!cookie_file.exists(), "空凭据也应删除持久化文件");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -237,8 +243,8 @@ fn test_extract_history_list_preserves_entities() {
 
 /// 模拟 Webview 登录脚本捕获到的真实 Cookie 形态（含中文/换行等脏字符），
 /// 验证 set_user_cookie 的 ASCII 清洗与落盘逻辑不会崩坏
-#[test]
-fn test_login_cookie_dirty_input_sanitized() {
+#[tokio::test]
+async fn test_login_cookie_dirty_input_sanitized() {
     use std::path::PathBuf;
 
     let dir = std::env::temp_dir().join(format!(
@@ -254,13 +260,23 @@ fn test_login_cookie_dirty_input_sanitized() {
 
     let dirty = "SESSID=abc;\r\n uid=10086; 昵称=oxygen的喵; other=\"v\"";
     client.set_user_cookie(dirty.to_string()).unwrap();
+    // 先建立账户，set_user_cookie 才会同步写 JSON 账户库
+    client
+        .save_account("10086", "测试用户", "", dirty)
+        .await
+        .unwrap();
+    client.set_user_cookie(dirty.to_string()).unwrap();
 
     let stored = client.get_user_cookie().unwrap();
     assert!(!stored.contains('\r') && !stored.contains('\n'), "不应包含换行");
     assert!(stored.contains("SESSID=abc") && stored.contains("uid=10086"));
-    // 落盘文件也必须是无换行的安全形态
-    let on_disk = std::fs::read_to_string(&cookie_file).unwrap();
-    assert!(!on_disk.contains('\r') && !on_disk.contains('\n'));
+    // 落盘 JSON 账户库中的 cookie 字段必须是清洗后的安全形态
+    let accounts_file: PathBuf = dir.join("accounts.json");
+    let root: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&accounts_file).unwrap()).unwrap();
+    let cookie = root["accounts"][0]["cookie"].as_str().unwrap_or("");
+    assert!(!cookie.contains('\r') && !cookie.contains('\n'), "JSON 库中 cookie 不应包含换行");
+    assert!(cookie.contains("SESSID=abc") && cookie.contains("uid=10086"), "cookie 应保留有效字段");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

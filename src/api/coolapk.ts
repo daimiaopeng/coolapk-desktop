@@ -435,6 +435,22 @@ export class CoolapkTauriAPI {
     return await invokeNative('check_login_status');
   }
 
+  static async listAccounts() {
+    return await invokeNative('list_accounts');
+  }
+
+  static async loginAs(uid: string) {
+    return await invokeNative('login_as', { uid });
+  }
+
+  static async saveAccount(uid: string, username: string, userAvatar: string, cookie: string) {
+    return await invokeNative('save_account', { uid, username, userAvatar, cookie });
+  }
+
+  static async removeAccount(uid: string) {
+    return await invokeNative('remove_account', { uid });
+  }
+
   static async loginByAccount(account: string, password: string) {
     return await invokeNative('login_by_account', { account, password });
   }
