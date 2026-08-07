@@ -1,75 +1,78 @@
 <template>
-  <div class="topics-hub-page">
-    <!-- 头部搜索与操作 -->
-    <div class="hub-header">
-      <div class="header-title">
-        <h2># 话题广场</h2>
-        <span class="header-subtitle">探索酷安各类热议话题、数码体验与酷友交流圈</span>
-      </div>
-      <div class="header-actions">
-        <div class="search-box">
-          <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="搜索话题..."
-            @keyup.enter="handleSearch"
-          />
+  <div class="page-container custom-scrollbar" @scroll="handleScroll">
+    <!-- 头部区域 -->
+    <div class="page-header">
+      <div class="header-main">
+        <div class="header-titles">
+          <h2 class="page-title">
+            <i class="fas fa-hashtag icon"></i> 话题广场
+          </h2>
+          <span class="page-subtitle">探索酷安各类热议话题、数码体验与酷友交流圈</span>
         </div>
-        <button class="btn-refresh" @click="refreshCurrent" :disabled="loading" title="刷新数据">
-          <svg class="refresh-icon" :class="{ spinning: loading }" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 20 1 14 7 14"></path>
-          </svg>
-        </button>
-      </div>
-    </div>
 
-    <!-- 主内容区：两栏结构 -->
-    <div class="hub-body">
-      <!-- 左侧分类侧边栏 -->
-      <div class="category-sidebar custom-scrollbar">
-        <div class="category-list">
-          <button
-            v-for="cat in categories"
-            :key="cat.url"
-            class="category-item"
-            :class="{ active: activeCategoryUrl === cat.url }"
-            @click="switchCategory(cat)"
-          >
-            <span class="category-title">{{ cat.title }}</span>
+        <!-- 话题搜索与刷新 -->
+        <div class="header-actions">
+          <div class="search-box">
+            <i class="fas fa-search search-icon"></i>
+            <input
+              v-model="searchQuery"
+              type="text"
+              placeholder="搜索话题..."
+              class="search-input"
+              @keyup.enter="handleSearch"
+            />
+            <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+
+          <button class="btn-refresh" @click="refreshCurrent" :disabled="loading" title="刷新数据">
+            <i class="fas fa-sync-alt refresh-icon" :class="{ spinning: loading }"></i>
           </button>
         </div>
       </div>
 
-      <!-- 右侧话题网格内容区 -->
-      <div class="topics-content custom-scrollbar" @scroll="handleScroll">
-        <div v-if="loading && page === 1" class="loading-container">
-          <LoadingState text="正在加载话题列表..." />
-        </div>
-
-        <div v-else-if="filteredTopics.length === 0" class="empty-container">
-          <EmptyState title="暂无话题数据" description="未能从服务器获取到话题，请稍后刷新重试" />
-        </div>
-
-        <div v-else class="topics-grid">
-          <TopicCard
-            v-for="(topic, idx) in filteredTopics"
-            :key="topic.id || topic.tag || topic.title || idx"
-            :topic="topic"
-          />
-        </div>
-
-        <!-- 底部翻页/加载状态 -->
-        <div class="pagination-footer" v-if="filteredTopics.length > 0">
-          <LoadingState v-if="loading && page > 1" text="加载更多话题..." />
-          <div v-else-if="noMore" class="no-more">已加载完毕所有话题</div>
-        </div>
+      <!-- 分类快捷标签栏 -->
+      <div class="category-tabs">
+        <button
+          v-for="cat in categories"
+          :key="cat.url"
+          :class="['cat-tab', { active: activeCategoryUrl === cat.url && !searchQuery.trim() }]"
+          @click="switchCategory(cat)"
+        >
+          <i :class="cat.icon"></i> {{ cat.title }}
+        </button>
       </div>
+    </div>
+
+    <!-- 加载中状态 -->
+    <div v-if="loading && page === 1" class="loading-wrapper">
+      <LoadingState text="正在加载话题列表..." />
+    </div>
+
+    <!-- 空数据状态 -->
+    <div v-else-if="filteredTopics.length === 0" class="empty-wrapper">
+      <EmptyState
+        title="暂无相关话题"
+        description="未能找到相关话题，可尝试切换上方分类标签或重新搜索"
+      />
+    </div>
+
+    <!-- 话题网格展示 -->
+    <div v-else class="topics-grid">
+      <TopicCard
+        v-for="(topic, idx) in filteredTopics"
+        :key="topic.id || topic.tag || topic.title || idx"
+        :topic="topic"
+      />
+    </div>
+
+    <!-- 底部加载状态 -->
+    <div class="pagination-footer" v-if="filteredTopics.length > 0">
+      <div v-if="loading && page > 1" class="loading-more-footer">
+        <i class="fas fa-circle-notch fa-spin"></i> 加载更多话题...
+      </div>
+      <div v-else-if="noMore" class="no-more-footer">已加载完毕所有话题</div>
     </div>
   </div>
 </template>
@@ -84,23 +87,22 @@ import EmptyState from '../components/common/EmptyState.vue';
 
 interface CategoryItem {
   title: string;
+  icon: string;
   url: string;
 }
 
 const router = useRouter();
 
-// 对应酷安真实有效的 话题 维度分类列表
 const categories = ref<CategoryItem[]>([
-  { title: '🔥 热门话题', url: '/v6/topic/tagList?sort=hot' },
-  { title: '⭐ 最受关注', url: '/v6/topic/tagList?sort=follow' },
-  { title: '🆕 最新话题', url: '/v6/topic/tagList?sort=new' },
-  { title: '📱 手机数码', url: '/v6/topic/tagList?tagType=1' },
-  { title: '💻 电脑外设', url: '/v6/topic/tagList?tagType=2' },
-  { title: '🎮 游戏生活', url: '/v6/topic/tagList?tagType=3' },
+  { title: '热门话题', icon: 'fas fa-fire', url: '/v6/topic/tagList?sort=hot' },
+  { title: '最受关注', icon: 'fas fa-star', url: '/v6/topic/tagList?sort=follow' },
+  { title: '最新话题', icon: 'fas fa-clock', url: '/v6/topic/tagList?sort=new' },
+  { title: '手机数码', icon: 'fas fa-mobile-alt', url: '/v6/topic/tagList?tagType=1' },
+  { title: '电脑外设', icon: 'fas fa-laptop', url: '/v6/topic/tagList?tagType=2' },
+  { title: '游戏生活', icon: 'fas fa-gamepad', url: '/v6/topic/tagList?tagType=3' },
 ]);
 
 const activeCategoryUrl = ref<string>('/v6/topic/tagList?sort=hot');
-
 const rawTopicItems = ref<any[]>([]);
 const searchQuery = ref('');
 const loading = ref(false);
@@ -128,7 +130,6 @@ async function fetchTopicData(url: string = '/v6/topic/tagList?sort=hot', isLoad
     const res = await CoolapkTauriAPI.getTopicHubData(url, currentPage);
     const dataList = (res && res.data && Array.isArray(res.data)) ? res.data : [];
 
-    // 解析酷安返回的话题数据
     const extractedTopics: any[] = [];
 
     dataList.forEach((item: any) => {
@@ -171,8 +172,8 @@ function isTopicEntity(item: any): boolean {
 }
 
 function switchCategory(cat: CategoryItem) {
-  if (activeCategoryUrl.value === cat.url) return;
   activeCategoryUrl.value = cat.url;
+  searchQuery.value = '';
   page.value = 1;
   noMore.value = false;
   rawTopicItems.value = [];
@@ -193,6 +194,10 @@ function handleSearch() {
   }
 }
 
+function clearSearch() {
+  searchQuery.value = '';
+}
+
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement;
   const { scrollTop, clientHeight, scrollHeight } = target;
@@ -209,93 +214,128 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.topics-hub-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+.page-container {
   width: 100%;
-  overflow: hidden;
-  background-color: var(--background);
+  max-width: var(--feed-max-width);
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-5);
+  margin: 0 auto;
 }
 
-.hub-header {
+.page-header {
+  margin-bottom: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.header-main {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4, 16px) var(--space-6, 24px);
-  border-bottom: 1px solid var(--border);
-  background-color: var(--surface);
-  flex-shrink: 0;
+  gap: var(--space-4);
+  flex-wrap: wrap;
 }
 
-.header-title h2 {
-  font-size: var(--font-size-title-md, 18px);
-  font-weight: var(--font-weight-bold, 700);
+.header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.page-title {
+  font-size: var(--font-size-title-lg);
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
-  margin: 0 0 4px 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
-.header-subtitle {
-  font-size: var(--font-size-xs, 12px);
-  color: var(--text-secondary);
+.page-title .icon {
+  color: var(--brand-primary);
+}
+
+.page-subtitle {
+  font-size: var(--font-size-sub);
+  color: var(--text-tertiary);
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: var(--space-3, 12px);
+  gap: var(--space-3);
 }
 
 .search-box {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background-color: var(--background);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill, 9999px);
-  padding: 6px 14px;
-  transition: all 0.2s ease;
-  width: 220px;
-}
-
-.search-box:focus-within {
-  border-color: var(--brand-primary);
-  box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb, 16, 185, 129), 0.15);
-  width: 280px;
+  width: 260px;
 }
 
 .search-icon {
-  color: var(--text-secondary);
-  flex-shrink: 0;
+  position: absolute;
+  left: 12px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  pointer-events: none;
 }
 
-.search-box input {
+.search-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 32px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background-color: var(--surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-sub);
+  outline: none;
+  transition: all var(--duration-fast);
+}
+
+.search-input:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.clear-btn {
+  position: absolute;
+  right: 10px;
   border: none;
   background: transparent;
-  outline: none;
-  font-size: var(--font-size-sm, 13px);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 12px;
+}
+
+.clear-btn:hover {
   color: var(--text-primary);
-  width: 100%;
 }
 
 .btn-refresh {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background-color: var(--surface);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--duration-fast);
+  flex-shrink: 0;
 }
 
 .btn-refresh:hover:not(:disabled) {
   color: var(--brand-primary);
   border-color: var(--brand-primary);
-  background-color: var(--background);
+  background-color: var(--surface-hover);
 }
 
 .spinning {
@@ -307,75 +347,41 @@ onMounted(() => {
   100% { transform: rotate(360deg); }
 }
 
-.hub-body {
+.category-tabs {
   display: flex;
-  flex: 1;
-  overflow: hidden;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
-.category-sidebar {
-  width: 160px;
-  border-right: 1px solid var(--border);
-  background-color: var(--surface);
-  overflow-y: auto;
-  flex-shrink: 0;
-  padding: var(--space-3, 12px) var(--space-2, 8px);
-}
-
-.category-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.category-item {
+.cat-tab {
   display: flex;
   align-items: center;
-  width: 100%;
-  padding: 10px 14px;
-  border-radius: var(--radius-md, 8px);
-  border: none;
-  background: transparent;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  font-size: var(--font-size-sm, 14px);
-  font-weight: var(--font-weight-medium, 500);
   cursor: pointer;
-  text-align: left;
-  transition: all 0.2s ease;
-  position: relative;
+  transition: all var(--duration-fast);
 }
 
-.category-item:hover {
-  background-color: var(--background);
+.cat-tab:hover {
+  background-color: var(--surface-hover);
   color: var(--text-primary);
 }
 
-.category-item.active {
-  background-color: rgba(var(--brand-primary-rgb, 16, 185, 129), 0.1);
+.cat-tab.active {
+  background-color: var(--brand-soft);
   color: var(--brand-primary);
-  font-weight: var(--font-weight-semibold, 600);
+  border-color: var(--brand-primary);
 }
 
-.category-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  border-radius: 0 4px 4px 0;
-  background-color: var(--brand-primary);
-}
-
-.topics-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-5, 20px);
-}
-
-.loading-container,
-.empty-container {
-  padding: 60px 0;
+.loading-wrapper,
+.empty-wrapper {
+  padding: var(--space-10) 0;
   display: flex;
   justify-content: center;
   align-items: center;
