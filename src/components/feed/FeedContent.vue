@@ -1,6 +1,6 @@
 <template>
   <div class="feed-content-wrapper">
-    <h3 v-if="title" class="feed-title">{{ title }}</h3>
+    <h3 v-if="shouldShowTitle" class="feed-title">{{ title }}</h3>
     <div
       :class="['feed-body', { 'is-collapsed': isLongText && !isExpanded }]"
       :style="isLongText && !isExpanded ? { WebkitLineClamp: collapseLines } : undefined"
@@ -22,6 +22,7 @@ import { useSettingsStore } from '../../stores/settings';
 const props = defineProps<{
   title?: string;
   message?: string;
+  username?: string;
 }>();
 
 const settingsStore = useSettingsStore();
@@ -29,6 +30,15 @@ const settingsStore = useSettingsStore();
 const isExpanded = ref(false);
 
 const collapseLines = computed(() => settingsStore.settings.collapseLines || 0);
+
+// 过滤无实质意义的 Coolapk 默认通用标题（如 "fishVD的动态" 或 "xxx的动态"）
+const shouldShowTitle = computed(() => {
+  if (!props.title) return false;
+  const trimmed = props.title.trim();
+  if (trimmed.endsWith('的动态')) return false;
+  if (props.username && (trimmed === `${props.username}的动态` || trimmed === `${props.username} 的动态`)) return false;
+  return true;
+});
 
 const isLongText = computed(() => {
   if (!props.message) return false;

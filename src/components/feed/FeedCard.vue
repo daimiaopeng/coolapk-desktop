@@ -18,6 +18,7 @@
     <FeedContent
       :title="feed.title"
       :message="feed.message || feed.message_raw_output"
+      :username="feed.username || feed.userInfo?.username"
     />
 
     <FeedImageGrid :images="feed.pics || feed.picArr || (feed.pic ? [feed.pic] : [])" />

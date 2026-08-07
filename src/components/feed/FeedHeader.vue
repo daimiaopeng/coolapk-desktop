@@ -14,7 +14,10 @@
       <div class="meta-row">
         <span v-if="recommendSource" :class="['source-tag', { clickable: entityType === 'product' || entityType === 'dyh' }]" @click.stop="handleSourceClick">{{ recommendSource }}</span>
         <span class="dateline">{{ formatDateline(dateline) }}</span>
-        <span v-if="showDeviceInfo && device" class="device-tag">· {{ device }}</span>
+        <span v-if="showDeviceInfo && device" class="device-badge" :title="device">
+          <i class="fas fa-mobile-alt device-icon"></i>
+          <span>{{ device }}</span>
+        </span>
       </div>
     </div>
 
@@ -174,8 +177,22 @@ function formatDateline(time?: number | string): string {
   opacity: 0.85;
 }
 
-.device-tag {
-  margin-left: 2px;
+.device-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background-color: var(--background-secondary, rgba(0, 0, 0, 0.04));
+  color: var(--text-tertiary);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
+  margin-left: 4px;
+}
+
+.device-icon {
+  font-size: 9px;
+  opacity: 0.8;
 }
 
 .rank-badge {

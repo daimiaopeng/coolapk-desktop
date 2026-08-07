@@ -131,8 +131,23 @@ function shareFeed() {
   background-color: var(--surface-hover);
 }
 
+.action-btn:hover .action-icon {
+  transform: scale(1.15);
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
 .action-btn.is-liked {
-  color: var(--danger);
+  color: #ef4444;
+}
+
+.action-btn.is-liked .action-icon {
+  animation: heartPulse 0.3s ease-in-out;
+}
+
+@keyframes heartPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.35); }
+  100% { transform: scale(1); }
 }
 
 .action-btn.is-fav {
@@ -141,5 +156,6 @@ function shareFeed() {
 
 .action-icon {
   font-size: 15px;
+  transition: transform var(--duration-fast);
 }
 </style>
