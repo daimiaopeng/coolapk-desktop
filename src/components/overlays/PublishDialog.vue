@@ -39,6 +39,35 @@
         @change="handleImageSelected"
       />
 
+      <!-- 表情面板 -->
+      <div v-if="showEmojiPanel" class="emoji-panel custom-scrollbar">
+        <button
+          v-for="(fileName, name) in EMOJI_MAP"
+          :key="name"
+          class="emoji-item"
+          :title="name"
+          @click="insertEmoji(name)"
+        >
+          <img :src="EMOJI_BASE + fileName" :alt="name" />
+        </button>
+      </div>
+
+      <!-- 话题面板 -->
+      <div v-if="showTopicPanel" class="topic-panel custom-scrollbar">
+        <div v-if="topicsLoading" class="panel-tip"><i class="fas fa-circle-notch fa-spin"></i> 正在获取热门话题...</div>
+        <div v-else-if="topics.length === 0" class="panel-tip">暂无热门话题</div>
+        <button
+          v-for="(t, idx) in topics"
+          :key="t.id || t.tag || t.title || idx"
+          class="topic-item"
+          :title="getTopicTitle(t)"
+          @click="insertTopic(getTopicTitle(t))"
+        >
+          <i class="fas fa-hashtag topic-hash"></i>
+          <span class="topic-name">{{ getTopicTitle(t) }}</span>
+        </button>
+      </div>
+
       <div class="publish-toolbar">
         <div class="toolbar-tools">
           <button
@@ -64,35 +93,6 @@
           </button>
         </div>
         <span class="word-count">{{ message.length }} / 1000</span>
-      </div>
-
-      <!-- 表情面板 -->
-      <div v-if="showEmojiPanel" class="emoji-panel custom-scrollbar">
-        <button
-          v-for="(fileName, name) in EMOJI_MAP"
-          :key="name"
-          class="emoji-item"
-          :title="name"
-          @click="insertEmoji(name)"
-        >
-          <img :src="EMOJI_BASE + fileName" :alt="name" />
-        </button>
-      </div>
-
-      <!-- 话题面板 -->
-      <div v-if="showTopicPanel" class="topic-panel custom-scrollbar">
-        <div v-if="topicsLoading" class="panel-tip"><i class="fas fa-circle-notch fa-spin"></i> 正在获取热门话题...</div>
-        <div v-else-if="topics.length === 0" class="panel-tip">暂无热门话题</div>
-        <button
-          v-for="t in topics"
-          :key="t.id || t.title"
-          class="topic-item"
-          :title="t.description || t.title"
-          @click="insertTopic(t.title)"
-        >
-          <i class="fas fa-hashtag topic-hash"></i>
-          <span class="topic-name">{{ t.title }}</span>
-        </button>
       </div>
 
       <div v-if="errorMessage" class="error-tip">
@@ -179,6 +179,16 @@ function insertAtCursor(text: string) {
 
 function insertEmoji(name: string) {
   insertAtCursor(`[${name}]`);
+}
+
+function getTopicTitle(t: any): string {
+  if (!t) return '';
+  if (typeof t === 'string') return t;
+  const raw = t.title || t.tag || t.name || t.entityTitle || t.topic_title || t.targetTitle || t.infoHtml || '';
+  if (typeof raw === 'string') {
+    return raw.replace(/^#|#$/g, '').trim();
+  }
+  return '';
 }
 
 function insertTopic(title: string) {
@@ -465,11 +475,11 @@ async function handlePublish() {
 
 .topic-panel {
   margin-top: var(--space-3);
-  max-height: 180px;
+  max-height: 150px;
   overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-control);
+  padding: var(--space-3);
   background-color: var(--background);
   display: flex;
   flex-wrap: wrap;
@@ -488,28 +498,33 @@ async function handlePublish() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 10px;
-  border-radius: var(--radius-control);
-  background-color: var(--surface-hover);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sub);
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-light);
+  background-color: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
   transition: all var(--duration-fast) var(--ease-default);
-  max-width: 200px;
+  max-width: 220px;
 }
 
 .topic-item:hover {
   background-color: var(--brand-soft);
+  border-color: var(--brand-primary);
   color: var(--brand-primary);
 }
 
 .topic-hash {
-  font-size: var(--font-size-caption);
+  font-size: 12px;
+  color: var(--brand-primary);
 }
 
 .topic-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 550;
 }
 
 .error-tip {

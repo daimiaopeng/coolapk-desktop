@@ -2920,6 +2920,66 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": list }))
     }
 
+    /// 获取粉丝列表。
+    /// 注意：酷安 /v6/user/fansList 返回数据中，真实粉丝信息在 `userInfo` 字段，
+    /// 而 `fUserInfo`/`fuid`/`fusername` 是"自己"的占位数据。
+    /// 这里用 userInfo 重写顶层字段并剔除占位，保证前端渲染的是真实粉丝。
+    pub async fn get_fans_user_list(&self, uid: &str, page: u32) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/user/fansList",
+                &[
+                    ("uid", uid.to_string()),
+                    ("page", page.to_string()),
+                    ("isIncludeTop", "1".to_string()),
+                ],
+            )
+            .await?;
+
+        let list = raw.get("data").cloned().unwrap_or(Value::Array(Vec::new()));
+        let mut clean_list = Vec::new();
+        if let Some(arr) = list.as_array() {
+            let self_uid = uid.trim().to_string();
+            for item in arr {
+                let user_info = item
+                    .get("userInfo")
+                    .or_else(|| item.get("fUserInfo"));
+                let real_uid = user_info
+                    .and_then(|info| info.get("uid"))
+                    .and_then(|v| value_to_string_opt(v))
+                    .unwrap_or_default();
+
+                // 剔除占位数据：真实 uid 为空 或 等于请求者自己
+                if real_uid.is_empty() || real_uid == self_uid {
+                    continue;
+                }
+
+                // 用 userInfo 重写顶层字段，前端可直接读取
+                let username = user_info
+                    .and_then(|info| info.get("username"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("酷友");
+                let avatar = user_info
+                    .and_then(|info| info.get("userAvatar"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                let mut new_item = item.clone();
+                if let Some(obj) = new_item.as_object_mut() {
+                    obj.insert("uid".to_string(), json!(real_uid));
+                    obj.insert("fuid".to_string(), json!(real_uid));
+                    obj.insert("username".to_string(), json!(username));
+                    obj.insert("fusername".to_string(), json!(username));
+                    obj.insert("userAvatar".to_string(), json!(avatar));
+                    obj.insert("fUserAvatar".to_string(), json!(avatar));
+                }
+                clean_list.push(new_item);
+            }
+        }
+
+        Ok(json!({ "code": 200, "data": clean_list }))
+    }
+
     pub async fn create_feed(&self, message: &str, pic: Option<&str>) -> Result<Value, String> {
         let mut query: Vec<(&str, String)> = vec![("message", message.to_string())];
         if let Some(pic) = pic {
@@ -3333,6 +3393,15 @@ fn value_to_string(value: &Value) -> String {
         .or_else(|| value.as_u64().map(|number| number.to_string()))
         .or_else(|| value.as_i64().map(|number| number.to_string()))
         .unwrap_or_default()
+}
+
+fn value_to_string_opt(value: &Value) -> Option<String> {
+    let s = value_to_string(value);
+    if s.is_empty() {
+        None
+    } else {
+        Some(s)
+    }
 }
 
 fn wrap_api_data(response: Value) -> Result<Value, String> {

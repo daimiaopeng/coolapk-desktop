@@ -1,20 +1,18 @@
 <template>
   <aside :class="['main-sidebar', { 'is-collapsed': isCollapsed }]">
-    <!-- 侧边栏折叠/展开控制按钮 (带精致图标) -->
-    <div class="collapse-header">
-      <button
-        class="collapse-toggle-btn"
-        :title="isCollapsed ? '展开侧边栏' : '收起侧边栏'"
-        @click="settingsStore.toggleSidebar"
-      >
-        <svg class="sidebar-panel-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="3" ry="3" />
-          <line x1="9" y1="3" x2="9" y2="21" />
-          <path v-if="isCollapsed" d="M13 12l3-3m0 0l-3-3m3 3H12" />
-          <path v-else d="M15 12l-3-3m0 0l3-3m-3 3h4" />
-        </svg>
-      </button>
-    </div>
+    <!-- 图二同款：吸附在侧边栏右侧分割线边缘的凸起折叠手柄按钮 -->
+    <button
+      class="sidebar-floating-toggle-btn"
+      :title="isCollapsed ? '展开侧边栏' : '收起侧边栏'"
+      @click="settingsStore.toggleSidebar"
+    >
+      <svg class="dock-toggle-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="3" ry="3" />
+        <line x1="9" y1="3" x2="9" y2="21" />
+        <path v-if="isCollapsed" d="M13 15l3-3m0 0l-3-3m3 3H11" />
+        <path v-else d="M15 15l-3-3m0 0l3-3m-3 3h4" />
+      </svg>
+    </button>
 
     <nav class="sidebar-nav custom-scrollbar">
       <div class="nav-group">
@@ -147,6 +145,7 @@ function handleLogout() {
 
 <style scoped>
 .main-sidebar {
+  position: relative;
   width: var(--sidebar-width);
   background-color: var(--surface);
   border-right: 1px solid var(--border);
@@ -154,53 +153,43 @@ function handleLogout() {
   flex-direction: column;
   height: 100%;
   transition: width var(--duration-normal) var(--ease-default);
+  z-index: 10;
 }
 
 .main-sidebar.is-collapsed {
   width: var(--sidebar-collapsed-width);
 }
 
-.collapse-header {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: var(--space-3) var(--space-4);
-  height: 40px;
-  box-sizing: border-box;
-}
-
-.collapse-header-title {
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-tertiary);
-  letter-spacing: 0.5px;
-}
-
-.main-sidebar.is-collapsed .collapse-header {
-  justify-content: center;
-  padding: var(--space-3) 0;
-}
-
-.collapse-toggle-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm, 6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--background, #f5f7f9);
-  border: 1px solid var(--border, #e4e9ef);
+/* 图二同款：吸附在侧边栏右侧分割线边缘的凸起折叠手柄按钮 */
+.sidebar-floating-toggle-btn {
+  position: absolute;
+  top: 20px;
+  right: -13px;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm, 8px);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  z-index: 99;
   transition: all var(--duration-fast) var(--ease-default);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-.collapse-toggle-btn:hover {
+.sidebar-floating-toggle-btn:hover {
   background-color: var(--surface-hover);
   border-color: var(--brand-primary);
   color: var(--brand-primary);
-  transform: scale(1.06);
+  transform: scale(1.12);
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.2);
+}
+
+.dock-toggle-icon {
+  display: block;
 }
 
 .sidebar-panel-icon {

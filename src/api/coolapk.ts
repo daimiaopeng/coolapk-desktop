@@ -554,6 +554,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_follow_user_list', { uid, page });
   }
 
+  static async getFansList(uid: string, page: number = 1) {
+    return await invokeNative('get_fans_user_list', { uid, page });
+  }
+
   static async getUserFollowNodes(uid: string) {
     return await invokeNative('get_user_follow_nodes', { uid });
   }

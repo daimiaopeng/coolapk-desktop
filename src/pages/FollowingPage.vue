@@ -2,10 +2,16 @@
   <div class="page-container custom-scrollbar">
     <div class="page-header">
       <div class="header-main">
-        <h2 class="page-title"><i class="fas fa-user-group icon"></i> 我关注的</h2>
-        <span class="page-subtitle">已关注酷友的最新动态与信息列表</span>
+        <h2 class="page-title">
+          <i :class="['icon', activeTab === 'fans' ? 'fas fa-heart' : 'fas fa-user-group']"></i>
+          {{ activeTab === 'fans' ? '我的粉丝' : '我关注的' }}
+        </h2>
+        <span class="page-subtitle">
+          {{ activeTab === 'fans' ? '关注并支持您的酷友列表' : '已关注酷友的最新动态与信息列表' }}
+        </span>
       </div>
 
+      <!-- 选项卡导航 -->
       <!-- 选项卡导航 -->
       <div class="tab-subnav">
         <button
@@ -22,11 +28,18 @@
           <i class="fas fa-users"></i>
           已关注酷友
         </button>
+        <button
+          :class="['subnav-btn', { active: activeTab === 'fans' }]"
+          @click="switchTab('fans')"
+        >
+          <i class="fas fa-heart"></i>
+          我的粉丝
+        </button>
       </div>
     </div>
 
-    <!-- 图 2 同款：【我关注的人】水平微缩滚动横卡 -->
-    <div v-if="authStore.isLoggedIn && users.length > 0" class="following-users-bar">
+    <!-- 【我关注的人】水平微缩滚动横卡 -->
+    <div v-if="authStore.isLoggedIn && users.length > 0 && activeTab !== 'fans'" class="following-users-bar">
       <div class="bar-header">
         <span class="bar-title">我关注的人</span>
         <span class="bar-more" @click="switchTab('users')">
@@ -54,12 +67,12 @@
         >
           <div class="avatar-ring">
             <AppAvatar 
-              :src="u.fUserAvatar || u.userAvatar" 
+              :src="u.userInfo?.userAvatar || u.fUserInfo?.userAvatar || u.fUserAvatar || u.userAvatar" 
               :plugin-url="u.avatar_plugin_url"
               size="md" 
             />
           </div>
-          <span class="user-name">{{ u.fusername || u.username || '酷友' }}</span>
+          <span class="user-name">{{ u.userInfo?.username || u.fUserInfo?.username || u.fusername || u.username || '酷友' }}</span>
         </div>
       </div>
     </div>
@@ -78,7 +91,7 @@
 
     <!-- 加载中状态 -->
     <div v-else-if="loading" class="loading-wrapper">
-      <LoadingState :text="activeTab === 'feeds' ? '正在获取关注人的动态...' : '正在获取已关注酷友列表...'" />
+      <LoadingState :text="activeTab === 'feeds' ? '正在获取关注人的动态...' : (activeTab === 'fans' ? '正在获取您的粉丝列表...' : '正在获取已关注酷友列表...')" />
     </div>
 
     <!-- 空状态 -->
@@ -87,6 +100,9 @@
     </div>
     <div v-else-if="activeTab === 'users' && users.length === 0" class="empty-wrapper">
       <EmptyState title="暂无关注的酷友" description="在酷安社区发现并关注你感兴趣的酷友吧" />
+    </div>
+    <div v-else-if="activeTab === 'fans' && fansUsers.length === 0" class="empty-wrapper">
+      <EmptyState title="暂无粉丝" description="发布更多精彩动态，吸引更多酷友关注你吧！" />
     </div>
 
     <!-- Tab 1: 关注动态列表 -->
@@ -103,14 +119,14 @@
       </div>
     </div>
 
-    <!-- Tab 2: 已关注酷友用户列表 -->
+    <!-- Tab 2 & 3: 已关注酷友 / 我的粉丝 用户列表 -->
     <div v-else class="user-grid">
-      <div v-for="u in users" :key="getTargetUid(u)" class="user-card">
+      <div v-for="u in (activeTab === 'fans' ? fansUsers : users)" :key="getTargetUid(u)" class="user-card">
         <div class="user-info-area" @click="navigateToUser(getTargetUid(u))">
-          <AppAvatar :src="u.fUserAvatar || u.userAvatar" size="md" />
+          <AppAvatar :src="u.userInfo?.userAvatar || u.fUserInfo?.userAvatar || u.fUserAvatar || u.userAvatar || u.avatar" size="md" />
           <div class="user-text">
-            <span class="username">{{ u.fusername || u.username || '酷友' }}</span>
-            <span class="subtext">{{ u.bio || '暂无个性签名' }}</span>
+            <span class="username">{{ u.userInfo?.username || u.fUserInfo?.username || u.displayUsername || u.fusername || u.username || '酷友' }}</span>
+            <span class="subtext">{{ u.userInfo?.bio || u.fUserInfo?.bio || u.bio || u.sign || '暂无个性签名' }}</span>
           </div>
         </div>
         <div class="card-actions">
@@ -124,8 +140,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
@@ -137,21 +153,25 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 
-const activeTab = ref<'feeds' | 'users'>('feeds');
+const activeTab = ref<'feeds' | 'users' | 'fans'>('feeds');
 const loading = ref(false);
 const feeds = ref<any[]>([]);
 const users = ref<any[]>([]);
+const fansUsers = ref<any[]>([]);
 
-function switchTab(tab: 'feeds' | 'users') {
+function switchTab(tab: 'feeds' | 'users' | 'fans') {
   if (activeTab.value === tab) return;
   activeTab.value = tab;
   if (tab === 'feeds' && feeds.value.length === 0) {
     loadFollowingFeeds();
   } else if (tab === 'users' && users.value.length === 0) {
     loadFollowUsers();
+  } else if (tab === 'fans' && fansUsers.value.length === 0) {
+    loadFansUsers();
   }
 }
 
@@ -163,10 +183,13 @@ function getTargetUid(u: any): string {
   const fuidStr = String(u.fuid || '');
   const uidStr = String(u.uid || '');
   const idStr = String(u.id || u.target_id || '');
+  const infoUidStr = String(u.userInfo?.uid || u.fUserInfo?.uid || '');
 
-  if (fuidStr && fuidStr !== myUid) return fuidStr;
+  // 粉丝列表：真实 uid 在 userInfo 里（fuid 可能是"自己"占位）
+  if (infoUidStr && infoUidStr !== myUid) return infoUidStr;
   if (uidStr && uidStr !== myUid) return uidStr;
-  return fuidStr || uidStr || idStr;
+  if (fuidStr && fuidStr !== myUid) return fuidStr;
+  return infoUidStr || fuidStr || uidStr || idStr;
 }
 
 async function selectUserFilter(uid: string | null) {
@@ -239,6 +262,31 @@ async function loadFollowUsers() {
   }
 }
 
+async function loadFansUsers() {
+  try {
+    const myUid = String(authStore.user?.uid || '1451266');
+    const res = await CoolapkTauriAPI.getFansList(myUid, 1);
+    fansUsers.value = extractList(res);
+  } catch (err) {
+    console.error('获取粉丝用户列表失败:', err);
+  }
+}
+
+function syncTabFromRoute() {
+  const queryTab = route.query.tab as string;
+  if (queryTab === 'fans') {
+    switchTab('fans');
+  } else if (queryTab === 'users') {
+    switchTab('users');
+  } else if (queryTab === 'feeds') {
+    switchTab('feeds');
+  }
+}
+
+watch(() => route.query.tab, () => {
+  syncTabFromRoute();
+});
+
 function navigateToUser(uid: string | number) {
   if (!uid) return;
   router.push(`/user/${uid}`);
@@ -274,6 +322,7 @@ const onRefreshFeeds = () => {
 onMounted(() => {
   loadFollowUsers();
   loadFollowingFeeds(true);
+  syncTabFromRoute();
   window.addEventListener('scroll', onScrollEvent, true);
   window.addEventListener('refresh-feeds', onRefreshFeeds);
 });
