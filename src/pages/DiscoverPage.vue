@@ -298,11 +298,11 @@ onMounted(() => loadDigitalData());
 <style scoped>
 .page-container {
   width: 100%;
-  max-width: 900px;
+  max-width: 100%;
   height: 100%;
   overflow-y: auto;
   padding: 16px;
-  margin: 0 auto;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -625,10 +625,10 @@ onMounted(() => loadDigitalData());
 <style scoped>
 .discover-page {
   width: 100%;
-  max-width: 1180px;
+  max-width: 100%;
   height: 100%;
   overflow-y: auto;
-  margin: 0 auto;
+  margin: 0;
   padding: 28px 32px 48px;
   display: flex;
   flex-direction: column;

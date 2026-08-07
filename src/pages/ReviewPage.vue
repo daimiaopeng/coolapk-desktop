@@ -223,11 +223,11 @@ onUnmounted(() => {
 <style scoped>
 .page-container {
   width: 100%;
-  max-width: var(--feed-max-width);
+  max-width: 100%;
   height: 100%;
   overflow-y: auto;
   padding: var(--space-5);
-  margin: 0 auto;
+  margin: 0;
 }
 
 .page-header {
