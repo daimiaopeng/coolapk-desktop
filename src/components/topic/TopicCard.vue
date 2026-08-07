@@ -9,7 +9,7 @@
         :alt="topicName"
       />
       <div v-else class="topic-icon-fallback">
-        <span class="hashtag">#</span>
+        <i class="fas fa-hashtag hashtag-icon"></i>
       </div>
     </div>
 
@@ -18,7 +18,7 @@
         {{ topicName }}
       </div>
       <div class="topic-stats" v-if="subText">
-        <span class="fire-icon">🔥</span>
+        <i class="fas fa-fire fire-icon"></i>
         <span>{{ subText }}</span>
       </div>
     </div>
@@ -39,7 +39,8 @@ const router = useRouter();
 const topicName = computed(() => {
   const item = props.topic;
   if (!item) return '';
-  return item.title || item.tag || item.title_format || item.entityTemplate || '未知话题';
+  const raw = item.title || item.tag || item.title_format || item.entityTemplate || '未知话题';
+  return raw.replace(/^#|#$/g, '').trim();
 });
 
 const iconUrl = computed(() => {
@@ -69,7 +70,7 @@ function formatNumber(num: number | string) {
 }
 
 function handleClick() {
-  const name = topicName.value.replace(/^#|#$/g, '').trim();
+  const name = topicName.value;
   if (name) {
     router.push(`/topic/${encodeURIComponent(name)}`);
   }
@@ -85,7 +86,7 @@ function handleClick() {
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card, 16px);
-  padding: var(--space-4, 16px);
+  padding: 16px 12px;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
@@ -94,9 +95,10 @@ function handleClick() {
 }
 
 .topic-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-4px);
   border-color: var(--brand-primary);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--brand-primary);
+  background-color: var(--surface-hover);
 }
 
 .topic-card:active {
@@ -104,17 +106,18 @@ function handleClick() {
 }
 
 .topic-icon-wrapper {
-  width: 64px;
-  height: 64px;
-  border-radius: 14px;
+  width: 68px;
+  height: 68px;
+  border-radius: 16px;
   overflow: hidden;
-  margin-bottom: var(--space-3, 12px);
+  margin-bottom: 12px;
   background-color: var(--background);
   border: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .topic-icon {
@@ -125,7 +128,7 @@ function handleClick() {
 }
 
 .topic-card:hover .topic-icon {
-  transform: scale(1.05);
+  transform: scale(1.06);
 }
 
 .topic-icon-fallback {
@@ -134,12 +137,11 @@ function handleClick() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(16, 185, 129, 0.25));
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.25));
 }
 
-.hashtag {
-  font-size: 24px;
-  font-weight: bold;
+.hashtag-icon {
+  font-size: 22px;
   color: var(--brand-primary);
 }
 
@@ -162,14 +164,15 @@ function handleClick() {
 
 .topic-stats {
   font-size: var(--font-size-xs, 12px);
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
 }
 
 .fire-icon {
   font-size: 11px;
+  color: #f59e0b;
 }
 </style>
