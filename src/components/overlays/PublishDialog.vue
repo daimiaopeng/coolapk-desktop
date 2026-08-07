@@ -309,12 +309,23 @@ async function handlePublish() {
     if (res && res.code === 200) {
       message.value = '';
       images.value = [];
-      appStore.closePublish();
+      // 给用户明确反馈后延迟关闭
+      errorMessage.value = '';
+      const successTip = document.createElement('div');
+      successTip.className = 'publish-success-tip';
+      successTip.textContent = '发布成功！';
+      document.body.appendChild(successTip);
+      setTimeout(() => successTip.remove(), 1500);
+      setTimeout(() => {
+        appStore.closePublish();
+      }, 600);
     } else {
       errorMessage.value = res?.message || '发布动态失败';
     }
   } catch (err: any) {
-    errorMessage.value = err.message || '发布动态服务异常';
+    errorMessage.value = err?.message || '发布动态服务异常';
+    // 失败时保持弹窗打开并聚焦输入框，便于用户修改重试
+    nextTick(() => messageInput.value?.focus());
   } finally {
     uploadingImages.value = false;
     submitting.value = false;
@@ -531,5 +542,34 @@ async function handlePublish() {
   margin-top: var(--space-3);
   color: var(--danger);
   font-size: var(--font-size-caption);
+}
+</style>
+
+<style>
+.publish-success-tip {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--brand-primary, #10b981);
+  color: #fff;
+  padding: 10px 22px;
+  border-radius: var(--radius-pill, 9999px);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+  z-index: 9999;
+  animation: successTipIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes successTipIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 </style>

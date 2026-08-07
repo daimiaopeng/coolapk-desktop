@@ -2980,14 +2980,43 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": clean_list }))
     }
 
+    /// 发布动态（需登录）
+    /// 官方客户端要求 POST multipart：message / type=feed / is_html_article=0 / pic
     pub async fn create_feed(&self, message: &str, pic: Option<&str>) -> Result<Value, String> {
-        let mut query: Vec<(&str, String)> = vec![("message", message.to_string())];
+        let token = self.auth.get_app_token()?;
+        let mut form = reqwest::multipart::Form::new()
+            .text("message", message.to_string())
+            .text("type", "feed".to_string())
+            .text("is_html_article", "0".to_string());
         if let Some(pic) = pic {
             if !pic.is_empty() {
-                query.push(("pic", pic.to_string()));
+                form = form.text("pic", pic.to_string());
             }
         }
-        wrap_api_data(self.api_get("/v6/feed/createFeed", &query).await?)
+
+        let mut request = self
+            .client
+            .request(
+                reqwest::Method::POST,
+                "https://api.coolapk.com/v6/feed/createFeed",
+            )
+            .header("X-App-Token", token)
+            .header("X-Requested-With", "XMLHttpRequest")
+            .multipart(form);
+
+        let cookie = self
+            .user_cookie
+            .read()
+            .map_err(|_| "failed to read login state".to_string())?
+            .clone();
+        if let Some(cookie) = cookie {
+            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
+                request = request.header(COOKIE, header_val);
+            }
+        }
+
+        let response = request.send().await.map_err(|e| e.to_string())?;
+        wrap_api_data(response_json(response).await?)
     }
 
     pub async fn check_login_status(&self) -> Result<Value, String> {
