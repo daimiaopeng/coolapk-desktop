@@ -37,12 +37,13 @@
     <div v-else class="comment-list">
       <div v-for="c in nestedComments" :key="c.id || c.uid" class="comment-row">
         <!-- 1. 一级评论人头像 -->
-        <img
+        <AppAvatar
           class="comment-avatar"
-          :src="normalizeImg(c.userAvatar || c.avatar, 'avatar')"
+          :src="c.userAvatar || c.avatar || c.userInfo?.userAvatar"
+          :size="32"
           alt="头像"
           @click="setReplyTarget(c.username || c.userInfo?.username)"
-        >
+        />
 
         <!-- 一级评论主体 -->
         <div class="comment-main">
@@ -101,11 +102,12 @@
               @click="setReplyTarget(sub.username || sub.fromUserName)"
             >
               <!-- 子回复头像 -->
-              <img
+              <AppAvatar
                 class="sub-reply-avatar"
-                :src="normalizeImg(sub.userAvatar || sub.avatar, 'avatar')"
+                :src="sub.userAvatar || sub.avatar || sub.userInfo?.userAvatar"
+                :size="28"
                 alt="头像"
-              >
+              />
               <div class="sub-reply-main">
                 <!-- 子回复 meta -->
                 <div class="sub-reply-meta">
@@ -165,6 +167,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import AppAvatar from '../common/AppAvatar.vue';
 import Button from '../ui/Button.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
