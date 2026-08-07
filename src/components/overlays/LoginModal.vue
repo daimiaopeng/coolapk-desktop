@@ -265,10 +265,6 @@ const successMessage = ref('');
 const isRebinding = ref(false);
 const debugStatus = ref('');
 
-const isValidPhone = computed(() => {
-  return /^1[3-9]\d{9}$/.test(mobilePhone.value.trim());
-});
-
 // 已保存的其他账户（排除当前登录的）
 const otherAccounts = computed(() => {
   const currentUid = String(authStore.user?.uid || '');
