@@ -27,7 +27,18 @@ if (requestedVersion) {
 }
 
 update('package.json', (text) => text.replace(/("version"\s*:\s*")[^"]+(")/, `$1${version}$2`));
-update('package-lock.json', (text) => text.replace(/("version"\s*:\s*")[^"]+(")/, `$1${version}$2`));
+update('package-lock.json', (text) => {
+  try {
+    const lock = JSON.parse(text);
+    lock.version = version;
+    if (lock.packages && lock.packages['']) {
+      lock.packages[''].version = version;
+    }
+    return JSON.stringify(lock, null, 2) + '\n';
+  } catch (e) {
+    return text;
+  }
+});
 update('src-tauri/tauri.conf.json', (text) => text.replace(/("version"\s*:\s*")[^"]+(")/, `$1${version}$2`));
 update('src-tauri/Cargo.toml', (text) => text.replace(/(^version\s*=\s*")[^"]+(")/m, `$1${version}$2`));
 update('src-tauri/Cargo.lock', (text) => text.replace(/(name = "coolapk_desktop"\r?\nversion = ")[^"]+(")/, `$1${version}$2`));
