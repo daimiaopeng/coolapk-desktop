@@ -280,3 +280,31 @@ async fn test_login_cookie_dirty_input_sanitized() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 验证修复后的 get_fans_user_list 返回真实粉丝（需登录）
+#[tokio::test]
+#[ignore]
+async fn verify_fans_user_list_fixed() {
+    let client = CoolapkClient::new();
+    let accounts_path = std::path::Path::new(r"C:\Users\admin\AppData\Roaming\com.coolapk.desktop\accounts.json");
+    if let Ok(content) = std::fs::read_to_string(accounts_path) {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+            if let Some(cookie) = json["accounts"][0]["cookie"].as_str() {
+                let _ = client.set_user_cookie(cookie.to_string());
+            }
+        }
+    }
+
+    match client.get_fans_user_list("1451266", 1).await {
+        Ok(res) => {
+            let arr = res["data"].as_array().cloned().unwrap_or_default();
+            println!("[fixed fansList] len={}", arr.len());
+            for u in arr.iter().take(5) {
+                let uid = u.get("uid").map(serde_json::to_string).and_then(Result::ok).unwrap_or_default();
+                let name = u.get("username").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                println!("  uid={} username={}", uid, name);
+            }
+        }
+        Err(e) => println!("[fixed fansList] ERROR: {}", e),
+    }
+}

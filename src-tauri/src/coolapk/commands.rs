@@ -670,6 +670,15 @@ pub async fn get_follow_user_list(
 }
 
 #[tauri::command]
+pub async fn get_fans_user_list(
+    state: State<'_, AppState>,
+    uid: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_fans_user_list(&uid, page).await
+}
+
+#[tauri::command]
 pub async fn create_feed(
     state: State<'_, AppState>,
     message: String,

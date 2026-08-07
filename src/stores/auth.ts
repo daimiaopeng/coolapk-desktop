@@ -10,6 +10,13 @@ export interface UserProfile {
   bio?: string;
   fans?: number;
   follow?: number;
+  likenum?: number;
+  logintime?: string;
+  gender?: string | number;
+  astro?: string;
+  ageTag?: string;
+  exp?: number;
+  maxExp?: number;
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -70,12 +77,15 @@ export const useAuthStore = defineStore('auth', () => {
 
       const level = Number(data.level || data.userLevel || 0);
       const bio = data.bio || data.sign || '';
+      const likenum = Number(data.be_like_num ?? data.feed_like_num ?? data.like_num ?? data.likenum ?? 0);
+      const fans = Number(data.fans ?? data.fansNum ?? data.fans_num ?? 0);
+      const follow = Number(data.follow ?? data.followNum ?? data.follow_num ?? 0);
 
       if (!uid) {
         throw new Error('无效的 Cookie 凭据，未能识别酷安 UID 账号身份');
       }
 
-      profile = { uid, username, userAvatar, level, bio };
+      profile = { uid, username, userAvatar, level, bio, likenum, fans, follow };
     } catch (err: any) {
       // 只有显式声明了 uid=xxxx 数字 ID 并且带有有效 Session 时，才进行补充识别
       const uidMatch = trimmed.match(/uid=(\d+)/i);
@@ -226,7 +236,8 @@ export const useAuthStore = defineStore('auth', () => {
         };
         user.value = updatedProfile;
         isLoggedIn.value = true;
-        localStorage.setItem('coolapk_user', JSON.stringify(updatedProfile));
+        updateProfileStats(data);
+        localStorage.setItem('coolapk_user', JSON.stringify(user.value));
       }
     } catch (e) {
       // 静默恢复失败：可能是未登录或网络异常，保留离线 UI 兜底
@@ -390,7 +401,8 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
         };
         user.value = profile;
         isLoggedIn.value = true;
-        localStorage.setItem('coolapk_user', JSON.stringify(profile));
+        updateProfileStats(data);
+        localStorage.setItem('coolapk_user', JSON.stringify(user.value));
         return true;
       }
       return false;
@@ -398,6 +410,60 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
       console.warn('checkStatus 校验失败:', e);
       return false;
     }
+  }
+
+  function formatActiveTime(val: any): string {
+    if (!val) return '';
+    const s = String(val).trim();
+    if (/^\d{9,11}$/.test(s)) {
+      const time = Number(s);
+      const now = Math.floor(Date.now() / 1000);
+      const diff = now - time;
+      if (diff < 60) return '刚刚活跃';
+      if (diff < 3600) return `${Math.floor(diff / 60)}分钟前活跃`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}小时前活跃`;
+      if (diff < 2592000) return `${Math.floor(diff / 86400)}天前活跃`;
+      return '';
+    }
+    if (s.includes('活跃') || s.includes('前') || s.includes('刚刚')) {
+      return s;
+    }
+    return '';
+  }
+
+  /**
+   * 更新及补充账户获赞、关注、粉丝及基本信息
+   */
+  function updateProfileStats(data: any) {
+    if (!user.value || !data) return;
+    const fans = Number(data.fans ?? data.fansNum ?? data.fans_num ?? user.value.fans ?? 0);
+    const follow = Number(data.follow ?? data.followNum ?? data.follow_num ?? user.value.follow ?? 0);
+    const likenum = Number(data.be_like_num ?? data.feed_like_num ?? data.feedLikeNum ?? data.like_num ?? data.likenum ?? data.user_like_num ?? user.value.likenum ?? 0);
+    const rawTime = data.logintime_formatted || data.logintime || data.last_active_time || user.value.logintime || '';
+    const logintime = formatActiveTime(rawTime);
+    const astro = data.astro || data.constellation || user.value.astro || '';
+    const ageTag = data.age_tag || data.ageTag || user.value.ageTag || '';
+    const gender = data.gender ?? user.value.gender;
+    const bio = data.bio || data.sign || user.value.bio || '';
+    const level = Number(data.level || data.userLevel || user.value.level || 1);
+    const exp = Number(data.experience || data.userExperience || data.exp || user.value.exp || 0);
+    const maxExp = Number(data.nextLevelExperience || data.next_level_experience || data.nextExp || user.value.maxExp || (level * 100));
+
+    user.value = {
+      ...user.value,
+      fans,
+      follow,
+      likenum,
+      logintime,
+      astro,
+      ageTag,
+      gender,
+      bio,
+      level,
+      exp,
+      maxExp
+    };
+    localStorage.setItem('coolapk_user', JSON.stringify(user.value));
   }
 
   return {
@@ -417,7 +483,8 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
     logout,
     initAuth,
     loadAccounts,
-    loginAs
+    loginAs,
+    updateProfileStats
   };
 });
 
