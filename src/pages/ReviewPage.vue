@@ -1,27 +1,47 @@
 <template>
   <div class="page-container custom-scrollbar">
+    <!-- 头部区域 -->
     <div class="page-header">
       <div class="header-main">
-        <h2 class="page-title"><i class="fas fa-flask icon"></i> 评测区</h2>
-        <span class="page-subtitle">数码产品深度测评与体验分享</span>
+        <div class="header-titles">
+          <h2 class="page-title">
+            <i class="fas fa-flask icon"></i> 评测区
+          </h2>
+          <span class="page-subtitle">数码产品深度测评与体验分享</span>
+        </div>
+
+        <!-- 搜索框 -->
+        <div class="search-box">
+          <i class="fas fa-search search-icon"></i>
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="搜索指定测评或数码产品..."
+            class="search-input"
+            @keyup.enter="handleSearch"
+          />
+          <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
       </div>
 
-      <div class="tab-subnav">
+      <!-- 分类快捷标签栏 -->
+      <div class="category-tabs">
         <button
           v-for="tab in reviewTabs"
           :key="tab.key"
-          :class="['subnav-btn', { active: activeTab === tab.key }]"
+          :class="['cat-tab', { active: activeTab === tab.key && !isSearching }]"
           @click="switchTab(tab.key)"
         >
-          <i :class="[tab.icon, 'subnav-icon']"></i>
-          {{ tab.label }}
+          <i :class="tab.icon"></i> {{ tab.label }}
         </button>
       </div>
     </div>
 
     <!-- 加载中状态 -->
     <div v-if="loading && feeds.length === 0" class="loading-wrapper">
-      <LoadingState text="正在加载评测动态..." />
+      <LoadingState :text="isSearching ? `正在搜索 &quot;${searchQuery}&quot; 相关测评...` : '正在加载评测动态...'" />
     </div>
 
     <!-- 错误状态 -->
@@ -31,7 +51,10 @@
 
     <!-- 空状态 -->
     <div v-else-if="feeds.length === 0" class="empty-wrapper">
-      <EmptyState title="该板块暂无动态" description="换个板块逛逛，或稍后再来看看吧" />
+      <EmptyState
+        :title="isSearching ? '未找到相关评测' : '该板块暂无动态'"
+        :description="isSearching ? '可尝试换个搜索关键词或在下方分类中进行筛选' : '换个板块逛逛，或稍后再来看看吧'"
+      />
     </div>
 
     <!-- 动态列表 -->
@@ -67,6 +90,8 @@ const reviewTabs = [
 ];
 
 const activeTab = ref('review');
+const searchQuery = ref('');
+const isSearching = ref(false);
 const feeds = ref<any[]>([]);
 const page = ref(1);
 const loading = ref(false);
@@ -102,22 +127,27 @@ async function loadFeeds(isRefresh: boolean = false) {
   error.value = '';
 
   try {
-    const tab = reviewTabs.find(t => t.key === activeTab.value);
     let list: any[] = [];
-    if (tab) {
-      try {
-        const res = await CoolapkTauriAPI.getBoardFeeds(tab.boardTag, page.value);
-        list = extractList(res).filter(isValidFeed);
-      } catch (e) {
-        console.warn(`获取板块(${tab.label})动态失败:`, e);
+    if (isSearching.value && searchQuery.value.trim()) {
+      const res = await CoolapkTauriAPI.searchFeeds(searchQuery.value.trim(), page.value);
+      list = extractList(res).filter(isValidFeed);
+    } else {
+      const tab = reviewTabs.find(t => t.key === activeTab.value);
+      if (tab) {
+        try {
+          const res = await CoolapkTauriAPI.getBoardFeeds(tab.boardTag, page.value);
+          list = extractList(res).filter(isValidFeed);
+        } catch (e) {
+          console.warn(`获取板块(${tab.label})动态失败:`, e);
+        }
       }
-    }
-    if (list.length === 0 && page.value === 1) {
-      try {
-        const fallback = await CoolapkTauriAPI.getHotFeeds(1);
-        list = extractList(fallback).filter(isValidFeed);
-      } catch (e) {
-        console.warn('回退热榜失败:', e);
+      if (list.length === 0 && page.value === 1) {
+        try {
+          const fallback = await CoolapkTauriAPI.getHotFeeds(1);
+          list = extractList(fallback).filter(isValidFeed);
+        } catch (e) {
+          console.warn('回退热榜失败:', e);
+        }
       }
     }
 
@@ -142,8 +172,24 @@ async function loadFeeds(isRefresh: boolean = false) {
 }
 
 function switchTab(key: string) {
-  if (activeTab.value === key) return;
   activeTab.value = key;
+  if (isSearching.value) {
+    isSearching.value = false;
+    searchQuery.value = '';
+  }
+  loadFeeds(true);
+}
+
+function handleSearch() {
+  if (searchQuery.value.trim()) {
+    isSearching.value = true;
+    loadFeeds(true);
+  }
+}
+
+function clearSearch() {
+  searchQuery.value = '';
+  isSearching.value = false;
   loadFeeds(true);
 }
 
@@ -187,13 +233,19 @@ onUnmounted(() => {
 .page-header {
   margin-bottom: var(--space-5);
   display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.header-main {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
 }
 
-.header-main {
+.header-titles {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -206,7 +258,7 @@ onUnmounted(() => {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .page-title .icon {
@@ -214,43 +266,88 @@ onUnmounted(() => {
 }
 
 .page-subtitle {
-  font-size: var(--font-size-caption);
+  font-size: var(--font-size-sub);
   color: var(--text-tertiary);
 }
 
-.tab-subnav {
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 280px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.search-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 32px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background-color: var(--surface);
+  color: var(--text-primary);
+  font-size: var(--font-size-sub);
+  outline: none;
+  transition: all var(--duration-fast);
+}
+
+.search-input:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+.clear-btn {
+  position: absolute;
+  right: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 12px;
+}
+
+.clear-btn:hover {
+  color: var(--text-primary);
+}
+
+.category-tabs {
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
 }
 
-.subnav-btn {
-  display: inline-flex;
+.cat-tab {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 14px;
-  border-radius: var(--radius-control);
-  font-size: var(--font-size-sub);
-  color: var(--text-secondary);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
   background-color: var(--surface);
   border: 1px solid var(--border);
-  transition: all var(--duration-fast) var(--ease-default);
-}
-
-.subnav-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--text-tertiary);
-}
-
-.subnav-btn.active {
-  color: var(--brand-primary);
-  background-color: var(--brand-soft);
-  border-color: var(--brand-primary);
+  font-size: var(--font-size-sub);
   font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--duration-fast);
 }
 
-.subnav-icon {
-  font-size: var(--font-size-caption);
+.cat-tab:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.cat-tab.active {
+  background-color: var(--brand-soft);
+  color: var(--brand-primary);
+  border-color: var(--brand-primary);
 }
 
 .loading-wrapper,
