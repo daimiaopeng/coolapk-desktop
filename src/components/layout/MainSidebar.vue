@@ -104,10 +104,10 @@ const isDark = computed(() => {
 const allPrimaryNavs = [
   { key: 'home', path: '/', label: '首页', icon: 'fas fa-home' },
   { key: 'feeds', path: '/feeds', label: '动态', icon: 'fas fa-stream' },
+  { key: 'topics', path: '/topics', label: '话题', icon: 'fas fa-hashtag' },
   { key: 'discover', path: '/discover', label: '发现', icon: 'fas fa-compass' },
   { key: 'apps', path: '/apps', label: '应用', icon: 'fas fa-cubes' },
   { key: 'games', path: '/games', label: '游戏', icon: 'fas fa-gamepad' },
-  { key: 'topics', path: '/topics', label: '话题', icon: 'fas fa-hashtag' },
   { key: 'reviews', path: '/reviews', label: '评测区', icon: 'fas fa-flask' },
   { key: 'secondhand', path: '/secondhand', label: '二手市场', icon: 'fas fa-store' },
 ];
