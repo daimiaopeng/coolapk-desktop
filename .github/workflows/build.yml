@@ -185,7 +185,6 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 酷安 ${{ github.ref_name }}
-          releaseBody: 请在下方下载适合当前系统的安装包。
           releaseDraft: false
           prerelease: false
           generateReleaseNotes: true
