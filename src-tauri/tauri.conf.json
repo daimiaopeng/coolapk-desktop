@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "coolapk-desktop",
+  "productName": "酷安",
   "version": "1.4.4",
   "identifier": "com.coolapk.desktop",
   "build": {
