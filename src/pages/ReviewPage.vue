@@ -350,6 +350,19 @@ onUnmounted(() => {
   border-color: var(--brand-primary);
 }
 
+.feed-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .feed-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 .loading-wrapper,
 .error-wrapper,
 .empty-wrapper {

@@ -51,15 +51,6 @@
       <div v-if="topicDetail.description || topicDetail.intro" class="topic-description">
         {{ topicDetail.description || topicDetail.intro }}
       </div>
-
-      <!-- 酷友自建 / 相近关联小分队卡片 -->
-      <div class="topic-sub-link-card" @click="openRelatedTopic">
-        <div class="sub-link-left">
-          <span class="sub-badge"><i class="fas fa-arrow-alt-circle-up"></i> 酷友自建</span>
-          <span class="sub-title">拼多多互助</span>
-        </div>
-        <i class="fas fa-chevron-right arrow-icon"></i>
-      </div>
     </div>
 
     <div v-else-if="headerLoading" class="topic-header-card skeleton-header">
@@ -77,14 +68,6 @@
         <span>{{ tab.label }}</span>
         <span v-if="activeTopicTab === tab.key" class="tab-line"></span>
       </button>
-    </div>
-
-    <!-- 3. 大额优惠券 Banner 提示 -->
-    <div class="coupon-live-banner">
-      <div class="coupon-text">
-        <span class="coupon-icon">🎁</span> 这些直播间 <strong class="highlight">正在发大额优惠券</strong>
-      </div>
-      <i class="fas fa-chevron-right arrow-icon"></i>
     </div>
 
     <!-- 4. 排序筛选工具条 [全部讨论: 默认 / 最新 / 热度] -->
@@ -334,10 +317,6 @@ async function toggleFollow() {
 
 function focusSearch() {
   router.push({ path: '/search', query: { q: tag.value } });
-}
-
-function openRelatedTopic() {
-  router.push('/topic/拼多多互助');
 }
 
 onMounted(() => {
