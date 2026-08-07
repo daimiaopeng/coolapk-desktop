@@ -153,10 +153,10 @@ function adjustFontSize(delta: number) {
 const navItems = [
   { key: 'home', label: '首页', icon: 'fas fa-home' },
   { key: 'feeds', label: '动态中心', icon: 'fas fa-stream' },
+  { key: 'topics', label: '话题广场', icon: 'fas fa-hashtag' },
   { key: 'discover', label: '发现中心', icon: 'fas fa-compass' },
   { key: 'apps', label: '应用中心', icon: 'fas fa-cubes' },
   { key: 'games', label: '游戏中心', icon: 'fas fa-gamepad' },
-  { key: 'topics', label: '话题广场', icon: 'fas fa-hashtag' },
   { key: 'reviews', label: '评测区', icon: 'fas fa-flask' },
   { key: 'secondhand', label: '二手市场', icon: 'fas fa-store' },
   { key: 'notifications', label: '通知中心', icon: 'far fa-bell' },
