@@ -100,7 +100,7 @@
               <div
                 v-for="item in group.items"
                 :key="item.id"
-                class="feed-history-card"
+                class="feed-history-card history-item"
                 @click="openItem(item)"
               >
                 <div class="feed-card-top">
@@ -117,7 +117,7 @@
 
                 <div
                   v-if="richDescription(item)"
-                  class="feed-text-content"
+                  class="feed-text-content history-desc"
                   v-html="richDescription(item)"
                   @click.stop="handleDescClick($event, item)"
                 ></div>
