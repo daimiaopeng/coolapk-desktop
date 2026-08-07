@@ -376,7 +376,8 @@ async function loadSubReplies(reset: boolean) {
 
 .sub-comments {
   background-color: var(--background);
-  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   padding: var(--space-2) var(--space-3);
   margin-top: var(--space-2);
   display: flex;

@@ -404,9 +404,9 @@ function handleSend() {
 .feed-comment-section {
   margin-top: 14px;
   padding: 14px;
-  background: var(--bg-subtle, #f8fafc);
-  border-radius: var(--radius-lg, 10px);
-  border: 1px solid var(--divider-color, #edf0f3);
+  background: var(--background);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-light);
 }
 
 /* 输入框 */
@@ -418,18 +418,19 @@ function handleSend() {
 
 .comment-input {
   flex: 1;
-  border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-color, #e4e9ef);
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
   padding: 8px 14px;
   font-size: 0.85rem;
   outline: none;
-  background: #ffffff;
-  transition: var(--transition-fast);
+  background: var(--surface);
+  color: var(--text-primary);
+  transition: all var(--duration-fast);
 }
 
 .comment-input:focus {
-  border-color: var(--brand-green, #10b966);
-  box-shadow: 0 0 0 2px var(--brand-green-light);
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 2px var(--brand-soft);
 }
 
 /* 加载与空提示 */
@@ -441,7 +442,7 @@ function handleSend() {
   gap: 8px;
   padding: 20px 0;
   font-size: 0.82rem;
-  color: var(--text-sub, #667085);
+  color: var(--text-secondary);
 }
 
 .empty-icon {
@@ -449,7 +450,7 @@ function handleSend() {
 }
 
 .text-green {
-  color: var(--brand-green, #10b966);
+  color: var(--brand-primary);
 }
 
 /* 评论列表 */
@@ -491,12 +492,12 @@ function handleSend() {
 
 .comment-username {
   font-weight: 700;
-  color: var(--text-main, #172033);
+  color: var(--text-primary);
   cursor: pointer;
 }
 
 .comment-username:hover {
-  color: var(--brand-green, #10b966);
+  color: var(--brand-primary);
 }
 
 /* 楼主 Badge 标签 (微博/酷安 风格高亮) */
@@ -505,10 +506,10 @@ function handleSend() {
   align-items: center;
   gap: 3px;
   font-size: 0.68rem;
-  background: var(--brand-green, #10b966);
-  color: #ffffff;
+  background: var(--brand-primary);
+  color: var(--text-inverse, #ffffff);
   padding: 1px 6px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-xs);
   font-weight: 600;
   line-height: 1.3;
 }
@@ -521,8 +522,8 @@ function handleSend() {
 
 .level-tag {
   font-size: 0.68rem;
-  background: var(--bg-app, #f5f7f9);
-  color: var(--text-sub, #667085);
+  background: var(--background-secondary);
+  color: var(--text-secondary);
   padding: 1px 5px;
   border-radius: 4px;
   font-weight: 600;
@@ -530,12 +531,12 @@ function handleSend() {
 
 .comment-time {
   font-size: 0.76rem;
-  color: var(--text-muted, #98a2b3);
+  color: var(--text-tertiary);
 }
 
 .comment-text {
   font-size: 0.88rem;
-  color: var(--text-main, #172033);
+  color: var(--text-primary);
   line-height: 1.6;
   word-break: break-word;
   cursor: pointer;
@@ -557,7 +558,7 @@ function handleSend() {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-muted, #98a2b3);
+  color: var(--text-tertiary);
   font-size: 0.75rem;
   line-height: 1.4;
   cursor: pointer;
@@ -567,7 +568,7 @@ function handleSend() {
 .comment-like-btn:hover,
 .comment-reply-btn:hover,
 .comment-like-btn.is-liked {
-  color: var(--brand-green, #10b966);
+  color: var(--brand-primary);
 }
 
 .comment-like-btn.is-liked i {
@@ -598,7 +599,7 @@ function handleSend() {
   margin-top: 8px;
   margin-left: 4px;
   padding-left: 14px;
-  border-left: 2px solid var(--border-color, #e4e9ef);
+  border-left: 2px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -609,13 +610,13 @@ function handleSend() {
   align-items: flex-start;
   gap: 10px;
   padding: 8px 8px;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: var(--transition-fast);
+  transition: var(--duration-fast);
 }
 
 .sub-reply-row:hover {
-  background: var(--bg-hover, #f1f5f9);
+  background: var(--surface-hover);
 }
 
 .sub-reply-avatar {
@@ -645,22 +646,22 @@ function handleSend() {
 
 .sub-user {
   font-weight: 700;
-  color: var(--text-main, #172033);
+  color: var(--text-primary);
 }
 
 .sub-reply-to {
-  color: var(--text-muted, #98a2b3);
+  color: var(--text-tertiary);
   margin: 0 2px;
 }
 
 .sub-target-user {
-  color: var(--brand-green, #10b966);
+  color: var(--brand-primary);
   font-weight: 600;
 }
 
 .sub-reply-text {
   font-size: 0.85rem;
-  color: var(--text-main, #172033);
+  color: var(--text-primary);
   line-height: 1.55;
   word-break: break-word;
 }
@@ -677,17 +678,21 @@ function handleSend() {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.78rem;
-  color: var(--brand-green, #10b966);
+  color: var(--brand-primary);
   font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: var(--transition-fast);
+  transition: var(--duration-fast);
 }
 
 .sub-more-btn:hover {
-  background: var(--brand-green-light);
+  background: var(--brand-soft);
+}
+
+.icon-arrow {
+  font-size: 0.7em;
 }
 
 .icon-arrow {
