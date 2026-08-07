@@ -2,19 +2,40 @@
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
     <div class="page-header">
       <div class="header-main">
-        <h2 class="page-title"><i class="far fa-bookmark icon"></i> 我的收藏</h2>
-        <span class="page-subtitle">同步自酷安账号的真实收藏</span>
+        <div class="header-titles">
+          <h2 class="page-title">
+            <i class="far fa-bookmark icon"></i> 我的收藏
+          </h2>
+          <span class="page-subtitle">同步自酷安账号的真实收藏</span>
+        </div>
+
+        <div v-if="authStore.isLoggedIn" class="header-actions">
+          <AppButton
+            variant="secondary"
+            size="sm"
+            icon="fas fa-sync-alt"
+            :loading="loading"
+            @click="fetchCloudFavorites(true)"
+          >
+            刷新收藏
+          </AppButton>
+        </div>
       </div>
-      <div class="header-actions">
-        <AppButton
-          v-if="authStore.isLoggedIn"
-          variant="secondary"
-          size="sm"
-          icon="fas fa-sync-alt"
-          @click="fetchCloudFavorites(true)"
+
+      <!-- 分类快捷标签栏 -->
+      <div v-if="authStore.isLoggedIn" class="category-tabs">
+        <button
+          :class="['cat-tab', { active: activeSubTab === 'all' }]"
+          @click="switchSubTab('all')"
         >
-          刷新收藏
-        </AppButton>
+          <i class="far fa-bookmark"></i> 全部收藏
+        </button>
+        <button
+          :class="['cat-tab', { active: activeSubTab === 'collections' }]"
+          @click="switchSubTab('collections')"
+        >
+          <i class="fas fa-folder-open"></i> 收藏单
+        </button>
       </div>
     </div>
 
@@ -27,20 +48,6 @@
     </div>
 
     <template v-else>
-        <div class="cloud-sub-tabs">
-          <button
-            :class="['cloud-sub-tab', { active: activeSubTab === 'all' }]"
-            @click="switchSubTab('all')"
-          >
-            全部收藏
-          </button>
-          <button
-            :class="['cloud-sub-tab', { active: activeSubTab === 'collections' }]"
-            @click="switchSubTab('collections')"
-          >
-            收藏单
-          </button>
-        </div>
 
         <!-- 收藏单内容视图 -->
         <div v-if="activeSubTab === 'collections' && activeCollectionId" class="collection-detail">
@@ -473,27 +480,29 @@ onMounted(() => {
 <style scoped>
 .page-container {
   width: 100%;
-  max-width: var(--feed-max-width);
+  max-width: 100%;
   height: 100%;
   overflow-y: auto;
   padding: var(--space-5);
-  margin: 0 auto;
+  margin: 0;
 }
 
 .page-header {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.header-titles {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -518,37 +527,55 @@ onMounted(() => {
   color: var(--text-tertiary);
 }
 
-.cloud-sub-tabs {
+.header-actions {
   display: flex;
-  gap: var(--space-4);
-  margin-bottom: var(--space-4);
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.cloud-sub-tab {
-  border: none;
-  background: transparent;
-  font-size: 13px;
-  font-weight: 500;
+.category-tabs {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.cat-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 4px 2px;
+  transition: all var(--duration-fast);
 }
 
-.cloud-sub-tab.active {
-  color: var(--brand-primary, #10b981);
-  font-weight: 700;
-  border-bottom: 2px solid var(--brand-primary, #10b981);
+.cat-tab:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.cat-tab.active {
+  background-color: var(--brand-soft);
+  color: var(--brand-primary);
+  border-color: var(--brand-primary);
 }
 
 .collection-grid {
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 .collection-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+  width: 100%;
 }
 
 .collection-card {
