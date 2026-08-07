@@ -131,17 +131,37 @@ onMounted(() => {
 }
 
 .rank-num {
-  font-size: 14px;
-  font-weight: var(--font-weight-bold);
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text-tertiary);
-  width: 18px;
-  text-align: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  background-color: var(--background-secondary, rgba(0, 0, 0, 0.04));
+  margin-top: 1px;
 }
 
-.rank-1 { color: #ff4757; }
-.rank-2 { color: #ffa502; }
-.rank-3 { color: #eccc68; }
+.rank-1 {
+  background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(255, 71, 87, 0.35);
+}
+
+.rank-2 {
+  background: linear-gradient(135deg, #ffa502 0%, #ff7f50 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(255, 165, 2, 0.35);
+}
+
+.rank-3 {
+  background: linear-gradient(135deg, #eccc68 0%, #ffa502 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(236, 204, 104, 0.35);
+}
 
 .item-info {
   display: flex;
