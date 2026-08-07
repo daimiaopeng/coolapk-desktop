@@ -71,7 +71,7 @@ import BackToTop from './components/common/BackToTop.vue';
 import AppDialog from './components/common/AppDialog.vue';
 import { useAuthStore } from './stores/auth';
 import { useSettingsStore } from './stores/settings';
-import { checkLatestRelease, type UpdateInfo } from './utils/updateChecker';
+import { checkLatestRelease, isNewerVersion, type UpdateInfo } from './utils/updateChecker';
 import { desktopNotify } from './utils/desktopNotify';
 import { registerGlobalHotkeys } from './utils/hotkeys';
 import { CoolapkTauriAPI } from './api/coolapk';
@@ -161,6 +161,12 @@ async function startBackgroundDownload(info: UpdateInfo) {
 function installNow() {
   const info = readyInfo.value;
   if (!info) return;
+  // 安装前再次校验：本地已不低于该版本时放弃安装旧包（防降级）
+  if (info.version && !isNewerVersion(info.version)) {
+    localStorage.removeItem(PENDING_UPDATE_KEY);
+    readyInfo.value = null;
+    return;
+  }
   localStorage.removeItem(PENDING_UPDATE_KEY);
   readyInfo.value = null;
   void (async () => {
@@ -195,12 +201,13 @@ onMounted(() => {
   window.addEventListener('resize', settingsStore.refreshAutoZoom);
   unregisterHotkeys = registerGlobalHotkeys();
 
-  // 上次已下载但未安装的更新包：启动时再次询问
+  // 上次已下载但未安装的更新包：启动时再次询问（仅当更新包版本确实高于当前版本，
+  // 防止本地已更新到更高版本后仍提示安装旧包导致降级）
   try {
     const pendingRaw = localStorage.getItem(PENDING_UPDATE_KEY);
     if (pendingRaw) {
       const pending = JSON.parse(pendingRaw);
-      if (pending && pending.version && pending.path) {
+      if (pending && pending.version && pending.path && isNewerVersion(pending.version)) {
         readyInfo.value = pending;
       } else {
         localStorage.removeItem(PENDING_UPDATE_KEY);
