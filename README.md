@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="https://github.com/daimiaopeng/coolapk-desktop/actions/workflows/build.yml"><img src="https://github.com/daimiaopeng/coolapk-desktop/actions/workflows/build.yml/badge.svg" alt="构建状态"></a>
+  <a href="https://github.com/daimiaopeng/coolapk-desktop/releases"><img src="https://img.shields.io/github/v/release/daimiaopeng/coolapk-desktop?color=41b883" alt="最新版本"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT 许可证"></a>
   <img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri" alt="Tauri 2">
 </p>
@@ -15,33 +16,56 @@
 > [!IMPORTANT]
 > 本项目是社区维护的非官方客户端，与酷安官方及深圳酷安网络科技有限公司无隶属、授权或合作关系。酷安名称、Logo 和相关商标归其权利人所有。
 
+## 📥 下载与安装
+
+请前往 [👉 GitHub Releases](https://github.com/daimiaopeng/coolapk-desktop/releases) 获取各平台的最新版本程序包：
+
+| 操作系统 | 文件格式 | 推荐安装包 |
+| :--- | :--- | :--- |
+| **Windows** | `.exe` | `coolapk-desktop_1.4.5_x64-setup.exe` (NSIS 一键安装包) |
+| **macOS** | `.dmg` / `.app` | `coolapk-desktop_1.4.5_aarch64.dmg` (Apple 芯片) / `x64.dmg` (Intel 芯片) |
+| **Linux** | `.AppImage` / `.deb` / `.rpm` | `coolapk-desktop_1.4.5_amd64.AppImage` / `.deb` / `.rpm` |
+
+> 💡 **提示**：构建产物均由 GitHub Actions 自动化流程在云端打包，无任何广告及恶意注入。
+
 ## 界面预览
 
-### 动态首页
+![界面预览 1](docs/screenshots/1.png)
 
-![酷安桌面端动态首页](docs/screenshots/feed-home.png)
+![界面预览 2](docs/screenshots/2.png)
 
-### 评论区
+![界面预览 3](docs/screenshots/3.png)
 
-![酷安桌面端评论区](docs/screenshots/comments.png)
+![界面预览 4](docs/screenshots/4.png)
+
+![界面预览 5](docs/screenshots/5.png)
+
+![界面预览 6](docs/screenshots/6.png)
+
+![界面预览 7](docs/screenshots/7.png)
+
+![界面预览 8](docs/screenshots/8.png)
 
 ## 功能
 
-- 首页推荐、24 小时热榜、精选、最新、酷图、二手和分类频道
-- 正文超过约 12 行时才折叠，点击后在本地即时展开，不额外请求详情接口
-- 首屏动态详情和评论在列表显示后以有限并发后台预加载，打开时优先使用缓存
-- 微博风格评论区、楼中楼、热门/时间排序及酷安表情
-- 搜索、用户空间、话题、应用详情、通知和私信接口
-- 点赞、评论、关注、发布等登录后操作
-- Rust 原生网络层、Token V3 兼容签名及图片代理
-- Windows、macOS、Linux 原生桌面构建
+- **首页信息流**：推荐、热榜、快讯、酷图、二手、数码、评测等频道一应俱全
+- **动态浏览**：图文详情、评论楼中楼、热门爆评、点赞、收藏、转发查看，体验顺畅
+- **浏览历史**：时间轴轨迹记录，支持动态、用户、话题与应用分类即时筛选及右侧常逛侧边栏
+- **关注与粉丝**：双列响应式布局，支持查看已关注酷友及粉丝列表、实时动态与全量自动翻页
+- **搜索直达**：全站综合搜索涵盖应用、游戏、用户、话题与动态帖子
+- **收藏管理**：集成云端收藏与收藏单合集，支持全屏满幅平铺浏览
+- **广场中心**：涵盖话题广场、评测区、应用中心与游戏中心
+- **私信聊天**：支持文字与图片消息，支持多账号快速切换
+- **账号能力**：官方授权或 Cookie 登录，多账户本地保存与一键切账号
+- **个性化与布局**：全屏无边距满幅平铺、深浅色主题、侧边栏折叠与默认启动页设置
+- **跨平台**：Windows、macOS、Linux 原生桌面应用
 
-接口来自未公开、可能随时变化的移动端协议。部分频道或登录后操作可能因服务端调整、账号权限或风控策略失效。
+部分功能依赖酷安服务端接口，可能因官方调整、账号权限或风控策略而临时失效。
 
 ## 隐私与网络访问
 
-- 项目不内置个人 Cookie、账号 Token、统计 SDK或遥测服务。
-- 登录 Cookie 由用户手动输入，只保存在当前进程内存中，退出应用后失效。
+- 项目不内置个人 Cookie、账号 Token、统计 SDK 或遥测服务。
+- 登录凭据由用户手动输入，只保存在本地应用数据目录的账户库中，不写入仓库。
 - 客户端标识在每次启动时临时生成，不使用开发者或用户的固定设备指纹。
 - 应用会直接访问 `api.coolapk.com`、酷安图片/静态资源域名；不会向第三方字体或图标 CDN 发起请求。
 - 请勿在 Issue、日志或截图中提交真实 Cookie、私信和其他个人数据。
@@ -116,12 +140,14 @@ src-tauri/                   Rust / Tauri 桌面端
   src/coolapk/auth.rs        Token V3 兼容签名
   src/coolapk/client.rs      API、图片和会话请求
   src/coolapk/commands.rs    Tauri commands
+  src/coolapk/api_tests.rs   接口可用性探测测试
+docs/screenshots/            界面预览截图
 .github/workflows/build.yml  跨平台构建流程
 ```
 
 ## 登录说明
 
-公开浏览功能不需要登录。需要账号权限的操作可在“功能中心”临时载入 Cookie。Cookie 不会写入仓库或持久化到磁盘，但它仍等同于账号凭据，请只在可信的本地构建中使用。
+公开浏览功能不需要登录。需要账号权限的操作可在登录弹窗中通过官方授权窗口或 Cookie 凭据导入登录；多账户会保存在本地账户库中，可随时快速切换。Cookie 不会写入仓库，但它仍等同于账号凭据，请只在可信的本地构建中使用。
 
 ## 贡献
 
