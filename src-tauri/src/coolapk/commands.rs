@@ -689,18 +689,14 @@ pub async fn create_feed(
 
 #[tauri::command]
 pub async fn save_cookie_securely(
-    app: tauri::AppHandle,
     state: State<'_, AppState>,
     cookie_str: String,
 ) -> Result<String, String> {
-    use tauri::Manager;
     eprintln!("[login-debug] save_cookie_securely received cookie len={}", cookie_str.len());
     state.client.set_user_cookie(cookie_str)?;
-    if let Some(win) = app.get_webview_window("login_window") {
-        let _ = win.close();
-    }
-    eprintln!("[login-debug] save_cookie_securely done, cookie saved");
-    Ok("登录 Cookie 已载入当前桌面会话".to_string())
+    // 保存和验证分开：回调页必须先确认服务端返回真实账号，再关登录窗口。
+    eprintln!("[login-debug] save_cookie_securely done, cookie staged for validation");
+    Ok("登录 Cookie 已载入，正在验证会话".to_string())
 }
 
 #[tauri::command]
@@ -951,32 +947,62 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     }
 
     let app_origin = get_app_origin(&app);
+    let target_login = format!(
+        "https://account.coolapk.com/auth/loginByCoolapk?forward={}/#/auth_callback",
+        app_origin
+    );
+    // 先发起 logout 清理网页底层 Cookie 旧会话，防止服务端自动 302 静默跳回旧账号，强制弹出全新登录框
     let login_url = reqwest::Url::parse_with_params(
-        "https://account.coolapk.com/auth/loginByCoolapk",
-        &[("forward", format!("{}/#/auth_callback", app_origin))],
+        "https://account.coolapk.com/auth/logout",
+        &[("forward", target_login)],
     )
     .map_err(|e| e.to_string())?;
 
     eprintln!("[login-debug] open_login_webview url={}", login_url);
 
-    // 远程域 IPC 在 Tauri 2 中受限，注入脚本不再依赖 invoke 调 Rust，
-    // 改为「URL 回跳」：检测到凭据后直接跳回本地回调页 {app_origin}/#/auth_callback?ck=<cookie>，
-    // 由回调页（本地应用源，IPC 可用）负责保存凭据并关窗。
+    // 远程域 IPC 在 Tauri 2 中受限，注入脚本侦测到有效 SESSID 后跳回本地回调页 {app_origin}/#/auth_callback?ck=<cookie>，
+    // 由回调页及 Rust monitor 提取保存凭据并关窗。
     let js_script = r#"
         (function() {
             var APP_ORIGIN = "__APP_ORIGIN__";
             var saved = false;
 
+            function checkLogoutPage() {
+                var href = window.location.href || "";
+                var text = (document.body && document.body.innerText) || "";
+                if (href.indexOf('auth/logout') !== -1 || text.indexOf('已经退出登录') !== -1) {
+                    window.location.replace("https://account.coolapk.com/auth/loginByCoolapk?forward=" + encodeURIComponent(APP_ORIGIN + "/#/auth_callback"));
+                    return true;
+                }
+                return false;
+            }
+
+            function hasValidSessId(cookies) {
+                if (!cookies) return false;
+                var sm = cookies.match(/(?:^|;\s*)SESSID=([^;]+)/i);
+                var um = cookies.match(/(?:^|;\s*)uid=([^;]+)/i);
+                var sOk = sm && sm[1].trim().length > 5 && sm[1].indexOf('deleted') === -1 && sm[1].indexOf('expired') === -1;
+                var uOk = um && um[1].trim() !== '0' && um[1].trim() !== '10000' && um[1].trim().length > 0;
+                return Boolean(sOk && uOk);
+            }
+
             function relayBack() {
                 if (saved) return;
                 var cookies = document.cookie || "";
-                var hasCreds = (cookies.indexOf("SESSID=") !== -1 || cookies.indexOf("uid=") !== -1 || cookies.indexOf("token=") !== -1);
-                if (!cookies || cookies.length < 5 || (!hasCreds && cookies.length <= 15)) return;
+                if (!hasValidSessId(cookies)) return;
                 saved = true;
                 window.location.replace(APP_ORIGIN + "/#/auth_callback?ck=" + encodeURIComponent(cookies));
             }
 
-            // 1. XHR 拦截：validateLogin 响应完成后凭据即已下发，立刻回跳
+            if (checkLogoutPage()) return;
+
+            document.addEventListener('DOMContentLoaded', function() {
+                if (!checkLogoutPage()) {
+                    relayBack();
+                }
+            });
+
+            // 1. XHR 拦截：validateLogin / 登录 API 响应完成后等待 Cookie 写入立刻检查并回跳
             try {
                 var oldOpen = XMLHttpRequest.prototype.open;
                 var oldSend = XMLHttpRequest.prototype.send;
@@ -986,29 +1012,19 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                 };
                 XMLHttpRequest.prototype.send = function() {
                     this.addEventListener('load', function() {
-                        if (this._reqUrl && this._reqUrl.indexOf('validateLogin') !== -1) {
-                            setTimeout(relayBack, 200);
+                        if (this._reqUrl && (this._reqUrl.indexOf('validateLogin') !== -1 || this._reqUrl.indexOf('loginByCoolapk') !== -1 || this._reqUrl.indexOf('/account/login') !== -1)) {
+                            setTimeout(relayBack, 250);
                         }
                     });
                     return oldSend.apply(this, arguments);
                 };
             } catch(e) {}
 
-            // 2. 轮询侦测凭据（登录落地页 www.coolapk.com 上 .coolapk.com 域 cookie 同样可读）
+            // 2. 轮询侦测真实有效的 SESSID 与 uid Cookie（绝不误判访客 uid=0）
             setInterval(function() {
-                var cookies = document.cookie || "";
-                var href = window.location.href || "";
-                var hasCreds = (cookies.indexOf("SESSID=") !== -1 || cookies.indexOf("uid=") !== -1 || cookies.indexOf("token=") !== -1);
-                var isOnLoginForm = (href.indexOf("loginByCoolapk") !== -1 || href.indexOf("auth/login") !== -1 || href.indexOf("validateLogin") !== -1);
-                var isCoolapkPage = (href.indexOf("coolapk.com") !== -1);
-                if (hasCreds || (cookies.length > 15 && isCoolapkPage && !isOnLoginForm)) {
-                    relayBack();
-                }
-            }, 250);
-
-            // 3. 页面即将跳离酷安域面前最后一刻回跳，规避轮询竞态
-            window.addEventListener('pagehide', relayBack);
-            window.addEventListener('unload', relayBack);
+                if (checkLogoutPage()) return;
+                relayBack();
+            }, 300);
         })();
     "#
     .replace("__APP_ORIGIN__", &app_origin);
@@ -1029,63 +1045,62 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     // 在 Rust 侧使用原生 Task 监控 Webview URL 重定向状态
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut relay_sent = false;
-        let mut landing_ticks = 0;
         loop {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
             if let Some(win) = app_handle.get_webview_window("login_window") {
                 if let Ok(url) = win.url() {
                     let url_str = url.as_str();
                     let app_origin = get_app_origin(&app_handle);
-                    let is_auth_flow = url_str.contains("account.coolapk.com")
-                        || url_str.contains("loginByCoolapk")
-                        || url_str.contains("/auth/");
 
                     eprintln!("[login-debug:monitor] url_origin={}", redact_url(url_str));
 
-                    // 已回到本地回调页：凭据随 URL 带回，Rust 直接解析 ck 写入会话并立即关窗，
-                    // 避免登录窗口加载完整 SPA 引发的渲染/进程问题；AuthCallbackView 仅作兜底
+                    // 已落在登出提示页 auth/logout：自动跳至登录主页 loginByCoolapk
+                    if url_str.contains("auth/logout") {
+                        eprintln!("[login-debug:monitor] landed on logout page, auto-navigating to loginByCoolapk");
+                        let target_login = format!(
+                            "https://account.coolapk.com/auth/loginByCoolapk?forward={}/#/auth_callback",
+                            app_origin
+                        );
+                        let _ = win.eval(&format!("window.location.replace('{}');", target_login));
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        continue;
+                    }
+
+                    // 已回到本地回调页：凭据随 URL 带回，Rust 直接解析 ck 写入会话并关窗
                     if url_str.starts_with(&format!("{}/", app_origin)) {
                         eprintln!("[login-debug:monitor] reached app-origin callback");
+                        let mut valid = false;
                         if let Some(ck) = extract_ck_from_url(url_str) {
                             if !ck.trim().is_empty() {
                                 let state = app_handle.state::<AppState>();
-                                match state.client.set_user_cookie(ck.clone()) {
-                                    Ok(_) => eprintln!(
-                                        "[login-debug:monitor] cookie captured from URL ck, len={}",
-                                        ck.len()
-                                    ),
-                                    Err(e) => eprintln!(
-                                        "[login-debug:monitor] set_user_cookie from ck failed: {}",
-                                        e
-                                    ),
+                                if state.client.set_user_cookie(ck.clone()).is_ok() {
+                                    if state.client.check_login_info().await.is_ok() {
+                                        valid = true;
+                                        eprintln!(
+                                            "[login-debug:monitor] cookie captured and validated, len={}",
+                                            ck.len()
+                                        );
+                                    }
                                 }
                             }
                         }
-                        let _ = win.close();
-                        use tauri::Emitter;
-                        let _ = app_handle.emit("login-window-closed", ());
-                        break;
-                    }
-
-                    // 登录落地页（非登录流程的 www.coolapk.com）：eval 回跳把 .coolapk.com 域 cookie 带回本地回调页
-                    if url_str.contains("www.coolapk.com") && !is_auth_flow {
-                        if !relay_sent {
-                            relay_sent = true;
-                            eprintln!("[login-debug:monitor] landing on www.coolapk.com, eval relay-back");
-                            let _ = win.eval(&format!(
-                                "if (document.cookie) {{ window.location.replace('{}/#/auth_callback?ck=' + encodeURIComponent(document.cookie)); }}",
-                                app_origin
-                            ));
-                        }
-                        landing_ticks += 1;
-                        // 兜底：5 秒内未完成回跳则直接关窗并通知
-                        if landing_ticks >= 10 {
+                        if valid {
                             let _ = win.close();
                             use tauri::Emitter;
                             let _ = app_handle.emit("login-window-closed", ());
                             break;
                         }
+                    }
+
+                    // 登录落地页（www.coolapk.com / m.coolapk.com）：严禁抓取 uid=0 或空 SESSID
+                    if (url_str.contains("www.coolapk.com") || url_str.contains("m.coolapk.com") || url_str.contains("coolapk.com"))
+                        && !url_str.contains("account.coolapk.com/auth")
+                    {
+                        let eval_script = format!(
+                            "(function() {{ var c = document.cookie || ''; var sm = c.match(/(?:^|;\\s*)SESSID=([^;]+)/i); var um = c.match(/(?:^|;\\s*)uid=([^;]+)/i); var sOk = sm && sm[1].trim().length > 5 && sm[1].indexOf('deleted') === -1; var uOk = um && um[1].trim() !== '0' && um[1].trim() !== '10000' && um[1].trim().length > 0; if (sOk && uOk) {{ window.location.replace('{}/#/auth_callback?ck=' + encodeURIComponent(c)); }} }})()",
+                            app_origin
+                        );
+                        let _ = win.eval(&eval_script);
                     }
                 }
             } else {

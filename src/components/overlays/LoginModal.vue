@@ -184,34 +184,12 @@ const authStore = useAuthStore();
 const activeTab = ref<'cookie'>('cookie');
 const showAdvanced = ref(false);
 
-let statusPollTimer: any = null;
-
 function handleOpenWebAuth() {
   console.log('[login-debug] handleOpenWebAuth -> openLoginWebview()');
   debugStatus.value = '已调用 open_login_webview，等待登录窗口';
   CoolapkTauriAPI.openLoginWebview();
   successMessage.value = '已调起客户端嵌入式官方登录窗口。登录完成后窗口将自动关闭并完成凭据同步！';
-  debugStatus.value = '登录窗口已调起，轮询检测登录状态中...';
-
-  // 开启 15 秒轮询检测登录状态
-  if (statusPollTimer) clearInterval(statusPollTimer);
-  let attempts = 0;
-  statusPollTimer = setInterval(async () => {
-    attempts++;
-    console.log('[login-debug] poll attempt', attempts);
-    const res = await authStore.checkStatus();
-    debugStatus.value = `轮询第 ${attempts} 次: checkStatus=${res ? 'true' : 'false'}`;
-    if (res || attempts > 20) {
-      clearInterval(statusPollTimer);
-      statusPollTimer = null;
-      if (res) {
-        successMessage.value = '🎉 酷安账号凭据同步成功！欢迎回来，' + (authStore.user?.username || '酷友');
-        debugStatus.value = 'checkStatus=true，登录成功';
-      } else {
-        debugStatus.value = '轮询超时(30s)，未检测到登录凭据';
-      }
-    }
-  }, 1500);
+  debugStatus.value = '登录窗口已调起，请在官方窗口完成登录后再同步';
 }
 
 async function handleCheckWebLogin() {
@@ -231,7 +209,7 @@ async function handleCheckWebLogin() {
     } else {
       showAdvanced.value = true;
       activeTab.value = 'cookie';
-      errorMessage.value = '提示：因 Edge 系统内核沙箱隔离，网页 Cookie 暂未透传。请直接在下方粘贴抓包获得的 Cookie（包含 SESSID），一秒点击立即登录！';
+      errorMessage.value = '未检测到成功登录会话。若您已在窗口中完成登录，请点击上方的“已在窗口完成登录？点击同步凭据”；或在下方备用选项直接粘贴 Cookie 登录。';
     }
   } catch (e: any) {
     console.log('[login-debug] checkStatus error =', e?.message || e);
@@ -344,7 +322,6 @@ async function handleLogout() {
 }
 
 onUnmounted(() => {
-  if (statusPollTimer) clearInterval(statusPollTimer);
   if (unlistenFn) unlistenFn();
 });
 </script>
