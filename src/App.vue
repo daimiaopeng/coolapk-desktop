@@ -1,8 +1,8 @@
 <template>
   <AppShell>
     <router-view v-slot="{ Component, route }">
-      <keep-alive include="HomePage">
-        <component :is="Component" :key="route.fullPath" />
+      <keep-alive :include="['HomePage', 'MessagesPage', 'DiscoverPage', 'NotificationsPage']">
+        <component :is="Component" :key="route.name || route.path" />
       </keep-alive>
     </router-view>
 
