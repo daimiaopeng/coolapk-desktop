@@ -353,6 +353,11 @@ const loadSessions = async () => {
 
 const selectSession = async (session: any) => {
   currentSession.value = session;
+  const partnerUid = getSessionPartnerUid(session);
+  if (partnerUid && String(route.query.uid || '') !== String(partnerUid)) {
+    router.replace({ path: '/messages', query: { ...route.query, uid: String(partnerUid) } });
+  }
+
   const ukey = session.ukey || session.id;
   if (!ukey) return;
 
