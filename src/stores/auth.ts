@@ -386,8 +386,9 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
         const fallbackRes = await withTimeout(CoolapkTauriAPI.checkLoginStatus(), 10000);
         data = fallbackRes?.data || fallbackRes || {};
       }
-      if (data && (data.uid || data.username)) {
-        const uid = String(data.uid || user.value?.uid || '');
+      // 酷安未登录时也可能返回游客资料（uid=10000），不能把它当成已登录。
+      const uid = String(data?.uid || data?.id || '').trim();
+      if (data && uid && uid !== '0' && uid !== '10000') {
         let userAvatar = data.userAvatar || data.avatar || data.user_avatar || '';
         if (!userAvatar && uid) {
           userAvatar = getAvatarUrlByUid(uid);
@@ -487,4 +488,3 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
     updateProfileStats
   };
 });
-

@@ -2,15 +2,17 @@
   <div class="auth-callback-container">
     <div class="callback-card">
       <i class="fas fa-circle-notch fa-spin status-icon"></i>
-      <h3>正在完成酷安账号凭据提取与同步...</h3>
-      <p>身份校验成功，即刻关闭登录窗口并载入会话</p>
+       <h3>{{ statusText }}</h3>
+       <p>只有服务端确认真实账号后才会关闭登录窗口</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
+
+const statusText = ref('正在验证酷安账号凭据...');
 
 onMounted(async () => {
   try {
@@ -44,19 +46,26 @@ onMounted(async () => {
       cookies = `SESSID=${sessid}; uid=${uid}; token=${token}; ${cookies}`.replace(/;\s*;/, ';');
     }
 
+    let validated = false;
     if (cookies && cookies.trim()) {
       await CoolapkTauriAPI.saveCookieSecurely(cookies);
+      const result: any = await CoolapkTauriAPI.checkLoginStatus();
+      const data = result?.data || result || {};
+      const currentUid = String(data.uid || data.id || '').trim();
+      validated = Boolean(currentUid && currentUid !== '0' && currentUid !== '10000');
+    }
+    statusText.value = validated ? '登录成功，正在同步会话...' : '未完成登录或凭据无效，请重新登录';
+    if (!validated) {
+      await CoolapkTauriAPI.clearCookie();
     }
   } catch (e) {
     console.warn('回调凭据提取警告:', e);
+    statusText.value = '登录凭据验证失败，请重新登录';
   } finally {
-    setTimeout(async () => {
-      try {
-        await CoolapkTauriAPI.closeLoginWebview();
-      } catch (err) {
-        console.warn('关闭窗口异常:', err);
-      }
-    }, 300);
+    // 只有上面的服务端校验通过时才关窗
+    if (statusText.value.startsWith('登录成功')) {
+      setTimeout(() => CoolapkTauriAPI.closeLoginWebview(), 300);
+    }
   }
 });
 </script>

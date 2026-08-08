@@ -3020,6 +3020,8 @@ impl CoolapkClient {
     }
 
     pub async fn check_login_status(&self) -> Result<Value, String> {
+        // 先验证当前会话，避免 /user/space 把任意公开用户资料误当成当前登录用户。
+        let login_info = self.check_login_info().await?;
         let mut query_params: Vec<(&str, String)> = Vec::new();
         if let Ok(guard) = self.user_cookie.read() {
             if let Some(cookie_str) = guard.as_ref() {
@@ -3034,11 +3036,14 @@ impl CoolapkClient {
         }
 
         let query_refs: Vec<(&str, String)> = query_params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        if query_params.is_empty() {
+            return Ok(login_info);
+        }
         let res = self.api_get("/v6/user/space", &query_refs).await?;
         if let Some(data) = res.get("data") {
             return Ok(json!({ "code": 200, "data": data }));
         }
-        Ok(res)
+        Ok(login_info)
     }
 
     pub fn clear_user_cookie(&self) -> Result<(), String> {
@@ -3269,7 +3274,31 @@ impl CoolapkClient {
     /// 检查登录态（比 user/space 更轻量的专用接口）
     /// 数据来源: GET /v6/account/checkLoginInfo
     pub async fn check_login_info(&self) -> Result<Value, String> {
-        wrap_api_data(self.api_get("/v6/account/checkLoginInfo", &[]).await?)
+        let cookie = self
+            .user_cookie
+            .read()
+            .map_err(|_| "failed to read login state".to_string())?
+            .clone()
+            .ok_or_else(|| "当前没有登录凭据".to_string())?;
+        let has_session = cookie.split(';').any(|item| {
+            let mut parts = item.trim().splitn(2, '=');
+            matches!((parts.next(), parts.next()), (Some("SESSID"), Some(value)) if !value.trim().is_empty())
+        });
+        if !has_session {
+            return Err("当前 Cookie 不包含有效会话".to_string());
+        }
+
+        let result = wrap_api_data(self.api_get("/v6/account/checkLoginInfo", &[]).await?)?;
+        let data = result.get("data").unwrap_or(&result);
+        let uid = data
+            .get("uid")
+            .or_else(|| data.get("id"))
+            .map(value_to_string)
+            .unwrap_or_default();
+        if uid.is_empty() || uid == "0" || uid == "10000" {
+            return Err("酷安账号尚未登录".to_string());
+        }
+        Ok(result)
     }
 
     #[allow(dead_code)]
