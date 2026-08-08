@@ -171,6 +171,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted, nextTick, computed } from 'vue';
+
+defineOptions({
+  name: 'MessagesPage'
+});
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import { useAppStore } from '../stores/app';
@@ -191,8 +195,8 @@ const router = useRouter();
 const authStore = useAuthStore();
 const currentUserUid = computed(() => authStore.user?.uid || '');
 
-const navigateToUser = (uid?: string) => {
-  if (!uid) return;
+const navigateToUser = (uid?: string | number) => {
+  if (uid === undefined || uid === null || uid === '') return;
   router.push(`/user/${uid}`);
 };
 
@@ -314,7 +318,9 @@ const scrollToBottom = async () => {
 
 // --- 数据加载 ---
 const loadSessions = async () => {
-  loadingSessions.value = true;
+  if (!sessions.value.length) {
+    loadingSessions.value = true;
+  }
   try {
     const res = await CoolapkTauriAPI.listMessages(1);
     if (res?.data && Array.isArray(res.data)) {
