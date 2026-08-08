@@ -628,7 +628,7 @@ function openFollowTopic(topic: any) {
 }
 
 function handleGoBack() {
-  if (window.history.state && window.history.state.back) {
+  if (window.history.length > 1) {
     router.back();
   } else {
     router.push('/home');

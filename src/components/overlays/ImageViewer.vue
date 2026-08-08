@@ -9,7 +9,9 @@
             <button class="viewer-btn" title="缩小" @click="zoomOut"><i class="fas fa-search-minus"></i></button>
             <span class="zoom-text">{{ Math.round(scale * 100) }}%</span>
             <button class="viewer-btn" title="放大" @click="zoomIn"><i class="fas fa-search-plus"></i></button>
-            <button class="viewer-btn" title="重置 (100%)" @click="resetTransform"><i class="fas fa-compress-arrows-alt"></i></button>
+            <button class="viewer-btn" title="向左旋转 90°" @click="rotateLeft"><i class="fas fa-undo"></i></button>
+            <button class="viewer-btn" title="向右旋转 90°" @click="rotateRight"><i class="fas fa-redo"></i></button>
+            <button class="viewer-btn" title="重置" @click="resetTransform"><i class="fas fa-compress-arrows-alt"></i></button>
             <button class="viewer-btn" title="复制链接" @click="copyLink"><i class="fas fa-link"></i></button>
             <button class="viewer-btn" title="关闭 (Esc)" @click="close"><i class="fas fa-times"></i></button>
           </div>
@@ -40,7 +42,7 @@
             alt="Viewer Image"
             class="viewer-img"
             :style="{
-              transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
+              transform: `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotation}deg)`,
               cursor: isDragging ? 'grabbing' : 'grab'
             }"
             @load="onImageLoaded"
@@ -85,6 +87,7 @@ const appStore = useAppStore();
 const viewerData = computed(() => appStore.activeImageViewer);
 const currentIndex = ref(0);
 const scale = ref(1);
+const rotation = ref(0);
 const translateX = ref(0);
 const translateY = ref(0);
 const isDragging = ref(false);
@@ -172,8 +175,17 @@ function onImageLoaded() {
 
 function resetTransform() {
   scale.value = 1;
+  rotation.value = 0;
   translateX.value = 0;
   translateY.value = 0;
+}
+
+function rotateRight() {
+  rotation.value = (rotation.value + 90) % 360;
+}
+
+function rotateLeft() {
+  rotation.value = (rotation.value - 90 + 360) % 360;
 }
 
 function close() {

@@ -38,7 +38,15 @@
     <!-- 右侧聊天区域 -->
     <div class="messages-main" v-if="currentSession">
       <div class="main-header">
-        <h3>{{ getUsername(currentSession) }}</h3>
+        <div 
+          class="header-partner-info clickable-header" 
+          @click="navigateToUser(getSessionPartnerUid(currentSession))"
+          title="点击查看个人主页"
+        >
+          <AppAvatar :src="getSessionPartnerAvatar(currentSession)" size="sm" class="header-avatar" />
+          <h3 class="header-username">{{ getUsername(currentSession) }}</h3>
+          <i class="fas fa-chevron-right header-link-icon"></i>
+        </div>
       </div>
       
       <div class="chat-area" ref="chatAreaRef">
@@ -70,7 +78,14 @@
               class="message-item"
               :class="{ 'is-self': isSelf(msg) }"
             >
-              <AppAvatar v-if="!isSelf(msg)" :src="getSessionPartnerAvatar(currentSession)" size="sm" class="msg-avatar" />
+              <AppAvatar 
+                v-if="!isSelf(msg)" 
+                :src="getSessionPartnerAvatar(currentSession)" 
+                size="sm" 
+                class="msg-avatar clickable-avatar" 
+                title="查看个人主页"
+                @click="navigateToUser(getSessionPartnerUid(currentSession))"
+              />
               <div class="message-content">
                 <!-- 纯图片消息 -->
                 <div v-if="getPicUrl(msg) && !getMessageText(msg)" class="msg-pic-only-card" @click.stop="openMessageImage(msg)">
@@ -85,7 +100,14 @@
                 </div>
                 <div class="msg-time">{{ formatTime(getDateline(msg)) }}</div>
               </div>
-              <AppAvatar v-if="isSelf(msg)" :src="authStore.user?.userAvatar" size="sm" class="msg-avatar" />
+              <AppAvatar 
+                v-if="isSelf(msg)" 
+                :src="authStore.user?.userAvatar" 
+                size="sm" 
+                class="msg-avatar clickable-avatar" 
+                title="查看个人主页"
+                @click="navigateToUser(currentUserUid)"
+              />
             </div>
           </template>
         </template>
@@ -161,12 +183,18 @@ import { EMOJI_MAP, EMOJI_BASE } from '../utils/coolapkEmoji';
 import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
 
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 // --- 状态管理 ---
 const route = useRoute();
+const router = useRouter();
 const authStore = useAuthStore();
 const currentUserUid = computed(() => authStore.user?.uid || '');
+
+const navigateToUser = (uid?: string) => {
+  if (!uid) return;
+  router.push(`/user/${uid}`);
+};
 
 const sessions = ref<any[]>([]);
 const loadingSessions = ref(false);
@@ -618,6 +646,44 @@ onMounted(() => {
   overflow-y: auto;
 }
 
+.session-list-status .main-header h3 {
+  font-size: var(--font-size-title-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.header-partner-info {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  transition: all var(--duration-fast);
+}
+
+.header-partner-info:hover {
+  background: var(--surface-hover);
+}
+
+.header-avatar {
+  flex-shrink: 0;
+}
+
+.header-link-icon {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  opacity: 0.6;
+  transition: transform var(--duration-fast);
+}
+
+.header-partner-info:hover .header-link-icon {
+  opacity: 1;
+  transform: translateX(2px);
+  color: var(--brand-primary);
+}
+
 .session-list-status {
   flex: 1;
   display: flex;
@@ -776,6 +842,54 @@ onMounted(() => {
 .msg-avatar {
   flex-shrink: 0;
   margin-top: 2px;
+}
+
+.clickable-avatar {
+  cursor: pointer;
+  transition: transform var(--duration-fast), opacity var(--duration-fast);
+}
+
+.clickable-avatar:hover {
+  transform: scale(1.08);
+  opacity: 0.88;
+}
+
+.header-partner-info {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  transition: all var(--duration-fast);
+}
+
+.header-partner-info:hover {
+  background: var(--surface-hover);
+}
+
+.header-avatar {
+  flex-shrink: 0;
+}
+
+.header-username {
+  font-size: var(--font-size-title-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.header-link-icon {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  opacity: 0.6;
+  transition: transform var(--duration-fast);
+}
+
+.header-partner-info:hover .header-link-icon {
+  opacity: 1;
+  transform: translateX(2px);
+  color: var(--brand-primary);
 }
 
 .message-content {
