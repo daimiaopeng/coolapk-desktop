@@ -22,9 +22,9 @@
 
 | 操作系统 | 文件格式 | 推荐安装包 |
 | :--- | :--- | :--- |
-| **Windows** | `.exe` | `coolapk-desktop_1.4.5_x64-setup.exe` (NSIS 一键安装包) |
-| **macOS** | `.dmg` / `.app` | `coolapk-desktop_1.4.5_aarch64.dmg` (Apple 芯片) / `x64.dmg` (Intel 芯片) |
-| **Linux** | `.AppImage` / `.deb` / `.rpm` | `coolapk-desktop_1.4.5_amd64.AppImage` / `.deb` / `.rpm` |
+| **Windows** | `.exe` | `coolapk-desktop_x.x.x_x64-setup.exe` (x64) / `arm64-setup.exe` (ARM64) |
+| **macOS** | `.dmg` / `.app` | `coolapk-desktop_x.x.x_aarch64.dmg` (Apple 芯片) / `x64.dmg` (Intel 芯片) |
+| **Linux** | `.AppImage` / `.deb` / `.rpm` | `coolapk-desktop_x.x.x_amd64.AppImage` / `.deb` / `.rpm` |
 
 > 💡 **提示**：构建产物均由 GitHub Actions 自动化流程在云端打包，无任何广告及恶意注入。
 

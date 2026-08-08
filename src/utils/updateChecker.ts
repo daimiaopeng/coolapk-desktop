@@ -46,7 +46,7 @@ export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Pro
   const tagName = release.tag_name || '';
   const hasNew = Boolean(tagName) && isNewerVersion(tagName);
 
-  // 挑选 Windows 安装包（NSIS setup.exe），优先 x64，且包内版本号必须与发布标签一致
+  // 挑选 Windows 安装包（NSIS setup.exe），智能匹配系统架构 (x64 / arm64)，且版本号匹配
   let installerUrl: string | undefined;
   const assets: Array<{ name?: string; browser_download_url?: string }> = release.assets || [];
   const candidates = assets.filter(
@@ -56,10 +56,20 @@ export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Pro
   const versionMatched = candidates.filter(
     (asset) => asset.name && versionFromAssetName(asset.name) === tagVersion
   );
-  const validCandidates = versionMatched.length > 0 ? versionMatched : [];
+  const validCandidates = versionMatched.length > 0 ? versionMatched : candidates;
+
   if (validCandidates.length > 0) {
-    const preferred = validCandidates.find((asset) => /x64|amd64/i.test(asset.name || ''));
-    installerUrl = (preferred || validCandidates[0]).browser_download_url;
+    const isArm64 = typeof navigator !== 'undefined' && /arm64|aarch64/i.test(navigator.userAgent || '');
+    if (isArm64) {
+      const armCandidate = validCandidates.find((asset) => /arm64|aarch64/i.test(asset.name || ''));
+      if (armCandidate) {
+        installerUrl = armCandidate.browser_download_url;
+      }
+    }
+    if (!installerUrl) {
+      const preferred = validCandidates.find((asset) => /x64|amd64/i.test(asset.name || ''));
+      installerUrl = (preferred || validCandidates[0]).browser_download_url;
+    }
   }
 
   return {
