@@ -118,6 +118,10 @@ jobs:
             platform: windows-latest
             args: --bundles nsis
             rustTargets: ''
+          - name: Windows ARM64
+            platform: windows-latest
+            args: --target aarch64-pc-windows-msvc --bundles nsis
+            rustTargets: aarch64-pc-windows-msvc
           - name: Linux x64
             platform: ubuntu-22.04
             args: --bundles appimage,deb,rpm
@@ -167,7 +171,20 @@ jobs:
       - name: 构建前端
         run: npm run build
 
-      - name: 构建并上传产物（非发布）
+      - name: 构建桌面端应用包
+        run: npx tauri build ${{ matrix.args }}
+
+      - name: 重命名产物为英文文件名 (coolapk-desktop)
+        shell: bash
+        run: |
+          find src-tauri/target -type f -name "酷安*" | while read file; do
+            dir=$(dirname "$file")
+            base=$(basename "$file")
+            newname=$(echo "$base" | sed 's/^酷安/coolapk-desktop/')
+            mv "$file" "$dir/$newname"
+          done
+
+      - name: 构建与上传产物（非 Tag 推送）
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: tauri-apps/tauri-action@v1
         env:
@@ -177,7 +194,7 @@ jobs:
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: '[platform]-[arch]-[bundle]'
 
-      - name: 构建并发布 Release
+      - name: 发布 Release 产物（Tag 推送）
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         uses: tauri-apps/tauri-action@v1
         env:
