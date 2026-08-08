@@ -171,18 +171,15 @@ jobs:
       - name: 构建前端
         run: npm run build
 
-      - name: 构建桌面端应用包
-        run: npx tauri build ${{ matrix.args }}
-
-      - name: 重命名产物为英文文件名 (coolapk-desktop)
+      - name: 设置 CI 纯英文包名 (coolapk-desktop)
         shell: bash
         run: |
-          find src-tauri/target -type f -name "酷安*" | while read file; do
-            dir=$(dirname "$file")
-            base=$(basename "$file")
-            newname=$(echo "$base" | sed 's/^酷安/coolapk-desktop/')
-            mv "$file" "$dir/$newname"
-          done
+          node -e '
+            const fs = require("fs");
+            const conf = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
+            conf.productName = "coolapk-desktop";
+            fs.writeFileSync("src-tauri/tauri.conf.json", JSON.stringify(conf, null, 2));
+          '
 
       - name: 构建与上传产物（非 Tag 推送）
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
