@@ -49,7 +49,7 @@
         </div>
       </div>
       
-      <div class="chat-area" ref="chatAreaRef">
+      <div class="chat-area" ref="chatAreaRef" @scroll="handleChatScroll">
         <div class="chat-status" v-if="loadingHistory">
           <LoadingState text="加载聊天记录..." />
         </div>
@@ -309,9 +309,30 @@ const isSelf = (msg: any) => {
   return String(msg.fromuid) === myUid;
 };
 
+const chatScrollMap = new Map<string, number>();
+
+const handleChatScroll = () => {
+  if (!currentSession.value || !chatAreaRef.value) return;
+  const ukey = currentSession.value.ukey || currentSession.value.id;
+  if (ukey) {
+    chatScrollMap.set(String(ukey), chatAreaRef.value.scrollTop);
+  }
+};
+
 const scrollToBottom = async () => {
   await nextTick();
   if (chatAreaRef.value) {
+    chatAreaRef.value.scrollTop = chatAreaRef.value.scrollHeight;
+  }
+};
+
+const restoreScrollPositionOrBottom = async (ukey: string) => {
+  await nextTick();
+  if (!chatAreaRef.value) return;
+  const targetKey = String(ukey);
+  if (chatScrollMap.has(targetKey)) {
+    chatAreaRef.value.scrollTop = chatScrollMap.get(targetKey)!;
+  } else {
     chatAreaRef.value.scrollTop = chatAreaRef.value.scrollHeight;
   }
 };
@@ -382,7 +403,7 @@ const selectSession = async (session: any) => {
   if (chatHistoryCache.has(ukey)) {
     chatHistory.value = chatHistoryCache.get(ukey) || [];
     loadingHistory.value = false;
-    scrollToBottom();
+    restoreScrollPositionOrBottom(String(ukey));
   } else {
     loadingHistory.value = true;
     chatHistory.value = [];
@@ -405,7 +426,7 @@ const selectSession = async (session: any) => {
     console.error('加载聊天记录失败', err);
   } finally {
     loadingHistory.value = false;
-    scrollToBottom();
+    restoreScrollPositionOrBottom(String(ukey));
   }
 };
 
@@ -525,6 +546,9 @@ const handleImageSelected = async (e: Event) => {
     sess.dateline = nowTimestamp;
     sess.lastupdate = nowTimestamp;
 
+    if (ukey) {
+      chatScrollMap.delete(String(ukey));
+    }
     scrollToBottom();
   } catch (err: any) {
     console.error('发送图片失败', err);
@@ -595,6 +619,9 @@ const sendMessage = async () => {
       sessions.value.unshift(s);
     }
     
+    if (ukey) {
+      chatScrollMap.delete(String(ukey));
+    }
     inputText.value = '';
     scrollToBottom();
   } catch (err: any) {
