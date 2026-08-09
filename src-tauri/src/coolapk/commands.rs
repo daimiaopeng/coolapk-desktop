@@ -1,7 +1,7 @@
 use crate::coolapk::client::{CoolapkClient, DeviceProfile};
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use md5::{Digest, Md5};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tauri::{Manager, State};
@@ -71,10 +71,7 @@ pub async fn get_dyh_feeds(
     feed_type: String,
     page: u32,
 ) -> Result<Value, String> {
-    state
-        .client
-        .get_dyh_feeds(&dyh_id, &feed_type, page)
-        .await
+    state.client.get_dyh_feeds(&dyh_id, &feed_type, page).await
 }
 
 #[tauri::command]
@@ -163,7 +160,10 @@ pub async fn get_collection_item_list(
     collection_id: String,
     page: u32,
 ) -> Result<Value, String> {
-    state.client.get_collection_item_list(&collection_id, page).await
+    state
+        .client
+        .get_collection_item_list(&collection_id, page)
+        .await
 }
 
 #[tauri::command]
@@ -207,18 +207,12 @@ pub async fn unlike_collection(
 }
 
 #[tauri::command]
-pub async fn follow_dyh(
-    state: State<'_, AppState>,
-    dyh_id: String,
-) -> Result<Value, String> {
+pub async fn follow_dyh(state: State<'_, AppState>, dyh_id: String) -> Result<Value, String> {
     state.client.follow_dyh(&dyh_id).await
 }
 
 #[tauri::command]
-pub async fn unfollow_dyh(
-    state: State<'_, AppState>,
-    dyh_id: String,
-) -> Result<Value, String> {
+pub async fn unfollow_dyh(state: State<'_, AppState>, dyh_id: String) -> Result<Value, String> {
     state.client.unfollow_dyh(&dyh_id).await
 }
 
@@ -229,7 +223,10 @@ pub async fn get_feed_forward_list(
     feed_type: String,
     page: u32,
 ) -> Result<Value, String> {
-    state.client.get_feed_forward_list(&feed_id, &feed_type, page).await
+    state
+        .client
+        .get_feed_forward_list(&feed_id, &feed_type, page)
+        .await
 }
 
 #[tauri::command]
@@ -259,18 +256,12 @@ pub async fn search_tags(
 }
 
 #[tauri::command]
-pub async fn follow_tag(
-    state: State<'_, AppState>,
-    tag: String,
-) -> Result<Value, String> {
+pub async fn follow_tag(state: State<'_, AppState>, tag: String) -> Result<Value, String> {
     state.client.follow_tag(&tag).await
 }
 
 #[tauri::command]
-pub async fn unfollow_tag(
-    state: State<'_, AppState>,
-    tag: String,
-) -> Result<Value, String> {
+pub async fn unfollow_tag(state: State<'_, AppState>, tag: String) -> Result<Value, String> {
     state.client.unfollow_tag(&tag).await
 }
 
@@ -290,7 +281,10 @@ pub async fn get_question_answers(
     sort: String,
     page: u32,
 ) -> Result<Value, String> {
-    state.client.get_question_answers(&feed_id, &sort, page).await
+    state
+        .client
+        .get_question_answers(&feed_id, &sort, page)
+        .await
 }
 
 #[tauri::command]
@@ -303,18 +297,12 @@ pub async fn get_vote_comments(
 }
 
 #[tauri::command]
-pub async fn get_hit_history(
-    state: State<'_, AppState>,
-    page: u32,
-) -> Result<Value, String> {
+pub async fn get_hit_history(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.get_hit_history(page).await
 }
 
 #[tauri::command]
-pub async fn get_recent_history(
-    state: State<'_, AppState>,
-    page: u32,
-) -> Result<Value, String> {
+pub async fn get_recent_history(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.get_recent_history(page).await
 }
 
@@ -378,7 +366,10 @@ pub async fn get_sub_replies(
     reply_id: String,
     page: u32,
 ) -> Result<Value, String> {
-    state.client.get_sub_replies(&feed_id, &reply_id, page).await
+    state
+        .client
+        .get_sub_replies(&feed_id, &reply_id, page)
+        .await
 }
 
 #[tauri::command]
@@ -420,7 +411,10 @@ pub async fn get_user_profile(state: State<'_, AppState>, uid: String) -> Result
 }
 
 #[tauri::command]
-pub async fn get_user_follow_nodes(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
+pub async fn get_user_follow_nodes(
+    state: State<'_, AppState>,
+    uid: String,
+) -> Result<Value, String> {
     state.client.get_user_follow_nodes(&uid).await
 }
 
@@ -515,26 +509,17 @@ pub async fn send_private_image(
 }
 
 #[tauri::command]
-pub async fn read_message(
-    state: State<'_, AppState>,
-    ukey: String,
-) -> Result<Value, String> {
+pub async fn read_message(state: State<'_, AppState>, ukey: String) -> Result<Value, String> {
     state.client.read_message(&ukey).await
 }
 
 #[tauri::command]
-pub async fn favorite_feed(
-    state: State<'_, AppState>,
-    feed_id: String,
-) -> Result<Value, String> {
+pub async fn favorite_feed(state: State<'_, AppState>, feed_id: String) -> Result<Value, String> {
     state.client.favorite_feed(&feed_id).await
 }
 
 #[tauri::command]
-pub async fn unfavorite_feed(
-    state: State<'_, AppState>,
-    feed_id: String,
-) -> Result<Value, String> {
+pub async fn unfavorite_feed(state: State<'_, AppState>, feed_id: String) -> Result<Value, String> {
     state.client.unfavorite_feed(&feed_id).await
 }
 
@@ -555,18 +540,12 @@ pub async fn unfavorite_apk(
 }
 
 #[tauri::command]
-pub async fn delete_feed(
-    state: State<'_, AppState>,
-    feed_id: String,
-) -> Result<Value, String> {
+pub async fn delete_feed(state: State<'_, AppState>, feed_id: String) -> Result<Value, String> {
     state.client.delete_feed(&feed_id).await
 }
 
 #[tauri::command]
-pub async fn delete_reply(
-    state: State<'_, AppState>,
-    reply_id: String,
-) -> Result<Value, String> {
+pub async fn delete_reply(state: State<'_, AppState>, reply_id: String) -> Result<Value, String> {
     state.client.delete_reply(&reply_id).await
 }
 
@@ -594,39 +573,33 @@ pub async fn upload_image(
 ) -> Result<Value, String> {
     state
         .client
-        .upload_image(&image_bytes, &file_name, &content_type, &dir, to_uid.as_deref())
+        .upload_image(
+            &image_bytes,
+            &file_name,
+            &content_type,
+            &dir,
+            to_uid.as_deref(),
+        )
         .await
 }
 
 #[tauri::command]
-pub async fn get_black_list(
-    state: State<'_, AppState>,
-    page: u32,
-) -> Result<Value, String> {
+pub async fn get_black_list(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.get_black_list(page).await
 }
 
 #[tauri::command]
-pub async fn get_ignore_list(
-    state: State<'_, AppState>,
-    page: u32,
-) -> Result<Value, String> {
+pub async fn get_ignore_list(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.get_ignore_list(page).await
 }
 
 #[tauri::command]
-pub async fn get_limit_list(
-    state: State<'_, AppState>,
-    page: u32,
-) -> Result<Value, String> {
+pub async fn get_limit_list(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.get_limit_list(page).await
 }
 
 #[tauri::command]
-pub async fn add_to_black_list(
-    state: State<'_, AppState>,
-    uid: String,
-) -> Result<Value, String> {
+pub async fn add_to_black_list(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
     state.client.add_to_black_list(&uid).await
 }
 
@@ -639,10 +612,7 @@ pub async fn remove_from_black_list(
 }
 
 #[tauri::command]
-pub async fn add_to_ignore_list(
-    state: State<'_, AppState>,
-    uid: String,
-) -> Result<Value, String> {
+pub async fn add_to_ignore_list(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
     state.client.add_to_ignore_list(&uid).await
 }
 
@@ -663,18 +633,12 @@ pub async fn get_apk_url(
 }
 
 #[tauri::command]
-pub async fn get_apk_qr(
-    state: State<'_, AppState>,
-    package_name: String,
-) -> Result<Value, String> {
+pub async fn get_apk_qr(state: State<'_, AppState>, package_name: String) -> Result<Value, String> {
     state.client.get_apk_qr(&package_name).await
 }
 
 #[tauri::command]
-pub async fn check_update(
-    state: State<'_, AppState>,
-    pkgs: String,
-) -> Result<Value, String> {
+pub async fn check_update(state: State<'_, AppState>, pkgs: String) -> Result<Value, String> {
     state.client.check_update(&pkgs).await
 }
 
@@ -695,7 +659,10 @@ pub async fn reply_feed(
     message: String,
     rid: Option<String>,
 ) -> Result<Value, String> {
-    state.client.reply_feed(&feed_id, &message, rid.as_deref()).await
+    state
+        .client
+        .reply_feed(&feed_id, &message, rid.as_deref())
+        .await
 }
 
 #[tauri::command]
@@ -759,7 +726,10 @@ pub async fn save_cookie_securely(
     state: State<'_, AppState>,
     cookie_str: String,
 ) -> Result<String, String> {
-    eprintln!("[login-debug] save_cookie_securely received cookie len={}", cookie_str.len());
+    eprintln!(
+        "[login-debug] save_cookie_securely received cookie len={}",
+        cookie_str.len()
+    );
     state.client.set_user_cookie(cookie_str)?;
     // 保存和验证分开：回调页必须先确认服务端返回真实账号，再关登录窗口。
     eprintln!("[login-debug] save_cookie_securely done, cookie staged for validation");
@@ -835,10 +805,7 @@ pub async fn login_by_account(
 }
 
 #[tauri::command]
-pub async fn send_sms_vcode(
-    state: State<'_, AppState>,
-    mobile: String,
-) -> Result<Value, String> {
+pub async fn send_sms_vcode(state: State<'_, AppState>, mobile: String) -> Result<Value, String> {
     state.client.send_sms_vcode(&mobile).await
 }
 
@@ -950,8 +917,8 @@ pub fn open_url(app: tauri::AppHandle, url: String, mode: Option<String>) -> Res
 
 #[tauri::command]
 pub fn close_login_window(app: tauri::AppHandle) -> Result<(), String> {
-    use tauri::Manager;
     use tauri::Emitter;
+    use tauri::Manager;
     if let Some(win) = app.get_webview_window("login_window") {
         let _ = win.close();
     }
@@ -962,10 +929,7 @@ pub fn close_login_window(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn fetch_external_page(
-    state: State<'_, AppState>,
-    url: String,
-) -> Result<Value, String> {
+pub async fn fetch_external_page(state: State<'_, AppState>, url: String) -> Result<Value, String> {
     state.client.fetch_external_page(&url).await
 }
 
@@ -1157,7 +1121,9 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
 
                     // 已落在登出提示页 auth/logout：自动跳至登录主页 loginByCoolapk
                     if url_str.contains("auth/logout") {
-                        eprintln!("[login-debug:monitor] landed on logout page, auto-navigating to loginByCoolapk");
+                        eprintln!(
+                            "[login-debug:monitor] landed on logout page, auto-navigating to loginByCoolapk"
+                        );
                         let target_login = format!(
                             "https://account.coolapk.com/auth/loginByCoolapk?forward={}/#/auth_callback",
                             app_origin
@@ -1194,7 +1160,9 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                     }
 
                     // 登录落地页（www.coolapk.com / m.coolapk.com）：严禁抓取 uid=0 或空 SESSID
-                    if (url_str.contains("www.coolapk.com") || url_str.contains("m.coolapk.com") || url_str.contains("coolapk.com"))
+                    if (url_str.contains("www.coolapk.com")
+                        || url_str.contains("m.coolapk.com")
+                        || url_str.contains("coolapk.com"))
                         && !url_str.contains("account.coolapk.com/auth")
                     {
                         let eval_script = format!(
@@ -1240,7 +1208,10 @@ pub async fn download_update(
     if parsed_url.scheme() != "https" {
         return Err("更新链接必须为 HTTPS".to_string());
     }
-    let host = parsed_url.host_str().unwrap_or_default().to_ascii_lowercase();
+    let host = parsed_url
+        .host_str()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
     if !UPDATE_ALLOWED_HOSTS.contains(&host.as_str()) {
         return Err(format!("更新链接域名不在允许列表内: {host}"));
     }
@@ -1262,8 +1233,8 @@ pub async fn download_update(
 
     let mut builder = reqwest::Client::builder().user_agent("coolapk-desktop-updater");
     if let Some(proxy) = proxy_url.filter(|p| !p.trim().is_empty()) {
-        builder = builder
-            .proxy(reqwest::Proxy::all(proxy).map_err(|e| format!("代理设置无效: {e}"))?);
+        builder =
+            builder.proxy(reqwest::Proxy::all(proxy).map_err(|e| format!("代理设置无效: {e}"))?);
     }
     let client = builder.build().map_err(|e| e.to_string())?;
     let mut response = client.get(&url).send().await.map_err(|e| e.to_string())?;
@@ -1275,7 +1246,9 @@ pub async fn download_update(
     if total > UPDATE_MAX_BYTES {
         return Err("更新包体积异常（超过 500MB），已拒绝下载".to_string());
     }
-    let mut file = tokio::fs::File::create(&path).await.map_err(|e| e.to_string())?;
+    let mut file = tokio::fs::File::create(&path)
+        .await
+        .map_err(|e| e.to_string())?;
     let mut downloaded: u64 = 0;
     // 限速：按 1 秒滑动窗口累积字节数，超出配额后补眠
     let limit_bytes_per_sec = speed_limit_kbps.unwrap_or(0).saturating_mul(1024);
@@ -1598,22 +1571,37 @@ pub fn quit_app(app: tauri::AppHandle) {
 
 // === 应用集 ===
 #[tauri::command]
-pub async fn get_album_list(state: State<'_, AppState>, list_type: String, page: u32) -> Result<Value, String> {
+pub async fn get_album_list(
+    state: State<'_, AppState>,
+    list_type: String,
+    page: u32,
+) -> Result<Value, String> {
     state.client.get_album_list(&list_type, page).await
 }
 
 #[tauri::command]
-pub async fn search_albums(state: State<'_, AppState>, query: String, page: u32) -> Result<Value, String> {
+pub async fn search_albums(
+    state: State<'_, AppState>,
+    query: String,
+    page: u32,
+) -> Result<Value, String> {
     state.client.search_albums(&query, page).await
 }
 
 #[tauri::command]
-pub async fn get_album_detail(state: State<'_, AppState>, album_id: String) -> Result<Value, String> {
+pub async fn get_album_detail(
+    state: State<'_, AppState>,
+    album_id: String,
+) -> Result<Value, String> {
     state.client.get_album_detail(&album_id).await
 }
 
 #[tauri::command]
-pub async fn get_album_replies(state: State<'_, AppState>, album_id: String, page: u32) -> Result<Value, String> {
+pub async fn get_album_replies(
+    state: State<'_, AppState>,
+    album_id: String,
+    page: u32,
+) -> Result<Value, String> {
     state.client.get_album_replies(&album_id, page).await
 }
 
@@ -1629,51 +1617,96 @@ pub async fn get_update_list(state: State<'_, AppState>, page: u32) -> Result<Va
 }
 
 #[tauri::command]
-pub async fn get_editor_choice_feeds(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+pub async fn get_editor_choice_feeds(
+    state: State<'_, AppState>,
+    page: u32,
+) -> Result<Value, String> {
     state.client.get_editor_choice_feeds(page).await
 }
 
 // === 应用额外 ===
 #[tauri::command]
-pub async fn get_apk_discoverers(state: State<'_, AppState>, package_name: String, page: u32) -> Result<Value, String> {
+pub async fn get_apk_discoverers(
+    state: State<'_, AppState>,
+    package_name: String,
+    page: u32,
+) -> Result<Value, String> {
     state.client.get_apk_discoverers(&package_name, page).await
 }
 
 #[tauri::command]
-pub async fn get_apk_recommend_list(state: State<'_, AppState>, apk_type: String, title: String, page: u32) -> Result<Value, String> {
-    state.client.get_apk_recommend_list(&apk_type, &title, page).await
+pub async fn get_apk_recommend_list(
+    state: State<'_, AppState>,
+    apk_type: String,
+    title: String,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_apk_recommend_list(&apk_type, &title, page)
+        .await
 }
 
 #[tauri::command]
-pub async fn get_apk_gift_list(state: State<'_, AppState>, apk_id: Option<String>, page: u32) -> Result<Value, String> {
-    state.client.get_apk_gift_list(apk_id.as_deref(), page).await
+pub async fn get_apk_gift_list(
+    state: State<'_, AppState>,
+    apk_id: Option<String>,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_apk_gift_list(apk_id.as_deref(), page)
+        .await
 }
 
 #[tauri::command]
-pub async fn get_download_version_list(state: State<'_, AppState>, package_name: String) -> Result<Value, String> {
+pub async fn get_download_version_list(
+    state: State<'_, AppState>,
+    package_name: String,
+) -> Result<Value, String> {
     state.client.get_download_version_list(&package_name).await
 }
 
 // === 图片 ===
 #[tauri::command]
-pub async fn get_picture_list(state: State<'_, AppState>, tag: String, page: u32) -> Result<Value, String> {
+pub async fn get_picture_list(
+    state: State<'_, AppState>,
+    tag: String,
+    page: u32,
+) -> Result<Value, String> {
     state.client.get_picture_list(&tag, page).await
 }
 
 // === 用户 ===
 #[tauri::command]
-pub async fn get_user_rating_list(state: State<'_, AppState>, uid: String, page: u32) -> Result<Value, String> {
+pub async fn get_user_rating_list(
+    state: State<'_, AppState>,
+    uid: String,
+    page: u32,
+) -> Result<Value, String> {
     state.client.get_user_rating_list(&uid, page).await
 }
 
 // === 搜索 ===
 #[tauri::command]
-pub async fn search_apks_by_developer(state: State<'_, AppState>, developer: String, page: u32) -> Result<Value, String> {
-    state.client.search_apks_by_developer(&developer, page).await
+pub async fn search_apks_by_developer(
+    state: State<'_, AppState>,
+    developer: String,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .search_apks_by_developer(&developer, page)
+        .await
 }
 
 #[tauri::command]
-pub async fn search_apks_by_tag(state: State<'_, AppState>, tag: String, apk_type: String, page: u32) -> Result<Value, String> {
+pub async fn search_apks_by_tag(
+    state: State<'_, AppState>,
+    tag: String,
+    apk_type: String,
+    page: u32,
+) -> Result<Value, String> {
     state.client.search_apks_by_tag(&tag, &apk_type, page).await
 }
 

@@ -1,98 +1,40 @@
 pub mod coolapk;
 
 use coolapk::client::CoolapkClient;
-    use coolapk::commands::{
-        check_login_status,
-        list_accounts,
-        login_as,
-        save_account,
-        persist_current_account,
-        remove_account, clear_user_cookie, get_user_cookie, create_feed, follow_user, get_app_detail, get_app_list,
-        get_board_feeds, get_cool_picture_rank, get_digest_feeds, get_feed_detail, get_feed_replies,
-        get_game_list, get_hot_feeds, get_hot_replies, get_image_data_url, get_index_v8_feeds, get_latest_feeds,
-        get_notification_count, get_notifications, get_secondhand_feeds, get_sub_replies,
-        get_topic_detail, get_topic_feeds, get_topic_hub_data, get_user_feeds, get_user_profile, get_user_space,
-        get_user_follow_nodes,
-        like_feed, list_chat_history, list_messages, login_by_account, login_by_mobile, open_url,
-        fetch_external_page,
-        reply_feed, save_cookie_securely, search_all, search_apks, search_feeds, send_private_message,
-        search_games,
-        send_sms_vcode, unfollow_user, unlike_feed, open_login_webview, close_login_window,
-        get_following_feeds, get_follow_user_list, get_fans_user_list, AppState,
-        download_update, install_update, quit_app, export_json_file, get_cache_info, clear_app_cache,
-        clean_expired_cache, open_cache_directory,
-        update_device_profile, get_device_info,
-        get_tab_config, get_search_suggestions, get_topic_detail_v7, get_product_detail,
-        get_product_feeds,             get_dyh_detail,
-            get_dyh_list,
-            get_dyh_feeds, get_apk_feeds, check_login_info,
-        get_album_detail,
-        get_album_list,
-        get_album_replies,
-        get_apk_discoverers,
-        get_apk_gift_list,
-        get_apk_recommend_list,
-        get_download_version_list,
-        get_editor_choice_feeds,
-        get_collection_item_list,
-        get_collection_list,
-        get_favorite_list,
-        get_headline_feeds,
-        get_collection_detail,
-        follow_collection,
-        unfollow_collection,
-        like_collection,
-        unlike_collection,
-        follow_dyh,
-        unfollow_dyh,
-        get_feed_forward_list,
-        get_feed_like_list,
-        get_feed_change_history,
-        search_tags,
-        follow_tag,
-        unfollow_tag,
-        get_device_feed_list,
-        get_question_answers,
-        get_vote_comments,
-        get_hit_history,
-        get_recent_history,
-        search_users,
-        get_search_suggestions_app,
-        search_feed_topics,
-        get_product_detail_by_name,
-        get_load_config,
-        send_private_image,
-        read_message,
-        favorite_feed,
-        unfavorite_feed,
-        favorite_apk,
-        unfavorite_apk,
-        delete_feed,
-        delete_reply,
-        create_forward,
-        upload_image,
-        get_black_list,
-        get_ignore_list,
-        get_limit_list,
-        add_to_black_list,
-        remove_from_black_list,
-        add_to_ignore_list,
-        remove_from_ignore_list,
-        get_apk_url,
-        get_apk_qr,
-        check_update,
-        get_hot_topics,
-        get_picture_list,
-        get_recommend_users,
-        get_update_list,
-        get_user_rating_list,
-        search_albums,
-        search_apks_by_developer,
-        search_apks_by_tag,
-    };
-use tauri::{Manager, WindowEvent};
-use std::sync::atomic::{AtomicBool, Ordering};
+use coolapk::commands::{
+    AppState, add_to_black_list, add_to_ignore_list, check_login_info, check_login_status,
+    check_update, clean_expired_cache, clear_app_cache, clear_user_cookie, close_login_window,
+    create_feed, create_forward, delete_feed, delete_reply, download_update, export_json_file,
+    favorite_apk, favorite_feed, fetch_external_page, follow_collection, follow_dyh, follow_tag,
+    follow_user, get_album_detail, get_album_list, get_album_replies, get_apk_discoverers,
+    get_apk_feeds, get_apk_gift_list, get_apk_qr, get_apk_recommend_list, get_apk_url,
+    get_app_detail, get_app_list, get_black_list, get_board_feeds, get_cache_info,
+    get_collection_detail, get_collection_item_list, get_collection_list, get_cool_picture_rank,
+    get_device_feed_list, get_device_info, get_digest_feeds, get_download_version_list,
+    get_dyh_detail, get_dyh_feeds, get_dyh_list, get_editor_choice_feeds, get_fans_user_list,
+    get_favorite_list, get_feed_change_history, get_feed_detail, get_feed_forward_list,
+    get_feed_like_list, get_feed_replies, get_follow_user_list, get_following_feeds, get_game_list,
+    get_headline_feeds, get_hit_history, get_hot_feeds, get_hot_replies, get_hot_topics,
+    get_ignore_list, get_image_data_url, get_index_v8_feeds, get_latest_feeds, get_limit_list,
+    get_load_config, get_notification_count, get_notifications, get_picture_list,
+    get_product_detail, get_product_detail_by_name, get_product_feeds, get_question_answers,
+    get_recent_history, get_recommend_users, get_search_suggestions, get_search_suggestions_app,
+    get_secondhand_feeds, get_sub_replies, get_tab_config, get_topic_detail, get_topic_detail_v7,
+    get_topic_feeds, get_topic_hub_data, get_update_list, get_user_cookie, get_user_feeds,
+    get_user_follow_nodes, get_user_profile, get_user_rating_list, get_user_space,
+    get_vote_comments, install_update, like_collection, like_feed, list_accounts,
+    list_chat_history, list_messages, login_as, login_by_account, login_by_mobile,
+    open_cache_directory, open_login_webview, open_url, persist_current_account, quit_app,
+    read_message, remove_account, remove_from_black_list, remove_from_ignore_list, reply_feed,
+    save_account, save_cookie_securely, search_albums, search_all, search_apks,
+    search_apks_by_developer, search_apks_by_tag, search_feed_topics, search_feeds, search_games,
+    search_tags, search_users, send_private_image, send_private_message, send_sms_vcode,
+    unfavorite_apk, unfavorite_feed, unfollow_collection, unfollow_dyh, unfollow_tag,
+    unfollow_user, unlike_collection, unlike_feed, update_device_profile, upload_image,
+};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{Manager, WindowEvent};
 
 static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(false);
 static START_MINIMIZED: AtomicBool = AtomicBool::new(false);
@@ -241,8 +183,12 @@ pub fn run() {
                                 );
                                 if let (Some(x), Some(y), Some(ww), Some(hh)) = (x, y, ww, hh) {
                                     if ww >= MIN_WINDOW_W && hh >= MIN_WINDOW_H {
-                                        let _ = w.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
-                                        let _ = w.set_size(tauri::PhysicalSize::new(ww as u32, hh as u32));
+                                        let _ = w.set_position(tauri::PhysicalPosition::new(
+                                            x as i32, y as i32,
+                                        ));
+                                        let _ = w.set_size(tauri::PhysicalSize::new(
+                                            ww as u32, hh as u32,
+                                        ));
                                     }
                                 }
                             }
@@ -289,7 +235,9 @@ pub fn run() {
                             // 退出前持久化窗口几何信息（托盘退出不触发 CloseRequested）
                             if REMEMBER_WINDOW_STATE.load(Ordering::SeqCst) {
                                 if let Some(w) = app.get_webview_window("main") {
-                                    if let (Ok(pos), Ok(size)) = (w.outer_position(), w.outer_size()) {
+                                    if let (Ok(pos), Ok(size)) =
+                                        (w.outer_position(), w.outer_size())
+                                    {
                                         persist_window_geometry(
                                             app,
                                             WindowState {
@@ -334,14 +282,24 @@ pub fn run() {
             match event {
                 WindowEvent::Moved(pos) => {
                     if let Ok(mut guard) = WINDOW_STATE.lock() {
-                        let prev = guard.get_or_insert(WindowState { x: 0, y: 0, w: 1440, h: 900 });
+                        let prev = guard.get_or_insert(WindowState {
+                            x: 0,
+                            y: 0,
+                            w: 1440,
+                            h: 900,
+                        });
                         prev.x = pos.x;
                         prev.y = pos.y;
                     }
                 }
                 WindowEvent::Resized(size) => {
                     if let Ok(mut guard) = WINDOW_STATE.lock() {
-                        let prev = guard.get_or_insert(WindowState { x: 0, y: 0, w: 1440, h: 900 });
+                        let prev = guard.get_or_insert(WindowState {
+                            x: 0,
+                            y: 0,
+                            w: 1440,
+                            h: 900,
+                        });
                         prev.w = size.width;
                         prev.h = size.height;
                     }
@@ -381,12 +339,11 @@ pub fn run() {
             get_topic_detail_v7,
             get_product_detail,
             get_product_feeds,
-        get_dyh_detail,
-        get_dyh_list,
-        get_dyh_feeds,
+            get_dyh_detail,
+            get_dyh_list,
+            get_dyh_feeds,
             get_apk_feeds,
             check_login_info,
-
             get_feed_detail,
             get_hot_replies,
             search_all,
@@ -416,11 +373,11 @@ pub fn run() {
             check_login_status,
             update_device_profile,
             get_device_info,
-        list_accounts,
-        login_as,
-        save_account,
-        persist_current_account,
-        remove_account,
+            list_accounts,
+            login_as,
+            save_account,
+            persist_current_account,
+            remove_account,
             clear_user_cookie,
             get_user_cookie,
             login_by_account,
@@ -508,7 +465,6 @@ pub fn run() {
             search_apks_by_developer,
             search_apks_by_tag,
         ])
-
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -1,5 +1,5 @@
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use bcrypt::{hash_with_salt, Version, BASE_64 as BCRYPT_BASE64};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use bcrypt::{BASE_64 as BCRYPT_BASE64, Version, hash_with_salt};
 use md5::{Digest, Md5};
 use std::time::{SystemTime, UNIX_EPOCH};
 

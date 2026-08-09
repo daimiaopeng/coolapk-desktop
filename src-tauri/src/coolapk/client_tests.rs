@@ -27,7 +27,10 @@ fn test_device_code_is_random() {
     assert!(a.len() >= 100, "设备码应有足够长度");
     assert!(!a.is_empty());
     // 设备码应是合法的 header 值
-    assert!(HeaderValue::from_str(&a).is_ok(), "设备码必须是合法 HTTP header 值");
+    assert!(
+        HeaderValue::from_str(&a).is_ok(),
+        "设备码必须是合法 HTTP header 值"
+    );
 }
 
 #[test]
@@ -60,7 +63,10 @@ async fn test_reply_list_api() {
     };
     let feed_id = match feeds["data"]
         .as_array()
-        .and_then(|arr| arr.iter().find(|f| f.get("replynum").and_then(|v| v.as_u64()).unwrap_or(0) > 0))
+        .and_then(|arr| {
+            arr.iter()
+                .find(|f| f.get("replynum").and_then(|v| v.as_u64()).unwrap_or(0) > 0)
+        })
         .and_then(|f| f.get("id").and_then(|v| v.as_str()))
     {
         Some(id) => id.to_string(),
@@ -85,10 +91,22 @@ async fn test_reply_list_api() {
     // 找到有楼中楼的评论
     let mut target_cid = String::new();
     for r in replies_arr.iter() {
-        let rrc = r.get("replyRowsCount").and_then(|v| v.as_u64()).unwrap_or(0);
+        let rrc = r
+            .get("replyRowsCount")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         if rrc > 2 {
-            target_cid = r.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_default();
-            println!("Found comment with {} sub-replies: id={}, author={}", rrc, target_cid, r.get("username").and_then(|v| v.as_str()).unwrap_or(""));
+            target_cid = r
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            println!(
+                "Found comment with {} sub-replies: id={}, author={}",
+                rrc,
+                target_cid,
+                r.get("username").and_then(|v| v.as_str()).unwrap_or("")
+            );
             break;
         }
     }
@@ -98,10 +116,19 @@ async fn test_reply_list_api() {
     }
 
     // 测试 replyList API，打印原始 id/rid/rrid 值
-    let url = format!("https://api.coolapk.com/v6/feed/replyList?id={}&rid={}&page=1", feed_id, target_cid);
+    let url = format!(
+        "https://api.coolapk.com/v6/feed/replyList?id={}&rid={}&page=1",
+        feed_id, target_cid
+    );
     println!("\nTesting URL: {}", url);
     let token = client.get_token().unwrap();
-    let res = client.client.get(&url).header("X-App-Token", token).send().await.unwrap();
+    let res = client
+        .client
+        .get(&url)
+        .header("X-App-Token", token)
+        .send()
+        .await
+        .unwrap();
     let json: Value = res.json().await.unwrap();
     if let Some(arr) = json.get("data").and_then(Value::as_array) {
         println!("Total items returned: {}", arr.len());
@@ -110,7 +137,10 @@ async fn test_reply_list_api() {
             let rid = item.get("rid");
             let rrid = item.get("rrid");
             let username = item.get("username").and_then(|v| v.as_str()).unwrap_or("");
-            println!("  [{}] id={:?}, rid={:?}, rrid={:?}, username={}", idx, id, rid, rrid, username);
+            println!(
+                "  [{}] id={:?}, rid={:?}, rrid={:?}, username={}",
+                idx, id, rid, rrid, username
+            );
         }
     } else {
         println!("No data array in response");
@@ -122,10 +152,8 @@ async fn test_reply_list_api() {
 async fn test_login_cookie_persistence_flow() {
     use std::path::PathBuf;
 
-    let dir = std::env::temp_dir().join(format!(
-        "coolapk_desktop_login_test_{}",
-        std::process::id()
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("coolapk_desktop_login_test_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let cookie_file: PathBuf = dir.join("session_cookie.txt");
@@ -143,10 +171,7 @@ async fn test_login_cookie_persistence_flow() {
         .await
         .unwrap();
     assert_eq!(client.get_user_cookie(), Some(fake_cookie.to_string()));
-    assert!(
-        accounts_file.exists(),
-        "登录后凭据应已写入 JSON 账户库"
-    );
+    assert!(accounts_file.exists(), "登录后凭据应已写入 JSON 账户库");
     let root: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&accounts_file).unwrap()).unwrap();
     assert_eq!(
@@ -169,7 +194,11 @@ async fn test_login_cookie_persistence_flow() {
     assert_eq!(restarted.get_user_cookie(), None);
     let root2: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&accounts_file).unwrap()).unwrap();
-    assert_eq!(root2["lastLoginUid"].as_str(), Some(""), "登出后当前登录标记应清空");
+    assert_eq!(
+        root2["lastLoginUid"].as_str(),
+        Some(""),
+        "登出后当前登录标记应清空"
+    );
     assert_eq!(
         root2["accounts"].as_array().map(|a| a.len()),
         Some(1),
@@ -260,17 +289,18 @@ fn test_extract_history_list_preserves_entities() {
     assert_eq!(history["entityType"], "history");
     assert_eq!(history["url"], "/u/1451266", "url 应补全前导斜杠");
     assert_eq!(
-        history["logo"],
-        "https://avatar.coolapk.com/data/001/45/12/66_avatar_middle.jpg",
+        history["logo"], "https://avatar.coolapk.com/data/001/45/12/66_avatar_middle.jpg",
         "http 图片应升级为 https"
     );
 
     let recent = &list[1];
     assert_eq!(recent["entityType"], "recentHistory");
-    assert_eq!(recent["url"], "/apk/tv.danmaku.bili", "已有前导斜杠的 url 不应被改动");
     assert_eq!(
-        recent["logo"],
-        "https://pp.myapp.com/ma_icon/0/icon/256",
+        recent["url"], "/apk/tv.danmaku.bili",
+        "已有前导斜杠的 url 不应被改动"
+    );
+    assert_eq!(
+        recent["logo"], "https://pp.myapp.com/ma_icon/0/icon/256",
         "// 开头图片应补全 https"
     );
 }
@@ -302,15 +332,24 @@ async fn test_login_cookie_dirty_input_sanitized() {
     client.set_user_cookie(dirty.to_string()).unwrap();
 
     let stored = client.get_user_cookie().unwrap();
-    assert!(!stored.contains('\r') && !stored.contains('\n'), "不应包含换行");
+    assert!(
+        !stored.contains('\r') && !stored.contains('\n'),
+        "不应包含换行"
+    );
     assert!(stored.contains("SESSID=abc") && stored.contains("uid=10086"));
     // 落盘 JSON 账户库中的 cookie 字段必须是清洗后的安全形态
     let accounts_file: PathBuf = dir.join("accounts.json");
     let root: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&accounts_file).unwrap()).unwrap();
     let cookie = root["accounts"][0]["cookie"].as_str().unwrap_or("");
-    assert!(!cookie.contains('\r') && !cookie.contains('\n'), "JSON 库中 cookie 不应包含换行");
-    assert!(cookie.contains("SESSID=abc") && cookie.contains("uid=10086"), "cookie 应保留有效字段");
+    assert!(
+        !cookie.contains('\r') && !cookie.contains('\n'),
+        "JSON 库中 cookie 不应包含换行"
+    );
+    assert!(
+        cookie.contains("SESSID=abc") && cookie.contains("uid=10086"),
+        "cookie 应保留有效字段"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -320,7 +359,8 @@ async fn test_login_cookie_dirty_input_sanitized() {
 #[ignore]
 async fn verify_fans_user_list_fixed() {
     let client = CoolapkClient::new();
-    let accounts_path = std::path::Path::new(r"C:\Users\admin\AppData\Roaming\com.coolapk.desktop\accounts.json");
+    let accounts_path =
+        std::path::Path::new(r"C:\Users\admin\AppData\Roaming\com.coolapk.desktop\accounts.json");
     if let Ok(content) = std::fs::read_to_string(accounts_path) {
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
             if let Some(cookie) = json["accounts"][0]["cookie"].as_str() {
@@ -334,8 +374,16 @@ async fn verify_fans_user_list_fixed() {
             let arr = res["data"].as_array().cloned().unwrap_or_default();
             println!("[fixed fansList] len={}", arr.len());
             for u in arr.iter().take(5) {
-                let uid = u.get("uid").map(serde_json::to_string).and_then(Result::ok).unwrap_or_default();
-                let name = u.get("username").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let uid = u
+                    .get("uid")
+                    .map(serde_json::to_string)
+                    .and_then(Result::ok)
+                    .unwrap_or_default();
+                let name = u
+                    .get("username")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 println!("  uid={} username={}", uid, name);
             }
         }

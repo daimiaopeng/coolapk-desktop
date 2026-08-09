@@ -1,8 +1,8 @@
 use crate::coolapk::auth::CoolapkAuth;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use reqwest::header::{COOKIE, HeaderMap, HeaderValue, USER_AGENT};
 use reqwest::{Client, Method};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -46,11 +46,7 @@ fn extract_html_title(html: &str) -> Option<String> {
     let start = lower.find("<title>")? + "<title>".len();
     let end = lower[start..].find("</title>")? + start;
     let title = html[start..end].trim().to_string();
-    if title.is_empty() {
-        None
-    } else {
-        Some(title)
-    }
+    if title.is_empty() { None } else { Some(title) }
 }
 
 /// 剔除网页外壳噪音标签（导航/页脚/脚本/样式等），保留正文骨架。
@@ -119,7 +115,9 @@ fn extract_tag_content(html: &str, tag: &str) -> Option<String> {
 fn extract_readable_content(html: &str) -> String {
     let cleaned = strip_noise_tags(
         html,
-        &["script", "style", "nav", "header", "footer", "aside", "iframe", "form", "noscript"],
+        &[
+            "script", "style", "nav", "header", "footer", "aside", "iframe", "form", "noscript",
+        ],
     );
     for tag in ["article", "main"] {
         if let Some(inner) = extract_tag_content(&cleaned, tag) {
@@ -247,11 +245,7 @@ impl CoolapkClient {
             match (parts.next(), parts.next()) {
                 (Some("uid"), Some(v)) => {
                     let uid = v.trim().to_string();
-                    if uid.is_empty() {
-                        None
-                    } else {
-                        Some(uid)
-                    }
+                    if uid.is_empty() { None } else { Some(uid) }
                 }
                 _ => None,
             }
@@ -704,7 +698,11 @@ impl CoolapkClient {
     }
 
     fn sanitize_cookie(cookie: &str) -> String {
-        let clean = cookie.replace('\r', "").replace('\n', " ").trim().to_string();
+        let clean = cookie
+            .replace('\r', "")
+            .replace('\n', " ")
+            .trim()
+            .to_string();
         // 转换非 ASCII 字符，防止 reqwest 构造 HeaderValue 出现 builder error
         clean
             .chars()
@@ -824,11 +822,16 @@ impl CoolapkClient {
         let entity_type = obj.get("entityType").and_then(|v| v.as_str()).unwrap_or("");
 
         // 过滤 Banner、Card 广告与结构占位卡 (如 "今日酷安" Banner 广告卡、搜索分组头)
-        if entity_type == "card" || entity_type == "header" || entity_type == "card_title" || entity_type == "banner" {
+        if entity_type == "card"
+            || entity_type == "header"
+            || entity_type == "card_title"
+            || entity_type == "banner"
+        {
             return None;
         }
 
-        let is_news_type = entity_type == "dyh" || entity_type == "article" || entity_type == "news";
+        let is_news_type =
+            entity_type == "dyh" || entity_type == "article" || entity_type == "news";
 
         let raw_username = match username {
             Some(u) if !u.is_empty() => u.to_string(),
@@ -958,15 +961,29 @@ impl CoolapkClient {
 
         let is_top = get_u64_by_keys(obj, &["is_top", "isTop", "top"]);
         let likenum = get_u64_by_keys(obj, &["likenum", "like_num", "likeNum", "likenum_count"]);
-        let replynum = get_u64_by_keys(obj, &["replynum", "reply_num", "replyNum", "commentnum", "comment_num", "replynum_count"]);
+        let replynum = get_u64_by_keys(
+            obj,
+            &[
+                "replynum",
+                "reply_num",
+                "replyNum",
+                "commentnum",
+                "comment_num",
+                "replynum_count",
+            ],
+        );
         let fav_num = get_u64_by_keys(obj, &["favnum", "fav_num", "favorite_num"]);
         let share_num = get_u64_by_keys(obj, &["sharenum", "share_num"]);
-        let hit_num = get_u64_by_keys(obj, &["hitnum", "clicknum", "read_num", "view_num", "hit_num"]);
+        let hit_num = get_u64_by_keys(
+            obj,
+            &["hitnum", "clicknum", "read_num", "view_num", "hit_num"],
+        );
         let is_modified = get_u64_by_keys(obj, &["isModified", "is_modified"]);
         let change_count = get_u64_by_keys(obj, &["change_count", "changeCount"]);
         let last_change_time = get_u64_by_keys(obj, &["last_change_time", "lastChangeTime"]);
 
-        let user_level = get_str_by_keys(obj, &["userLevel", "level", "user_level"]).unwrap_or_default();
+        let user_level =
+            get_str_by_keys(obj, &["userLevel", "level", "user_level"]).unwrap_or_default();
 
         let target_type = obj
             .get("target_row")
@@ -1026,7 +1043,9 @@ impl CoolapkClient {
         let mut list = Vec::new();
         if let Some(data_arr) = json_data.get("data").and_then(|v| v.as_array()) {
             for item in data_arr.iter() {
-                let Some(obj) = item.as_object() else { continue };
+                let Some(obj) = item.as_object() else {
+                    continue;
+                };
 
                 let mut cleaned = obj.clone();
 
@@ -1062,7 +1081,10 @@ impl CoolapkClient {
         let obj = item.as_object()?;
 
         // 提取标题与包名，若两者皆无则非合规应用实体
-        let title = get_str_by_keys(obj, &["title", "shorttitle", "apkname", "label", "entityTitle"])?;
+        let title = get_str_by_keys(
+            obj,
+            &["title", "shorttitle", "apkname", "label", "entityTitle"],
+        )?;
         let package_name = get_str_by_keys(obj, &["packageName", "apkname", "package_name", "id"])?;
 
         let raw_icon = get_str_by_keys(
@@ -1085,18 +1107,50 @@ impl CoolapkClient {
         } else if raw_icon.starts_with("//") {
             format!("https:{}", raw_icon)
         } else if !raw_icon.is_empty() {
-            format!("https://image.coolapk.com/{}", raw_icon.trim_start_matches('/'))
+            format!(
+                "https://image.coolapk.com/{}",
+                raw_icon.trim_start_matches('/')
+            )
         } else {
             String::new()
         };
 
-
-        let sub_title = get_str_by_keys(obj, &["subTitle", "description", "target_row_title", "comment"]).unwrap_or_default();
-        let score = get_str_by_keys(obj, &["score", "star", "rating"]).unwrap_or_else(|| "9.0".to_string());
-        let apk_size = get_str_by_keys(obj, &["apksize", "apkSizeFormatted", "size", "apk_size"]).unwrap_or_default();
-        let down_num = get_str_by_keys(obj, &["downCount", "downCountFormatted", "downnum", "download_count"]).unwrap_or_default();
-        let category = get_str_by_keys(obj, &["catName", "category_title", "category_name", "category", "tag", "apkTypeName"]).unwrap_or_else(|| "应用".to_string());
-        let version = get_str_by_keys(obj, &["apkversionname", "apkVersionName", "version", "versionName"]).unwrap_or_default();
+        let sub_title = get_str_by_keys(
+            obj,
+            &["subTitle", "description", "target_row_title", "comment"],
+        )
+        .unwrap_or_default();
+        let score =
+            get_str_by_keys(obj, &["score", "star", "rating"]).unwrap_or_else(|| "9.0".to_string());
+        let apk_size = get_str_by_keys(obj, &["apksize", "apkSizeFormatted", "size", "apk_size"])
+            .unwrap_or_default();
+        let down_num = get_str_by_keys(
+            obj,
+            &[
+                "downCount",
+                "downCountFormatted",
+                "downnum",
+                "download_count",
+            ],
+        )
+        .unwrap_or_default();
+        let category = get_str_by_keys(
+            obj,
+            &[
+                "catName",
+                "category_title",
+                "category_name",
+                "category",
+                "tag",
+                "apkTypeName",
+            ],
+        )
+        .unwrap_or_else(|| "应用".to_string());
+        let version = get_str_by_keys(
+            obj,
+            &["apkversionname", "apkVersionName", "version", "versionName"],
+        )
+        .unwrap_or_default();
 
         // 酷安 APK 实体 apktype 字段：1=应用，2=游戏
         let apk_type = get_u64_by_keys(obj, &["apktype", "apkType", "apk_type", "type"]);
@@ -1161,8 +1215,14 @@ impl CoolapkClient {
         for item in items {
             if let Some(obj) = item.as_object() {
                 if let Some(clean_apk) = Self::clean_single_apk(item) {
-                    let is_explicit_game = clean_apk.get("isExplicitGame").and_then(|v| v.as_bool()).unwrap_or(false);
-                    let is_utility_tool = clean_apk.get("isUtilityTool").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let is_explicit_game = clean_apk
+                        .get("isExplicitGame")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let is_utility_tool = clean_apk
+                        .get("isUtilityTool")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
 
                     let should_keep = match filter_mode {
                         "game" => !is_utility_tool,
@@ -1176,8 +1236,14 @@ impl CoolapkClient {
                 if let Some(entities) = obj.get("entities").and_then(|v| v.as_array()) {
                     for entity in entities {
                         if let Some(clean_apk) = Self::clean_single_apk(entity) {
-                            let is_explicit_game = clean_apk.get("isExplicitGame").and_then(|v| v.as_bool()).unwrap_or(false);
-                            let is_utility_tool = clean_apk.get("isUtilityTool").and_then(|v| v.as_bool()).unwrap_or(false);
+                            let is_explicit_game = clean_apk
+                                .get("isExplicitGame")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+                            let is_utility_tool = clean_apk
+                                .get("isUtilityTool")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
 
                             let should_keep = match filter_mode {
                                 "game" => !is_utility_tool,
@@ -1194,9 +1260,6 @@ impl CoolapkClient {
         }
         apk_list
     }
-
-
-
 
     pub async fn get_by_full_url(&self, full_url: &str) -> Result<Value, String> {
         let token = self.get_token()?;
@@ -1370,7 +1433,10 @@ impl CoolapkClient {
         let raw = self
             .api_get(
                 "/v6/main/indexV8",
-                &[("page", "1".to_string()), ("show_type", "recommend".to_string())],
+                &[
+                    ("page", "1".to_string()),
+                    ("show_type", "recommend".to_string()),
+                ],
             )
             .await?;
 
@@ -1392,12 +1458,20 @@ impl CoolapkClient {
                 let uid = obj
                     .get("uid")
                     .and_then(|v| v.as_str().map(str::to_owned))
-                    .or_else(|| user_info.and_then(|u| u.get("uid")).and_then(|v| v.as_str().map(str::to_owned)))
+                    .or_else(|| {
+                        user_info
+                            .and_then(|u| u.get("uid"))
+                            .and_then(|v| v.as_str().map(str::to_owned))
+                    })
                     .unwrap_or_default();
                 let username = obj
                     .get("username")
                     .and_then(|v| v.as_str())
-                    .or_else(|| user_info.and_then(|u| u.get("username")).and_then(|v| v.as_str()))
+                    .or_else(|| {
+                        user_info
+                            .and_then(|u| u.get("username"))
+                            .and_then(|v| v.as_str())
+                    })
                     .unwrap_or("")
                     .to_string();
                 if uid.is_empty() || username.is_empty() || !seen.insert(uid.clone()) {
@@ -1406,13 +1480,20 @@ impl CoolapkClient {
                 let raw_avatar = obj
                     .get("userAvatar")
                     .and_then(|v| v.as_str())
-                    .or_else(|| user_info.and_then(|u| u.get("userAvatar")).and_then(|v| v.as_str()))
+                    .or_else(|| {
+                        user_info
+                            .and_then(|u| u.get("userAvatar"))
+                            .and_then(|v| v.as_str())
+                    })
                     .unwrap_or("")
                     .to_string();
                 let avatar = if raw_avatar.starts_with("http") {
                     raw_avatar
                 } else if !raw_avatar.is_empty() {
-                    format!("https://avatar.coolapk.com/{}", raw_avatar.trim_start_matches('/'))
+                    format!(
+                        "https://avatar.coolapk.com/{}",
+                        raw_avatar.trim_start_matches('/')
+                    )
                 } else {
                     String::new()
                 };
@@ -1489,7 +1570,12 @@ impl CoolapkClient {
         wrap_api_data(raw)
     }
 
-    pub async fn get_sub_replies(&self, feed_id: &str, reply_id: &str, page: u32) -> Result<Value, String> {
+    pub async fn get_sub_replies(
+        &self,
+        feed_id: &str,
+        reply_id: &str,
+        page: u32,
+    ) -> Result<Value, String> {
         let full_url = format!(
             "https://api.coolapk.com/v6/feed/replyList?id={}&rid={}&page={}",
             feed_id, reply_id, page
@@ -1564,7 +1650,14 @@ impl CoolapkClient {
                         .map(value_to_string)
                         .unwrap_or_default();
 
-                    let item_id = obj.get("id").and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_u64().map(|n| n.to_string()))).unwrap_or_default();
+                    let item_id = obj
+                        .get("id")
+                        .and_then(|v| {
+                            v.as_str()
+                                .map(|s| s.to_string())
+                                .or_else(|| v.as_u64().map(|n| n.to_string()))
+                        })
+                        .unwrap_or_default();
                     let item_rid = obj.get("rid").map(value_to_string).unwrap_or_default();
                     let item_rrid = obj.get("rrid").map(value_to_string).unwrap_or_default();
 
@@ -1573,7 +1666,11 @@ impl CoolapkClient {
                         continue;
                     }
 
-                    let user_action_like = obj.get("userAction").and_then(|ua| ua.get("like")).and_then(|v| v.as_i64()).unwrap_or(0);
+                    let user_action_like = obj
+                        .get("userAction")
+                        .and_then(|ua| ua.get("like"))
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
 
                     cleaned_replies.push(json!({
                         "id": item_id,
@@ -1613,7 +1710,14 @@ impl CoolapkClient {
             .await;
 
         let raw = match hot_res {
-            Ok(ref json) if json.get("data").and_then(|v| v.as_array()).map_or(false, |a| !a.is_empty()) => json.clone(),
+            Ok(ref json)
+                if json
+                    .get("data")
+                    .and_then(|v| v.as_array())
+                    .map_or(false, |a| !a.is_empty()) =>
+            {
+                json.clone()
+            }
             _ => {
                 // 酷安 replyList 要求 listType=lastupdate_desc（lastupdate 已不返回数据）
                 self.api_get(
@@ -1687,12 +1791,19 @@ impl CoolapkClient {
                         .map(value_to_string)
                         .unwrap_or_default();
 
-        let reply_rows = obj.get("replyRows").cloned().unwrap_or(json!([]));
-        let reply_rows_count = obj.get("replyRowsCount").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let reply_rows = obj.get("replyRows").cloned().unwrap_or(json!([]));
+                    let reply_rows_count = obj
+                        .get("replyRowsCount")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
 
-        let user_action_like = obj.get("userAction").and_then(|ua| ua.get("like")).and_then(|v| v.as_i64()).unwrap_or(0);
+                    let user_action_like = obj
+                        .get("userAction")
+                        .and_then(|ua| ua.get("like"))
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
 
-        cleaned_replies.push(json!({
+                    cleaned_replies.push(json!({
             "id": obj.get("id").and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_u64().map(|n| n.to_string()))).unwrap_or_default(),
             "fid": obj.get("fid").map(value_to_string).unwrap_or_default(),
             "rid": obj.get("rid").map(value_to_string).unwrap_or_default(),
@@ -1817,10 +1928,7 @@ impl CoolapkClient {
             let raw = self
                 .api_get(
                     "/v6/page/dataList",
-                    &[
-                        ("url", page_url.to_string()),
-                        ("page", page.to_string()),
-                    ],
+                    &[("url", page_url.to_string()), ("page", page.to_string())],
                 )
                 .await;
 
@@ -1860,7 +1968,6 @@ impl CoolapkClient {
     }
 
     pub async fn get_image_data_url(&self, source_url: &str) -> Result<String, String> {
-
         let mut url =
             reqwest::Url::parse(source_url).map_err(|e| format!("invalid image URL: {e}"))?;
         let scheme = url.scheme().to_ascii_lowercase();
@@ -1891,7 +1998,6 @@ impl CoolapkClient {
                 .map_err(|_| "failed to upgrade image URL to HTTPS".to_string())?;
         }
 
-
         let img_client = Client::builder()
             .timeout(std::time::Duration::from_secs(12))
             .build()
@@ -1908,7 +2014,10 @@ impl CoolapkClient {
                 self.client
                     .get(url)
                     .timeout(std::time::Duration::from_secs(20))
-                    .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+                    .header(
+                        "Accept",
+                        "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+                    )
                     .header("X-Requested-With", "XMLHttpRequest")
                     .header("X-App-Token", token),
             )?
@@ -1975,10 +2084,7 @@ impl CoolapkClient {
             .map_err(|e| e.to_string())?;
 
         let parsed_url = reqwest::Url::parse(url).map_err(|e| format!("invalid URL: {e}"))?;
-        let is_coolapk_target = parsed_url
-            .host_str()
-            .map(is_coolapk_host)
-            .unwrap_or(false);
+        let is_coolapk_target = parsed_url.host_str().map(is_coolapk_host).unwrap_or(false);
 
         let mut request = page_client
             .get(url)
@@ -2117,10 +2223,7 @@ impl CoolapkClient {
         let raw = self
             .api_get(
                 "/v6/favorite/list",
-                &[
-                    ("type", fav_type.to_string()),
-                    ("page", page.to_string()),
-                ],
+                &[("type", fav_type.to_string()), ("page", page.to_string())],
             )
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
@@ -2177,11 +2280,18 @@ impl CoolapkClient {
 
     /// 收藏单内容列表
     /// 数据来源: GET /v6/collection/itemList?id={collectionId}
-    pub async fn get_collection_item_list(&self, collection_id: &str, page: u32) -> Result<Value, String> {
+    pub async fn get_collection_item_list(
+        &self,
+        collection_id: &str,
+        page: u32,
+    ) -> Result<Value, String> {
         let raw = self
             .api_get(
                 "/v6/collection/itemList",
-                &[("id", collection_id.to_string()), ("page", page.to_string())],
+                &[
+                    ("id", collection_id.to_string()),
+                    ("page", page.to_string()),
+                ],
             )
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
@@ -2191,32 +2301,40 @@ impl CoolapkClient {
     /// 数据来源: GET /v6/collection/detail?id={collectionId}
     pub async fn get_collection_detail(&self, collection_id: &str) -> Result<Value, String> {
         wrap_api_data(
-            self.api_get("/v6/collection/detail", &[("id", collection_id.to_string())])
-                .await?,
+            self.api_get(
+                "/v6/collection/detail",
+                &[("id", collection_id.to_string())],
+            )
+            .await?,
         )
     }
 
     /// 关注/点赞收藏单（酷安 v6 写接口统一使用 GET）
     async fn collection_action(&self, path: &str, collection_id: &str) -> Result<Value, String> {
         wrap_api_data(
-            self.api_get(path, &[("id", collection_id.to_string())]).await?,
+            self.api_get(path, &[("id", collection_id.to_string())])
+                .await?,
         )
     }
 
     pub async fn follow_collection(&self, collection_id: &str) -> Result<Value, String> {
-        self.collection_action("/v6/collection/follow", collection_id).await
+        self.collection_action("/v6/collection/follow", collection_id)
+            .await
     }
 
     pub async fn unfollow_collection(&self, collection_id: &str) -> Result<Value, String> {
-        self.collection_action("/v6/collection/unFollow", collection_id).await
+        self.collection_action("/v6/collection/unFollow", collection_id)
+            .await
     }
 
     pub async fn like_collection(&self, collection_id: &str) -> Result<Value, String> {
-        self.collection_action("/v6/collection/like", collection_id).await
+        self.collection_action("/v6/collection/like", collection_id)
+            .await
     }
 
     pub async fn unlike_collection(&self, collection_id: &str) -> Result<Value, String> {
-        self.collection_action("/v6/collection/unLike", collection_id).await
+        self.collection_action("/v6/collection/unLike", collection_id)
+            .await
     }
 
     /// 关注/取消关注看看号
@@ -2432,7 +2550,10 @@ impl CoolapkClient {
         wrap_api_data(
             self.api_get(
                 "/v6/search/suggestSearchWordsNew",
-                &[("searchValue", query.to_string()), ("type", "app".to_string())],
+                &[
+                    ("searchValue", query.to_string()),
+                    ("type", "app".to_string()),
+                ],
             )
             .await?,
         )
@@ -2494,7 +2615,7 @@ impl CoolapkClient {
 
     pub async fn get_topic_hub_data(&self, sub_url: &str, page: u32) -> Result<Value, String> {
         let clean_sub_url = sub_url.trim_start_matches('#');
-        
+
         // 识别分类 Tag 维度 (1: 手机数码, 2: 电脑外设, 3: 游戏生活)
         let tag_type = if clean_sub_url.contains("tagType=1") || clean_sub_url.contains("type=1") {
             Some(1)
@@ -2544,7 +2665,14 @@ impl CoolapkClient {
         let raw = self.api_get("/v6/topic/tagList", &query).await;
 
         let res = match raw {
-            Ok(val) if val.get("data").and_then(|d| d.as_array()).map_or(false, |arr| !arr.is_empty()) => val,
+            Ok(val)
+                if val
+                    .get("data")
+                    .and_then(|d| d.as_array())
+                    .map_or(false, |arr| !arr.is_empty()) =>
+            {
+                val
+            }
             _ => {
                 let page_url = if clean_sub_url.is_empty() || clean_sub_url == "/main/tagList" {
                     "/topic/tagList".to_string()
@@ -2565,10 +2693,16 @@ impl CoolapkClient {
         if clean_sub_url.contains("sort=follow") {
             if let Some(arr) = data.as_array_mut() {
                 arr.sort_by(|a, b| {
-                    let f_a = a.get("follower_num").and_then(|v| v.as_u64())
-                        .or_else(|| a.get("follownum").and_then(|v| v.as_u64())).unwrap_or(0);
-                    let f_b = b.get("follower_num").and_then(|v| v.as_u64())
-                        .or_else(|| b.get("follownum").and_then(|v| v.as_u64())).unwrap_or(0);
+                    let f_a = a
+                        .get("follower_num")
+                        .and_then(|v| v.as_u64())
+                        .or_else(|| a.get("follownum").and_then(|v| v.as_u64()))
+                        .unwrap_or(0);
+                    let f_b = b
+                        .get("follower_num")
+                        .and_then(|v| v.as_u64())
+                        .or_else(|| b.get("follownum").and_then(|v| v.as_u64()))
+                        .unwrap_or(0);
                     f_b.cmp(&f_a)
                 });
             }
@@ -2637,10 +2771,7 @@ impl CoolapkClient {
     /// GET + query 方式服务端无法识别内容（报"私信内容不能为空"）。
     pub async fn send_private_message(&self, uid: &str, message: &str) -> Result<Value, String> {
         let token = self.get_token()?;
-        let url = format!(
-            "https://api.coolapk.com/v6/message/send?uid={}",
-            uid
-        );
+        let url = format!("https://api.coolapk.com/v6/message/send?uid={}", uid);
         let form = reqwest::multipart::Form::new().text("message", message.to_string());
 
         let mut request = self.apply_device_profile(
@@ -2670,10 +2801,7 @@ impl CoolapkClient {
     /// 与 send_private_message 相同接口，multipart 字段为 message_pic
     pub async fn send_private_image(&self, uid: &str, message_pic: &str) -> Result<Value, String> {
         let token = self.get_token()?;
-        let url = format!(
-            "https://api.coolapk.com/v6/message/send?uid={}",
-            uid
-        );
+        let url = format!("https://api.coolapk.com/v6/message/send?uid={}", uid);
         let form = reqwest::multipart::Form::new().text("message_pic", message_pic.to_string());
 
         let mut request = self.apply_device_profile(
@@ -2728,7 +2856,8 @@ impl CoolapkClient {
     }
 
     pub async fn unfavorite_apk(&self, package_name: &str) -> Result<Value, String> {
-        self.favorite_action("/v6/apk/unFavorite", package_name).await
+        self.favorite_action("/v6/apk/unFavorite", package_name)
+            .await
     }
 
     /// 删除自己发布的动态（需登录）
@@ -2788,14 +2917,13 @@ impl CoolapkClient {
             .ok()
             .and_then(|g| g.clone())
             .and_then(|c| {
-                c.split(';')
-                    .find_map(|kv| {
-                        let mut parts = kv.trim().splitn(2, '=');
-                        match (parts.next(), parts.next()) {
-                            (Some("uid"), Some(v)) => Some(v.trim().to_string()),
-                            _ => None,
-                        }
-                    })
+                c.split(';').find_map(|kv| {
+                    let mut parts = kv.trim().splitn(2, '=');
+                    match (parts.next(), parts.next()) {
+                        (Some("uid"), Some(v)) => Some(v.trim().to_string()),
+                        _ => None,
+                    }
+                })
             })
             .ok_or_else(|| "未登录，无法上传图片".to_string())?;
         let target_uid = match to_uid {
@@ -2849,7 +2977,6 @@ impl CoolapkClient {
         }
         let prepare_res = prepare_request.send().await.map_err(|e| e.to_string())?;
         let prepare_json = response_json(prepare_res).await?;
-        
 
         let file_info = prepare_json
             .get("data")
@@ -2900,19 +3027,24 @@ impl CoolapkClient {
         {
             return Err(format!(
                 "上传凭证不完整: {:?}",
-                prepare_json.get("data").map(|d| d.to_string()).unwrap_or_default()
+                prepare_json
+                    .get("data")
+                    .map(|d| d.to_string())
+                    .unwrap_or_default()
             ));
         }
 
         // 2. 直传 OSS（PUT Object，OSS V1 签名）
         let content_md5_b64 = {
-            use md5::{Digest, Md5};
             use base64::Engine;
+            use md5::{Digest, Md5};
             let mut hasher = Md5::new();
             hasher.update(image_bytes);
             base64::engine::general_purpose::STANDARD.encode(hasher.finalize())
         };
-        let now = chrono::Utc::now().format("%a, %d %b %Y %H:%M:%S GMT").to_string();
+        let now = chrono::Utc::now()
+            .format("%a, %d %b %Y %H:%M:%S GMT")
+            .to_string();
 
         // 上传成功回调（与官方客户端一致）
         let callback = "eyJjYWxsYmFja0JvZHlUeXBlIjoiYXBwbGljYXRpb25cL2pzb24iLCJjYWxsYmFja0hvc3QiOiJhcGkuY29vbGFway5jb20iLCJjYWxsYmFja1VybCI6Imh0dHBzOlwvXC9hcGkuY29vbGFway5jb21cL3Y2XC9jYWxsYmFja1wvbW9iaWxlT3NzVXBsb2FkU3VjY2Vzc0NhbGxiYWNrP2NoZWNrQXJ0aWNsZUNvdmVyUmVzb2x1dGlvbj0wJnZlcnNpb25Db2RlPTIxMDIwMzEiLCJjYWxsYmFja0JvZHkiOiJ7XCJidWNrZXRcIjoke2J1Y2tldH0sXCJvYmplY3RcIjoke29iamVjdH0sXCJoYXNQcm9jZXNzXCI6JHt4OnZhcjF9fSJ9";
@@ -2921,23 +3053,18 @@ impl CoolapkClient {
         let resource = format!("/{}/{}", bucket, upload_file_name);
         let string_to_sign = format!(
             "PUT\n{}\n{}\n{}\nx-oss-callback:{}\nx-oss-callback-var:{}\nx-oss-security-token:{}\n{}",
-            content_md5_b64,
-            content_type,
-            now,
-            callback,
-            callback_var,
-            security_token,
-            resource
+            content_md5_b64, content_type, now, callback, callback_var, security_token, resource
         );
 
         use base64::Engine;
         use hmac::{Hmac, Mac};
         use sha1::Sha1;
         type HmacSha1 = Hmac<Sha1>;
-        let mut mac = HmacSha1::new_from_slice(access_key_secret.as_bytes())
-            .map_err(|e| e.to_string())?;
+        let mut mac =
+            HmacSha1::new_from_slice(access_key_secret.as_bytes()).map_err(|e| e.to_string())?;
         mac.update(string_to_sign.as_bytes());
-        let signature = base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes());
+        let signature =
+            base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes());
         let authorization = format!("OSS {}:{}", access_key_id, signature);
 
         let oss_host = if end_point.starts_with("http") {
@@ -2945,9 +3072,7 @@ impl CoolapkClient {
         } else {
             format!("https://{}", end_point)
         };
-        let oss_host = oss_host
-            .replace("https://", "")
-            .replace("http://", "");
+        let oss_host = oss_host.replace("https://", "").replace("http://", "");
         let oss_url = format!("https://{}.{}/{}", bucket, oss_host, upload_file_name);
 
         let mut oss_request = self
@@ -2966,17 +3091,10 @@ impl CoolapkClient {
 
         let oss_res = oss_request.send().await.map_err(|e| e.to_string())?;
         let oss_status = oss_res.status();
-        let oss_body = oss_res
-            .text()
-            .await
-            .unwrap_or_default();
+        let oss_body = oss_res.text().await.unwrap_or_default();
 
         if !oss_status.is_success() {
-            return Err(format!(
-                "OSS 直传失败 (HTTP {}): {}",
-                oss_status,
-                &oss_body
-            ));
+            return Err(format!("OSS 直传失败 (HTTP {}): {}", oss_status, &oss_body));
         }
 
         // 3. 解析 OSS 回调返回的图片地址
@@ -3068,7 +3186,8 @@ impl CoolapkClient {
     }
 
     pub async fn remove_from_black_list(&self, uid: &str) -> Result<Value, String> {
-        self.blacklist_action("/v6/user/removeFromBlackList", uid).await
+        self.blacklist_action("/v6/user/removeFromBlackList", uid)
+            .await
     }
 
     /// 屏蔽/取消屏蔽用户（需登录，GET 写接口）
@@ -3077,7 +3196,8 @@ impl CoolapkClient {
     }
 
     pub async fn remove_from_ignore_list(&self, uid: &str) -> Result<Value, String> {
-        self.blacklist_action("/v6/user/removeFromIgnoreList", uid).await
+        self.blacklist_action("/v6/user/removeFromIgnoreList", uid)
+            .await
     }
 
     /// 应用下载链接
@@ -3161,11 +3281,17 @@ impl CoolapkClient {
     }
 
     pub async fn follow_user(&self, uid: &str) -> Result<Value, String> {
-        wrap_api_data(self.api_get("/v6/user/follow", &[("uid", uid.to_string())]).await?)
+        wrap_api_data(
+            self.api_get("/v6/user/follow", &[("uid", uid.to_string())])
+                .await?,
+        )
     }
 
     pub async fn unfollow_user(&self, uid: &str) -> Result<Value, String> {
-        wrap_api_data(self.api_get("/v6/user/unfollow", &[("uid", uid.to_string())]).await?)
+        wrap_api_data(
+            self.api_get("/v6/user/unfollow", &[("uid", uid.to_string())])
+                .await?,
+        )
     }
 
     pub async fn get_following_feeds(&self, page: u32) -> Result<Value, String> {
@@ -3189,10 +3315,7 @@ impl CoolapkClient {
 
         // 2. 备用尝试 /v6/feed/followFeedList 关注流接口
         if let Ok(raw) = self
-            .api_get(
-                "/v6/feed/followFeedList",
-                &[("page", page.to_string())],
-            )
+            .api_get("/v6/feed/followFeedList", &[("page", page.to_string())])
             .await
         {
             let cleaned = Self::extract_cleaned_list(&raw);
@@ -3244,9 +3367,7 @@ impl CoolapkClient {
         if let Some(arr) = list.as_array() {
             let self_uid = uid.trim().to_string();
             for item in arr {
-                let user_info = item
-                    .get("userInfo")
-                    .or_else(|| item.get("fUserInfo"));
+                let user_info = item.get("userInfo").or_else(|| item.get("fUserInfo"));
                 let real_uid = user_info
                     .and_then(|info| info.get("uid"))
                     .and_then(|v| value_to_string_opt(v))
@@ -3415,7 +3536,8 @@ impl CoolapkClient {
             }
         }
 
-        let query_refs: Vec<(&str, String)> = query_params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        let query_refs: Vec<(&str, String)> =
+            query_params.iter().map(|(k, v)| (*k, v.clone())).collect();
         if query_params.is_empty() {
             return Ok(login_info);
         }
@@ -3468,7 +3590,8 @@ impl CoolapkClient {
             .await?;
 
         if let Some(msg) = res.get("message").and_then(Value::as_str) {
-            if msg.contains("unsupported") || res.get("status").and_then(Value::as_i64) == Some(403) {
+            if msg.contains("unsupported") || res.get("status").and_then(Value::as_i64) == Some(403)
+            {
                 return Err("酷安官方现已停用第三方原生账号密码 API (403 Unsupported)，请切换至【SESSID 凭据】标签导入凭据登录。".to_string());
             }
         }
@@ -3492,7 +3615,9 @@ impl CoolapkClient {
         match first_try {
             Ok(res) => {
                 if let Some(msg) = res.get("message").and_then(Value::as_str) {
-                    if msg.contains("unsupported") || res.get("status").and_then(Value::as_i64) == Some(403) {
+                    if msg.contains("unsupported")
+                        || res.get("status").and_then(Value::as_i64) == Some(403)
+                    {
                         return Err("酷安官方已停用第三方纯验证码直连 API (403 API Unsupported)，请使用【SESSID 凭据】快捷登录。".to_string());
                     }
                 }
@@ -3516,7 +3641,8 @@ impl CoolapkClient {
             .await?;
 
         if let Some(msg) = res.get("message").and_then(Value::as_str) {
-            if msg.contains("unsupported") || res.get("status").and_then(Value::as_i64) == Some(403) {
+            if msg.contains("unsupported") || res.get("status").and_then(Value::as_i64) == Some(403)
+            {
                 return Err("酷安官方已停用第三方手机号登录 API (403 API Unsupported)，请使用【SESSID 凭据】快捷登录。".to_string());
             }
         }
@@ -3584,7 +3710,12 @@ impl CoolapkClient {
 
     /// 产品（数码）所属动态列表（讨论/问答/图文/视频/交易）
     /// 数据来源: GET /v6/page/dataList?url=/page?url=/product/feedList
-    pub async fn get_product_feeds(&self, product_id: &str, feed_type: &str, page: u32) -> Result<Value, String> {
+    pub async fn get_product_feeds(
+        &self,
+        product_id: &str,
+        feed_type: &str,
+        page: u32,
+    ) -> Result<Value, String> {
         let raw = self
             .api_get(
                 "/v6/page/dataList",
@@ -3644,7 +3775,12 @@ impl CoolapkClient {
 
     /// 应用所属动态列表（点评/讨论）
     /// 数据来源: GET /v6/page/dataList?url=#/feed/apkCommentList
-    pub async fn get_apk_feeds(&self, package_name: &str, sort_type: &str, page: u32) -> Result<Value, String> {
+    pub async fn get_apk_feeds(
+        &self,
+        package_name: &str,
+        sort_type: &str,
+        page: u32,
+    ) -> Result<Value, String> {
         let sort = match sort_type {
             "lastupdate_desc" | "dateline_desc" | "popular" => sort_type,
             _ => "lastupdate_desc",
@@ -3701,67 +3837,123 @@ impl CoolapkClient {
     /// 应用集列表
     /// 数据来源: GET /v6/album/list
     pub async fn get_album_list(&self, list_type: &str, page: u32) -> Result<Value, String> {
-        let raw = self.api_get("/v6/album/list", &[("listType", list_type.to_string()), ("page", page.to_string())]).await?;
+        let raw = self
+            .api_get(
+                "/v6/album/list",
+                &[
+                    ("listType", list_type.to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await?;
         Ok(json!({ "code": 200, "data": raw.get("data").cloned().unwrap_or(json!([])) }))
     }
 
     /// 搜索应用集
     /// 数据来源: GET /v6/album/search
     pub async fn search_albums(&self, query: &str, page: u32) -> Result<Value, String> {
-        let raw = self.api_get("/v6/album/search", &[("q", query.to_string()), ("page", page.to_string())]).await?;
+        let raw = self
+            .api_get(
+                "/v6/album/search",
+                &[("q", query.to_string()), ("page", page.to_string())],
+            )
+            .await?;
         Ok(json!({ "code": 200, "data": raw.get("data").cloned().unwrap_or(json!([])) }))
     }
 
     /// 应用集详情
     /// 数据来源: GET /v6/album/detail
     pub async fn get_album_detail(&self, album_id: &str) -> Result<Value, String> {
-        wrap_api_data(self.api_get("/v6/album/detail", &[("id", album_id.to_string())]).await?)
+        wrap_api_data(
+            self.api_get("/v6/album/detail", &[("id", album_id.to_string())])
+                .await?,
+        )
     }
 
     /// 应用集评论
     /// 数据来源: GET /v6/album/replyList
     pub async fn get_album_replies(&self, album_id: &str, page: u32) -> Result<Value, String> {
-        wrap_api_data(self.api_get("/v6/album/replyList", &[("id", album_id.to_string()), ("page", page.to_string())]).await?)
+        wrap_api_data(
+            self.api_get(
+                "/v6/album/replyList",
+                &[("id", album_id.to_string()), ("page", page.to_string())],
+            )
+            .await?,
+        )
     }
 
     /// 头条列表
     /// 数据来源: GET /v6/main/headline
     pub async fn get_headline_feeds(&self, page: u32) -> Result<Value, String> {
-        let raw = self.api_get("/v6/main/headline", &[("page", page.to_string())]).await?;
+        let raw = self
+            .api_get("/v6/main/headline", &[("page", page.to_string())])
+            .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
     /// 更新列表
     /// 数据来源: GET /v6/main/updateList
     pub async fn get_update_list(&self, page: u32) -> Result<Value, String> {
-        let raw = self.api_get("/v6/main/updateList", &[("page", page.to_string())]).await?;
+        let raw = self
+            .api_get("/v6/main/updateList", &[("page", page.to_string())])
+            .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
     /// 编辑精选
     /// 数据来源: GET /v6/feed/editorChoiceList
     pub async fn get_editor_choice_feeds(&self, page: u32) -> Result<Value, String> {
-        let raw = self.api_get("/v6/feed/editorChoiceList", &[("page", page.to_string())]).await?;
+        let raw = self
+            .api_get("/v6/feed/editorChoiceList", &[("page", page.to_string())])
+            .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
     /// 应用发现者列表
     /// 数据来源: GET /v6/apk/discovererList
-    pub async fn get_apk_discoverers(&self, package_name: &str, page: u32) -> Result<Value, String> {
-        wrap_api_data(self.api_get("/v6/apk/discovererList", &[("id", package_name.to_string()), ("page", page.to_string())]).await?)
+    pub async fn get_apk_discoverers(
+        &self,
+        package_name: &str,
+        page: u32,
+    ) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get(
+                "/v6/apk/discovererList",
+                &[("id", package_name.to_string()), ("page", page.to_string())],
+            )
+            .await?,
+        )
     }
 
     /// 推荐应用列表
     /// 数据来源: GET /v6/apk/recommendList
-    pub async fn get_apk_recommend_list(&self, apk_type: &str, title: &str, page: u32) -> Result<Value, String> {
-        let raw = self.api_get("/v6/apk/recommendList", &[("apkType", apk_type.to_string()), ("title", title.to_string()), ("page", page.to_string())]).await?;
+    pub async fn get_apk_recommend_list(
+        &self,
+        apk_type: &str,
+        title: &str,
+        page: u32,
+    ) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/apk/recommendList",
+                &[
+                    ("apkType", apk_type.to_string()),
+                    ("title", title.to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await?;
         let apks = Self::extract_apk_list(&raw, "all");
         Ok(json!({ "code": 200, "data": apks }))
     }
 
     /// 应用礼品列表
     /// 数据来源: GET /v6/apk/giftList
-    pub async fn get_apk_gift_list(&self, apk_id: Option<&str>, page: u32) -> Result<Value, String> {
+    pub async fn get_apk_gift_list(
+        &self,
+        apk_id: Option<&str>,
+        page: u32,
+    ) -> Result<Value, String> {
         let mut params: Vec<(&str, String)> = vec![("page", page.to_string())];
         if let Some(apk_id) = apk_id {
             params.push(("apkId", apk_id.to_string()));
@@ -3797,29 +3989,67 @@ impl CoolapkClient {
     /// 图片列表(按标签)
     /// 数据来源: GET /v6/picture/list
     pub async fn get_picture_list(&self, tag: &str, page: u32) -> Result<Value, String> {
-        let raw = self.api_get("/v6/picture/list", &[("tag", tag.to_string()), ("page", page.to_string())]).await?;
+        let raw = self
+            .api_get(
+                "/v6/picture/list",
+                &[("tag", tag.to_string()), ("page", page.to_string())],
+            )
+            .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
     /// 用户评分列表
     /// 数据来源: GET /v6/user/apkRatingList
     pub async fn get_user_rating_list(&self, uid: &str, page: u32) -> Result<Value, String> {
-        let raw = self.api_get("/v6/user/apkRatingList", &[("uid", uid.to_string()), ("page", page.to_string())]).await?;
+        let raw = self
+            .api_get(
+                "/v6/user/apkRatingList",
+                &[("uid", uid.to_string()), ("page", page.to_string())],
+            )
+            .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
     /// 按开发者搜索应用
     /// 数据来源: GET /v6/apk/search?searchType=developer
-    pub async fn search_apks_by_developer(&self, developer: &str, page: u32) -> Result<Value, String> {
-        let raw = self.api_get("/v6/apk/search", &[("searchType", "developer".to_string()), ("developer", developer.to_string()), ("page", page.to_string())]).await?;
+    pub async fn search_apks_by_developer(
+        &self,
+        developer: &str,
+        page: u32,
+    ) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/apk/search",
+                &[
+                    ("searchType", "developer".to_string()),
+                    ("developer", developer.to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await?;
         let apks = Self::extract_apk_list(&raw, "all");
         Ok(json!({ "code": 200, "data": apks }))
     }
 
     /// 按标签搜索应用
     /// 数据来源: GET /v6/apk/search?searchType=tag
-    pub async fn search_apks_by_tag(&self, tag: &str, apk_type: &str, page: u32) -> Result<Value, String> {
-        let raw = self.api_get("/v6/apk/search", &[("searchType", "tag".to_string()), ("tag", tag.to_string()), ("apkType", apk_type.to_string()), ("page", page.to_string())]).await?;
+    pub async fn search_apks_by_tag(
+        &self,
+        tag: &str,
+        apk_type: &str,
+        page: u32,
+    ) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/apk/search",
+                &[
+                    ("searchType", "tag".to_string()),
+                    ("tag", tag.to_string()),
+                    ("apkType", apk_type.to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await?;
         let apks = Self::extract_apk_list(&raw, "all");
         Ok(json!({ "code": 200, "data": apks }))
     }
@@ -3843,7 +4073,9 @@ fn generate_random_device_code() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u64;
-    seed ^= COUNTER.fetch_add(1, Ordering::Relaxed).wrapping_mul(0x9E3779B97F4A7C15);
+    seed ^= COUNTER
+        .fetch_add(1, Ordering::Relaxed)
+        .wrapping_mul(0x9E3779B97F4A7C15);
     seed ^= std::process::id() as u64;
     seed ^= (&seed as *const u64) as u64;
 
@@ -3874,11 +4106,7 @@ fn value_to_string(value: &Value) -> String {
 
 fn value_to_string_opt(value: &Value) -> Option<String> {
     let s = value_to_string(value);
-    if s.is_empty() {
-        None
-    } else {
-        Some(s)
-    }
+    if s.is_empty() { None } else { Some(s) }
 }
 
 fn wrap_api_data(response: Value) -> Result<Value, String> {
@@ -3887,9 +4115,15 @@ fn wrap_api_data(response: Value) -> Result<Value, String> {
             return Err(err_msg.to_string());
         }
     }
-    
+
     if let Some(message) = response.get("message").and_then(Value::as_str) {
-        let code = response.get("code").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))).unwrap_or(200);
+        let code = response
+            .get("code")
+            .and_then(|v| {
+                v.as_i64()
+                    .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+            })
+            .unwrap_or(200);
         let status = response.get("status").and_then(|v| v.as_i64()).unwrap_or(1);
         let msg_status = response
             .get("messageStatus")
@@ -3908,7 +4142,11 @@ fn wrap_api_data(response: Value) -> Result<Value, String> {
 
     if let Some(status) = response.get("status").and_then(|v| v.as_i64()) {
         if status < 0 {
-            let msg = response.get("message").or_else(|| response.get("error")).and_then(Value::as_str).unwrap_or("酷安服务端拒绝请求");
+            let msg = response
+                .get("message")
+                .or_else(|| response.get("error"))
+                .and_then(Value::as_str)
+                .unwrap_or("酷安服务端拒绝请求");
             return Err(msg.to_string());
         }
     }
