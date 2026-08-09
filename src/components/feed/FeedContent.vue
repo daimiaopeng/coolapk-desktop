@@ -23,8 +23,8 @@ import { ref, computed, watch } from 'vue';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import { useSettingsStore } from '../../stores/settings';
-import { CoolapkTauriAPI } from '../../api/coolapk';
-import { getFeedDetailMessage, hasFeedMoreSuffix, stripFeedMoreSuffix } from '../../utils/feedContent';
+import { hasFeedMoreSuffix, stripFeedMoreSuffix } from '../../utils/feedContent';
+import { preloadFeedFullText } from '../../utils/feedFullTextCache';
 
 const props = defineProps<{
   feedId?: string | number;
@@ -65,10 +65,7 @@ async function handleExpand() {
 
   expanding.value = true;
   try {
-    const response: any = await CoolapkTauriAPI.getFeedDetail(String(props.feedId));
-    const detailMessage = getFeedDetailMessage(response?.data);
-    if (!detailMessage) throw new Error('动态详情没有返回完整正文');
-    fullMessage.value = detailMessage;
+    fullMessage.value = await preloadFeedFullText(props.feedId);
   } catch (error) {
     console.warn('加载动态完整正文失败：', error);
     expandError.value = true;
@@ -106,9 +103,24 @@ const formattedMessage = computed(() => {
 watch(
   () => [props.feedId, props.message],
   () => {
+    const feedId = props.feedId;
+    const sourceMessage = props.message || '';
     fullMessage.value = '';
     expandError.value = false;
     isExpanded.value = Boolean(props.forceExpanded);
+
+    if (!feedId || !hasFeedMoreSuffix(sourceMessage)) return;
+    // 列表接口出现“查看更多”时立即在后台排队加载全文。
+    // 用户点击前若已完成即可瞬时展开；仍在加载时也会复用同一个请求。
+    void preloadFeedFullText(feedId)
+      .then((message) => {
+        if (String(props.feedId) === String(feedId) && props.message === sourceMessage) {
+          fullMessage.value = message;
+        }
+      })
+      .catch(() => {
+        // 后台预取失败保持静默，用户主动点击时仍可重试并看到错误状态。
+      });
   },
   { immediate: true }
 );

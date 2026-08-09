@@ -30,6 +30,9 @@ export function sanitizeCoolapkHtml(text: string): string {
         const a = doc.createElement('a');
         a.setAttribute('href', href);
         a.setAttribute('rel', 'noopener noreferrer');
+        if (/^\/u\//i.test(href)) {
+          a.classList.add('coolapk-user-link');
+        }
         el.childNodes.forEach((c) => a.appendChild(convert(c)));
         return a;
       }
@@ -46,4 +49,11 @@ export function sanitizeCoolapkHtml(text: string): string {
   doc.body.innerHTML = '';
   doc.body.appendChild(frag);
   return doc.body.innerHTML;
+}
+
+/** 将酷安富文本 HTML 转为纯文本（去标签、解码实体），用于文本插值场景 */
+export function coolapkHtmlToPlainText(text: string): string {
+  if (!text) return '';
+  const doc = new DOMParser().parseFromString(text.replace(/\n/g, '<br/>'), 'text/html');
+  return (doc.body.textContent || '').replace(/\s*\n\s*/g, '\n').trim();
 }

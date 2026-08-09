@@ -1298,13 +1298,21 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
-    // 2. 24H 热榜 (带有备用降级 API)
+    // 2. 热榜
+    // 实测定位：官方热榜 tab（V9_HOME_TAB_RANKING）→ 总榜（V15_DONGTAI_TOP）
+    // → 7天总榜 #/feed/statList。sortField 对比实测：
+    //   detailnum（详情数）→ 6659/946/1545...
+    //   likenum（点赞数）  → 6659/3630/1586/1545/1256... ← 点赞热榜，采用此排序
+    // #/feed/hotList 与 V9_HOME_TAB_RANKING 主列表点赞仅个位数/千位以下。
     pub async fn get_hot_feeds(&self, page: u32) -> Result<Value, String> {
         let res = self
             .api_get(
                 "/v6/page/dataList",
                 &[
-                    ("url", "#/feed/hotList".to_string()),
+                    (
+                        "url",
+                        "#/feed/statList?statType=7days&sortField=likenum".to_string(),
+                    ),
                     ("title", "热门".to_string()),
                     ("page", page.to_string()),
                 ],
@@ -1331,6 +1339,26 @@ impl CoolapkClient {
             )
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&fallback) }))
+    }
+
+    /// 热榜页内的五种榜单。周榜沿用带降级的主热榜，其余榜单使用官方统计页参数。
+    pub async fn get_rank_feeds(&self, rank_type: &str, page: u32) -> Result<Value, String> {
+        if rank_type == "week" {
+            return self.get_hot_feeds(page).await;
+        }
+        if rank_type == "picture" {
+            return self.get_cool_picture_rank(page).await;
+        }
+
+        let rank_url =
+            rank_feed_url(rank_type).ok_or_else(|| format!("不支持的热榜类型：{rank_type}"))?;
+        let raw = self
+            .api_get(
+                "/v6/page/dataList",
+                &[("url", rank_url.to_string()), ("page", page.to_string())],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
     // 3. 科技快讯 (对接官方快讯页 V11_HOME_TAB_NEWS，含平滑降级)
@@ -1425,97 +1453,6 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": topics }))
     }
 
-    // 右侧栏：推荐酷友
-    // 酷安已下线 V9_HOME_TAB_FOLLOW 的"热门酷友"卡片与 /v6/user/statList、
-    // /v6/member/verifyList 等用户列表接口（实测均返回空），
-    // 现改为从首页推荐流（indexV8）的作者中提取活跃酷友，去重取前 5。
-    pub async fn get_recommend_users(&self) -> Result<Value, String> {
-        let raw = self
-            .api_get(
-                "/v6/main/indexV8",
-                &[
-                    ("page", "1".to_string()),
-                    ("show_type", "recommend".to_string()),
-                ],
-            )
-            .await?;
-
-        let mut users: Vec<Value> = Vec::new();
-        let mut seen = std::collections::HashSet::new();
-        if let Some(arr) = raw.get("data").and_then(|v| v.as_array()) {
-            for item in arr {
-                let obj = match item.as_object() {
-                    Some(o) => o,
-                    None => continue,
-                };
-                if obj.get("entityType").and_then(|v| v.as_str()) != Some("feed") {
-                    continue;
-                }
-                let user_info = obj
-                    .get("userInfo")
-                    .or_else(|| obj.get("user"))
-                    .and_then(|v| v.as_object());
-                let uid = obj
-                    .get("uid")
-                    .and_then(|v| v.as_str().map(str::to_owned))
-                    .or_else(|| {
-                        user_info
-                            .and_then(|u| u.get("uid"))
-                            .and_then(|v| v.as_str().map(str::to_owned))
-                    })
-                    .unwrap_or_default();
-                let username = obj
-                    .get("username")
-                    .and_then(|v| v.as_str())
-                    .or_else(|| {
-                        user_info
-                            .and_then(|u| u.get("username"))
-                            .and_then(|v| v.as_str())
-                    })
-                    .unwrap_or("")
-                    .to_string();
-                if uid.is_empty() || username.is_empty() || !seen.insert(uid.clone()) {
-                    continue;
-                }
-                let raw_avatar = obj
-                    .get("userAvatar")
-                    .and_then(|v| v.as_str())
-                    .or_else(|| {
-                        user_info
-                            .and_then(|u| u.get("userAvatar"))
-                            .and_then(|v| v.as_str())
-                    })
-                    .unwrap_or("")
-                    .to_string();
-                let avatar = if raw_avatar.starts_with("http") {
-                    raw_avatar
-                } else if !raw_avatar.is_empty() {
-                    format!(
-                        "https://avatar.coolapk.com/{}",
-                        raw_avatar.trim_start_matches('/')
-                    )
-                } else {
-                    String::new()
-                };
-                let verify_title = obj
-                    .get("verify_title")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                users.push(json!({
-                    "uid": uid,
-                    "username": username,
-                    "avatar": avatar,
-                    "verifyTitle": verify_title
-                }));
-                if users.len() >= 5 {
-                    break;
-                }
-            }
-        }
-        Ok(json!({ "code": 200, "data": users }))
-    }
-
     // 4. 精选热帖
     pub async fn get_digest_feeds(&self, page: u32) -> Result<Value, String> {
         let raw = self
@@ -1532,6 +1469,8 @@ impl CoolapkClient {
     }
 
     // 5. 酷图热榜
+    // 实测：digestList?type=8 返回的动态点赞全为 0（数据异常），
+    // 官方酷图榜入口为 statList?statType=30days&sortField=likenum&type=8（点赞 256/169/124）
     pub async fn get_cool_picture_rank(&self, page: u32) -> Result<Value, String> {
         let raw = self
             .api_get(
@@ -1539,7 +1478,7 @@ impl CoolapkClient {
                 &[
                     (
                         "url",
-                        "#/feed/digestList?type=8&message_status=all".to_string(),
+                        "#/feed/statList?statType=30days&sortField=likenum&type=8".to_string(),
                     ),
                     ("title", "酷图热榜".to_string()),
                     ("page", page.to_string()),
@@ -4107,6 +4046,17 @@ fn value_to_string(value: &Value) -> String {
 fn value_to_string_opt(value: &Value) -> Option<String> {
     let s = value_to_string(value);
     if s.is_empty() { None } else { Some(s) }
+}
+
+fn rank_feed_url(rank_type: &str) -> Option<&'static str> {
+    match rank_type {
+        // 实测：月榜 statType=30days 有效（6659/3676/3630），statType=month 返回空
+        "month" => Some("#/feed/statList?statType=30days&sortField=likenum"),
+        // 实测：收藏榜必须 statType=7days（favnum 排序），statType=all 返回空
+        "favorite" => Some("#/feed/statList?statType=7days&sortField=favnum"),
+        "index" => Some("#/feed/statList?statType=7days&sortField=detailnum"),
+        _ => None,
+    }
 }
 
 fn wrap_api_data(response: Value) -> Result<Value, String> {

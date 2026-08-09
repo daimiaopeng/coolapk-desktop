@@ -386,6 +386,12 @@ async function loadSubReplies(reset: boolean) {
   word-break: break-word;
 }
 
+.comment-body :deep(a.coolapk-user-link),
+.sub-text :deep(a.coolapk-user-link) {
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
 .comment-actions {
   display: flex;
   align-items: center;

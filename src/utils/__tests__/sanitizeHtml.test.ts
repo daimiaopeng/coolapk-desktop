@@ -8,6 +8,7 @@ describe('sanitizeCoolapkHtml', () => {
       '<a class="feed-forward-pic" href="http://image.coolapk.com/feed/2023/0822/16/123456_1c34c870_4735_0557_79@1440x3200.jpeg">查看图片</a>';
     const html = sanitizeCoolapkHtml(input);
     expect(html).toContain('<a href="/u/测试用户"');
+    expect(html).toContain('class="coolapk-user-link"');
     expect(html).toContain('<a href="http://image.coolapk.com/feed/2023/0822/16/123456_1c34c870_4735_0557_79@1440x3200.jpeg"');
     expect(html).toContain('@测试用户');
     expect(html).toContain('查看图片');

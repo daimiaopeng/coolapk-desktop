@@ -174,6 +174,7 @@ import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
+import { renderCoolapkRichText } from '../utils/richText';
 import { useAuthStore } from '../stores/auth';
 import { handleAnchorClick } from '../utils/anchorClick';
 import { openFeedDetail } from '../utils/feedNavigation';
@@ -235,7 +236,9 @@ function typeLabel(item: any): string {
 
 function richDescription(item: any): string {
   const desc = item?.description || item?.entityTemplate || '';
-  if (typeof desc === 'string' && desc.trim() && desc.trim() !== 'feed') return desc.trim();
+  if (typeof desc === 'string' && desc.trim() && desc.trim() !== 'feed') {
+    return renderCoolapkRichText(desc.trim());
+  }
   return '';
 }
 

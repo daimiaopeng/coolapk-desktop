@@ -13,10 +13,12 @@ vi.mock('../../../api/coolapk', () => ({
 }));
 
 import FeedContent from '../FeedContent.vue';
+import { clearFeedFullTextCache } from '../../../utils/feedFullTextCache';
 
 describe('动态正文展开', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearFeedFullTextCache();
   });
 
   it('本地长正文直接在卡片内展开', async () => {
@@ -46,5 +48,21 @@ describe('动态正文展开', () => {
 
     expect(mocks.getFeedDetail).toHaveBeenCalledWith('456');
     expect(wrapper.text()).toContain('这里是接口返回的完整正文');
+  });
+
+  it('后台预取完成后点击立即展开且不重复请求', async () => {
+    mocks.getFeedDetail.mockResolvedValue({ data: { message: '后台已经准备好的完整正文' } });
+    const wrapper = mount(FeedContent, {
+      props: { feedId: '789', message: '正文摘要... 查看更多' },
+      global: { plugins: [createPinia()] },
+    });
+
+    await flushPromises();
+    expect(mocks.getFeedDetail).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('.feed-body').classes()).toContain('is-collapsed');
+
+    await wrapper.find('.expand-btn').trigger('click');
+    expect(wrapper.text()).toContain('后台已经准备好的完整正文');
+    expect(mocks.getFeedDetail).toHaveBeenCalledTimes(1);
   });
 });

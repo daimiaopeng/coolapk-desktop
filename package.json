@@ -1,7 +1,7 @@
 {
   "name": "coolapk-desktop",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "基于 Tauri 2、Vue 3 和 Rust 的非官方酷安桌面客户端",
   "author": "daimiaopeng",
   "license": "MIT",
@@ -19,6 +19,7 @@
     "test:cache:cdp": "node scripts/test-resource-cache-cdp.mjs",
     "test:navigation:cdp": "node scripts/test-resource-cache-cdp.mjs",
     "test:feed-navigation:cdp": "node scripts/test-feed-navigation-cdp.mjs",
+    "test:home-regressions:cdp": "node scripts/test-home-regressions-cdp.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "vue-tsc --noEmit",

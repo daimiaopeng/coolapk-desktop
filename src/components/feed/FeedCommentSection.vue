@@ -621,6 +621,12 @@ function handleSend() {
   cursor: pointer;
 }
 
+.comment-text :deep(a.coolapk-user-link),
+.sub-reply-text :deep(a.coolapk-user-link) {
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
 .comment-actions,
 .sub-reply-actions {
   display: flex;
@@ -756,8 +762,8 @@ function handleSend() {
 }
 
 .sub-target-user {
-  color: var(--brand-primary);
-  font-weight: 600;
+  color: var(--text-primary);
+  font-weight: 400;
 }
 
 .sub-reply-text {

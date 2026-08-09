@@ -1,6 +1,23 @@
 use super::*;
 
 #[test]
+fn test_hot_rank_routes_use_statistics_api() {
+    assert_eq!(
+        rank_feed_url("month"),
+        Some("#/feed/statList?statType=30days&sortField=likenum")
+    );
+    assert_eq!(
+        rank_feed_url("favorite"),
+        Some("#/feed/statList?statType=7days&sortField=favnum")
+    );
+    assert_eq!(
+        rank_feed_url("index"),
+        Some("#/feed/statList?statType=7days&sortField=detailnum")
+    );
+    assert_eq!(rank_feed_url("unknown"), None);
+}
+
+#[test]
 fn test_clean_feed_keeps_edit_metadata() {
     let raw = json!({
         "id": 123,

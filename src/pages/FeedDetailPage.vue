@@ -57,14 +57,6 @@ const loading = ref(false);
 const error = ref('');
 let requestVersion = 0;
 
-async function fetchWebFallback(targetFeedId: string) {
-  const response: any = await CoolapkTauriAPI.fetchExternalPage(`https://www.coolapk.com/feed/${targetFeedId}`);
-  const raw = response?.data?.html;
-  if (!raw) return null;
-  const parsed = JSON.parse(raw);
-  return parsed?.data && typeof parsed.data === 'object' ? parsed.data : null;
-}
-
 async function fetchDetail() {
   if (!feedId.value) return;
   const requestedFeedId = feedId.value;
@@ -79,16 +71,6 @@ async function fetchDetail() {
     feedDetail.value = detail;
     appStore.setFeedDetailContext(requestedFeedId, detail);
   } catch (requestError) {
-    try {
-      const fallback = await fetchWebFallback(requestedFeedId);
-      if (fallback && currentRequest === requestVersion && requestedFeedId === feedId.value) {
-        feedDetail.value = fallback;
-        appStore.setFeedDetailContext(requestedFeedId, fallback);
-        return;
-      }
-    } catch {
-      // 网页兜底失败后显示原始请求错误。
-    }
     if (currentRequest === requestVersion) {
       error.value = requestError instanceof Error ? requestError.message : String(requestError);
     }

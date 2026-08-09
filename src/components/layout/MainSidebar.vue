@@ -103,7 +103,6 @@ const isDark = computed(() => {
 
 const allPrimaryNavs = [
   { key: 'home', path: '/', label: '首页', icon: 'fas fa-home' },
-  { key: 'feeds', path: '/feeds', label: '动态', icon: 'fas fa-stream' },
   { key: 'topics', path: '/topics', label: '话题', icon: 'fas fa-hashtag' },
   { key: 'discover', path: '/discover', label: '发现', icon: 'fas fa-compass' },
   { key: 'apps', path: '/apps', label: '应用', icon: 'fas fa-cubes' },

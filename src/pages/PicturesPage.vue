@@ -67,7 +67,7 @@
               <AppAvatar :src="avatarOf(item)" size="sm" :alt="usernameOf(item) || '酷友'" />
               <span class="picture-username">{{ usernameOf(item) || '酷友' }}</span>
             </div>
-            <p v-if="messageOf(item)" class="picture-message">{{ messageOf(item) }}</p>
+            <p v-if="plainMessageOf(item)" class="picture-message">{{ plainMessageOf(item) }}</p>
           </div>
         </div>
       </div>
@@ -91,6 +91,7 @@ import AppAvatar from '../components/common/AppAvatar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
+import { coolapkHtmlToPlainText } from '../utils/sanitizeHtml';
 
 const appStore = useAppStore();
 
@@ -129,6 +130,11 @@ function usernameOf(item: any): string {
 function messageOf(item: any): string {
   const msg = item?.message || item?.message_raw_output || '';
   return typeof msg === 'string' ? msg.trim() : '';
+}
+
+// 酷安 message 是富文本 HTML（含 <a> 等标签），文本插值渲染需先转纯文本
+function plainMessageOf(item: any): string {
+  return coolapkHtmlToPlainText(messageOf(item));
 }
 
 function openViewer(item: any, index: number) {

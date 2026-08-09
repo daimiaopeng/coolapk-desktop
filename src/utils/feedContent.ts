@@ -27,3 +27,17 @@ export function getFeedDetailMessage(feed: any): string {
     || ''
   );
 }
+
+/** 解析酷安动态网页版返回的 JSON 正文，作为详情接口被验证码拦截时的兜底。 */
+export function parseWebFeedDetail(raw: unknown): any | null {
+  if (!raw) return null;
+
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const detail = (parsed as any).data ?? parsed;
+    return detail && typeof detail === 'object' ? detail : null;
+  } catch {
+    return null;
+  }
+}

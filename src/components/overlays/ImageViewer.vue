@@ -13,6 +13,14 @@
             <button class="viewer-btn" title="向右旋转 90°" @click="rotateRight"><i class="fas fa-redo"></i></button>
             <button class="viewer-btn" title="重置" @click="resetTransform"><i class="fas fa-compress-arrows-alt"></i></button>
             <button class="viewer-btn" title="复制链接" @click="copyLink"><i class="fas fa-link"></i></button>
+            <button
+              class="viewer-btn"
+              :disabled="savingOriginal"
+              :title="savingOriginal ? '正在保存原图' : '保存原图'"
+              @click.stop="saveOriginal"
+            >
+              <i :class="savingOriginal ? 'fas fa-circle-notch fa-spin' : 'fas fa-download'"></i>
+            </button>
             <button class="viewer-btn" title="关闭 (Esc)" @click="close"><i class="fas fa-times"></i></button>
           </div>
         </div>
@@ -79,11 +87,15 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useAppStore } from '../../stores/app';
+import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { getHdImageUrl, getOriginalImageUrl } from '../../utils/image';
 import { loadImageResource } from '../../utils/resourceCache';
+import { getErrorMessage } from '../../utils/errors';
+import { showToast } from '../../utils/toast';
 
 const appStore = useAppStore();
+const settingsStore = useSettingsStore();
 
 const viewerData = computed(() => appStore.activeImageViewer);
 const currentIndex = ref(0);
@@ -92,6 +104,7 @@ const rotation = ref(0);
 const translateX = ref(0);
 const translateY = ref(0);
 const isDragging = ref(false);
+const savingOriginal = ref(false);
 
 const displaySrc = ref<string>('');
 let resolveSequence = 0;
@@ -115,6 +128,15 @@ const currentUrl = computed(() => {
     return getOriginalImageUrl(rawUrl.value);
   }
   return getHdImageUrl(rawUrl.value);
+});
+
+const originalUrl = computed(() => {
+  if (!rawUrl.value) return '';
+  // 私信图片接口本身就返回原图，普通酷安图片则剥离缩略图后缀。
+  if (rawUrl.value.includes('/v6/message/showImage') || rawUrl.value.includes('api.coolapk.com')) {
+    return rawUrl.value;
+  }
+  return getOriginalImageUrl(rawUrl.value);
 });
 
 const isCurrentOriginalLoaded = computed(() => Boolean(originalLoadedMap.value[currentIndex.value]));
@@ -280,6 +302,22 @@ function copyLink() {
   }
 }
 
+async function saveOriginal() {
+  if (!originalUrl.value || savingOriginal.value) return;
+  savingOriginal.value = true;
+  try {
+    const path = await CoolapkTauriAPI.saveImage(
+      originalUrl.value,
+      settingsStore.settings.downloadPath
+    );
+    showToast(`原图已保存：${path}`, 'success', 3000);
+  } catch (error) {
+    showToast(getErrorMessage(error, '保存原图失败'), 'error', 3000);
+  } finally {
+    savingOriginal.value = false;
+  }
+}
+
 function handleKeydown(e: KeyboardEvent) {
   if (!viewerData.value) return;
   if (e.key === 'Escape') close();
@@ -340,6 +378,11 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
 .viewer-btn:hover {
   background: rgba(255, 255, 255, 0.15);
   color: #ffffff;
+}
+
+.viewer-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
 }
 
 .zoom-text {

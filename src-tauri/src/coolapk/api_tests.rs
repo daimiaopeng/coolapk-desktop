@@ -371,10 +371,13 @@ async fn probe_readonly_endpoints_smoke() {
         // === 信息流 ===
         ("首页推荐", "/v6/main/indexV8", &[("page", "1".to_string())]),
         (
-            "24H 热榜",
+            "热榜(7天点赞榜)",
             "/v6/page/dataList",
             &[
-                ("url", "#/feed/hotList".to_string()),
+                (
+                    "url",
+                    "#/feed/statList?statType=7days&sortField=likenum".to_string(),
+                ),
                 ("page", "1".to_string()),
             ],
         ),

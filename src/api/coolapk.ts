@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { router } from '../router';
+import { getFeedDetailMessage, hasFeedMoreSuffix, parseWebFeedDetail } from '../utils/feedContent';
 
 async function safeFetch(pythonEndpoint: string, tauriCmd: string, tauriArgs: any = {}) {
   let rustError: unknown;
@@ -107,6 +108,10 @@ export class CoolapkTauriAPI {
     return await safeFetch(`/feeds/hot?page=${page}`, 'get_hot_feeds', { page });
   }
 
+  static async getRankFeeds(rankType: string, page: number = 1) {
+    return await invokeNative('get_rank_feeds', { rankType, page });
+  }
+
   // 3. 全站最新
   static async getLatestFeeds(page: number = 1) {
     return await safeFetch(`/feeds/latest?page=${page}`, 'get_latest_feeds', { page });
@@ -173,7 +178,32 @@ export class CoolapkTauriAPI {
   }
 
   static async getFeedDetail(feedId: string) {
-    return await invokeNative('get_feed_detail', { feedId });
+    let primaryResponse: any = null;
+    let primaryError: unknown;
+
+    try {
+      primaryResponse = await invokeNative('get_feed_detail', { feedId });
+      const primaryMessage = getFeedDetailMessage(primaryResponse?.data);
+      if (primaryMessage && !hasFeedMoreSuffix(primaryMessage)) return primaryResponse;
+    } catch (error) {
+      primaryError = error;
+    }
+
+    // 动态详情接口偶尔会被验证码拦截，改用网页版 XHR 返回的完整 JSON 兜底。
+    try {
+      const webResponse: any = await invokeNative('fetch_external_page', {
+        url: `https://www.coolapk.com/feed/${encodeURIComponent(feedId)}`,
+      });
+      const detail = parseWebFeedDetail(webResponse?.data?.html);
+      if (detail && getFeedDetailMessage(detail)) {
+        return { code: 200, data: detail };
+      }
+    } catch (fallbackError) {
+      console.warn('网页版动态详情兜底失败：', fallbackError);
+    }
+
+    if (primaryResponse) return primaryResponse;
+    throw primaryError instanceof Error ? primaryError : new Error(String(primaryError || '动态详情加载失败'));
   }
 
   static async getHotReplies(feedId: string, page: number = 1) {
@@ -251,13 +281,9 @@ export class CoolapkTauriAPI {
     return await invokeNative('unfollow_user', { uid });
   }
 
-  // 右侧栏：热门话题 / 推荐酷友
+  // 右侧栏：热门话题
   static async getHotTopics() {
     return await invokeNative('get_hot_topics');
-  }
-
-  static async getRecommendUsers() {
-    return await invokeNative('get_recommend_users');
   }
 
   static async getFavoriteList(favType: string = 'feed', page: number = 1) {
@@ -514,6 +540,10 @@ export class CoolapkTauriAPI {
       cacheDir: options?.cacheDir || '',
       cacheTtlDays: options?.cacheTtlDays ?? 7,
     });
+  }
+
+  static async saveImage(url: string, dir?: string) {
+    return await invoke<string>('save_image', { url, dir: dir || '' });
   }
 
   static async openUrl(url: string, mode: 'internal' | 'system' = 'internal') {

@@ -98,6 +98,15 @@ pub async fn get_hot_feeds(state: State<'_, AppState>, page: u32) -> Result<Valu
 }
 
 #[tauri::command]
+pub async fn get_rank_feeds(
+    state: State<'_, AppState>,
+    rank_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_rank_feeds(&rank_type, page).await
+}
+
+#[tauri::command]
 pub async fn get_latest_feeds(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.get_latest_feeds(page).await
 }
@@ -129,11 +138,6 @@ pub async fn get_secondhand_feeds(state: State<'_, AppState>, page: u32) -> Resu
 #[tauri::command]
 pub async fn get_hot_topics(state: State<'_, AppState>) -> Result<Value, String> {
     state.client.get_hot_topics().await
-}
-
-#[tauri::command]
-pub async fn get_recommend_users(state: State<'_, AppState>) -> Result<Value, String> {
-    state.client.get_recommend_users().await
 }
 
 #[tauri::command]
@@ -837,6 +841,119 @@ pub async fn get_image_data_url(
     // 写缓存失败不能影响图片显示，网络请求成功后始终优先返回图片。
     let _ = write_image_cache(&cache_file, &data_url).await;
     Ok(data_url)
+}
+
+/// 下载并保存图片原始数据，目录为空时使用系统下载目录。
+#[tauri::command]
+pub async fn save_image(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    url: String,
+    dir: Option<String>,
+) -> Result<String, String> {
+    let data_url = state.client.get_image_data_url(&url).await?;
+    let (mime_type, bytes) = decode_image_data_url(&data_url)?;
+    let file_name = build_image_file_name(&url, mime_type);
+    let target_dir = dir
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
+        .or_else(|| app.path().download_dir().ok())
+        .unwrap_or_else(std::env::temp_dir);
+
+    tokio::fs::create_dir_all(&target_dir)
+        .await
+        .map_err(|error| format!("创建图片保存目录失败：{error}"))?;
+    let target_path = next_available_file_path(&target_dir, &file_name);
+    tokio::fs::write(&target_path, bytes)
+        .await
+        .map_err(|error| format!("保存图片失败：{error}"))?;
+
+    Ok(target_path.to_string_lossy().to_string())
+}
+
+fn decode_image_data_url(data_url: &str) -> Result<(&str, Vec<u8>), String> {
+    let (header, payload) = data_url
+        .split_once(',')
+        .ok_or_else(|| "图片数据格式无效".to_string())?;
+    let mime_type = header
+        .strip_prefix("data:")
+        .and_then(|value| value.split(';').next())
+        .filter(|value| value.starts_with("image/"))
+        .ok_or_else(|| "下载内容不是图片".to_string())?;
+    if !header.ends_with(";base64") {
+        return Err("图片数据不是 Base64 格式".to_string());
+    }
+    let bytes = BASE64
+        .decode(payload)
+        .map_err(|error| format!("图片数据解码失败：{error}"))?;
+    Ok((mime_type, bytes))
+}
+
+fn image_extension(mime_type: &str) -> &'static str {
+    match mime_type.to_ascii_lowercase().as_str() {
+        "image/png" => "png",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/avif" => "avif",
+        "image/bmp" => "bmp",
+        "image/svg+xml" => "svg",
+        _ => "jpg",
+    }
+}
+
+fn build_image_file_name(url: &str, mime_type: &str) -> String {
+    let source_name = reqwest::Url::parse(url)
+        .ok()
+        .and_then(|parsed| {
+            parsed
+                .path_segments()
+                .and_then(|mut segments| segments.next_back())
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    let stem = std::path::Path::new(&source_name)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    let safe_stem: String = stem
+        .chars()
+        .take(100)
+        .filter(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
+        .collect();
+    let final_stem = if safe_stem.is_empty() || safe_stem.eq_ignore_ascii_case("showimage") {
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        format!("coolapk_image_{timestamp}")
+    } else {
+        safe_stem
+    };
+    format!("{final_stem}.{}", image_extension(mime_type))
+}
+
+fn next_available_file_path(dir: &std::path::Path, file_name: &str) -> PathBuf {
+    let initial = dir.join(file_name);
+    if !initial.exists() {
+        return initial;
+    }
+
+    let path = std::path::Path::new(file_name);
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("coolapk_image");
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("jpg");
+    for index in 2..=9999 {
+        let candidate = dir.join(format!("{stem}_{index}.{extension}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    dir.join(format!("{stem}_{}.{}", std::process::id(), extension))
 }
 
 #[tauri::command]
@@ -1712,7 +1829,10 @@ pub async fn search_apks_by_tag(
 
 #[cfg(test)]
 mod cache_tests {
-    use super::{read_image_cache, write_image_cache};
+    use super::{
+        build_image_file_name, decode_image_data_url, next_available_file_path, read_image_cache,
+        write_image_cache,
+    };
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[tokio::test]
@@ -1744,6 +1864,30 @@ mod cache_tests {
         std::fs::write(&path, b"broken-cache").unwrap();
 
         assert!(read_image_cache(&path, 7).await.is_none());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn image_save_helpers_keep_original_format_and_avoid_overwrite() {
+        let (mime_type, bytes) = decode_image_data_url("data:image/png;base64,YWJj").unwrap();
+        assert_eq!(mime_type, "image/png");
+        assert_eq!(bytes, b"abc");
+        assert_eq!(
+            build_image_file_name("https://image.coolapk.com/feed/2026/abc123.jpg", mime_type),
+            "abc123.png"
+        );
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("coolapk-image-save-test-{unique}"));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("abc123.png"), b"existing").unwrap();
+        assert_eq!(
+            next_available_file_path(&root, "abc123.png"),
+            root.join("abc123_2.png")
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 }

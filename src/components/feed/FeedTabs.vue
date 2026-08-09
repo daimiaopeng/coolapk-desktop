@@ -55,11 +55,11 @@ const tabs = computed(() => {
 .feed-tabs {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: 0 var(--space-6);
+  gap: 20px;
+  padding: 0 18px;
   background-color: var(--surface);
   border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
-  height: 52px;
+  height: 48px;
   overflow-x: auto;
   flex-shrink: 0;
   user-select: none;

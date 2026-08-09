@@ -88,6 +88,7 @@ onMounted(() => {
 }
 
 .card-title {
+  margin: 0;
   font-size: var(--font-size-title-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);

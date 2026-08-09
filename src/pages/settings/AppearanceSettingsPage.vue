@@ -152,7 +152,6 @@ function adjustFontSize(delta: number) {
 
 const navItems = [
   { key: 'home', label: '首页', icon: 'fas fa-home' },
-  { key: 'feeds', label: '动态中心', icon: 'fas fa-stream' },
   { key: 'topics', label: '话题广场', icon: 'fas fa-hashtag' },
   { key: 'discover', label: '发现中心', icon: 'fas fa-compass' },
   { key: 'apps', label: '应用中心', icon: 'fas fa-cubes' },

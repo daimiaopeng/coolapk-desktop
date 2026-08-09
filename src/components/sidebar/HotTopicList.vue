@@ -71,10 +71,14 @@ onMounted(fetchTopics);
 }
 
 .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: var(--space-3);
 }
 
 .card-title {
+  margin: 0;
   font-size: var(--font-size-title-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);

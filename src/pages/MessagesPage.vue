@@ -194,6 +194,7 @@ import ErrorState from '../components/common/ErrorState.vue';
 import AppButton from '../components/common/AppButton.vue';
 import { EMOJI_MAP, EMOJI_BASE } from '../utils/coolapkEmoji';
 import { renderCoolapkRichText } from '../utils/richText';
+import { coolapkHtmlToPlainText } from '../utils/sanitizeHtml';
 import { handleAnchorClick } from '../utils/anchorClick';
 
 import { useRoute, useRouter } from 'vue-router';
@@ -286,7 +287,9 @@ const getSessionPartnerAvatar = (session: any) => {
     || session.messageUserInfo?.userAvatar || '';
 };
 
-const getLastMessage = (item: any) => item.message || item.lastMessage || item.summary || item.last_message || '';
+// 会话列表摘要：message 可能为富文本 HTML，转纯文本展示
+const getLastMessage = (item: any) =>
+  coolapkHtmlToPlainText(item.message || item.lastMessage || item.summary || item.last_message || '');
 const getMessageText = (item: any) => item.message || item.text || item.content || '';
 const getDateline = (item: any) => item.dateline || item.lastupdate || item.time || item.created_at || 0;
 

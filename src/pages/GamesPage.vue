@@ -69,7 +69,7 @@
         </div>
         <div class="review-body">
           <h4 v-if="feed.title" class="review-title">{{ feed.title }}</h4>
-          <p class="review-text">{{ feed.message || feed.description || feed.subTitle }}</p>
+          <p class="review-text">{{ plainReviewText(feed) }}</p>
         </div>
         <div class="review-footer">
           <span class="stat"><i class="far fa-thumbs-up"></i> {{ feed.likenum || 0 }}</span>
@@ -119,6 +119,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
+import { coolapkHtmlToPlainText } from '../utils/sanitizeHtml';
 import AppImage from '../components/common/AppImage.vue';
 import AppButton from '../components/common/AppButton.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -131,6 +132,11 @@ const isSearching = ref(false);
 const loading = ref(false);
 const gamesList = ref<any[]>([]);
 const reviewsList = ref<any[]>([]);
+
+// 点评 message 为富文本 HTML，文本插值渲染需先转纯文本
+function plainReviewText(feed: any): string {
+  return coolapkHtmlToPlainText(feed.message || feed.description || feed.subTitle || '');
+}
 
 const categories = [
   { key: 'hot', name: '热门大作', icon: 'fas fa-fire' },

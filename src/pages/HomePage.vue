@@ -50,26 +50,16 @@
         <div v-if="activeTab === 'hot'" class="hot-header-section">
           <!-- 5 大榜单金刚组 -->
           <div class="hot-ranks-row">
-            <div class="rank-action-item" @click="quickFilter('周榜')">
-              <div class="rank-icon-bg bg-orange"><i class="fas fa-thumbs-up"></i></div>
-              <span>周榜</span>
-            </div>
-            <div class="rank-action-item" @click="quickFilter('月榜')">
-              <div class="rank-icon-bg bg-cyan"><i class="fas fa-calendar-alt"></i></div>
-              <span>月榜</span>
-            </div>
-            <div class="rank-action-item" @click="quickFilter('收藏榜')">
-              <div class="rank-icon-bg bg-yellow"><i class="fas fa-star"></i></div>
-              <span>收藏榜</span>
-            </div>
-            <div class="rank-action-item" @click="quickFilter('酷安指数')">
-              <div class="rank-icon-bg bg-purple"><i class="fas fa-chart-line"></i></div>
-              <span>酷安指数</span>
-            </div>
-            <div class="rank-action-item" @click="quickFilter('酷图榜')">
-              <div class="rank-icon-bg bg-red"><i class="fas fa-chart-bar"></i></div>
-              <span>酷图榜</span>
-            </div>
+            <button
+              v-for="rank in hotRanks"
+              :key="rank.key"
+              type="button"
+              :class="['rank-action-item', { active: activeHotRank === rank.key }]"
+              @click="selectHotRank(rank.key)"
+            >
+              <span :class="['rank-icon-bg', rank.color]"><i :class="rank.icon"></i></span>
+              <span>{{ rank.label }}</span>
+            </button>
           </div>
 
           <!-- 热门搜索词 Chips 胶囊标签 -->
@@ -222,13 +212,20 @@ const hotKeywords = ref<string[]>([
   '酷安优惠券', 'ios27', '小米15', '抖音', '酷安', 'scene', '小米17', '电动车', '澎湃os4', 'shizuku'
 ]);
 
+type HotRankType = 'week' | 'month' | 'favorite' | 'index' | 'picture';
+const activeHotRank = ref<HotRankType>('week');
+const hotRanks: { key: HotRankType; label: string; icon: string; color: string }[] = [
+  { key: 'week', label: '周榜', icon: 'fas fa-thumbs-up', color: 'bg-orange' },
+  { key: 'month', label: '月榜', icon: 'fas fa-calendar-alt', color: 'bg-cyan' },
+  { key: 'favorite', label: '收藏榜', icon: 'fas fa-star', color: 'bg-yellow' },
+  { key: 'index', label: '酷安指数', icon: 'fas fa-chart-line', color: 'bg-purple' },
+  { key: 'picture', label: '酷图榜', icon: 'fas fa-chart-bar', color: 'bg-red' },
+];
+
 function syncTabFromRoute() {
   const path = route.path;
   switch (path) {
     case '/':
-      activeTab.value = settingsStore.settings.defaultHomeTab;
-      break;
-    case '/feeds':
       activeTab.value = settingsStore.settings.defaultHomeTab;
       break;
     case '/discover':
@@ -297,7 +294,7 @@ function deriveTabKey(url: string): string {
 
 async function fetchTabApi(tab: string, p: number) {
   switch (tab) {
-    case 'hot': return await CoolapkTauriAPI.getHotFeeds(p);
+    case 'hot': return await CoolapkTauriAPI.getRankFeeds(activeHotRank.value, p);
     case 'latest': return await CoolapkTauriAPI.getLatestFeeds(p);
     case 'digest': return await CoolapkTauriAPI.getDigestFeeds(p);
     case 'cool_picture': return await CoolapkTauriAPI.getCoolPictureRank(p);
@@ -411,6 +408,14 @@ function quickFilter(tag: string) {
   quickSearch(tag);
 }
 
+function selectHotRank(rankType: HotRankType) {
+  if (activeHotRank.value === rankType) {
+    void loadFeeds(true);
+    return;
+  }
+  activeHotRank.value = rankType;
+}
+
 function handleBulletinClick(item: any) {
   if (item.id) {
     // 引导点击
@@ -419,6 +424,10 @@ function handleBulletinClick(item: any) {
 
 watch(activeTab, () => {
   loadFeeds(true);
+});
+
+watch(activeHotRank, () => {
+  if (activeTab.value === 'hot') loadFeeds(true);
 });
 
 const navIndex = ref(-1);
@@ -484,8 +493,8 @@ onUnmounted(() => {
   display: flex;
   width: 100%;
   height: 100%;
-  gap: var(--space-4);
-  padding: var(--space-4);
+  gap: 0;
+  padding: 0;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -503,14 +512,14 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   background-color: var(--surface);
-  border-radius: var(--radius-card);
-  border: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   overflow: hidden;
 }
 
 .feed-scroll-container {
   flex: 1;
   overflow-y: auto;
+  background-color: var(--background-secondary);
 }
 
 /* 1. 头条 Tab 头部样式 */
@@ -659,9 +668,24 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  padding: 4px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
   cursor: pointer;
   font-size: 12px;
   color: var(--text-primary);
+}
+
+.rank-action-item.active {
+  color: var(--brand-primary);
+  font-weight: 700;
+  background: var(--brand-soft);
+}
+
+.rank-action-item:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
 }
 
 .rank-icon-bg {
@@ -736,11 +760,25 @@ onUnmounted(() => {
   opacity: 0.85;
 }
 
-.skeleton-padding, .error-padding, .empty-padding, .feed-list-padding {
+.skeleton-padding, .error-padding, .empty-padding {
   display: flex;
   flex-direction: column;
   gap: var(--feed-card-gap, 12px);
-  padding: var(--space-4);
+  padding: 12px;
+}
+
+.feed-list-padding {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0;
+}
+
+.feed-list-padding :deep(.feed-card) {
+  margin-bottom: 0;
+  border-right: 0;
+  border-left: 0;
+  border-radius: 0;
 }
 
 .dyh-tab-grid {

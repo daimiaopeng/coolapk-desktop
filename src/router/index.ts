@@ -42,7 +42,7 @@ import AuthCallbackView from '../pages/AuthCallbackView.vue';
 const routes = [
   { path: '/', name: 'Home', component: HomePage },
   { path: '/auth_callback', name: 'AuthCallback', component: AuthCallbackView },
-  { path: '/feeds', name: 'Feeds', component: HomePage },
+  { path: '/feeds', name: 'Feeds', redirect: '/' },
   { path: '/discover', name: 'Discover', component: DiscoverPage },
   { path: '/apps', name: 'Apps', component: AppsPage },
   { path: '/games', name: 'Games', component: GamesPage },

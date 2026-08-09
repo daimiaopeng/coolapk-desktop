@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getFeedDetailMessage, hasFeedMoreSuffix, stripFeedMoreSuffix } from '../feedContent';
+import {
+  getFeedDetailMessage,
+  hasFeedMoreSuffix,
+  parseWebFeedDetail,
+  stripFeedMoreSuffix,
+} from '../feedContent';
 
 describe('动态正文处理', () => {
   it('识别并移除纯文本查看更多', () => {
@@ -23,5 +28,11 @@ describe('动态正文处理', () => {
   it('按优先级提取动态详情正文', () => {
     expect(getFeedDetailMessage({ message: '完整正文', message_raw_output: '原始正文' })).toBe('完整正文');
     expect(getFeedDetailMessage({ message_raw_output: '原始正文' })).toBe('原始正文');
+  });
+
+  it('解析网页版动态详情兜底数据', () => {
+    expect(parseWebFeedDetail(JSON.stringify({ data: { id: '123', message: '完整正文' } })))
+      .toEqual({ id: '123', message: '完整正文' });
+    expect(parseWebFeedDetail('{不是合法 JSON')).toBeNull();
   });
 });
