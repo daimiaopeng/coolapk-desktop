@@ -68,6 +68,8 @@ export interface AppSettings {
   maxConcurrentDownloads: number;
   autoCleanCache: boolean;
   cacheThresholdMB: number;
+  cacheTtlDays: number;
+  cachePath: string;
   imageQuality: ImageQuality;
   navVisibility?: NavVisibilitySettings;
   checkUpdateOnStartup: boolean;

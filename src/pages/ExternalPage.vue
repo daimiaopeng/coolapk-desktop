@@ -9,9 +9,6 @@
         <AppButton variant="ghost" size="sm" icon="fas fa-external-link-alt" @click="openInSystem">
           系统浏览器
         </AppButton>
-        <AppButton variant="ghost" size="sm" icon="fas fa-arrow-left" @click="goBack">
-          返回
-        </AppButton>
       </div>
     </div>
 
@@ -30,8 +27,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { navigateBack } from '../utils/navigation';
+import { useRoute } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { sanitizeCoolapkHtml } from '../utils/sanitizeHtml';
 import { handleAnchorClick } from '../utils/anchorClick';
@@ -41,7 +37,6 @@ import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 
 const route = useRoute();
-const router = useRouter();
 
 // 固定当前缓存页面的目标地址，避免切换路由时后台重新抓取。
 const url = ref(String(route.query.url || ''));
@@ -83,10 +78,6 @@ async function loadPage() {
 
 function openInSystem() {
   CoolapkTauriAPI.openUrl(url.value, 'system');
-}
-
-function goBack() {
-  navigateBack(router);
 }
 
 watch(url, (newUrl) => {

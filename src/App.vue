@@ -4,10 +4,11 @@
       <!--
         桌面端通过路由切换维护页面栈。缓存所有路由页面，进入详情页时不销毁下面的页面，
         从而保留已加载数据、滚动位置、筛选条件、草稿和其他局部状态。
-        使用包含参数和查询条件的完整路径作为缓存标识，让不同页面拥有独立实例。
+        大多数页面使用包含参数和查询条件的完整路径作为缓存标识，让不同详情拥有独立实例。
+        私信页的 uid 只表示当前会话，不能据此重建整页，否则每次点会话都会重新加载列表。
       -->
       <keep-alive>
-        <component :is="Component" :key="route.fullPath" />
+        <component :is="Component" :key="route.name === 'Messages' ? route.path : route.fullPath" />
       </keep-alive>
     </router-view>
 
@@ -82,6 +83,7 @@ import { checkLatestRelease, isNewerVersion, type UpdateInfo } from './utils/upd
 import { desktopNotify } from './utils/desktopNotify';
 import { registerGlobalHotkeys } from './utils/hotkeys';
 import { CoolapkTauriAPI } from './api/coolapk';
+import { clearResourceCache } from './utils/resourceCache';
 
 const PENDING_UPDATE_KEY = 'coolapk_pending_update';
 
@@ -231,14 +233,19 @@ onMounted(() => {
   }
   window.addEventListener('check-for-update', () => void checkForUpdate(true));
 
-  // 启动时按阈值自动清理缓存
+  // 启动时先清理过期图片，再按总占用阈值决定是否清理全部缓存。
   if (settingsStore.settings.autoCleanCache) {
     void (async () => {
       try {
-        const info = await CoolapkTauriAPI.getCacheInfo();
+        await CoolapkTauriAPI.cleanExpiredCache(
+          settingsStore.settings.cachePath,
+          settingsStore.settings.cacheTtlDays
+        );
+        const info = await CoolapkTauriAPI.getCacheInfo(settingsStore.settings.cachePath);
         const threshold = (settingsStore.settings.cacheThresholdMB || 500) * 1024 * 1024;
         if (Number(info?.bytes) > threshold) {
-          await CoolapkTauriAPI.clearAppCache();
+          await clearResourceCache();
+          await CoolapkTauriAPI.clearAppCache(settingsStore.settings.cachePath);
         }
       } catch {
         // 自动清理失败不影响启动

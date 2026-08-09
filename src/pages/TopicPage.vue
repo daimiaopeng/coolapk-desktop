@@ -2,9 +2,6 @@
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
     <!-- 顶部导航栏 -->
     <div class="top-nav-bar">
-      <button class="btn-back" @click="goBack" title="返回上一页">
-        <i class="fa-solid fa-arrow-left"></i>
-      </button>
       <div class="nav-title-box">
         <span class="nav-title">{{ tag }}</span>
       </div>
@@ -123,7 +120,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import FeedCard from '../components/feed/FeedCard.vue';
@@ -193,10 +189,6 @@ const viewCount = computed(() => {
   if (!topicDetail.value) return 3177000;
   return topicDetail.value.view_num || topicDetail.value.hot_num || topicDetail.value.click || 3177000;
 });
-
-function goBack() {
-  navigateBack(router, '/topics');
-}
 
 function formatNumber(num: number | string) {
   const n = Number(num);
@@ -348,14 +340,6 @@ onMounted(() => {
   gap: 12px;
   padding: 4px 0;
   margin-bottom: 2px;
-}
-
-.btn-back {
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  color: var(--text-primary);
-  cursor: pointer;
 }
 
 .nav-title-box {

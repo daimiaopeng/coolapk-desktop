@@ -1895,14 +1895,17 @@ impl CoolapkClient {
         // （X-Sdk-Int/X-App-Id/X-App-Version 等）+ Token 认证，必须复用主 client；
         // 其余 CDN 图片用独立浏览器 UA 客户端（浏览器 UA 访问 image.coolapk.com 会被 CDN 放行）
         let mut req = if host == "api.coolapk.com" || host == "api2.coolapk.com" {
-            let mut r = self
-                .client
-                .get(url)
-                .header("X-Requested-With", "XMLHttpRequest");
-            if let Ok(token) = self.get_token() {
-                r = r.header("X-App-Token", token);
-            }
-            r
+            // 私信图片接口与普通 API 一样校验设备码和自定义设备信息，
+            // 不能只带 Token，否则持久缓存改为原生代理加载后会出现空白图片。
+            let token = self.get_token()?;
+            self.apply_device_profile(
+                self.client
+                    .get(url)
+                    .timeout(std::time::Duration::from_secs(20))
+                    .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .header("X-App-Token", token),
+            )?
         } else {
             img_client
                 .get(url)

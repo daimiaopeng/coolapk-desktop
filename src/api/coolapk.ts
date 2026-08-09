@@ -505,8 +505,15 @@ export class CoolapkTauriAPI {
     return await invoke<string | null>('get_user_cookie');
   }
 
-  static async getImageDataUrl(url: string) {
-    return await invoke<string>('get_image_data_url', { url });
+  static async getImageDataUrl(
+    url: string,
+    options?: { cacheDir?: string; cacheTtlDays?: number }
+  ) {
+    return await invoke<string>('get_image_data_url', {
+      url,
+      cacheDir: options?.cacheDir || '',
+      cacheTtlDays: options?.cacheTtlDays ?? 7,
+    });
   }
 
   static async openUrl(url: string, mode: 'internal' | 'system' = 'internal') {
@@ -542,12 +549,26 @@ export class CoolapkTauriAPI {
     return await invoke<string>('export_json_file', { fileName, content, dir: dir || '' });
   }
 
-  static async getCacheInfo() {
-    return await invoke<{ bytes: number }>('get_cache_info');
+  static async getCacheInfo(cacheDir: string = '') {
+    return await invoke<{
+      bytes: number;
+      imageBytes: number;
+      webviewBytes: number;
+      updateBytes: number;
+      path: string;
+    }>('get_cache_info', { cacheDir });
   }
 
-  static async clearAppCache() {
-    return await invoke<{ bytes: number }>('clear_app_cache');
+  static async clearAppCache(cacheDir: string = '') {
+    return await invoke<{ bytes: number }>('clear_app_cache', { cacheDir });
+  }
+
+  static async cleanExpiredCache(cacheDir: string = '', cacheTtlDays: number = 7) {
+    return await invoke<{ bytes: number }>('clean_expired_cache', { cacheDir, cacheTtlDays });
+  }
+
+  static async openCacheDirectory(cacheDir: string = '') {
+    return await invoke<string>('open_cache_directory', { cacheDir });
   }
 
   static async installUpdate(installerPath: string) {

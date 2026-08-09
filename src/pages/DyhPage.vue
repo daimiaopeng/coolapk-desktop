@@ -1,9 +1,6 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
     <div class="top-nav-bar">
-      <button class="btn-back" @click="goBack" title="返回上一页">
-        <i class="fa-solid fa-arrow-left"></i>
-      </button>
       <div class="nav-title-box">
         <span class="nav-title">{{ dyhTitle }}</span>
       </div>
@@ -102,7 +99,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import FeedCard from '../components/feed/FeedCard.vue';
 import AppImage from '../components/common/AppImage.vue';
@@ -162,10 +158,6 @@ const dyhDescription = computed(() => {
   if (!dyhDetail.value) return '';
   return dyhDetail.value.description || dyhDetail.value.dyhDescription || '';
 });
-
-function goBack() {
-  navigateBack(router, '/discover');
-}
 
 async function fetchDyhHeader() {
   if (!dyhId.value) return;
@@ -312,14 +304,6 @@ watch(dyhId, () => {
   gap: 12px;
   padding: 4px 0;
   margin-bottom: 2px;
-}
-
-.btn-back {
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  color: var(--text-primary);
-  cursor: pointer;
 }
 
 .nav-title-box {

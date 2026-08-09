@@ -63,6 +63,13 @@ withDefaults(
   color: var(--text-primary);
 }
 
+.app-icon-button:disabled {
+  color: var(--text-tertiary);
+  opacity: 0.38;
+  cursor: default;
+  pointer-events: none;
+}
+
 .app-icon-button.is-active {
   color: var(--brand-primary);
   background-color: var(--brand-soft);

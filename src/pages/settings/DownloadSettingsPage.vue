@@ -46,7 +46,7 @@
       <div class="setting-row">
         <div class="row-info">
           <span class="row-label">自动清理缓存</span>
-          <span class="row-sub">应用启动时若缓存占用超过阈值，自动清理更新包临时文件与 WebView 缓存</span>
+          <span class="row-sub">应用启动时先删除过期图片；总占用超过阈值后再清理全部缓存</span>
         </div>
         <AppSwitch v-model="settingsStore.settings.autoCleanCache" />
       </div>
@@ -66,12 +66,51 @@
 
       <div class="setting-row">
         <div class="row-info">
+          <span class="row-label">图片缓存有效期</span>
+          <span class="row-sub">超过有效期的图片会在应用启动时和再次读取时自动删除</span>
+        </div>
+        <select v-model.number="settingsStore.settings.cacheTtlDays" class="select-control" @change="cleanExpiredCache">
+          <option :value="1">1 天</option>
+          <option :value="3">3 天</option>
+          <option :value="7">7 天（推荐）</option>
+          <option :value="14">14 天</option>
+          <option :value="30">30 天</option>
+          <option :value="0">永不过期</option>
+        </select>
+      </div>
+
+      <div class="setting-row cache-directory-row">
+        <div class="row-info">
+          <span class="row-label">图片缓存目录</span>
+          <span class="row-sub cache-path">{{ cacheDirectoryText }}</span>
+          <span class="row-sub">自定义目录中会创建 CoolapkDesktopCache\images；WebView 系统缓存位置不变</span>
+        </div>
+        <div class="row-actions">
+          <AppButton variant="ghost" size="sm" @click="openCacheDir">打开目录</AppButton>
+          <AppButton variant="secondary" size="sm" @click="chooseCacheDir">更改目录</AppButton>
+          <AppButton
+            v-if="settingsStore.settings.cachePath"
+            variant="ghost"
+            size="sm"
+            @click="resetCacheDir"
+          >恢复默认</AppButton>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="row-info">
           <span class="row-label">缓存占用</span>
           <span class="row-sub">{{ cacheInfoText }}</span>
+          <span class="row-sub">{{ cacheBreakdownText }}</span>
         </div>
-        <AppButton variant="ghost" size="sm" :disabled="cacheBusy" @click="clearCache">
-          {{ cacheBusy ? '清理中...' : '清理缓存' }}
-        </AppButton>
+        <div class="row-actions">
+          <AppButton variant="ghost" size="sm" :disabled="cacheBusy" @click="cleanExpiredCache">
+            清理过期项
+          </AppButton>
+          <AppButton variant="ghost" size="sm" :disabled="cacheBusy" @click="clearCache">
+            {{ cacheBusy ? '清理中...' : '清理全部缓存' }}
+          </AppButton>
+        </div>
       </div>
     </div>
     <div class="setting-group">
@@ -149,6 +188,7 @@ import { useAuthStore } from '../../stores/auth';
 import AppButton from '../../components/common/AppButton.vue';
 import AppSwitch from '../../components/common/AppSwitch.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { clearResourceCache, clearResourceMemoryCache } from '../../utils/resourceCache';
 
 const settingsStore = useSettingsStore();
 const authStore = useAuthStore();
@@ -157,6 +197,10 @@ const exporting = ref(false);
 const exportResult = ref('');
 const cacheBusy = ref(false);
 const cacheBytes = ref<number | null>(null);
+const cacheImageBytes = ref(0);
+const cacheWebviewBytes = ref(0);
+const cacheUpdateBytes = ref(0);
+const cacheDirectory = ref('');
 
 const displayDownloadPath = computed(
   () => settingsStore.settings.downloadPath || '（系统下载目录）'
@@ -164,10 +208,18 @@ const displayDownloadPath = computed(
 
 const cacheInfoText = computed(() => {
   if (cacheBytes.value === null) return '正在统计缓存占用...';
-  const mb = cacheBytes.value / 1024 / 1024;
-  const size = mb >= 1024 ? `${(mb / 1024).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
-  return `当前缓存占用约 ${size}（更新包临时文件 + WebView 缓存）`;
+  return `当前总占用约 ${formatBytes(cacheBytes.value)}`;
 });
+
+const cacheBreakdownText = computed(() => (
+  `图片 ${formatBytes(cacheImageBytes.value)} · WebView ${formatBytes(cacheWebviewBytes.value)} · 更新包 ${formatBytes(cacheUpdateBytes.value)}`
+));
+
+const cacheDirectoryText = computed(() => (
+  cacheDirectory.value || (settingsStore.settings.cachePath
+    ? `${settingsStore.settings.cachePath}\\CoolapkDesktopCache\\images`
+    : '正在读取默认缓存目录...')
+));
 
 function formatBytes(bytes: number) {
   const mb = bytes / 1024 / 1024;
@@ -176,8 +228,12 @@ function formatBytes(bytes: number) {
 
 async function refreshCacheInfo() {
   try {
-    const info = await CoolapkTauriAPI.getCacheInfo();
+    const info = await CoolapkTauriAPI.getCacheInfo(settingsStore.settings.cachePath);
     cacheBytes.value = Number(info?.bytes) || 0;
+    cacheImageBytes.value = Number(info?.imageBytes) || 0;
+    cacheWebviewBytes.value = Number(info?.webviewBytes) || 0;
+    cacheUpdateBytes.value = Number(info?.updateBytes) || 0;
+    cacheDirectory.value = String(info?.path || '');
   } catch {
     cacheBytes.value = 0;
   }
@@ -188,14 +244,61 @@ async function clearCache() {
   cacheBusy.value = true;
   try {
     sessionStorage.clear();
-    const info = await CoolapkTauriAPI.clearAppCache();
+    await clearResourceCache();
+    const info = await CoolapkTauriAPI.clearAppCache(settingsStore.settings.cachePath);
     cacheBytes.value = Number(info?.bytes) || 0;
+    await refreshCacheInfo();
     alert(`缓存清理完成，当前占用约 ${formatBytes(cacheBytes.value)}`);
   } catch (err) {
     alert(`缓存清理失败：${err instanceof Error ? err.message : String(err)}`);
   } finally {
     cacheBusy.value = false;
   }
+}
+
+async function cleanExpiredCache() {
+  if (cacheBusy.value) return;
+  cacheBusy.value = true;
+  try {
+    await CoolapkTauriAPI.cleanExpiredCache(
+      settingsStore.settings.cachePath,
+      settingsStore.settings.cacheTtlDays
+    );
+    clearResourceMemoryCache();
+    await refreshCacheInfo();
+  } catch (err) {
+    alert(`清理过期缓存失败：${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    cacheBusy.value = false;
+  }
+}
+
+async function chooseCacheDir() {
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const selected = await open({ directory: true, title: '选择图片缓存所在目录' });
+    if (typeof selected === 'string' && selected) {
+      settingsStore.settings.cachePath = selected;
+      clearResourceMemoryCache();
+      await refreshCacheInfo();
+    }
+  } catch (err) {
+    alert(`选择缓存目录失败：${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function openCacheDir() {
+  try {
+    cacheDirectory.value = await CoolapkTauriAPI.openCacheDirectory(settingsStore.settings.cachePath);
+  } catch (err) {
+    alert(`打开缓存目录失败：${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function resetCacheDir() {
+  settingsStore.settings.cachePath = '';
+  clearResourceMemoryCache();
+  await refreshCacheInfo();
 }
 
 async function chooseDownloadDir() {
@@ -325,6 +428,25 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.cache-directory-row {
+  align-items: flex-start;
+}
+
+.cache-path {
+  max-width: 500px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  margin-left: var(--space-4);
 }
 
 .row-label {

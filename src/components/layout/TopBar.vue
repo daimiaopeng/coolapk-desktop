@@ -6,14 +6,31 @@
     </div>
 
     <div class="top-bar-center">
-      <AppIconButton
-        v-if="showGlobalBack"
-        icon="fas fa-arrow-left"
-        title="返回上一页"
-        aria-label="返回上一页"
-        class="global-back-button"
-        @click="goBack"
-      />
+      <div class="global-navigation" aria-label="页面导航">
+        <AppIconButton
+          icon="fas fa-arrow-left"
+          title="后退"
+          aria-label="后退"
+          size="sm"
+          :disabled="!canGoBack"
+          @click="goBack"
+        />
+        <AppIconButton
+          icon="fas fa-arrow-right"
+          title="前进"
+          aria-label="前进"
+          size="sm"
+          :disabled="!canGoForward"
+          @click="goForward"
+        />
+        <AppIconButton
+          icon="fas fa-rotate-right"
+          title="刷新当前页面"
+          aria-label="刷新当前页面"
+          size="sm"
+          @click="refreshPage"
+        />
+      </div>
       <div class="search-input-wrapper" @click="appStore.openSearch">
         <i class="fas fa-search search-icon"></i>
         <span class="placeholder-text">搜索应用、动态、用户、话题</span>
@@ -164,7 +181,13 @@ import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { desktopNotify } from '../../utils/desktopNotify';
-import { canNavigateBack, navigateBack } from '../../utils/navigation';
+import {
+  canNavigateBack,
+  canNavigateForward,
+  navigateBack,
+  navigateForward,
+  reloadCurrentPage,
+} from '../../utils/navigation';
 import AppButton from '../common/AppButton.vue';
 import AppIconButton from '../common/AppIconButton.vue';
 import AppAvatar from '../common/AppAvatar.vue';
@@ -178,10 +201,18 @@ const settingsStore = useSettingsStore();
 // 由路由器维护桌面端页面栈。
 // 通过当前路由的变化触发计算，保证页面进入、替换和返回后按钮状态同步更新。
 const canGoBack = computed(() => Boolean(route.fullPath && canNavigateBack(router)));
-const showGlobalBack = computed(() => canGoBack.value && route.meta.hasOwnBackButton !== true);
+const canGoForward = computed(() => Boolean(route.fullPath && canNavigateForward(router)));
 
 function goBack() {
   navigateBack(router);
+}
+
+function goForward() {
+  navigateForward(router);
+}
+
+function refreshPage() {
+  reloadCurrentPage();
 }
 
 const unreadNotificationCount = ref(0);
@@ -388,9 +419,13 @@ function handleUserClick() {
   gap: var(--space-2);
 }
 
-.global-back-button {
+.global-navigation {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   flex: 0 0 auto;
-  color: var(--text-tertiary);
+  padding: 2px;
+  border-radius: var(--radius-control);
 }
 
 .search-input-wrapper {

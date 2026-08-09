@@ -18,6 +18,7 @@
 import { computed, ref, watch, onMounted } from 'vue';
 import AppImage from './AppImage.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { loadImageResource, normalizeResourceUrl } from '../../utils/resourceCache';
 
 const props = withDefaults(
   defineProps<{
@@ -34,20 +35,22 @@ const props = withDefaults(
 const defaultAvatar = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23b0b0b0"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>';
 
 const pluginDataUrl = ref<string>('');
+let pluginLoadSequence = 0;
 
 async function loadPluginImage(url?: string) {
+  const sequence = ++pluginLoadSequence;
   if (!url) {
     pluginDataUrl.value = '';
     return;
   }
-  let targetUrl = url;
-  if (targetUrl.startsWith('//')) targetUrl = `https:${targetUrl}`;
-  else if (targetUrl.startsWith('http://')) targetUrl = targetUrl.replace('http://', 'https://');
+  const targetUrl = normalizeResourceUrl(url);
 
   try {
-    const dataUrl = await CoolapkTauriAPI.getImageDataUrl(targetUrl);
+    const dataUrl = await loadImageResource(targetUrl, CoolapkTauriAPI.getImageDataUrl);
+    if (sequence !== pluginLoadSequence) return;
     pluginDataUrl.value = dataUrl;
   } catch (err) {
+    if (sequence !== pluginLoadSequence) return;
     pluginDataUrl.value = targetUrl;
   }
 }

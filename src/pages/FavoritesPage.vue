@@ -52,9 +52,6 @@
         <!-- 收藏单内容视图 -->
         <div v-if="activeSubTab === 'collections' && activeCollectionId" class="collection-detail">
           <div class="collection-detail-header">
-            <AppButton variant="secondary" size="sm" icon="fas fa-arrow-left" @click="backToCollections">
-              返回收藏单
-            </AppButton>
             <span class="collection-detail-title">{{ activeCollectionTitle }}</span>
           </div>
 
@@ -187,6 +184,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import FeedCard from '../components/feed/FeedCard.vue';
 import AppButton from '../components/common/AppButton.vue';
 import AppImage from '../components/common/AppImage.vue';
@@ -197,6 +195,8 @@ import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 
 const authStore = useAuthStore();
+const route = useRoute();
+const router = useRouter();
 
 const activeSubTab = ref<'all' | 'collections'>('all');
 
@@ -244,9 +244,13 @@ function toBool(value: any) {
 }
 
 function switchSubTab(tab: 'all' | 'collections') {
-  if (activeSubTab.value === tab) return;
+  if (activeSubTab.value === tab && !activeCollectionId.value) return;
   activeSubTab.value = tab;
-  activeCollectionId.value = '';
+  if (activeCollectionId.value) {
+    resetCollectionState();
+    const { collectionId: _collectionId, collectionTitle: _collectionTitle, ...query } = route.query;
+    void router.push({ path: route.path, query });
+  }
   if (tab === 'all') {
     if (cloudFeeds.value.length === 0) void fetchCloudFavorites(true);
   } else {
@@ -269,6 +273,17 @@ async function fetchCollections() {
 }
 
 function openCollection(collection: any) {
+  void router.push({
+    path: route.path,
+    query: {
+      ...route.query,
+      collectionId: String(collection.id),
+      collectionTitle: collection.title || '收藏单',
+    },
+  });
+}
+
+function activateCollection(collection: any) {
   activeCollectionId.value = String(collection.id);
   activeCollectionTitle.value = collection.title || '收藏单';
   collectionDetail.value = { ...collection };
@@ -281,7 +296,7 @@ function openCollection(collection: any) {
   void fetchCollectionItems(true);
 }
 
-function backToCollections() {
+function resetCollectionState() {
   activeCollectionId.value = '';
   activeCollectionTitle.value = '';
   collectionDetail.value = {};
@@ -294,6 +309,28 @@ function backToCollections() {
   collectionItemsPage.value = 1;
   collectionItemsNoMore.value = false;
 }
+
+watch(
+  () => route.query.collectionId,
+  (value) => {
+    const collectionId = Array.isArray(value) ? value[0] : value;
+    if (!collectionId) {
+      if (activeCollectionId.value) resetCollectionState();
+      return;
+    }
+    if (activeCollectionId.value === String(collectionId)) return;
+
+    const titleValue = route.query.collectionTitle;
+    const collectionTitle = Array.isArray(titleValue) ? titleValue[0] : titleValue;
+    const source = collections.value.find(item => String(item.id) === String(collectionId)) || {
+      id: String(collectionId),
+      title: collectionTitle || '收藏单',
+    };
+    activeSubTab.value = 'collections';
+    activateCollection(source);
+  },
+  { immediate: true }
+);
 
 function applyCollectionDetail(detail: any, fallback: any) {
   const source = detail && Object.keys(detail).length > 0 ? detail : fallback;

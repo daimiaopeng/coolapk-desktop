@@ -6,13 +6,12 @@
       class="img-item-wrapper"
       @click.stop="$emit('open-image', imgUrl)"
     >
-      <img
+      <AppImage
         :src="safeSrc(imgUrl, 'feed')"
         alt="动态图片"
-        class="feed-img"
+        image-class="feed-img"
         loading="lazy"
-        @error="handleImgError"
-      >
+      />
     </div>
   </div>
 </template>
@@ -20,6 +19,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { sanitizeImageUrl } from '../../utils/image';
+import AppImage from '../common/AppImage.vue';
 
 const props = defineProps<{
   pics: string[];
@@ -46,10 +46,6 @@ const gridClass = computed(() => {
   return 'grid-multi'; // 5 ~ 9 张
 });
 
-function handleImgError(e: Event) {
-  const img = e.currentTarget as HTMLImageElement;
-  img.src = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#f1f5f9"/><text x="160" y="95" text-anchor="middle" font-size="13" fill="#94a3b8">图片加载失败</text></svg>')}`;
-}
 </script>
 
 <style scoped>
@@ -74,6 +70,12 @@ function handleImgError(e: Event) {
   display: block;
 }
 
+.feed-img :deep(img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* 1 张图：保持高尚美感，不压缩为小方块 */
 .grid-single {
   grid-template-columns: 1fr;
@@ -89,6 +91,12 @@ function handleImgError(e: Event) {
   height: auto;
   max-height: 420px;
   object-fit: cover;
+}
+
+.grid-single .feed-img :deep(img) {
+  width: 100%;
+  height: auto;
+  max-height: 420px;
 }
 
 /* 2 张图 */

@@ -1,9 +1,6 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
     <div class="top-nav-bar">
-      <button class="btn-back" @click="goBack" title="返回上一页">
-        <i class="fa-solid fa-arrow-left"></i>
-      </button>
       <div class="nav-title-box">
         <span class="nav-title">{{ albumTitle }}</span>
       </div>
@@ -125,7 +122,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import FeedCommentSection from '../components/feed/FeedCommentSection.vue';
@@ -177,10 +173,6 @@ const subCount = computed(() => {
   if (!albumDetail.value) return 0;
   return albumDetail.value.subCount || albumDetail.value.sub_count || albumDetail.value.subscriberCount || 0;
 });
-
-function goBack() {
-  navigateBack(router, '/discover');
-}
 
 function formatNumber(num: number | string) {
   const n = Number(num);
@@ -324,14 +316,6 @@ onMounted(() => {
   gap: 12px;
   padding: 4px 0;
   margin-bottom: 2px;
-}
-
-.btn-back {
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  color: var(--text-primary);
-  cursor: pointer;
 }
 
 .nav-title-box {

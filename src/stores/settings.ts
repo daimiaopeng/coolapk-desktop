@@ -88,6 +88,8 @@ const defaultSettings: AppSettings = {
   maxConcurrentDownloads: 3,
   autoCleanCache: true,
   cacheThresholdMB: 500,
+  cacheTtlDays: 7,
+  cachePath: '',
   imageQuality: 'hd',
   navVisibility: { ...defaultNavVisibility },
   checkUpdateOnStartup: true,

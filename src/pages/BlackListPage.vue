@@ -1,9 +1,6 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
     <div class="page-header">
-      <button class="btn-back" @click="goBack" title="返回上一页">
-        <i class="fa-solid fa-arrow-left"></i>
-      </button>
       <div class="header-main">
         <h2 class="page-title"><i class="fas fa-user-slash icon"></i> 黑名单</h2>
         <span class="page-subtitle">管理已拉黑、屏蔽与限制的酷友</span>
@@ -86,7 +83,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { navigateBack } from '../utils/navigation';
 import AppButton from '../components/common/AppButton.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -130,10 +126,6 @@ function getAvatarUrlByUid(uid: any) {
     const padded = strUid.padStart(9, '0');
     return `http://avatar.coolapk.com/data/${padded.slice(0, 3)}/${padded.slice(3, 5)}/${padded.slice(5, 7)}/${strUid.slice(-2)}_avatar_middle.jpg`;
   } catch { return ''; }
-}
-
-function goBack() {
-  navigateBack(router);
 }
 
 function goUser(item: any) {
@@ -246,15 +238,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.btn-back {
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  color: var(--text-primary);
-  cursor: pointer;
-  padding: 4px 0;
 }
 
 .header-main {

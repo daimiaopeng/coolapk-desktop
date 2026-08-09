@@ -81,6 +81,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { getHdImageUrl, getOriginalImageUrl } from '../../utils/image';
+import { loadImageResource } from '../../utils/resourceCache';
 
 const appStore = useAppStore();
 
@@ -93,7 +94,7 @@ const translateY = ref(0);
 const isDragging = ref(false);
 
 const displaySrc = ref<string>('');
-const imageCache = new Map<string, string>();
+let resolveSequence = 0;
 
 const originalLoadedMap = ref<Record<number, boolean>>({});
 const originalLoadingMap = ref<Record<number, boolean>>({});
@@ -120,6 +121,7 @@ const isCurrentOriginalLoaded = computed(() => Boolean(originalLoadedMap.value[c
 const isCurrentOriginalLoading = computed(() => Boolean(originalLoadingMap.value[currentIndex.value]));
 
 async function resolveImageData(url: string) {
+  const sequence = ++resolveSequence;
   if (!url) {
     displaySrc.value = '';
     return;
@@ -128,16 +130,13 @@ async function resolveImageData(url: string) {
     displaySrc.value = url;
     return;
   }
-  if (imageCache.has(url)) {
-    displaySrc.value = imageCache.get(url)!;
-    return;
-  }
   displaySrc.value = '';
   try {
-    const dataUrl = await CoolapkTauriAPI.getImageDataUrl(url);
-    imageCache.set(url, dataUrl);
+    const dataUrl = await loadImageResource(url, CoolapkTauriAPI.getImageDataUrl);
+    if (sequence !== resolveSequence) return;
     displaySrc.value = dataUrl;
   } catch (err) {
+    if (sequence !== resolveSequence) return;
     console.warn('看图器加载图片失败:', err);
     displaySrc.value = url; // 备用回退直接使用原 url
   }

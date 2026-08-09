@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
+import { clearResourceMemoryCache } from '../utils/resourceCache';
 
 export interface UserProfile {
   uid: string | number;
@@ -27,6 +28,7 @@ export const useAuthStore = defineStore('auth', () => {
   const accounts = ref<any[]>([]);
 
   function clearFrontendAuthState() {
+    clearResourceMemoryCache();
     user.value = null;
     isLoggedIn.value = false;
     rawCookie.value = '';
@@ -106,6 +108,7 @@ export const useAuthStore = defineStore('auth', () => {
     rawCookie.value = '';
     user.value = profile;
     isLoggedIn.value = true;
+    clearResourceMemoryCache();
 
     localStorage.setItem('coolapk_user', JSON.stringify(profile));
 
@@ -193,6 +196,7 @@ export const useAuthStore = defineStore('auth', () => {
     };
     user.value = profile;
     isLoggedIn.value = true;
+    clearResourceMemoryCache();
     localStorage.setItem('coolapk_user', JSON.stringify(profile));
     await loadAccounts();
     return profile;

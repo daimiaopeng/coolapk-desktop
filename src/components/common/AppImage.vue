@@ -25,7 +25,9 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { useSettingsStore } from '../../stores/settings';
 import { sanitizeImageUrl } from '../../utils/image';
+import { loadImageResource, normalizeResourceUrl } from '../../utils/resourceCache';
 
 const props = withDefaults(defineProps<{
   src?: string;
@@ -41,14 +43,17 @@ const emit = defineEmits<{
   (event: 'error', payload: Event): void;
 }>();
 
+const settingsStore = useSettingsStore();
+
 const renderedSrc = ref<string | undefined>(undefined);
 const loading = ref(false);
 const error = ref(false);
 const isFallback = ref(false);
 
-const imageCache = new Map<string, string>();
+let loadSequence = 0;
 
 async function loadImage(url: string | undefined) {
+  const sequence = ++loadSequence;
   if (!url) {
     renderedSrc.value = undefined;
     error.value = false;
@@ -57,12 +62,7 @@ async function loadImage(url: string | undefined) {
   }
 
   // 1. 如果是相对地址，自动补全 https；如果是 http 协议，强制自动升级为 https
-  let targetUrl = url;
-  if (targetUrl.startsWith('//')) {
-    targetUrl = `https:${targetUrl}`;
-  } else if (targetUrl.startsWith('http://')) {
-    targetUrl = targetUrl.replace('http://', 'https://');
-  }
+  const targetUrl = normalizeResourceUrl(url);
 
   // 协议白名单：降级路径会直接把 URL 交给 <img>（WebView 原生加载），
   // file:/javascript: 等异常 scheme 一律拒绝，防止加载/探测本地文件
@@ -81,29 +81,28 @@ async function loadImage(url: string | undefined) {
     return;
   }
 
-  // 3. 检查内存缓存
-  if (imageCache.has(targetUrl)) {
-    renderedSrc.value = imageCache.get(targetUrl);
-    loading.value = false;
-    error.value = false;
-    return;
-  }
-
+  // 3. 依次检查全局内存缓存、持久缓存和网络
   loading.value = true;
   error.value = false;
   isFallback.value = false;
   renderedSrc.value = undefined;
 
   try {
-    const dataUrl = await CoolapkTauriAPI.getImageDataUrl(targetUrl);
-    imageCache.set(targetUrl, dataUrl);
+    const dataUrl = await loadImageResource(targetUrl, (resourceUrl) => (
+      CoolapkTauriAPI.getImageDataUrl(resourceUrl, {
+        cacheDir: settingsStore.settings.cachePath,
+        cacheTtlDays: settingsStore.settings.cacheTtlDays,
+      })
+    ));
+    if (sequence !== loadSequence) return;
     renderedSrc.value = dataUrl;
   } catch (err) {
+    if (sequence !== loadSequence) return;
     // 代理请求失败时，自动降级为原生应用 HTTP/HTTPS 直接请求
     isFallback.value = true;
     renderedSrc.value = targetUrl;
   } finally {
-    loading.value = false;
+    if (sequence === loadSequence) loading.value = false;
   }
 }
 

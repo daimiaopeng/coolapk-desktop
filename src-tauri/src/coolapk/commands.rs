@@ -1,7 +1,10 @@
 use crate::coolapk::client::{CoolapkClient, DeviceProfile};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use md5::{Digest, Md5};
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use tauri::State;
+use std::time::{Duration, SystemTime};
+use tauri::{Manager, State};
 
 pub struct AppState {
     pub client: CoolapkClient,
@@ -849,8 +852,24 @@ pub async fn login_by_mobile(
 }
 
 #[tauri::command]
-pub async fn get_image_data_url(state: State<'_, AppState>, url: String) -> Result<String, String> {
-    state.client.get_image_data_url(&url).await
+pub async fn get_image_data_url(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    url: String,
+    cache_dir: Option<String>,
+    cache_ttl_days: Option<u64>,
+) -> Result<String, String> {
+    let cache_file = image_cache_file(&app, cache_dir.as_deref(), &url)?;
+    let ttl_days = cache_ttl_days.unwrap_or(7);
+
+    if let Some(cached) = read_image_cache(&cache_file, ttl_days).await {
+        return Ok(cached);
+    }
+
+    let data_url = state.client.get_image_data_url(&url).await?;
+    // 写缓存失败不能影响图片显示，网络请求成功后始终优先返回图片。
+    let _ = write_image_cache(&cache_file, &data_url).await;
+    Ok(data_url)
 }
 
 #[tauri::command]
@@ -1348,57 +1367,191 @@ fn dir_total_size(dir: &std::path::Path) -> u64 {
     total
 }
 
-/// 更新包临时目录 + WebView 缓存目录（如 WebView2 的 EBWebView）
-fn cache_dirs(app: &tauri::AppHandle) -> Vec<std::path::PathBuf> {
-    use tauri::Manager;
-    let mut dirs = Vec::new();
-    dirs.push(std::env::temp_dir().join("coolapk-desktop-update"));
-    if let Ok(data_dir) = app.path().app_data_dir() {
-        let webview = data_dir.join("EBWebView");
-        if webview.exists() {
-            dirs.push(webview);
-        }
-    }
-    if let Ok(cache) = app.path().app_cache_dir() {
-        if cache.exists() {
-            dirs.push(cache);
-        }
-    }
-    dirs
+const IMAGE_CACHE_CONTAINER: &str = "CoolapkDesktopCache";
+const IMAGE_CACHE_MAGIC: &str = "COOLAPK_IMAGE_CACHE_V1";
+
+fn image_cache_root(app: &tauri::AppHandle, custom_dir: Option<&str>) -> Result<PathBuf, String> {
+    let base = custom_dir
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .map(Ok)
+        .unwrap_or_else(|| app.path().app_cache_dir().map_err(|e| e.to_string()))?;
+    Ok(base.join(IMAGE_CACHE_CONTAINER).join("images"))
 }
 
-/// 统计本地缓存占用（更新包临时文件 + WebView 缓存）
-#[tauri::command]
-pub fn get_cache_info(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    let mut total = 0u64;
-    for dir in cache_dirs(&app) {
-        total += dir_total_size(&dir);
-    }
-    Ok(serde_json::json!({ "bytes": total }))
+fn image_cache_file(
+    app: &tauri::AppHandle,
+    custom_dir: Option<&str>,
+    url: &str,
+) -> Result<PathBuf, String> {
+    let mut hasher = Md5::new();
+    hasher.update(url.as_bytes());
+    let key = hex::encode(hasher.finalize());
+    Ok(image_cache_root(app, custom_dir)?.join(format!("{key}.bin")))
 }
 
-/// 清理本地缓存（更新包临时文件 + WebView 缓存目录内容），返回清理后的占用
-#[tauri::command]
-pub fn clear_app_cache(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    for dir in cache_dirs(&app) {
-        if !dir.exists() {
-            continue;
+async fn read_image_cache(path: &std::path::Path, ttl_days: u64) -> Option<String> {
+    let metadata = tokio::fs::metadata(path).await.ok()?;
+    if ttl_days > 0 {
+        let max_age = Duration::from_secs(ttl_days.saturating_mul(24 * 60 * 60));
+        let modified = metadata.modified().ok()?;
+        if SystemTime::now().duration_since(modified).ok()? > max_age {
+            let _ = tokio::fs::remove_file(path).await;
+            return None;
         }
-        // 更新包目录整体删除重建；WebView 缓存目录删除子项（运行中可能有文件被锁，忽略失败）
-        if dir.ends_with("coolapk-desktop-update") {
-            let _ = std::fs::remove_dir_all(&dir);
-        } else if let Ok(entries) = std::fs::read_dir(&dir) {
+    }
+
+    let bytes = tokio::fs::read(path).await.ok()?;
+    let first_break = bytes.iter().position(|byte| *byte == b'\n')?;
+    let second_break = bytes[first_break + 1..]
+        .iter()
+        .position(|byte| *byte == b'\n')?
+        + first_break
+        + 1;
+    let magic = std::str::from_utf8(&bytes[..first_break]).ok()?;
+    let mime = std::str::from_utf8(&bytes[first_break + 1..second_break]).ok()?;
+    if magic != IMAGE_CACHE_MAGIC || !mime.starts_with("image/") {
+        let _ = tokio::fs::remove_file(path).await;
+        return None;
+    }
+    Some(format!(
+        "data:{mime};base64,{}",
+        BASE64.encode(&bytes[second_break + 1..])
+    ))
+}
+
+async fn write_image_cache(path: &std::path::Path, data_url: &str) -> Result<(), String> {
+    let (meta, encoded) = data_url
+        .split_once(',')
+        .ok_or_else(|| "图片数据格式不正确".to_string())?;
+    let mime = meta
+        .strip_prefix("data:")
+        .and_then(|value| value.strip_suffix(";base64"))
+        .filter(|value| value.starts_with("image/"))
+        .ok_or_else(|| "图片类型不正确".to_string())?;
+    let image = BASE64
+        .decode(encoded)
+        .map_err(|e| format!("图片缓存解码失败：{e}"))?;
+    let parent = path.parent().ok_or_else(|| "缓存目录不正确".to_string())?;
+    tokio::fs::create_dir_all(parent)
+        .await
+        .map_err(|e| format!("创建缓存目录失败：{e}"))?;
+
+    let mut content = format!("{IMAGE_CACHE_MAGIC}\n{mime}\n").into_bytes();
+    content.extend_from_slice(&image);
+    let temp = path.with_extension(format!("tmp-{}", std::process::id()));
+    tokio::fs::write(&temp, content)
+        .await
+        .map_err(|e| format!("写入图片缓存失败：{e}"))?;
+    if tokio::fs::rename(&temp, path).await.is_err() {
+        let _ = tokio::fs::remove_file(path).await;
+        tokio::fs::rename(&temp, path)
+            .await
+            .map_err(|e| format!("保存图片缓存失败：{e}"))?;
+    }
+    Ok(())
+}
+
+fn cache_locations(
+    app: &tauri::AppHandle,
+    custom_dir: Option<&str>,
+) -> Result<(PathBuf, PathBuf, PathBuf), String> {
+    let image = image_cache_root(app, custom_dir)?;
+    let webview = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("EBWebView");
+    let update = std::env::temp_dir().join("coolapk-desktop-update");
+    Ok((image, webview, update))
+}
+
+fn clear_dir_contents(dir: &std::path::Path) {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let _ = std::fs::remove_dir_all(&path);
+            } else {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+}
+
+/// 统计当前图片缓存、WebView 缓存和更新包临时文件，并返回实际图片缓存目录。
+#[tauri::command]
+pub fn get_cache_info(
+    app: tauri::AppHandle,
+    cache_dir: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let (image, webview, update) = cache_locations(&app, cache_dir.as_deref())?;
+    let _ = std::fs::create_dir_all(&image);
+    let image_bytes = dir_total_size(&image);
+    let webview_bytes = dir_total_size(&webview);
+    let update_bytes = dir_total_size(&update);
+    Ok(serde_json::json!({
+        "bytes": image_bytes + webview_bytes + update_bytes,
+        "imageBytes": image_bytes,
+        "webviewBytes": webview_bytes,
+        "updateBytes": update_bytes,
+        "path": image.to_string_lossy(),
+    }))
+}
+
+/// 删除图片、WebView 与更新包缓存。只清理由应用固定创建的缓存子目录。
+#[tauri::command]
+pub fn clear_app_cache(
+    app: tauri::AppHandle,
+    cache_dir: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let (image, webview, update) = cache_locations(&app, cache_dir.as_deref())?;
+    let _ = std::fs::remove_dir_all(&image);
+    let _ = std::fs::create_dir_all(&image);
+    clear_dir_contents(&webview);
+    let _ = std::fs::remove_dir_all(&update);
+    get_cache_info(app, cache_dir)
+}
+
+/// 删除超过设置天数的原生图片缓存，启动和修改过期时间时调用。
+#[tauri::command]
+pub fn clean_expired_cache(
+    app: tauri::AppHandle,
+    cache_dir: Option<String>,
+    cache_ttl_days: u64,
+) -> Result<serde_json::Value, String> {
+    let image = image_cache_root(&app, cache_dir.as_deref())?;
+    if cache_ttl_days > 0 {
+        let max_age = Duration::from_secs(cache_ttl_days.saturating_mul(24 * 60 * 60));
+        if let Ok(entries) = std::fs::read_dir(&image) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.is_dir() {
-                    let _ = std::fs::remove_dir_all(&path);
-                } else {
-                    let _ = std::fs::remove_file(&path);
+                let expired = entry
+                    .metadata()
+                    .ok()
+                    .and_then(|meta| meta.modified().ok())
+                    .and_then(|modified| SystemTime::now().duration_since(modified).ok())
+                    .is_some_and(|age| age > max_age);
+                if expired && path.is_file() {
+                    let _ = std::fs::remove_file(path);
                 }
             }
         }
     }
-    get_cache_info(app)
+    get_cache_info(app, cache_dir)
+}
+
+/// 打开当前图片缓存目录，方便用户查看实际落盘文件。
+#[tauri::command]
+pub fn open_cache_directory(
+    app: tauri::AppHandle,
+    cache_dir: Option<String>,
+) -> Result<String, String> {
+    let image = image_cache_root(&app, cache_dir.as_deref())?;
+    std::fs::create_dir_all(&image).map_err(|e| format!("创建缓存目录失败：{e}"))?;
+    opener::open(&image).map_err(|e| format!("打开缓存目录失败：{e}"))?;
+    Ok(image.to_string_lossy().to_string())
 }
 
 /// 以静默更新模式启动安装包：/S 静默、/UPDATE 跳过卸载、/R 安装完成后自动重新启动应用
@@ -1522,4 +1675,42 @@ pub async fn search_apks_by_developer(state: State<'_, AppState>, developer: Str
 #[tauri::command]
 pub async fn search_apks_by_tag(state: State<'_, AppState>, tag: String, apk_type: String, page: u32) -> Result<Value, String> {
     state.client.search_apks_by_tag(&tag, &apk_type, page).await
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::{read_image_cache, write_image_cache};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[tokio::test]
+    async fn image_cache_round_trip_keeps_binary_data() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("coolapk-image-cache-test-{unique}"));
+        let path = root.join("sample.bin");
+        let expected = "data:image/png;base64,Y2FjaGUtdGVzdA==";
+
+        write_image_cache(&path, expected).await.unwrap();
+        let actual = read_image_cache(&path, 7).await;
+
+        assert_eq!(actual.as_deref(), Some(expected));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn invalid_image_cache_is_ignored() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("coolapk-image-cache-invalid-{unique}"));
+        let path = root.join("sample.bin");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(&path, b"broken-cache").unwrap();
+
+        assert!(read_image_cache(&path, 7).await.is_none());
+        let _ = std::fs::remove_dir_all(root);
+    }
 }

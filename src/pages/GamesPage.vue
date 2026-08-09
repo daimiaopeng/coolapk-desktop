@@ -61,7 +61,7 @@
         @click="navigateToFeed(feed)"
       >
         <div class="review-header">
-          <img :src="getAvatar(feed)" class="user-avatar" alt="Avatar" />
+          <AppImage :src="getAvatar(feed)" image-class="user-avatar" alt="头像" />
           <div class="user-info">
             <span class="username">{{ feed.username || feed.userName || '酷友' }}</span>
             <span class="device-tag">{{ feed.deviceTitle || '手机游戏社区' }}</span>
@@ -514,6 +514,11 @@ onMounted(() => loadData());
   object-fit: cover;
 }
 
+.user-avatar :deep(img) {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .user-info {
   display: flex;
   flex-direction: column;
@@ -561,4 +566,3 @@ onMounted(() => loadData());
   gap: 4px;
 }
 </style>
-

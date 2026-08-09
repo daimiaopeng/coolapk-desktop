@@ -7,7 +7,7 @@
         <AppButton icon="fas fa-plus" size="sm" variant="secondary">新建私信</AppButton>
       </div>
       
-      <div class="session-list" v-if="!loadingSessions && sessions.length">
+      <div class="session-list" v-if="sessions.length">
         <div 
           v-for="session in sessions" 
           :key="session.ukey || session.id" 
@@ -28,6 +28,10 @@
       
       <div class="session-list-status" v-else-if="loadingSessions">
         <LoadingState text="加载中..." />
+      </div>
+
+      <div class="session-list-status" v-else-if="sessionsError">
+        <ErrorState title="私信加载失败" :message="sessionsError" @retry="loadSessions" />
       </div>
       
       <div class="session-list-status" v-else>
@@ -52,6 +56,10 @@
       <div class="chat-area" ref="chatAreaRef" @scroll="handleChatScroll">
         <div class="chat-status" v-if="loadingHistory">
           <LoadingState text="加载聊天记录..." />
+        </div>
+
+        <div class="chat-status" v-else-if="historyError && !chatHistory.length">
+          <ErrorState title="聊天记录加载失败" :message="historyError" @retry="retryCurrentSession" />
         </div>
         
         <template v-else>
@@ -182,6 +190,7 @@ import AppAvatar from '../components/common/AppAvatar.vue';
 import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+import ErrorState from '../components/common/ErrorState.vue';
 import AppButton from '../components/common/AppButton.vue';
 import { EMOJI_MAP, EMOJI_BASE } from '../utils/coolapkEmoji';
 import { renderCoolapkRichText } from '../utils/richText';
@@ -202,11 +211,14 @@ const navigateToUser = (uid?: string | number) => {
 
 const sessions = ref<any[]>([]);
 const loadingSessions = ref(false);
+const sessionsError = ref('');
 const currentSession = ref<any>(null);
 
 const chatHistory = ref<any[]>([]);
 const loadingHistory = ref(false);
+const historyError = ref('');
 const chatHistoryCache = new Map<string, any[]>();
+let historyRequestSequence = 0;
 
 const inputText = ref('');
 const sending = ref(false);
@@ -217,6 +229,29 @@ const showEmojiPicker = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const chatAreaRef = ref<HTMLElement | null>(null);
+
+function sessionsCacheKey() {
+  return `coolapk_message_sessions_${currentUserUid.value || 'guest'}`;
+}
+
+function restoreSessionsCache() {
+  try {
+    const cached = sessionStorage.getItem(sessionsCacheKey());
+    if (!cached) return;
+    const parsed = JSON.parse(cached);
+    if (Array.isArray(parsed)) sessions.value = parsed;
+  } catch {
+    sessionStorage.removeItem(sessionsCacheKey());
+  }
+}
+
+function persistSessionsCache() {
+  try {
+    sessionStorage.setItem(sessionsCacheKey(), JSON.stringify(sessions.value));
+  } catch {
+    // 会话缓存写入失败时继续使用内存数据，不影响私信功能。
+  }
+}
 
 // --- 字段提取工具（基于酷安真实 API 数据结构精确适配） ---
 // 酷安 API 中：uid = 消息发送者，fromuid = 消息接收者
@@ -338,14 +373,37 @@ const restoreScrollPositionOrBottom = async (ukey: string) => {
 };
 
 // --- 数据加载 ---
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
 const loadSessions = async () => {
+  if (loadingSessions.value) return;
   if (!sessions.value.length) {
     loadingSessions.value = true;
   }
+  sessionsError.value = '';
   try {
-    const res = await CoolapkTauriAPI.listMessages(1);
+    const res = await withTimeout(
+      CoolapkTauriAPI.listMessages(1),
+      15_000,
+      '会话列表请求超时，请检查网络后重试'
+    );
     if (res?.data && Array.isArray(res.data)) {
       sessions.value = res.data;
+      persistSessionsCache();
       
       const queryUid = String(route.query.uid || '');
       if (queryUid) {
@@ -354,7 +412,11 @@ const loadSessions = async () => {
           selectSession(found);
         } else {
           try {
-            const userProf = await CoolapkTauriAPI.getUserProfile(queryUid);
+            const userProf = await withTimeout(
+              CoolapkTauriAPI.getUserProfile(queryUid),
+              15_000,
+              '用户资料请求超时'
+            );
             const userData = userProf?.data || {};
             const tempSession = {
               messageUid: queryUid,
@@ -370,40 +432,50 @@ const loadSessions = async () => {
           }
         }
       }
+    } else {
+      throw new Error('会话列表返回格式不正确');
     }
   } catch (err) {
     console.error('加载会话列表失败', err);
+    sessionsError.value = err instanceof Error ? err.message : String(err);
   } finally {
     loadingSessions.value = false;
   }
 };
 
 const selectSession = async (session: any) => {
+  const requestSequence = ++historyRequestSequence;
   currentSession.value = session;
+  historyError.value = '';
   const partnerUid = getSessionPartnerUid(session);
   if (partnerUid && String(route.query.uid || '') !== String(partnerUid)) {
     router.replace({ path: '/messages', query: { ...route.query, uid: String(partnerUid) } });
   }
 
   const ukey = session.ukey || session.id;
-  if (!ukey) return;
+  if (!ukey) {
+    loadingHistory.value = false;
+    chatHistory.value = [];
+    historyError.value = '该会话缺少聊天标识，请刷新会话列表后重试';
+    return;
+  }
+  const sessionKey = String(ukey);
 
   // 0. 若有未读消息则标记已读（本地即时清零 + 服务端同步）
   if (session.isnew == 1 || session.isNew) {
     session.isnew = 0;
     session.isNew = false;
-    try {
-      await CoolapkTauriAPI.readMessage(String(ukey));
-    } catch (err) {
+    // 标记已读不阻塞聊天记录显示，网络异常时只记录错误。
+    void withTimeout(CoolapkTauriAPI.readMessage(sessionKey), 10_000, '标记已读请求超时').catch((err) => {
       console.error('标记会话已读失败', err);
-    }
+    });
   }
 
   // 1. 如果缓存中已存在历史记录，直接使用，实现 0 延迟秒切无转圈
-  if (chatHistoryCache.has(ukey)) {
-    chatHistory.value = chatHistoryCache.get(ukey) || [];
+  if (chatHistoryCache.has(sessionKey)) {
+    chatHistory.value = chatHistoryCache.get(sessionKey) || [];
     loadingHistory.value = false;
-    restoreScrollPositionOrBottom(String(ukey));
+    restoreScrollPositionOrBottom(sessionKey);
   } else {
     loadingHistory.value = true;
     chatHistory.value = [];
@@ -411,7 +483,12 @@ const selectSession = async (session: any) => {
 
   // 2. 静默发送 API 请求抓取最新记录并同步更新缓存
   try {
-    const res = await CoolapkTauriAPI.listChatHistory(ukey, 1);
+    const res = await withTimeout(
+      CoolapkTauriAPI.listChatHistory(sessionKey, 1),
+      15_000,
+      '聊天记录请求超时，请重试'
+    );
+    if (requestSequence !== historyRequestSequence) return;
     if (res?.data && Array.isArray(res.data)) {
       const list = [...res.data];
       list.sort((a, b) => {
@@ -420,14 +497,24 @@ const selectSession = async (session: any) => {
         return timeA - timeB;
       });
       chatHistory.value = list;
-      chatHistoryCache.set(ukey, list);
+      chatHistoryCache.set(sessionKey, list);
+    } else {
+      throw new Error('聊天记录返回格式不正确');
     }
   } catch (err) {
+    if (requestSequence !== historyRequestSequence) return;
     console.error('加载聊天记录失败', err);
+    historyError.value = err instanceof Error ? err.message : String(err);
   } finally {
-    loadingHistory.value = false;
-    restoreScrollPositionOrBottom(String(ukey));
+    if (requestSequence === historyRequestSequence) {
+      loadingHistory.value = false;
+      restoreScrollPositionOrBottom(sessionKey);
+    }
   }
+};
+
+const retryCurrentSession = () => {
+  if (currentSession.value) void selectSession(currentSession.value);
 };
 
 // --- 交互事件 ---
@@ -637,7 +724,8 @@ const sendMessage = async () => {
 
 // --- 生命周期 ---
 onMounted(() => {
-  loadSessions();
+  restoreSessionsCache();
+  void loadSessions();
 });
 </script>
 

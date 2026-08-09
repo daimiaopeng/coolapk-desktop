@@ -19,11 +19,8 @@
           <div class="banner-cover-placeholder" v-else></div>
           <div class="banner-cover-gradient"></div>
 
-          <!-- 悬浮顶部返回与交互 Bar -->
+          <!-- 悬浮顶部交互栏；页面导航统一放在全局顶栏。 -->
           <div class="banner-top-bar">
-            <button class="icon-circle-btn" @click="handleGoBack" title="返回">
-              <i class="fas fa-arrow-left"></i>
-            </button>
             <div class="top-bar-right">
               <button class="icon-circle-btn" title="搜索">
                 <i class="fas fa-search"></i>
@@ -334,7 +331,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppImage from '../components/common/AppImage.vue';
@@ -787,10 +783,6 @@ async function fetchLoadConfig() {
   }
 }
 
-function handleGoBack() {
-  navigateBack(router);
-}
-
 watch(effectiveUid, (newUid) => {
   isBlacklisted.value = false;
   isIgnored.value = false;
@@ -902,6 +894,7 @@ watch(activeTab, () => {
 .top-bar-right {
   display: flex;
   gap: 10px;
+  margin-left: auto;
 }
 
 .icon-circle-btn {

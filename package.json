@@ -16,6 +16,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:cache:cdp": "node scripts/test-resource-cache-cdp.mjs",
+    "test:navigation:cdp": "node scripts/test-resource-cache-cdp.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "vue-tsc --noEmit",

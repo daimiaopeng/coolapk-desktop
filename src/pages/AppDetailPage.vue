@@ -1,11 +1,7 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handlePageScroll">
-    <!-- 顶栏返回工具条 -->
+    <!-- 当前应用标题 -->
     <div class="detail-nav-bar">
-      <button class="back-btn" @click="handleGoBack">
-        <i class="fas fa-arrow-left"></i>
-        <span>返回</span>
-      </button>
       <span v-if="appTitle" class="nav-app-name">{{ appTitle }}</span>
     </div>
 
@@ -295,7 +291,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAppStore } from '../stores/app';
 import { useAuthStore } from '../stores/auth';
@@ -796,10 +791,6 @@ function handleGiftClaim(gift: any) {
   CoolapkTauriAPI.openUrl(link, 'system');
 }
 
-function handleGoBack() {
-  navigateBack(router, '/apps');
-}
-
 onMounted(() => fetchAppDetail());
 </script>
 
@@ -818,27 +809,6 @@ onMounted(() => fetchAppDetail());
   align-items: center;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
-}
-
-.back-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-primary);
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-
-.back-btn:hover {
-  background-color: var(--surface-hover);
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
 }
 
 .nav-app-name {
