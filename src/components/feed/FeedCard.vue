@@ -1,5 +1,5 @@
 <template>
-  <article class="feed-card" @click="handleCardClick">
+  <article :class="['feed-card', { 'is-detail-mode': detailMode }]" @click="handleCardClick">
     <FeedHeader
       :uid="feed.uid || feed.userInfo?.uid"
       :avatar="feed.userAvatar || feed.userInfo?.userAvatar || feed.pic"
@@ -18,6 +18,9 @@
 
     <div v-if="moreMenuOpen" class="more-menu-backdrop" @click.stop="moreMenuOpen = false"></div>
     <div v-if="moreMenuOpen" class="more-menu" @click.stop>
+      <button class="more-menu-item" @click="toggleHistoryPanel">
+        <i class="fas fa-clock-rotate-left"></i> 修改历史
+      </button>
       <button v-if="isMyFeed" class="more-menu-item is-danger" @click="handleDeleteFeed">
         <i class="fas fa-trash-alt"></i> 删除动态
       </button>
@@ -28,6 +31,7 @@
       :title="feed.title"
       :message="feed.message || feed.message_raw_output"
       :username="feed.username || feed.userInfo?.username"
+      :force-expanded="detailMode"
     />
 
     <FeedImageGrid :images="feed.pics || feed.picArr || (feed.pic ? [feed.pic] : [])" />
@@ -44,6 +48,27 @@
         v-if="feed.targetRow?.pics || feed.targetRow?.pic" 
         :images="feed.targetRow?.pics || (feed.targetRow?.pic ? [feed.targetRow?.pic] : [])" 
       />
+    </div>
+
+    <div v-if="historyPanelOpen" class="feed-history-panel" @click.stop>
+      <div class="history-panel-header">
+        <span><i class="fas fa-clock-rotate-left"></i> 修改历史</span>
+        <button type="button" aria-label="关闭修改历史" @click="historyPanelOpen = false">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <LoadingState v-if="historyLoading" text="正在加载修改历史..." />
+      <div v-else-if="historyError" class="history-status">
+        <span>{{ historyError }}</span>
+        <button type="button" @click="loadHistory">重试</button>
+      </div>
+      <div v-else-if="!historyList.length" class="history-status">暂无修改记录</div>
+      <div v-else class="history-list">
+        <div v-for="(item, index) in historyList" :key="item.id || item.dateline || index" class="history-item">
+          <div class="history-time">{{ formatHistoryDate(item) }}</div>
+          <div class="history-text">{{ formatHistoryContent(item) }}</div>
+        </div>
+      </div>
     </div>
 
     <FeedActionBar
@@ -84,6 +109,7 @@ import FeedImageGrid from './FeedImageGrid.vue';
 import FeedActionBar from './FeedActionBar.vue';
 import FeedCommentSection from './FeedCommentSection.vue';
 import ForwardDialog from '../overlays/ForwardDialog.vue';
+import LoadingState from '../common/LoadingState.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { useAuthStore } from '../../stores/auth';
@@ -99,6 +125,7 @@ const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
 const props = defineProps<{
   feed: FeedItem;
   rankIndex?: number;
+  detailMode?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -115,6 +142,10 @@ const isMyFeed = computed(() => {
 
 const forwardOpen = ref(false);
 const moreMenuOpen = ref(false);
+const historyPanelOpen = ref(false);
+const historyLoading = ref(false);
+const historyError = ref('');
+const historyList = ref<any[]>([]);
 
 function openForwardDialog() {
   if (!authStore.isLoggedIn) {
@@ -129,8 +160,49 @@ function handleForwardSuccess() {
 }
 
 function toggleMoreMenu() {
-  if (!isMyFeed.value) return;
   moreMenuOpen.value = !moreMenuOpen.value;
+}
+
+async function toggleHistoryPanel() {
+  moreMenuOpen.value = false;
+  historyPanelOpen.value = !historyPanelOpen.value;
+  if (historyPanelOpen.value && !historyList.value.length) {
+    await loadHistory();
+  }
+}
+
+async function loadHistory() {
+  historyLoading.value = true;
+  historyError.value = '';
+  try {
+    const response: any = await CoolapkTauriAPI.getFeedChangeHistory(String(props.feed.id));
+    historyList.value = Array.isArray(response?.data) ? response.data : [];
+  } catch (error) {
+    console.warn('加载动态修改历史失败：', error);
+    historyError.value = '修改历史加载失败';
+  } finally {
+    historyLoading.value = false;
+  }
+}
+
+function formatHistoryDate(item: any): string {
+  const value = item?.date || item?.dateline || item?.createTime || item?.create_time;
+  if (!value) return '';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value);
+  const date = new Date(number > 9_999_999_999 ? number : number * 1000);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('zh-CN', { hour12: false });
+}
+
+function formatHistoryContent(item: any): string {
+  if (!item || typeof item !== 'object') return '（无详细内容）';
+  return item.message
+    || item.content
+    || item.text
+    || item.change_content
+    || item.description
+    || (item.title ? `标题：${item.title}` : '')
+    || '（无详细内容）';
 }
 
 async function handleDeleteFeed() {
@@ -214,6 +286,7 @@ async function toggleComments() {
 }
 
 function handleCardClick(e: MouseEvent) {
+  if (props.detailMode) return;
   const target = e.target as HTMLElement;
   if (target.closest('a') || target.closest('button') || target.closest('.grid-item') || target.closest('.inline-comment-wrapper')) {
     return;
@@ -272,6 +345,15 @@ function formatRichText(text: string) {
   border-color: var(--border-dark, rgba(0, 0, 0, 0.12));
 }
 
+.feed-card.is-detail-mode {
+  cursor: default;
+}
+
+.feed-card.is-detail-mode:hover {
+  background-color: var(--surface);
+  border-color: var(--border);
+}
+
 .quoted-feed-box {
   background: var(--background-secondary, rgba(0, 0, 0, 0.03));
   border: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
@@ -309,6 +391,82 @@ function formatRichText(text: string) {
   border-top: 1px solid var(--border-light);
   padding-top: 4px;
   cursor: default;
+}
+
+.feed-history-panel {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-control);
+  background-color: var(--background-secondary);
+  cursor: default;
+}
+
+.history-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.history-panel-header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.history-panel-header button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--text-tertiary);
+}
+
+.history-panel-header button:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item {
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background-color: var(--surface);
+}
+
+.history-time {
+  margin-bottom: 4px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption);
+}
+
+.history-text {
+  color: var(--text-primary);
+  font-size: var(--font-size-sub);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.history-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 64px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sub);
+}
+
+.history-status button {
+  color: var(--brand-primary);
 }
 
 .more-menu-backdrop {

@@ -56,7 +56,6 @@ export interface AppSettings {
   zoomManuallySet: boolean;
   sidebarCollapsed: boolean;
   reduceMotion: boolean;
-  inlineComments: boolean;
   accentColor: AccentColor;
   collapseLines: number;
   commentSort: CommentSort;

@@ -7,45 +7,73 @@
       v-html="formattedMessage"
       @click="onBodyClick"
     ></div>
-    <button v-if="isLongText && !isExpanded" class="expand-btn" @click="handleExpand">
-      展开全文
+    <button
+      v-if="isLongText && (!isExpanded || expanding || expandError)"
+      class="expand-btn"
+      :disabled="expanding"
+      @click.stop="handleExpand"
+    >
+      {{ expanding ? '正在加载全文...' : expandError ? '全文加载失败，重试' : '展开全文' }}
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import { useSettingsStore } from '../../stores/settings';
-import { useAppStore } from '../../stores/app';
+import { CoolapkTauriAPI } from '../../api/coolapk';
+import { getFeedDetailMessage, hasFeedMoreSuffix, stripFeedMoreSuffix } from '../../utils/feedContent';
 
 const props = defineProps<{
   feedId?: string | number;
   title?: string;
   message?: string;
   username?: string;
+  forceExpanded?: boolean;
 }>();
 
 const settingsStore = useSettingsStore();
 
 const isExpanded = ref(false);
+const expanding = ref(false);
+const expandError = ref(false);
+const fullMessage = ref('');
+
+const currentMessage = computed(() => fullMessage.value || props.message || '');
+const needsRemoteFullText = computed(() => hasFeedMoreSuffix(props.message || ''));
 
 function onBodyClick(e: Event) {
   const anchor = (e.target as HTMLElement).closest('a');
   if (anchor) {
     const text = anchor.textContent?.trim() || '';
     if (text.includes('查看更多')) {
-      isExpanded.value = true;
+      e.preventDefault();
+      e.stopPropagation();
+      void handleExpand();
+      return;
     }
   }
   handleAnchorClick(e, props.feedId);
 }
 
-function handleExpand() {
+async function handleExpand() {
   isExpanded.value = true;
-  if (props.feedId) {
-    useAppStore().openCommentDrawer(props.feedId);
+  expandError.value = false;
+  if (!needsRemoteFullText.value || !props.feedId || fullMessage.value || expanding.value) return;
+
+  expanding.value = true;
+  try {
+    const response: any = await CoolapkTauriAPI.getFeedDetail(String(props.feedId));
+    const detailMessage = getFeedDetailMessage(response?.data);
+    if (!detailMessage) throw new Error('动态详情没有返回完整正文');
+    fullMessage.value = detailMessage;
+  } catch (error) {
+    console.warn('加载动态完整正文失败：', error);
+    expandError.value = true;
+  } finally {
+    expanding.value = false;
   }
 }
 
@@ -61,19 +89,29 @@ const shouldShowTitle = computed(() => {
 });
 
 const isLongText = computed(() => {
-  if (!props.message) return false;
+  if (!currentMessage.value) return false;
+  if (needsRemoteFullText.value) return true;
   const lines = collapseLines.value;
   if (lines <= 0) return false;
-  return props.message.length > 400 || props.message.split('\n').length > lines || /(?:<a[^>]*>\s*查看更多\s*<\/a>)/i.test(props.message);
+  return currentMessage.value.length > 400
+    || currentMessage.value.split('\n').length > lines;
 });
 
 const formattedMessage = computed(() => {
-  if (!props.message) return '';
+  if (!currentMessage.value) return '';
   // 统一渲染：先安全化（去标签/防注入/换行），再渲染酷安表情
-  const html = renderCoolapkRichText(props.message);
-  // 过滤结尾由酷安 API 默认带有的 "... 查看更多" 冗余文本，统一使用原生的 "展开全文" 按钮
-  return html.replace(/(?:(?:[…\.]|\s)*<a[^>]*>\s*查看更多\s*<\/a>\s*)+$/gi, '');
+  return renderCoolapkRichText(stripFeedMoreSuffix(currentMessage.value));
 });
+
+watch(
+  () => [props.feedId, props.message],
+  () => {
+    fullMessage.value = '';
+    expandError.value = false;
+    isExpanded.value = Boolean(props.forceExpanded);
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped>

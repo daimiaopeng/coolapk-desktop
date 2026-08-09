@@ -11,7 +11,7 @@ describe('app store', () => {
     const store = useAppStore();
     expect(store.isSearchOpen).toBe(false);
     expect(store.isPublishOpen).toBe(false);
-    expect(store.activeCommentFeedId).toBeNull();
+    expect(store.feedDetailContexts).toEqual({});
     expect(store.activeImageViewer).toBeNull();
   });
 
@@ -36,17 +36,11 @@ describe('app store', () => {
     expect(store.isPublishOpen).toBe(false);
   });
 
-  it('openCommentDrawer sets active feed id', () => {
+  it('保存并读取动态详情上下文', () => {
     const store = useAppStore();
-    store.openCommentDrawer('feed-123');
-    expect(store.activeCommentFeedId).toBe('feed-123');
-  });
-
-  it('closeCommentDrawer clears active feed id', () => {
-    const store = useAppStore();
-    store.openCommentDrawer(456);
-    store.closeCommentDrawer();
-    expect(store.activeCommentFeedId).toBeNull();
+    const context = { id: 'feed-123', message: '动态摘要' };
+    store.setFeedDetailContext('feed-123', context);
+    expect(store.getFeedDetailContext('feed-123')).toEqual(context);
   });
 
   it('openImageViewer stores urls and current index', () => {

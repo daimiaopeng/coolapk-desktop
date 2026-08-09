@@ -75,24 +75,24 @@ describe('HistoryPage 点击行为', () => {
     vi.clearAllMocks();
   });
 
-  it('点击动态条目卡片 → 打开内置评论抽屉（带上下文）', async () => {
+  it('点击动态条目卡片 → 进入完整动态页并保存上下文', async () => {
     const { wrapper, appStore } = await mountPage();
     const items = wrapper.findAll('.history-item');
     expect(items).toHaveLength(2);
 
     await items[0].trigger('click');
-    expect(appStore.activeCommentFeedId).toBe('72727311');
-    expect(appStore.activeCommentFeed).toStrictEqual(feedItem);
+    expect(mocks.router.push).toHaveBeenCalledWith('/feed/72727311');
+    expect(appStore.getFeedDetailContext('72727311')).toStrictEqual(feedItem);
   });
 
-  it('点击描述区纯文本（非链接）→ 不再无响应，同样打开评论抽屉', async () => {
+  it('点击描述区纯文本（非链接）→ 进入完整动态页', async () => {
     const { wrapper, appStore } = await mountPage();
     const desc = wrapper.find('.history-desc');
     expect(desc.exists()).toBe(true);
 
     // 点击描述里非链接的正文文字
     await desc.trigger('click');
-    expect(appStore.activeCommentFeedId).toBe('72727311');
+    expect(mocks.router.push).toHaveBeenCalledWith('/feed/72727311');
   });
 
   it('点击描述区话题链接 → 走统一 anchor 处理并阻止卡片事件', async () => {
@@ -101,7 +101,7 @@ describe('HistoryPage 点击行为', () => {
     expect(topicLink.exists()).toBe(true);
 
     await topicLink.trigger('click');
-    expect(appStore.activeCommentFeedId).toBeNull();
+    expect(appStore.feedDetailContexts).toEqual({});
     expect(mocks.router.resolve).toHaveBeenCalled();
   });
 
@@ -110,7 +110,7 @@ describe('HistoryPage 点击行为', () => {
     const items = wrapper.findAll('.history-item');
 
     await items[1].trigger('click');
-    expect(appStore.activeCommentFeedId).toBeNull();
+    expect(appStore.feedDetailContexts).toEqual({});
     expect(mocks.router.push).toHaveBeenCalledWith('/user/123456');
   });
 });

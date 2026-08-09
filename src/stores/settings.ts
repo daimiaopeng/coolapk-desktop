@@ -76,7 +76,6 @@ const defaultSettings: AppSettings = {
   zoomManuallySet: false,
   sidebarCollapsed: false,
   reduceMotion: false,
-  inlineComments: false,
   accentColor: 'green',
   collapseLines: 12,
   commentSort: 'hot',

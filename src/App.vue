@@ -13,7 +13,6 @@
     </router-view>
 
     <!-- 全局交互浮层 -->
-    <CommentDrawer />
     <PublishDialog />
     <ImageViewer />
     <SearchCommand />
@@ -69,7 +68,6 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import { listen } from '@tauri-apps/api/event';
 import AppShell from './components/layout/AppShell.vue';
-import CommentDrawer from './components/comments/CommentDrawer.vue';
 import PublishDialog from './components/overlays/PublishDialog.vue';
 import ImageViewer from './components/overlays/ImageViewer.vue';
 import SearchCommand from './components/overlays/SearchCommand.vue';

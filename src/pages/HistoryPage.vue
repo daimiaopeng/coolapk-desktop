@@ -175,12 +175,11 @@ import ErrorState from '../components/common/ErrorState.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
-import { useAppStore } from '../stores/app';
 import { handleAnchorClick } from '../utils/anchorClick';
+import { openFeedDetail } from '../utils/feedNavigation';
 
 const router = useRouter();
 const authStore = useAuthStore();
-const appStore = useAppStore();
 
 const selectedFilter = ref<'all' | 'feed' | 'user' | 'topic' | 'apk'>('all');
 
@@ -377,7 +376,7 @@ function openItem(item: any) {
   if (type === 'feed' || url.includes('/feed/')) {
     const feedId = url.match(/\/feed\/(\d+)/)?.[1] || id;
     if (feedId) {
-      appStore.openCommentDrawer(feedId, item);
+      openFeedDetail(router, feedId, item);
       return;
     }
   }
@@ -395,7 +394,7 @@ function openItem(item: any) {
     }
     if (url.startsWith('/feed/')) {
       const feedId = url.replace('/feed/', '').split('?')[0];
-      appStore.openCommentDrawer(feedId, item);
+      openFeedDetail(router, feedId, item);
       return;
     }
   }
@@ -433,7 +432,7 @@ function handleDescClick(e: Event, item: any) {
   e.preventDefault();
   const feedMatch = (anchor.getAttribute('href') || '').match(/^\/feed\/(\d+)/);
   if (feedMatch?.[1]) {
-    appStore.openCommentDrawer(feedMatch[1], item);
+    openFeedDetail(router, feedMatch[1], item);
     return;
   }
   handleAnchorClick(e);

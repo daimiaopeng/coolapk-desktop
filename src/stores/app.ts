@@ -4,8 +4,7 @@ import { ref } from 'vue';
 export const useAppStore = defineStore('app', () => {
   const isSearchOpen = ref(false);
   const isPublishOpen = ref(false);
-  const activeCommentFeedId = ref<string | number | null>(null);
-  const activeCommentFeed = ref<any>(null);
+  const feedDetailContexts = ref<Record<string, any>>({});
   const activeImageViewer = ref<{ urls: string[]; currentIndex: number } | null>(null);
 
   function openSearch() {
@@ -24,14 +23,16 @@ export const useAppStore = defineStore('app', () => {
     isPublishOpen.value = false;
   }
 
-  function openCommentDrawer(feedId: string | number, feed?: any) {
-    activeCommentFeedId.value = feedId;
-    activeCommentFeed.value = feed || null;
+  function setFeedDetailContext(feedId: string | number, feed: any) {
+    if (!feed) return;
+    feedDetailContexts.value = {
+      ...feedDetailContexts.value,
+      [String(feedId)]: feed,
+    };
   }
 
-  function closeCommentDrawer() {
-    activeCommentFeedId.value = null;
-    activeCommentFeed.value = null;
+  function getFeedDetailContext(feedId: string | number) {
+    return feedDetailContexts.value[String(feedId)] || null;
   }
 
   function openImageViewer(urls: string[], currentIndex: number = 0) {
@@ -45,15 +46,14 @@ export const useAppStore = defineStore('app', () => {
   return {
     isSearchOpen,
     isPublishOpen,
-    activeCommentFeedId,
-    activeCommentFeed,
+    feedDetailContexts,
     activeImageViewer,
     openSearch,
     closeSearch,
     openPublish,
     closePublish,
-    openCommentDrawer,
-    closeCommentDrawer,
+    setFeedDetailContext,
+    getFeedDetailContext,
     openImageViewer,
     closeImageViewer
   };

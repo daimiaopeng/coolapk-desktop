@@ -34,12 +34,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import LoadingState from '../common/LoadingState.vue';
 import EmptyState from '../common/EmptyState.vue';
-import { useAppStore } from '../../stores/app';
+import { openFeedDetail } from '../../utils/feedNavigation';
 
-const appStore = useAppStore();
+const router = useRouter();
 const loading = ref(false);
 const items = ref<any[]>([]);
 
@@ -59,7 +60,7 @@ async function fetchHot() {
 
 function openFeed(item: any) {
   if (item && item.id) {
-    appStore.openCommentDrawer(item.id, item);
+    openFeedDetail(router, item.id, item);
   }
 }
 

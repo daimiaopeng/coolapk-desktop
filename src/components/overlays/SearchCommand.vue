@@ -83,6 +83,7 @@ import { useAppStore } from '../../stores/app';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import LoadingState from '../common/LoadingState.vue';
 import EmptyState from '../common/EmptyState.vue';
+import { openFeedDetail } from '../../utils/feedNavigation';
 
 const appStore = useAppStore();
 const router = useRouter();
@@ -152,7 +153,7 @@ function handleEnterSearch() {
 function selectResult(item: any) {
   appStore.closeSearch();
   if (item.id) {
-    appStore.openCommentDrawer(item.id, item);
+    openFeedDetail(router, item.id, item);
   }
 }
 

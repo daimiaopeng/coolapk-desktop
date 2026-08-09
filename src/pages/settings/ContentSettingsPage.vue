@@ -19,14 +19,6 @@
 
       <div class="setting-row">
         <div class="row-info">
-          <span class="row-label">卡片展开评论 (行内评论)</span>
-          <span class="row-sub">在列表卡片下方直接展开评论，默认使用右侧抽屉展现</span>
-        </div>
-        <AppSwitch v-model="settingsStore.settings.inlineComments" />
-      </div>
-
-      <div class="setting-row">
-        <div class="row-info">
           <span class="row-label">无限滚动</span>
           <span class="row-sub">滚动到底部时自动加载下一页动态</span>
         </div>

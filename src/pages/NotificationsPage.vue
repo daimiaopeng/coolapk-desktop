@@ -42,6 +42,17 @@
             <div v-if="getTarget(item)" class="notify-target">
               <span class="target-title" v-html="renderCoolapkRichText(getTarget(item))" @click="handleNotifyClick($event, item)"></span>
             </div>
+
+            <button
+              v-if="getOriginalFeedId(item)"
+              type="button"
+              class="original-feed-preview"
+              @click="openOriginalFeed(item)"
+            >
+              <span class="original-feed-label">原动态</span>
+              <span class="original-feed-summary">{{ getOriginalFeedSummary(item) }}</span>
+              <span class="original-feed-action">查看原动态 <i class="fas fa-chevron-right"></i></span>
+            </button>
           </div>
         </div>
 
@@ -65,13 +76,16 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
-import { useAppStore } from '../stores/app';
+import { openFeedDetail } from '../utils/feedNavigation';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+
+const router = useRouter();
 
 // 分类 Tabs（接口路径与官方 UWP 客户端一致）
 const tabs = [
@@ -187,6 +201,36 @@ function getTarget(item: any): string {
   return '';
 }
 
+function getOriginalFeed(item: any): any {
+  const candidates = [item?.feedInfo, item?.targetRow, item?.targetFeed];
+  return candidates.find((feed) => feed && typeof feed === 'object') || null;
+}
+
+function getOriginalFeedId(item: any): string {
+  const original = getOriginalFeed(item);
+  const direct = original?.id || original?.feedId || item?.feedId || item?.targetId || item?.target_id;
+  if (direct) return String(direct).replace(/^feed:/, '');
+  const source = [item?.url, item?.targetUrl, item?.note, item?.message, item?.targetTitle]
+    .filter(Boolean)
+    .join(' ');
+  return source.match(/\/feed\/(\d+)/)?.[1] || '';
+}
+
+function getOriginalFeedSummary(item: any): string {
+  const original = getOriginalFeed(item);
+  const text = original?.title
+    || original?.message_title
+    || original?.message
+    || item?.targetTitle
+    || '点击查看这条通知对应的完整动态';
+  return String(text).replace(/<[^>]+>/g, '').trim();
+}
+
+function openOriginalFeed(item: any) {
+  const id = getOriginalFeedId(item);
+  if (id) openFeedDetail(router, id, item);
+}
+
 function formatTime(dateline: any): string {
   if (!dateline) return '';
   // 酷安的时间可能是时间戳(秒)
@@ -209,7 +253,7 @@ function renderSafeHtml(text: string): string {
   return renderCoolapkRichText(text);
 }
 
-// 通知内链接点击：动态链接携带通知上下文打开抽屉（详情优先用上下文渲染），其余走统一处理
+// 通知内链接点击：动态链接携带通知上下文进入完整动态页，其余走统一处理。
 function handleNotifyClick(e: Event, item: any) {
   const anchor = (e.target as HTMLElement).closest('a');
   if (!anchor?.href) return;
@@ -217,7 +261,7 @@ function handleNotifyClick(e: Event, item: any) {
   const feedMatch = href.match(/^\/feed\/(\d+)/);
   if (feedMatch?.[1]) {
     e.preventDefault();
-    useAppStore().openCommentDrawer(feedMatch[1], item);
+    openFeedDetail(router, feedMatch[1], item);
     return;
   }
   handleAnchorClick(e);
@@ -412,6 +456,50 @@ onMounted(() => {
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.original-feed-preview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-control);
+  background-color: var(--background);
+  text-align: left;
+  transition: border-color var(--duration-fast) var(--ease-default), background-color var(--duration-fast) var(--ease-default);
+}
+
+.original-feed-preview:hover {
+  border-color: var(--brand-primary);
+  background-color: var(--brand-soft);
+}
+
+.original-feed-label {
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background-color: var(--brand-soft);
+  color: var(--brand-primary);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+}
+
+.original-feed-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sub);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.original-feed-action {
+  color: var(--brand-primary);
+  font-size: var(--font-size-caption);
+  white-space: nowrap;
 }
 
 .load-more-wrapper {

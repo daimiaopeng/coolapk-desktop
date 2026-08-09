@@ -1,11 +1,11 @@
 import { router } from '../router';
 import { CoolapkTauriAPI } from '../api/coolapk';
-import { useAppStore } from '../stores/app';
 import { useSettingsStore } from '../stores/settings';
+import { openFeedDetail } from './feedNavigation';
 
 /**
  * 统一处理富文本内 <a> 的点击：
- *  - /feed/<id> 站内动态链接 → 直接打开应用内评论抽屉（详情+评论）；
+ *  - /feed/<id> 站内动态链接 → 进入完整动态页；
  *  - 其余站内路径（/ 开头）优先走内部路由（如 /u/xxx 用户页），
  *    未命中路由时用酷安官网域名拼装，避免加载应用自身 origin 产生空白页；
  *  - http(s) 链接按设置选择应用内新窗口浏览或调起系统浏览器。
@@ -20,14 +20,14 @@ export function handleAnchorClick(e: Event, feedId?: string | number) {
   if (text.includes('查看更多') || !href || href === '#' || href.startsWith('javascript:')) {
     const targetId = feedId || href.match(/\d+/)?.[0];
     if (targetId) {
-      useAppStore().openCommentDrawer(targetId);
+      openFeedDetail(router, targetId);
     }
     return;
   }
 
   const feedMatch = href.match(/^\/feed\/(\d+)/);
   if (feedMatch?.[1]) {
-    useAppStore().openCommentDrawer(feedMatch[1]);
+    openFeedDetail(router, feedMatch[1]);
     return;
   }
 
