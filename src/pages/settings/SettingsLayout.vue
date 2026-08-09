@@ -34,6 +34,7 @@ const settingsMenu = [
   { path: '/settings/appearance', label: '外观设置', icon: 'fas fa-palette' },
   { path: '/settings/shortcuts', label: '快捷键', icon: 'fas fa-keyboard' },
   { path: '/settings/startup', label: '启动与行为', icon: 'fas fa-power-off' },
+  { path: '/settings/device', label: '设备信息', icon: 'fas fa-mobile-alt' },
   { path: '/settings/about', label: '关于酷安', icon: 'fas fa-info-circle' },
 ];
 </script>

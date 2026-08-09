@@ -1,5 +1,5 @@
 <template>
-  <div class="discover-page custom-scrollbar">
+  <div class="discover-page custom-scrollbar" @scroll="handleDiscoverScroll">
     <section class="discover-hero">
       <div class="hero-copy">
         <div class="hero-kicker">
@@ -88,7 +88,7 @@
           <span class="heading-count">10 个分类</span>
         </div>
         <div class="category-grid">
-          <button v-for="(cat, idx) in digitalCategories" :key="idx" class="category-item" @click="filterCat(cat.name)">
+          <button v-for="(cat, idx) in digitalCategories" :key="idx" class="category-item" @click="onCategoryClick(cat)">
             <span class="category-icon"><i :class="cat.icon"></i></span>
             <span class="category-label">{{ cat.name }}</span>
           </button>
@@ -103,6 +103,47 @@
         <span class="selection-device selection-device-back"><i class="fas fa-mobile-alt"></i></span>
         <span class="selection-device selection-device-front"><i class="fas fa-mobile-screen-button"></i></span>
       </button>
+    </section>
+
+    <section v-if="dyhPanelOpen" class="dyh-square-section">
+      <div class="section-heading">
+        <div>
+          <span class="section-eyebrow">OFFICIAL ACCOUNTS</span>
+          <h2>看看号广场</h2>
+        </div>
+        <span class="section-link" @click="dyhPanelOpen = false">收起</span>
+      </div>
+
+      <div v-if="dyhLoading && dyhList.length === 0" class="rank-loading-box">
+        <LoadingState text="正在加载看看号..." />
+      </div>
+
+      <div v-else-if="dyhError && dyhList.length === 0" class="rank-loading-box">
+        <span class="dyh-error-text">看看号加载失败，请稍后重试</span>
+      </div>
+
+      <div v-else class="dyh-grid">
+        <div
+          v-for="item in dyhList"
+          :key="item.id"
+          class="dyh-card"
+          @click="openDyh(item.id)"
+        >
+          <AppImage v-if="item.logo" :src="item.logo" fit="cover" image-class="dyh-logo" />
+          <div v-else class="dyh-logo-fallback"><i class="fas fa-building-columns"></i></div>
+          <div class="dyh-card-info">
+            <strong class="dyh-name">{{ item.title || item.dyhName }}</strong>
+            <span class="dyh-desc">{{ item.description }}</span>
+            <span class="dyh-follow"><i class="fas fa-user-plus"></i> {{ formatCount(item.follownum) }} 关注</span>
+          </div>
+          <i class="fas fa-chevron-right dyh-arrow"></i>
+        </div>
+
+        <div v-if="dyhLoadingMore" class="dyh-loading-more">
+          <LoadingState text="加载更多看看号..." />
+        </div>
+        <div v-else-if="dyhNoMore" class="dyh-no-more">没有更多看看号了</div>
+      </div>
     </section>
 
     <section class="hot-rank-section">
@@ -156,7 +197,7 @@
         <LoadingState text="正在搜索数码动态..." />
       </div>
       <div v-else class="feeds-column">
-        <FeedCard v-for="item in feeds" :key="item.id || item.feedId" :feed="item" />
+        <FeedCard v-for="item in feeds" :key="item.id || item.feedId" :feed="item" @deleted="handleFeedDeleted" />
       </div>
     </section>
   </div>
@@ -204,12 +245,83 @@ const digitalCategories = [
   { name: '游戏', icon: 'fas fa-gamepad' },
   { name: '路由器', icon: 'fas fa-wifi' },
   { name: '全部', icon: 'fas fa-th-large' },
+  { name: '酷图', icon: 'fas fa-images', action: 'pictures' },
+  { name: '看看号', icon: 'fas fa-building-columns', action: 'dyh' },
 ];
+
+const dyhPanelOpen = ref(false);
+const dyhList = ref<any[]>([]);
+const dyhLoading = ref(false);
+const dyhLoadingMore = ref(false);
+const dyhError = ref(false);
+const dyhNoMore = ref(false);
+const dyhPage = ref(1);
 
 const hotDevicesList = ref<any[]>([]);
 const rankLoading = ref(false);
 const feeds = ref<any[]>([]);
 const feedLoading = ref(false);
+
+function formatCount(n: any): string {
+  const num = Number(n) || 0;
+  if (num >= 10000) return (num / 10000).toFixed(1) + '万';
+  return String(num);
+}
+
+function onCategoryClick(cat: any) {
+  if (cat.action === 'pictures') {
+    router.push('/pictures');
+    return;
+  }
+  if (cat.action === 'dyh') {
+    if (!dyhPanelOpen.value) {
+      dyhPanelOpen.value = true;
+      if (dyhList.value.length === 0) fetchDyhList(false);
+    } else {
+      dyhPanelOpen.value = false;
+    }
+    return;
+  }
+  filterCat(cat.name);
+}
+
+async function fetchDyhList(isLoadMore = false) {
+  if (dyhLoading.value || dyhLoadingMore.value || dyhNoMore.value) return;
+  if (isLoadMore) {
+    dyhLoadingMore.value = true;
+  } else {
+    dyhLoading.value = true;
+    dyhError.value = false;
+  }
+  try {
+    const res: any = await CoolapkTauriAPI.getDyhList(dyhPage.value);
+    const list = (res?.data && Array.isArray(res.data)) ? res.data : [];
+    if (list.length === 0) {
+      dyhNoMore.value = true;
+    } else {
+      if (isLoadMore) {
+        dyhList.value.push(...list);
+      } else {
+        dyhList.value = list;
+      }
+      dyhPage.value++;
+    }
+  } catch (err) {
+    if (!isLoadMore) dyhError.value = true;
+    console.warn('获取看看号列表失败', err);
+  } finally {
+    dyhLoading.value = false;
+    dyhLoadingMore.value = false;
+  }
+}
+
+function openDyh(dyhId: any) {
+  if (dyhId) router.push(`/dyh/${String(dyhId)}`);
+}
+
+function handleFeedDeleted(id: string | number) {
+  feeds.value = feeds.value.filter((f: any) => String(f.id) !== String(id));
+}
 
 async function loadDigitalData() {
   rankLoading.value = true;
@@ -290,6 +402,14 @@ function filterCat(catName: string) {
 
 function handleMoreFollow() {
   router.push('/following');
+}
+
+function handleDiscoverScroll(e: Event) {
+  if (!dyhPanelOpen.value || dyhLoading.value || dyhLoadingMore.value || dyhNoMore.value) return;
+  const target = e.target as HTMLElement;
+  if (target.scrollTop + target.clientHeight >= target.scrollHeight - 120) {
+    fetchDyhList(true);
+  }
 }
 
 onMounted(() => loadDigitalData());
@@ -1235,6 +1355,121 @@ onMounted(() => loadDigitalData());
 
 .hot-rank-section {
   gap: 20px;
+}
+
+.dyh-square-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(30, 41, 59, 0.035);
+}
+
+.dyh-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dyh-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  background: var(--background);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-default), transform var(--duration-fast) var(--ease-default);
+}
+
+.dyh-card:hover {
+  border-color: var(--brand-primary);
+  transform: translateY(-2px);
+}
+
+.dyh-logo {
+  width: 44px !important;
+  height: 44px !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 12px !important;
+  background: var(--brand-soft) !important;
+}
+
+.dyh-logo-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: var(--brand-primary);
+  background: var(--brand-soft);
+  font-size: 18px;
+}
+
+.dyh-card-info {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.dyh-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dyh-desc {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dyh-follow {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.dyh-follow i {
+  margin-right: 3px;
+  color: var(--brand-primary);
+}
+
+.dyh-arrow {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.dyh-loading-more,
+.dyh-no-more {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.dyh-no-more {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.dyh-error-text {
+  color: var(--text-tertiary);
+  font-size: 13px;
 }
 
 .hot-grid {

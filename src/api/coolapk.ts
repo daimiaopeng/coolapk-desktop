@@ -84,6 +84,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_dyh_detail', { dyhId });
   }
 
+  static async getDyhList(page: number = 1) {
+    return await invokeNative('get_dyh_list', { page });
+  }
+
   static async getDyhFeeds(dyhId: string, feedType: string = 'all', page: number = 1) {
     return await invokeNative('get_dyh_feeds', { dyhId, feedType, page });
   }
@@ -376,6 +380,28 @@ export class CoolapkTauriAPI {
     return await invokeNative('unfavorite_feed', { feedId });
   }
 
+  static async favoriteApk(packageName: string) {
+    return await invokeNative('favorite_apk', { packageName });
+  }
+
+  static async unfavoriteApk(packageName: string) {
+    return await invokeNative('unfavorite_apk', { packageName });
+  }
+
+  static async deleteFeed(feedId: string) {
+    return await invokeNative('delete_feed', { feedId });
+  }
+
+  static async deleteReply(replyId: string) {
+    return await invokeNative('delete_reply', { replyId });
+  }
+
+  static async createForward(feedId: string, message: string, pic?: string) {
+    const args: any = { feedId, message };
+    if (pic) args.pic = pic;
+    return await invokeNative('create_forward', args);
+  }
+
   static async uploadImage(imageBytes: Uint8Array, fileName: string, contentType: string, dir: string = 'feed', toUid?: string) {
     return await invokeNative('upload_image', { imageBytes, fileName, contentType, dir, toUid });
   }
@@ -435,6 +461,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('check_login_status');
   }
 
+  static async getDeviceInfo() {
+    return await invokeNative('get_device_info');
+  }
+
   static async listAccounts() {
     return await invokeNative('list_accounts');
   }
@@ -445,6 +475,10 @@ export class CoolapkTauriAPI {
 
   static async saveAccount(uid: string, username: string, userAvatar: string, cookie: string) {
     return await invokeNative('save_account', { uid, username, userAvatar, cookie });
+  }
+
+  static async persistCurrentAccount(uid: string, username: string, userAvatar: string) {
+    return await invokeNative('persist_current_account', { uid, username, userAvatar });
   }
 
   static async removeAccount(uid: string) {
@@ -539,11 +573,7 @@ export class CoolapkTauriAPI {
   }
 
   static async saveCookieSecurely(cookieStr: string) {
-    try {
-      await invoke('save_cookie_securely', { cookieStr });
-    } catch (e) {
-      console.warn('saveCookieSecurely 触发失败:', e);
-    }
+    await invoke('save_cookie_securely', { cookieStr });
   }
 
   static async getFollowingFeeds(page: number = 1) {
@@ -621,5 +651,9 @@ export class CoolapkTauriAPI {
 
   static async searchApksByTag(tag: string, apkType: string = '1', page: number = 1) {
     return await invokeNative('search_apks_by_tag', { tag, apkType, page })
+  }
+
+  static async getUserRatingList(uid: string, page: number = 1) {
+    return await invokeNative('get_user_rating_list', { uid, page })
   }
 }

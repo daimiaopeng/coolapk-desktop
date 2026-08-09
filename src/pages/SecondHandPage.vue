@@ -26,7 +26,7 @@
     <!-- 闲置列表 -->
     <div v-else class="feed-list-wrapper">
       <div class="feed-list">
-        <FeedCard v-for="item in feeds" :key="item.id" :feed="item" />
+        <FeedCard v-for="item in feeds" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
       </div>
       <div v-if="loadingMore" class="loading-more-footer">
         <i class="fas fa-circle-notch fa-spin"></i> 正在加载更多闲置...
@@ -47,6 +47,10 @@ import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 
 const feeds = ref<any[]>([]);
+
+function handleFeedDeleted(id: string | number) {
+  feeds.value = feeds.value.filter((f: any) => String(f.id) !== String(id));
+}
 const page = ref(1);
 const loading = ref(false);
 const loadingMore = ref(false);

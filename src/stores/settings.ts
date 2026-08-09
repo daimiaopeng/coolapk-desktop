@@ -8,6 +8,7 @@ import type {
   ImageQuality,
   AccentColor,
   NavVisibilitySettings,
+  DeviceFingerprintSettings,
 } from '../types/settings';
 
 const STORAGE_KEY = 'coolapk_desktop_settings';
@@ -43,6 +44,29 @@ const defaultNavVisibility: NavVisibilitySettings = {
   messages: true,
   following: true,
 };
+
+/** 默认设备信息：与 Rust 客户端 CoolapkClient::new() 内置的默认头一致 */
+const defaultDeviceFingerprint: DeviceFingerprintSettings = {
+  customFingerprint: false,
+  model: '23113RKC6C',
+  androidVersion: '16',
+  build: 'AQ3A.250226.002',
+  appVersion: '16.2.0',
+  appCode: '2604201',
+  sdkInt: '36',
+  locale: 'zh-CN',
+  darkMode: '0',
+};
+
+/** 由设备信息字段拼装酷安移动端 User-Agent */
+export function buildDeviceUserAgent(f: DeviceFingerprintSettings): string {
+  const model = f.model.trim() || defaultDeviceFingerprint.model;
+  const android = f.androidVersion.trim() || defaultDeviceFingerprint.androidVersion;
+  const build = f.build.trim() || defaultDeviceFingerprint.build;
+  const version = f.appVersion.trim() || defaultDeviceFingerprint.appVersion;
+  const code = f.appCode.trim() || defaultDeviceFingerprint.appCode;
+  return `Dalvik/2.1.0 (Linux; U; Android ${android}; ${model} Build/${build}) +CoolMarket/${version}-${code}-universal`;
+}
 
 const defaultSettings: AppSettings = {
   theme: 'system',
@@ -85,13 +109,14 @@ const defaultSettings: AppSettings = {
   hideAdCards: false,
   blockedKeywords: [],
   publishDeviceSignature: true,
-  deviceSignature: '酷安桌面版',
+  deviceSignature: '',
   imageOpenMode: 'internal',
   updateSpeedLimitKBps: 0,
   proxyUrl: '',
   notifyDownloadComplete: true,
   updateChannel: 'stable',
   experimentalFeatures: false,
+  deviceFingerprint: { ...defaultDeviceFingerprint },
 };
 
 type AccentPalette = {
@@ -136,7 +161,10 @@ export const useSettingsStore = defineStore('settings', () => {
         // 旧版本没有记录手动缩放标志：早期版本的"自动"值（devicePixelRatio×100）
         // 会与系统 DPI 双重放大导致界面过大，因此一律视为自动，按新算法重置为 100%。
         zoomManuallySet: hasManualZoomFlag ? parsed.zoomManuallySet : false,
-        navVisibility: { ...defaultNavVisibility, ...(parsed.navVisibility || {}) }
+        // 旧默认签名"来自酷安桌面版"已取消，改为空；用户自定义签名保留
+        deviceSignature: parsed.deviceSignature === '酷安桌面版' ? '' : (parsed.deviceSignature ?? ''),
+        navVisibility: { ...defaultNavVisibility, ...(parsed.navVisibility || {}) },
+        deviceFingerprint: { ...defaultDeviceFingerprint, ...(parsed.deviceFingerprint || {}) }
       };
     }
   } catch (err) {
@@ -166,6 +194,7 @@ export const useSettingsStore = defineStore('settings', () => {
       syncAlwaysOnTop(newVal.alwaysOnTop);
       syncStartupFlags(newVal);
       applyReduceMotion(newVal.reduceMotion);
+      syncDeviceProfile(newVal);
     },
     { deep: true, immediate: true }
   );
@@ -283,6 +312,28 @@ export const useSettingsStore = defineStore('settings', () => {
       alwaysOnTop: s.alwaysOnTop,
     }).catch((err) => {
       console.warn('同步启动参数失败:', err);
+    });
+  }
+
+  // 将"设备信息"设置同步给 Rust 客户端（作用于所有 API 请求头）。
+  // 未启用自定义时下发空对象，Rust 端保持默认值。
+  function syncDeviceProfile(s: AppSettings) {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) return;
+    const f = s.deviceFingerprint;
+    invoke('update_device_profile', {
+      profile: f.customFingerprint
+        ? {
+            userAgent: buildDeviceUserAgent(f),
+            sdkInt: f.sdkInt,
+            locale: f.locale,
+            appVersion: f.appVersion,
+            appCode: f.appCode,
+            apiVersion: '16',
+            darkMode: f.darkMode,
+          }
+        : {},
+    }).catch((err) => {
+      console.warn('同步设备信息设置失败:', err);
     });
   }
 

@@ -95,8 +95,8 @@ function openViewer(index: number) {
 <style scoped>
 .feed-image-grid {
   display: grid;
-  gap: 6px;
-  margin-bottom: var(--space-3);
+  gap: 8px;
+  margin-bottom: var(--space-3, 12px);
   width: 100%;
 }
 
@@ -124,6 +124,7 @@ function openViewer(index: number) {
   width: 100%;
   height: auto;
   object-fit: contain;
+  border-radius: 12px;
 }
 
 .count-1 .grid-item.is-long-image {
@@ -173,34 +174,32 @@ function openViewer(index: number) {
 .grid-item {
   position: relative;
   aspect-ratio: 1 / 1;
-  border-radius: var(--radius-control);
+  border-radius: 12px;
   overflow: hidden;
-  background-color: var(--background-secondary);
+  background-color: var(--background-secondary, rgba(0, 0, 0, 0.03));
   cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .grid-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform var(--duration-fast) var(--ease-default);
-}
-
-.grid-item:hover .grid-img {
-  transform: scale(1.03);
 }
 
 .image-count-badge {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  background: rgba(0, 0, 0, 0.65);
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
   color: #ffffff;
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
-  backdrop-filter: blur(4px);
+  padding: 2px 8px;
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   pointer-events: none;
 }
 </style>

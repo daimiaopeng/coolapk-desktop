@@ -1,5 +1,5 @@
-use crate::coolapk::client::CoolapkClient;
-use serde_json::Value;
+use crate::coolapk::client::{CoolapkClient, DeviceProfile};
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use tauri::State;
 
@@ -54,6 +54,11 @@ pub async fn get_product_feeds(
 #[tauri::command]
 pub async fn get_dyh_detail(state: State<'_, AppState>, dyh_id: String) -> Result<Value, String> {
     state.client.get_dyh_detail(&dyh_id).await
+}
+
+#[tauri::command]
+pub async fn get_dyh_list(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+    state.client.get_dyh_list(page).await
 }
 
 #[tauri::command]
@@ -531,6 +536,51 @@ pub async fn unfavorite_feed(
 }
 
 #[tauri::command]
+pub async fn favorite_apk(
+    state: State<'_, AppState>,
+    package_name: String,
+) -> Result<Value, String> {
+    state.client.favorite_apk(&package_name).await
+}
+
+#[tauri::command]
+pub async fn unfavorite_apk(
+    state: State<'_, AppState>,
+    package_name: String,
+) -> Result<Value, String> {
+    state.client.unfavorite_apk(&package_name).await
+}
+
+#[tauri::command]
+pub async fn delete_feed(
+    state: State<'_, AppState>,
+    feed_id: String,
+) -> Result<Value, String> {
+    state.client.delete_feed(&feed_id).await
+}
+
+#[tauri::command]
+pub async fn delete_reply(
+    state: State<'_, AppState>,
+    reply_id: String,
+) -> Result<Value, String> {
+    state.client.delete_reply(&reply_id).await
+}
+
+#[tauri::command]
+pub async fn create_forward(
+    state: State<'_, AppState>,
+    feed_id: String,
+    message: String,
+    pic: Option<String>,
+) -> Result<Value, String> {
+    state
+        .client
+        .create_forward(&feed_id, &message, pic.as_deref())
+        .await
+}
+
+#[tauri::command]
 pub async fn upload_image(
     state: State<'_, AppState>,
     image_bytes: Vec<u8>,
@@ -688,6 +738,20 @@ pub async fn create_feed(
 }
 
 #[tauri::command]
+pub fn update_device_profile(
+    state: State<'_, AppState>,
+    profile: DeviceProfile,
+) -> Result<Value, String> {
+    state.client.update_device_profile(profile);
+    Ok(json!({ "code": 200, "data": true }))
+}
+
+#[tauri::command]
+pub fn get_device_info(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_device_info()
+}
+
+#[tauri::command]
 pub async fn save_cookie_securely(
     state: State<'_, AppState>,
     cookie_str: String,
@@ -712,6 +776,11 @@ pub fn clear_user_cookie(state: State<'_, AppState>) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn get_user_cookie(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    Ok(state.client.get_user_cookie())
+}
+
+#[tauri::command]
 pub async fn list_accounts(state: State<'_, AppState>) -> Result<Value, String> {
     state.client.list_accounts().await
 }
@@ -732,6 +801,19 @@ pub async fn save_account(
     state
         .client
         .save_account(&uid, &username, &user_avatar, &cookie)
+        .await
+}
+
+#[tauri::command]
+pub async fn persist_current_account(
+    state: State<'_, AppState>,
+    uid: String,
+    username: String,
+    user_avatar: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .persist_current_account(&uid, &username, &user_avatar)
         .await
 }
 

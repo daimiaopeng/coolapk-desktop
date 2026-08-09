@@ -45,6 +45,17 @@
             <span v-if="dyhDetail.likenum">{{ formatCount(dyhDetail.likenum) }} 获赞</span>
           </div>
         </div>
+
+        <div class="dyh-actions">
+          <button
+            :class="['btn-follow-dyh', isFollowing ? 'btn-following' : 'btn-follow-primary']"
+            :disabled="followLoading"
+            @click="toggleFollow"
+          >
+            <i :class="isFollowing ? 'fas fa-check' : 'fas fa-plus'"></i>
+            {{ isFollowing ? '已关注' : '关注' }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -77,7 +88,7 @@
     </div>
 
     <div v-else class="feed-list">
-      <FeedCard v-for="item in dyhFeeds" :key="item.id || item.ttype + item.uid" :feed="item" />
+      <FeedCard v-for="item in dyhFeeds" :key="item.id || item.ttype + item.uid" :feed="item" @deleted="handleFeedDeleted" />
 
       <div class="pagination-footer">
         <LoadingState v-if="feedsLoading && page > 1" text="加载更多中..." />
@@ -97,16 +108,24 @@ import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
 const router = useRouter();
+const authStore = useAuthStore();
 const dyhId = computed(() => route.params.dyhId as string);
 
 const dyhDetail = ref<any>(null);
 const headerLoading = ref(false);
 const headerError = ref(false);
+const isFollowing = ref(false);
+const followLoading = ref(false);
 
 const dyhFeeds = ref<any[]>([]);
+
+function handleFeedDeleted(id: string | number) {
+  dyhFeeds.value = dyhFeeds.value.filter((f: any) => String(f.id) !== String(id));
+}
 const feedsLoading = ref(false);
 const feedsError = ref(false);
 const page = ref(1);
@@ -159,6 +178,7 @@ async function fetchDyhHeader() {
     const res = await CoolapkTauriAPI.getDyhDetail(dyhId.value);
     if (res?.data && typeof res.data === 'object') {
       dyhDetail.value = res.data;
+      isFollowing.value = !!(res.data.isFollow ?? res.data.isFollowed ?? res.data.followed ?? res.data.is_follow ?? res.data.follow);
     } else {
       headerError.value = true;
     }
@@ -167,6 +187,33 @@ async function fetchDyhHeader() {
     console.warn('获取看看号详情失败', err);
   } finally {
     headerLoading.value = false;
+  }
+}
+
+async function toggleFollow() {
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  if (!dyhDetail.value || followLoading.value) return;
+  const target = !isFollowing.value;
+  const prevFollowing = isFollowing.value;
+  const prevFollowNum = Number(dyhDetail.value.follownum) || 0;
+  isFollowing.value = target;
+  followLoading.value = true;
+  dyhDetail.value.follownum = Math.max(0, prevFollowNum + (target ? 1 : -1));
+  try {
+    if (target) {
+      await CoolapkTauriAPI.followDyh(dyhId.value);
+    } else {
+      await CoolapkTauriAPI.unfollowDyh(dyhId.value);
+    }
+  } catch (err) {
+    isFollowing.value = prevFollowing;
+    dyhDetail.value.follownum = prevFollowNum;
+    console.warn(target ? '关注看看号失败' : '取消关注看看号失败', err);
+  } finally {
+    followLoading.value = false;
   }
 }
 
@@ -336,6 +383,51 @@ watch(dyhId, () => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.dyh-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.btn-follow-dyh {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  border: none;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.btn-follow-primary {
+  background: var(--brand-primary, #10b981);
+  color: #ffffff;
+}
+
+.btn-follow-primary:hover {
+  background: var(--brand-hover, #059669);
+}
+
+.btn-following {
+  background: var(--background-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn-following:hover {
+  color: var(--text-primary);
+}
+
+.btn-follow-dyh:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .dyh-title {

@@ -58,3 +58,36 @@ img.coolapk-emoji,
   display: inline-flex !important;
 }
 
+/* 全局轻量提示 Toast（转发/删除等操作反馈） */
+.app-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--brand-primary, #10b768);
+  color: #fff;
+  padding: 10px 22px;
+  border-radius: var(--radius-pill, 9999px);
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(16, 183, 104, 0.35);
+  z-index: 9999;
+  animation: appToastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-toast.is-error {
+  background: var(--danger, #f04444);
+  box-shadow: 0 6px 20px rgba(240, 68, 68, 0.35);
+}
+
+@keyframes appToastIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+

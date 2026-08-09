@@ -1,6 +1,5 @@
 use crate::coolapk::auth::CoolapkAuth;
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use md5::{Digest, Md5};
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE, USER_AGENT};
 use reqwest::{Client, Method};
 use serde_json::{json, Value};
@@ -10,9 +9,32 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct CoolapkClient {
     client: Client,
-    auth: CoolapkAuth,
+    auth: RwLock<CoolapkAuth>,
     user_cookie: RwLock<Option<String>>,
     cookie_file: RwLock<Option<PathBuf>>,
+    device_profile: RwLock<DeviceProfile>,
+    device_code: RwLock<String>,
+}
+
+/// 设备信息覆盖配置（由设置页"设备信息"下发，作用于所有 API 请求头）。
+/// 字段为 None 时使用客户端默认值；全部留空表示恢复默认。
+/// 注意：X-App-Device（设备码）与 X-App-Token 属于账号绑定指纹，不允许覆盖。
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+pub struct DeviceProfile {
+    #[serde(default)]
+    pub user_agent: Option<String>,
+    #[serde(default)]
+    pub sdk_int: Option<String>,
+    #[serde(default)]
+    pub locale: Option<String>,
+    #[serde(default)]
+    pub app_version: Option<String>,
+    #[serde(default)]
+    pub app_code: Option<String>,
+    #[serde(default)]
+    pub api_version: Option<String>,
+    #[serde(default)]
+    pub dark_mode: Option<String>,
 }
 
 /// 移动端 UA：酷安网页（账号安全页/移动版页面）在桌面 UA 下会白屏或重定向
@@ -156,12 +178,12 @@ fn get_str_by_keys(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> Optio
 }
 
 impl CoolapkClient {
-    /// 生成或复用持久化设备码。
-    /// 酷安对写操作（点赞/评论/关注等）会校验设备指纹一致性，
-    /// 每次启动更换设备码会导致写请求被判为"网络环境异常"。
-    /// 首次启动生成随机码并保存到文件，之后启动复用同一设备码。
+    /// 设备码策略：
+    /// - 未登录（游客态）：每台电脑首次启动随机生成一次并持久化，之后固定
+    /// - 已登录：使用账号绑定的固定设备码（首次登录生成随机并持久化，之后固定）
+    /// 设备码与 Token V3 绑定，切换时 auth 签名同步切换。
     pub fn new() -> Self {
-        let device_code = load_or_create_device_code();
+        let device_code = generate_random_device_code();
         let mut headers = HeaderMap::new();
         headers.insert(
             USER_AGENT,
@@ -172,11 +194,6 @@ impl CoolapkClient {
         headers.insert("X-App-Mode", HeaderValue::from_static("universal"));
         headers.insert("X-App-Channel", HeaderValue::from_static("coolapk"));
         headers.insert("X-App-Id", HeaderValue::from_static("com.coolapk.market"));
-        headers.insert(
-            "X-App-Device",
-            HeaderValue::from_str(&device_code)
-                .expect("generated desktop device code must be a valid header"),
-        );
         headers.insert("X-App-Version", HeaderValue::from_static("16.2.0"));
         headers.insert("X-App-Code", HeaderValue::from_static("2604201"));
         headers.insert("X-Api-Version", HeaderValue::from_static("16"));
@@ -190,10 +207,171 @@ impl CoolapkClient {
 
         Self {
             client,
-            auth: CoolapkAuth::new(device_code),
+            auth: RwLock::new(CoolapkAuth::new(device_code.clone())),
             user_cookie: RwLock::new(None),
             cookie_file: RwLock::new(None),
+            device_profile: RwLock::new(DeviceProfile::default()),
+            device_code: RwLock::new(device_code),
         }
+    }
+
+    /// 获取当前设备码签名（Token V3 与设备码绑定，切换设备码后自动换签名）
+    fn get_token(&self) -> Result<String, String> {
+        self.auth
+            .read()
+            .map_err(|_| "failed to lock auth state".to_string())?
+            .get_app_token()
+    }
+
+    /// 同步设备码：已登录使用该账号绑定的固定设备码，
+    /// 未登录使用本机持久化的游客设备码（每台电脑首次生成后固定）。
+    /// 两者都会持久化，重启后保持不变。
+    pub fn sync_device_code(&self) {
+        let uid = self.current_uid();
+        let code = if let Some(uid) = uid {
+            self.account_device_code(&uid)
+        } else {
+            self.guest_device_code()
+        };
+        if let Ok(mut auth) = self.auth.write() {
+            auth.set_device_code(code.clone());
+        }
+        if let Ok(mut guard) = self.device_code.write() {
+            *guard = code;
+        }
+    }
+
+    fn current_uid(&self) -> Option<String> {
+        self.get_user_cookie()?.split(';').find_map(|kv| {
+            let mut parts = kv.trim().splitn(2, '=');
+            match (parts.next(), parts.next()) {
+                (Some("uid"), Some(v)) => {
+                    let uid = v.trim().to_string();
+                    if uid.is_empty() {
+                        None
+                    } else {
+                        Some(uid)
+                    }
+                }
+                _ => None,
+            }
+        })
+    }
+
+    /// 账号绑定的固定设备码：账号首次登录时的设备码会被服务端绑定。
+    /// - 账号已有 deviceCode 记录：沿用记录值
+    /// - 无记录：默认使用 SDK 官方 DEFAULT_DEVICE_CODE（Python SDK 登录的账号
+    ///   都绑定该码，实测发动态/评论等写操作可用），并持久化到该账号。
+    ///   注意：不能用随机码（实测随机码 + 已绑定账号的 Cookie 会被服务端
+    ///   以"网络环境异常"拒绝写操作）。
+    fn account_device_code(&self, uid: &str) -> String {
+        let mut accounts = self.load_accounts();
+        if let Some(pos) = accounts
+            .iter()
+            .position(|a| a.get("uid").and_then(|v| v.as_str()) == Some(uid))
+        {
+            if let Some(code) = accounts[pos]
+                .get("deviceCode")
+                .and_then(|v| v.as_str())
+                .filter(|c| !c.is_empty())
+            {
+                return code.to_string();
+            }
+            let code = SDK_DEFAULT_DEVICE_CODE.to_string();
+            if let Some(obj) = accounts[pos].as_object_mut() {
+                obj.insert("deviceCode".to_string(), json!(code.clone()));
+            }
+            self.save_accounts(&accounts);
+            return code;
+        }
+        let code = SDK_DEFAULT_DEVICE_CODE.to_string();
+        accounts.push(json!({ "uid": uid, "cookie": "", "deviceCode": code.clone() }));
+        self.save_accounts(&accounts);
+        code
+    }
+
+    /// 游客设备码：每台电脑首次生成随机后固定（持久化在账户库 root）
+    fn guest_device_code(&self) -> String {
+        let mut root = self.load_accounts_root();
+        if let Some(code) = root
+            .get("guestDeviceCode")
+            .and_then(|v| v.as_str())
+            .filter(|c| !c.is_empty())
+        {
+            return code.to_string();
+        }
+        let code = generate_random_device_code();
+        root["guestDeviceCode"] = json!(code.clone());
+        self.save_accounts_root(&root);
+        code
+    }
+
+    /// 将用户自定义设备信息覆盖到请求头（None 字段保留默认值）。
+    /// X-App-Device 由当前生效设备码决定（游客随机/账号固定），此处统一写入。
+    fn apply_device_profile(
+        &self,
+        request: reqwest::RequestBuilder,
+    ) -> Result<reqwest::RequestBuilder, String> {
+        let profile = self
+            .device_profile
+            .read()
+            .map_err(|_| "failed to read device profile".to_string())?;
+        let device_code = self
+            .device_code
+            .read()
+            .map_err(|_| "failed to read device code".to_string())?
+            .clone();
+        let mut request = request;
+        if let Ok(header_value) = HeaderValue::from_str(&device_code) {
+            request = request.header("X-App-Device", header_value);
+        }
+        for (header_name, value) in [
+            ("X-Sdk-Int", profile.sdk_int.as_ref()),
+            ("X-Sdk-Locale", profile.locale.as_ref()),
+            ("X-App-Version", profile.app_version.as_ref()),
+            ("X-App-Code", profile.app_code.as_ref()),
+            ("X-Api-Version", profile.api_version.as_ref()),
+            ("X-Dark-Mode", profile.dark_mode.as_ref()),
+        ] {
+            if let Some(value) = value.filter(|s| !s.trim().is_empty()) {
+                if let Ok(header_value) = HeaderValue::from_str(value) {
+                    request = request.header(header_name, header_value);
+                }
+            }
+        }
+        if let Some(app_code) = profile.app_code.as_ref().filter(|s| !s.trim().is_empty()) {
+            if let Ok(header_value) = HeaderValue::from_str(app_code) {
+                request = request.header("X-App-Supported", header_value);
+            }
+        }
+        if let Some(ua) = profile.user_agent.as_ref().filter(|s| !s.trim().is_empty()) {
+            if let Ok(header_value) = HeaderValue::from_str(ua) {
+                request = request.header(USER_AGENT, header_value);
+            }
+        }
+        Ok(request)
+    }
+
+    /// 更新设备信息覆盖配置（由设置页调用；传空字段即恢复默认）
+    pub fn update_device_profile(&self, profile: DeviceProfile) {
+        if let Ok(mut guard) = self.device_profile.write() {
+            *guard = profile;
+        }
+    }
+
+    /// 当前设备信息（设置页展示用）：登录态 + 生效设备码
+    pub fn get_device_info(&self) -> Result<Value, String> {
+        let code = self
+            .device_code
+            .read()
+            .map_err(|_| "failed to read device code".to_string())?
+            .clone();
+        let logged_in = self
+            .user_cookie
+            .read()
+            .map_err(|_| "failed to read login state".to_string())?
+            .is_some();
+        Ok(json!({ "code": 200, "data": { "loggedIn": logged_in, "deviceCode": code } }))
     }
 
     /// 绑定 Cookie 持久化文件路径，并载入上次保存的登录凭据
@@ -234,6 +412,7 @@ impl CoolapkClient {
                         if let Ok(mut stored) = self.user_cookie.write() {
                             *stored = Some(cookie);
                         }
+                        self.sync_device_code();
                         return;
                     }
                 }
@@ -277,6 +456,7 @@ impl CoolapkClient {
                 let _ = std::fs::remove_file(&path);
             }
         }
+        self.sync_device_code();
     }
 
     #[allow(dead_code)]
@@ -324,12 +504,9 @@ impl CoolapkClient {
     }
 
     fn save_accounts(&self, accounts: &[Value]) {
-        let last_uid = self
-            .load_accounts_root()
-            .get("lastLoginUid")
-            .cloned()
-            .unwrap_or_default();
-        let root = json!({ "lastLoginUid": last_uid, "accounts": accounts });
+        // 保留 root 上的其他字段（如 guestDeviceCode 游客设备码）
+        let mut root = self.load_accounts_root();
+        root["accounts"] = Value::Array(accounts.to_vec());
         self.save_accounts_root(&root);
     }
 
@@ -371,16 +548,60 @@ impl CoolapkClient {
         if cookie.is_empty() {
             return Err("该账户凭据为空".to_string());
         }
-        self.set_user_cookie(cookie)?;
-        self.set_last_login_uid(uid);
-        Ok(json!({
-            "code": 200,
-            "data": {
-                "uid": target.get("uid").cloned().unwrap_or_default(),
-                "username": target.get("username").cloned().unwrap_or_default(),
-                "userAvatar": target.get("userAvatar").cloned().unwrap_or_default(),
+
+        let previous_cookie = self.get_user_cookie();
+        let previous_uid = self
+            .load_accounts_root()
+            .get("lastLoginUid")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        self.set_user_cookie(cookie.clone())?;
+        match self.check_login_info().await {
+            Ok(result) => {
+                let data = result.get("data").unwrap_or(&result);
+                let validated_uid = data
+                    .get("uid")
+                    .or_else(|| data.get("id"))
+                    .map(value_to_string)
+                    .unwrap_or_default();
+                if validated_uid != uid {
+                    self.restore_login_state(previous_cookie, &previous_uid)?;
+                    return Err("保存的账户凭据与目标 UID 不一致，请重新登录该账户".to_string());
+                }
+
+                let username = data
+                    .get("username")
+                    .and_then(Value::as_str)
+                    .or_else(|| target.get("username").and_then(Value::as_str))
+                    .unwrap_or("");
+                let avatar = data
+                    .get("userAvatar")
+                    .or_else(|| data.get("avatar"))
+                    .and_then(Value::as_str)
+                    .or_else(|| target.get("userAvatar").and_then(Value::as_str))
+                    .unwrap_or("");
+                self.save_account(uid, username, avatar, &cookie).await
             }
-        }))
+            Err(error) => {
+                self.restore_login_state(previous_cookie, &previous_uid)?;
+                Err(format!("切换账户失败，凭据无效或已过期: {error}"))
+            }
+        }
+    }
+
+    fn restore_login_state(
+        &self,
+        previous_cookie: Option<String>,
+        previous_uid: &str,
+    ) -> Result<(), String> {
+        if let Some(cookie) = previous_cookie {
+            self.set_user_cookie(cookie)?;
+            self.set_last_login_uid(previous_uid);
+        } else {
+            self.clear_user_cookie()?;
+        }
+        Ok(())
     }
 
     /// 保存（或更新）一个账户并切换为当前登录
@@ -391,12 +612,19 @@ impl CoolapkClient {
         user_avatar: &str,
         cookie: &str,
     ) -> Result<Value, String> {
+        if uid.trim().is_empty() || uid == "0" || uid == "10000" {
+            return Err("账户 UID 无效".to_string());
+        }
+        let safe_cookie = Self::sanitize_cookie(cookie);
+        if !Self::has_valid_session_cookie(&safe_cookie) {
+            return Err("账户凭据缺少有效的 SESSID".to_string());
+        }
         let mut accounts = self.load_accounts();
         let entry = json!({
             "uid": uid,
             "username": username,
             "userAvatar": user_avatar,
-            "cookie": cookie,
+            "cookie": safe_cookie.clone(),
         });
         if let Some(pos) = accounts
             .iter()
@@ -407,7 +635,7 @@ impl CoolapkClient {
             accounts.push(entry);
         }
         self.save_accounts(&accounts);
-        self.set_user_cookie(cookie.to_string())?;
+        self.set_user_cookie(safe_cookie)?;
         self.set_last_login_uid(uid);
         Ok(json!({
             "code": 200,
@@ -415,8 +643,27 @@ impl CoolapkClient {
         }))
     }
 
+    /// 将已经通过服务端校验的当前内存会话写入账户库。
+    pub async fn persist_current_account(
+        &self,
+        uid: &str,
+        username: &str,
+        user_avatar: &str,
+    ) -> Result<Value, String> {
+        let cookie = self
+            .get_user_cookie()
+            .ok_or_else(|| "当前没有可持久化的登录凭据".to_string())?;
+        self.save_account(uid, username, user_avatar, &cookie).await
+    }
+
     /// 删除一个已保存的账户；若删除的是当前登录账户则同时清空登录态
     pub async fn remove_account(&self, uid: &str) -> Result<Value, String> {
+        let last_login_uid = self
+            .load_accounts_root()
+            .get("lastLoginUid")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         let mut accounts = self.load_accounts();
         accounts.retain(|a| a.get("uid").and_then(|v| v.as_str()) != Some(uid));
         self.save_accounts(&accounts);
@@ -432,25 +679,14 @@ impl CoolapkClient {
                 }
             })
             .unwrap_or_default();
-        if current_uid == uid {
+        if current_uid == uid || last_login_uid == uid {
             self.clear_user_cookie()?;
         }
         Ok(json!({ "code": 200, "data": true }))
     }
 
     pub fn set_user_cookie(&self, cookie: String) -> Result<(), String> {
-        let clean = cookie.replace('\r', "").replace('\n', " ").trim().to_string();
-        // 转换非 ASCII 字符，防止 reqwest 构造 HeaderValue 出现 builder error
-        let safe_ascii: String = clean
-            .chars()
-            .map(|c| {
-                if c.is_ascii() && c != '\r' && c != '\n' {
-                    c.to_string()
-                } else {
-                    format!("%{:02X}", c as u32)
-                }
-            })
-            .collect();
+        let safe_ascii = Self::sanitize_cookie(&cookie);
 
         let mut stored = self
             .user_cookie
@@ -459,35 +695,42 @@ impl CoolapkClient {
         *stored = if safe_ascii.is_empty() {
             None
         } else {
-            Some(safe_ascii.clone())
+            Some(safe_ascii)
         };
-        // 同步 JSON 账户库：更新该 uid 的 cookie 并记为当前登录
-        if !safe_ascii.is_empty() {
-            let uid = safe_ascii
-                .split(';')
-                .find_map(|kv| {
-                    let mut parts = kv.trim().splitn(2, '=');
-                    match (parts.next(), parts.next()) {
-                        (Some("uid"), Some(v)) => Some(v.trim().to_string()),
-                        _ => None,
-                    }
-                })
-                .unwrap_or_default();
-            if !uid.is_empty() {
-                let mut accounts = self.load_accounts();
-                if let Some(pos) = accounts
-                    .iter()
-                    .position(|a| a.get("uid").and_then(|v| v.as_str()) == Some(uid.as_str()))
-                {
-                    if let Some(obj) = accounts[pos].as_object_mut() {
-                        obj.insert("cookie".to_string(), json!(safe_ascii));
-                    }
-                    self.save_accounts(&accounts);
-                    self.set_last_login_uid(&uid);
-                }
-            }
-        }
+        drop(stored);
+        // 登录态变化（登录/登出/切换账号）后同步设备码
+        self.sync_device_code();
         Ok(())
+    }
+
+    fn sanitize_cookie(cookie: &str) -> String {
+        let clean = cookie.replace('\r', "").replace('\n', " ").trim().to_string();
+        // 转换非 ASCII 字符，防止 reqwest 构造 HeaderValue 出现 builder error
+        clean
+            .chars()
+            .map(|c| {
+                if c.is_ascii() && c != '\r' && c != '\n' {
+                    c.to_string()
+                } else {
+                    format!("%{:02X}", c as u32)
+                }
+            })
+            .collect()
+    }
+
+    /// 校验 Cookie 是否包含真实有效的 SESSID 会话
+    /// （"deleted"/"expired" 等占位值视为无效）
+    pub fn has_valid_session_cookie(cookie: &str) -> bool {
+        cookie.split(';').any(|item| {
+            let mut parts = item.trim().splitn(2, '=');
+            matches!(
+                (parts.next(), parts.next()),
+                (Some("SESSID"), Some(value))
+                    if !value.trim().is_empty()
+                        && !value.eq_ignore_ascii_case("deleted")
+                        && !value.eq_ignore_ascii_case("expired")
+            )
+        })
     }
 
     async fn request_api(
@@ -497,19 +740,20 @@ impl CoolapkClient {
         query: &[(&str, String)],
         form: Option<&[(&str, String)]>,
     ) -> Result<Value, String> {
-        let token = self.auth.get_app_token()?;
+        let token = self.get_token()?;
         let url = format!("https://api.coolapk.com{path}");
         let requested_with = if method == Method::POST {
             "com.coolapk.market"
         } else {
             "XMLHttpRequest"
         };
-        let mut request = self
-            .client
-            .request(method, url)
-            .header("X-App-Token", token)
-            .header("X-Requested-With", requested_with)
-            .query(query);
+        let mut request = self.apply_device_profile(
+            self.client
+                .request(method, url)
+                .header("X-App-Token", token)
+                .header("X-Requested-With", requested_with)
+                .query(query),
+        )?;
 
         let cookie = self
             .user_cookie
@@ -949,7 +1193,7 @@ impl CoolapkClient {
 
 
     pub async fn get_by_full_url(&self, full_url: &str) -> Result<Value, String> {
-        let token = self.auth.get_app_token()?;
+        let token = self.get_token()?;
 
         // 防御性校验：带 App 指纹头 + Token + 登录 Cookie 的请求仅允许发往酷安 API 域
         let parsed = reqwest::Url::parse(full_url).map_err(|e| format!("invalid URL: {e}"))?;
@@ -1246,7 +1490,7 @@ impl CoolapkClient {
             "https://api.coolapk.com/v6/feed/replyList?id={}&rid={}&page={}",
             feed_id, reply_id, page
         );
-        let token = self.auth.get_app_token()?;
+        let token = self.get_token()?;
 
         let res = self
             .client
@@ -1657,7 +1901,7 @@ impl CoolapkClient {
                 .client
                 .get(url)
                 .header("X-Requested-With", "XMLHttpRequest");
-            if let Ok(token) = self.auth.get_app_token() {
+            if let Ok(token) = self.get_token() {
                 r = r.header("X-App-Token", token);
             }
             r
@@ -2385,19 +2629,20 @@ impl CoolapkClient {
     /// 酷安 v6 私信接口要求：POST + multipart/form-data（字段 message）+ X-Requested-With: XMLHttpRequest。
     /// GET + query 方式服务端无法识别内容（报"私信内容不能为空"）。
     pub async fn send_private_message(&self, uid: &str, message: &str) -> Result<Value, String> {
-        let token = self.auth.get_app_token()?;
+        let token = self.get_token()?;
         let url = format!(
             "https://api.coolapk.com/v6/message/send?uid={}",
             uid
         );
         let form = reqwest::multipart::Form::new().text("message", message.to_string());
 
-        let mut request = self
-            .client
-            .request(reqwest::Method::POST, url)
-            .header("X-App-Token", token)
-            .header("X-Requested-With", "XMLHttpRequest")
-            .multipart(form);
+        let mut request = self.apply_device_profile(
+            self.client
+                .request(reqwest::Method::POST, url)
+                .header("X-App-Token", token)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .multipart(form),
+        )?;
 
         let cookie = self
             .user_cookie
@@ -2417,19 +2662,20 @@ impl CoolapkClient {
     /// 发送图片私信（需登录）
     /// 与 send_private_message 相同接口，multipart 字段为 message_pic
     pub async fn send_private_image(&self, uid: &str, message_pic: &str) -> Result<Value, String> {
-        let token = self.auth.get_app_token()?;
+        let token = self.get_token()?;
         let url = format!(
             "https://api.coolapk.com/v6/message/send?uid={}",
             uid
         );
         let form = reqwest::multipart::Form::new().text("message_pic", message_pic.to_string());
 
-        let mut request = self
-            .client
-            .request(reqwest::Method::POST, url)
-            .header("X-App-Token", token)
-            .header("X-Requested-With", "XMLHttpRequest")
-            .multipart(form);
+        let mut request = self.apply_device_profile(
+            self.client
+                .request(reqwest::Method::POST, url)
+                .header("X-App-Token", token)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .multipart(form),
+        )?;
 
         let cookie = self
             .user_cookie
@@ -2466,6 +2712,55 @@ impl CoolapkClient {
 
     pub async fn unfavorite_feed(&self, feed_id: &str) -> Result<Value, String> {
         self.favorite_action("/v6/feed/unFavorite", feed_id).await
+    }
+
+    /// 收藏/取消收藏应用（需登录，GET 写接口）
+    /// 数据来源: GET /v6/apk/favorite?id={packageName} / /v6/apk/unFavorite?id={packageName}
+    pub async fn favorite_apk(&self, package_name: &str) -> Result<Value, String> {
+        self.favorite_action("/v6/apk/favorite", package_name).await
+    }
+
+    pub async fn unfavorite_apk(&self, package_name: &str) -> Result<Value, String> {
+        self.favorite_action("/v6/apk/unFavorite", package_name).await
+    }
+
+    /// 删除自己发布的动态（需登录）
+    /// 实测：必须 POST + id 放 URL query + X-Requested-With: XMLHttpRequest
+    /// （GET 返回 status=-1"请求方式错误"）
+    pub async fn delete_feed(&self, feed_id: &str) -> Result<Value, String> {
+        self.delete_action("/v6/feed/deleteFeed", feed_id).await
+    }
+
+    /// 删除自己的评论/回复（需登录）
+    /// 实测：必须 POST + id 放 URL query + X-Requested-With: XMLHttpRequest
+    pub async fn delete_reply(&self, reply_id: &str) -> Result<Value, String> {
+        self.delete_action("/v6/feed/deleteReply", reply_id).await
+    }
+
+    /// 删除类接口通用实现：POST + query + XMLHttpRequest（与实测成功组合一致）
+    async fn delete_action(&self, path: &str, id: &str) -> Result<Value, String> {
+        let token = self.get_token()?;
+        let url = format!("https://api.coolapk.com{path}?id={}", id);
+        let mut request = self.apply_device_profile(
+            self.client
+                .request(reqwest::Method::POST, url)
+                .header("X-App-Token", token)
+                .header("X-Requested-With", "XMLHttpRequest"),
+        )?;
+
+        let cookie = self
+            .user_cookie
+            .read()
+            .map_err(|_| "failed to read login state".to_string())?
+            .clone();
+        if let Some(cookie) = cookie {
+            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
+                request = request.header(COOKIE, header_val);
+            }
+        }
+
+        let response = request.send().await.map_err(|e| e.to_string())?;
+        wrap_api_data(response_json(response).await?)
     }
 
     /// 上传图片（发动态/发私信配图），返回图片 URL（需登录）
@@ -2526,15 +2821,16 @@ impl CoolapkClient {
             .text("uploadFileList", file_list)
             .text("toUid", target_uid);
 
-        let mut prepare_request = self
-            .client
-            .request(
-                reqwest::Method::POST,
-                "https://api.coolapk.com/v6/upload/ossUploadPrepare",
-            )
-            .header("X-Requested-With", "XMLHttpRequest")
-            .multipart(prepare_form);
-        if let Ok(token) = self.auth.get_app_token() {
+        let mut prepare_request = self.apply_device_profile(
+            self.client
+                .request(
+                    reqwest::Method::POST,
+                    "https://api.coolapk.com/v6/upload/ossUploadPrepare",
+                )
+                .header("X-Requested-With", "XMLHttpRequest")
+                .multipart(prepare_form),
+        )?;
+        if let Ok(token) = self.get_token() {
             prepare_request = prepare_request.header("X-App-Token", token);
         }
         if let Ok(guard) = self.user_cookie.read() {
@@ -2983,7 +3279,7 @@ impl CoolapkClient {
     /// 发布动态（需登录）
     /// 官方客户端要求 POST multipart：message / type=feed / is_html_article=0 / pic
     pub async fn create_feed(&self, message: &str, pic: Option<&str>) -> Result<Value, String> {
-        let token = self.auth.get_app_token()?;
+        let token = self.get_token()?;
         let mut form = reqwest::multipart::Form::new()
             .text("message", message.to_string())
             .text("type", "feed".to_string())
@@ -2994,15 +3290,16 @@ impl CoolapkClient {
             }
         }
 
-        let mut request = self
-            .client
-            .request(
-                reqwest::Method::POST,
-                "https://api.coolapk.com/v6/feed/createFeed",
-            )
-            .header("X-App-Token", token)
-            .header("X-Requested-With", "XMLHttpRequest")
-            .multipart(form);
+        let mut request = self.apply_device_profile(
+            self.client
+                .request(
+                    reqwest::Method::POST,
+                    "https://api.coolapk.com/v6/feed/createFeed",
+                )
+                .header("X-App-Token", token)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .multipart(form),
+        )?;
 
         let cookie = self
             .user_cookie
@@ -3016,7 +3313,83 @@ impl CoolapkClient {
         }
 
         let response = request.send().await.map_err(|e| e.to_string())?;
-        wrap_api_data(response_json(response).await?)
+        let wrapped = wrap_api_data(response_json(response).await?)?;
+        // 发布成功时服务端必须返回新建动态对象（含 id）；data 缺失/为空说明
+        // 服务端虽然返回了 200 信封但并未真正创建动态，必须视为失败
+        let created = wrapped
+            .get("data")
+            .and_then(|d| d.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .or_else(|| {
+                wrapped
+                    .get("data")
+                    .and_then(|d| d.get("id").and_then(|v| v.as_u64()))
+                    .map(|n| n.to_string())
+            });
+        if created.is_none() {
+            return Err("发布动态失败：服务端未返回发布结果，请重试".to_string());
+        }
+        Ok(wrapped)
+    }
+
+    /// 转发动态（需登录）
+    /// 官方无独立转发接口（/v6/feed/forward、/v6/feed/repost 均不存在），
+    /// 通过 createFeed 携带 fid 实现：POST multipart /v6/feed/createFeed。
+    /// 实测：参数名必须是 fid（forward_id 会被服务端当成普通动态发布，fid=0）
+    pub async fn create_forward(
+        &self,
+        feed_id: &str,
+        message: &str,
+        pic: Option<&str>,
+    ) -> Result<Value, String> {
+        let token = self.get_token()?;
+        let mut form = reqwest::multipart::Form::new()
+            .text("message", message.to_string())
+            .text("type", "feed".to_string())
+            .text("is_html_article", "0".to_string())
+            .text("fid", feed_id.to_string());
+        if let Some(pic) = pic {
+            if !pic.is_empty() {
+                form = form.text("pic", pic.to_string());
+            }
+        }
+
+        let mut request = self.apply_device_profile(
+            self.client
+                .request(
+                    reqwest::Method::POST,
+                    "https://api.coolapk.com/v6/feed/createFeed",
+                )
+                .header("X-App-Token", token)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .multipart(form),
+        )?;
+
+        let cookie = self
+            .user_cookie
+            .read()
+            .map_err(|_| "failed to read login state".to_string())?
+            .clone();
+        if let Some(cookie) = cookie {
+            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
+                request = request.header(COOKIE, header_val);
+            }
+        }
+
+        let response = request.send().await.map_err(|e| e.to_string())?;
+        let wrapped = wrap_api_data(response_json(response).await?)?;
+        let created = wrapped
+            .get("data")
+            .and_then(|d| d.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
+            .or_else(|| {
+                wrapped
+                    .get("data")
+                    .and_then(|d| d.get("id").and_then(|v| v.as_u64()))
+                    .map(|n| n.to_string())
+            });
+        if created.is_none() {
+            return Err("转发失败：服务端未返回转发结果，请重试".to_string());
+        }
+        Ok(wrapped)
     }
 
     pub async fn check_login_status(&self) -> Result<Value, String> {
@@ -3052,6 +3425,7 @@ impl CoolapkClient {
             .write()
             .map_err(|_| "failed to lock login state".to_string())?;
         *stored = None;
+        drop(stored);
         // 清空当前登录标记（保留账户记录，便于下次快速切换）
         let mut root = self.load_accounts_root();
         root["lastLoginUid"] = json!("");
@@ -3062,6 +3436,8 @@ impl CoolapkClient {
                 let _ = std::fs::remove_file(&path);
             }
         }
+        // 登出后回到游客态，同步游客设备码
+        self.sync_device_code();
         Ok(())
     }
 
@@ -3225,6 +3601,15 @@ impl CoolapkClient {
         )
     }
 
+    /// 看看号（官方号）列表
+    /// 数据来源: GET /v6/dyh/list
+    pub async fn get_dyh_list(&self, page: u32) -> Result<Value, String> {
+        let raw = self
+            .api_get("/v6/dyh/list", &[("page", page.to_string())])
+            .await?;
+        Ok(json!({ "code": 200, "data": raw.get("data").cloned().unwrap_or(json!([])) }))
+    }
+
     /// 看看号（官方号）动态列表
     /// 数据来源: GET /v6/dyhArticle/list
     pub async fn get_dyh_feeds(
@@ -3280,10 +3665,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone()
             .ok_or_else(|| "当前没有登录凭据".to_string())?;
-        let has_session = cookie.split(';').any(|item| {
-            let mut parts = item.trim().splitn(2, '=');
-            matches!((parts.next(), parts.next()), (Some("SESSID"), Some(value)) if !value.trim().is_empty())
-        });
+        let has_session = Self::has_valid_session_cookie(&cookie);
         if !has_session {
             return Err("当前 Cookie 不包含有效会话".to_string());
         }
@@ -3381,9 +3763,28 @@ impl CoolapkClient {
     }
 
     /// 下载版本列表
-    /// 数据来源: GET /v6/apk/downloadVersionList
+    /// 数据来源: GET /v6/apk/detail（取应用数字 ID）→ GET /v6/apk/downloadVersionList?id={数字ID}
+    /// 注意：downloadVersionList 的 id 参数是应用数字 ID，传包名会恒返回"没有历史版本"
     pub async fn get_download_version_list(&self, package_name: &str) -> Result<Value, String> {
-        wrap_api_data(self.api_get("/v6/apk/downloadVersionList", &[("id", package_name.to_string())]).await?)
+        let detail = wrap_api_data(
+            self.api_get("/v6/apk/detail", &[("id", package_name.to_string())])
+                .await?,
+        )?;
+        let apk_id = detail
+            .get("data")
+            .and_then(|d| d.get("id"))
+            .map(value_to_string)
+            .unwrap_or_default();
+        if apk_id.is_empty() {
+            return Ok(json!({ "code": 200, "data": [] }));
+        }
+        let raw = self
+            .api_get(
+                "/v6/apk/downloadVersionList",
+                &[("id", apk_id), ("page", "1".to_string())],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": raw.get("data").cloned().unwrap_or(json!([])) }))
     }
 
     /// 图片列表(按标签)
@@ -3417,31 +3818,42 @@ impl CoolapkClient {
     }
 }
 
-/// 生成稳定的设备码：基于机器身份（主机名 + 用户名 + 固定盐）派生，
-/// 同一台机器上每次启动结果一致，避免酷安把频繁变更的设备指纹
-/// 判定为"网络环境异常"而拒绝点赞/评论等写操作。
-fn load_or_create_device_code() -> String {
-    let identity = std::env::var("COMPUTERNAME")
-        .or_else(|_| std::env::var("HOSTNAME"))
-        .or_else(|_| std::env::var("HOST"))
-        .unwrap_or_else(|_| "unknown-host".to_string());
-    let user = std::env::var("USERNAME")
-        .or_else(|_| std::env::var("USER"))
-        .unwrap_or_else(|_| "unknown-user".to_string());
-    let salt = "coolapk-desktop:v1";
+/// SDK 官方默认设备码（Python SDK 全程使用，对应 Redmi K50 电竞版）。
+/// 已登录账号默认绑定该设备码（实测该码 + SDK 登录的 Cookie 写操作可用），
+/// 账号首次登录时持久化到账户库，之后固定。
+const SDK_DEFAULT_DEVICE_CODE: &str = "AZmV2N4UzN0UmZ3kDOzEzYgsjMwAjL2IjMwUjMuE0MRFEI7MkMxITM4AjMyAyOp1GZlJFI7kWbvFWaYByOgsDI7AyOzYGO3okVq1GWOlEez8WYLlkWKVWbllzX3pUTjFTcjx2aPVFR";
 
-    let mut hasher = Md5::new();
-    hasher.update(format!("{salt}|{identity}|{user}").as_bytes());
-    let digest = hasher.finalize();
+/// 生成随机设备码（仿官方格式：约 220 字符的 base64 风格字符串）。
+/// 用途：未登录（游客态）时使用，每台电脑首次启动生成一次并持久化，之后固定。
+/// 注意：设备码与账号绑定，登录后写操作（发动态/点赞/评论）校验其一致性，
+/// 已登录账号不能使用随机码（会被服务端判定为"网络环境异常"）。
+fn generate_random_device_code() -> String {
+    use md5::{Digest, Md5};
+    use std::sync::atomic::{AtomicU64, Ordering};
 
-    // 仿照官方 Android 设备码格式（字母数字），保持稳定
-    let b64 = BASE64.encode(digest);
-    let code = format!(
-        "coolapk-desktop:{}:{}",
-        b64.trim_end_matches('=').chars().take(24).collect::<String>(),
-        user.chars().take(8).collect::<String>()
-    );
-    code
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let mut seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64;
+    seed ^= COUNTER.fetch_add(1, Ordering::Relaxed).wrapping_mul(0x9E3779B97F4A7C15);
+    seed ^= std::process::id() as u64;
+    seed ^= (&seed as *const u64) as u64;
+
+    let mut out = String::with_capacity(224);
+    let mut state = seed;
+    while out.len() < 220 {
+        let mut hasher = Md5::new();
+        hasher.update(state.to_le_bytes());
+        hasher.update(out.as_bytes());
+        let digest = hasher.finalize();
+        out.push_str(&BASE64.encode(digest));
+        state = u64::from_le_bytes([
+            digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
+        ]);
+    }
+    out.truncate(220);
+    out
 }
 
 fn value_to_string(value: &Value) -> String {
@@ -3464,7 +3876,7 @@ fn value_to_string_opt(value: &Value) -> Option<String> {
 
 fn wrap_api_data(response: Value) -> Result<Value, String> {
     if let Some(err_msg) = response.get("error").and_then(Value::as_str) {
-        if !err_msg.is_empty() {
+        if !err_msg.is_empty() && err_msg != "0" {
             return Err(err_msg.to_string());
         }
     }
@@ -3472,8 +3884,17 @@ fn wrap_api_data(response: Value) -> Result<Value, String> {
     if let Some(message) = response.get("message").and_then(Value::as_str) {
         let code = response.get("code").and_then(|v| v.as_i64().or_else(|| v.as_str().and_then(|s| s.parse().ok()))).unwrap_or(200);
         let status = response.get("status").and_then(|v| v.as_i64()).unwrap_or(1);
+        let msg_status = response
+            .get("messageStatus")
+            .and_then(Value::as_str)
+            .unwrap_or("");
 
-        if (code != 200 && code != 0 && code != 1) || status < 0 {
+        // 酷安成功信封：code 为 200/0/1 且 status 为 0/1（status=1004/500 等均属失败，
+        // 例如"网络环境异常"会以 HTTP 200 + status=1004/500 的形式返回）
+        if (code != 200 && code != 0 && code != 1)
+            || !(status == 0 || status == 1)
+            || msg_status.starts_with("err_")
+        {
             return Err(message.to_string());
         }
     }

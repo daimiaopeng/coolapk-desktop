@@ -164,6 +164,8 @@ const navItems = [
   { key: 'history', label: '历史记录', icon: 'far fa-clock' },
   { key: 'messages', label: '消息通知', icon: 'far fa-comment-alt' },
   { key: 'following', label: '我关注的', icon: 'far fa-user' },
+  { key: 'albums', label: '专辑广场', icon: 'fas fa-layer-group' },
+  { key: 'pictures', label: '酷图广场', icon: 'far fa-image' },
 ];
 
 function getNavVisible(key: string): boolean {

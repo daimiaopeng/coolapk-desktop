@@ -64,7 +64,7 @@
         <!-- 动态卡片列表 -->
         <div v-else class="feed-list-wrapper">
           <div class="feed-list">
-            <FeedCard v-for="item in feeds" :key="item.id" :feed="item" />
+            <FeedCard v-for="item in feeds" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
           </div>
           <div v-if="loadingMore" class="loading-more-footer">
             <i class="fas fa-circle-notch fa-spin"></i> 正在读取下一页动态...
@@ -425,6 +425,10 @@ const onRefreshFeeds = () => {
     loadFollowingFeeds(true);
   }
 };
+
+function handleFeedDeleted(id: string | number) {
+  feeds.value = feeds.value.filter((f: any) => String(f.id) !== String(id));
+}
 
 onMounted(() => {
   if (authStore.isLoggedIn) {

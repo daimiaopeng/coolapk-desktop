@@ -10,11 +10,20 @@ import { useSettingsStore } from '../stores/settings';
  *    未命中路由时用酷安官网域名拼装，避免加载应用自身 origin 产生空白页；
  *  - http(s) 链接按设置选择应用内新窗口浏览或调起系统浏览器。
  */
-export function handleAnchorClick(e: Event) {
+export function handleAnchorClick(e: Event, feedId?: string | number) {
   const anchor = (e.target as HTMLElement).closest('a');
-  if (!anchor?.href) return;
+  if (!anchor) return;
   const href = anchor.getAttribute('href') || '';
+  const text = anchor.textContent?.trim() || '';
   e.preventDefault();
+
+  if (text.includes('查看更多') || !href || href === '#' || href.startsWith('javascript:')) {
+    const targetId = feedId || href.match(/\d+/)?.[0];
+    if (targetId) {
+      useAppStore().openCommentDrawer(targetId);
+    }
+    return;
+  }
 
   const feedMatch = href.match(/^\/feed\/(\d+)/);
   if (feedMatch?.[1]) {

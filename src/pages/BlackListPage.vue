@@ -6,7 +6,7 @@
       </button>
       <div class="header-main">
         <h2 class="page-title"><i class="fas fa-user-slash icon"></i> 黑名单</h2>
-        <span class="page-subtitle">管理已拉黑与已屏蔽的酷友</span>
+        <span class="page-subtitle">管理已拉黑、屏蔽与限制的酷友</span>
       </div>
     </div>
 
@@ -22,6 +22,12 @@
         @click="switchTab('ignore')"
       >
         屏蔽
+      </button>
+      <button
+        :class="['source-tab', { active: activeTab === 'limit' }]"
+        @click="switchTab('limit')"
+      >
+        限制
       </button>
     </div>
 
@@ -54,9 +60,11 @@
             <div class="user-text">
               <span class="user-name">{{ item.username || '酷友' }}</span>
               <span class="user-uid">UID {{ item.uid }}</span>
+              <span v-if="activeTab === 'limit' && item.bio" class="user-bio">{{ item.bio }}</span>
             </div>
           </div>
           <AppButton
+            v-if="activeTab !== 'limit'"
             variant="danger"
             size="sm"
             :loading="removingUid === item.uid"
@@ -89,7 +97,7 @@ import { useAuthStore } from '../stores/auth';
 const router = useRouter();
 const authStore = useAuthStore();
 
-const activeTab = ref<'black' | 'ignore'>('black');
+const activeTab = ref<'black' | 'ignore' | 'limit'>('black');
 const items = ref<any[]>([]);
 const loading = ref(false);
 const loadingMore = ref(false);
@@ -98,11 +106,13 @@ const page = ref(1);
 const noMore = ref(false);
 const removingUid = ref('');
 
-const emptyTitle = computed(() =>
-  activeTab.value === 'black' ? '暂无拉黑用户' : '暂无屏蔽用户'
-);
+const emptyTitle = computed(() => {
+  if (activeTab.value === 'black') return '暂无拉黑用户';
+  if (activeTab.value === 'ignore') return '暂无屏蔽用户';
+  return '暂无限制用户';
+});
 
-function switchTab(tab: 'black' | 'ignore') {
+function switchTab(tab: 'black' | 'ignore' | 'limit') {
   if (activeTab.value === tab) return;
   activeTab.value = tab;
   page.value = 1;
@@ -151,7 +161,9 @@ async function fetchItems(isRefresh = false) {
   try {
     const res = activeTab.value === 'black'
       ? await CoolapkTauriAPI.getBlackList(page.value)
-      : await CoolapkTauriAPI.getIgnoreList(page.value);
+      : activeTab.value === 'ignore'
+        ? await CoolapkTauriAPI.getIgnoreList(page.value)
+        : await CoolapkTauriAPI.getLimitList(page.value);
     const raw = (res && res.data && Array.isArray(res.data)) ? res.data : [];
     if (raw.length === 0) {
       noMore.value = true;
@@ -160,7 +172,8 @@ async function fetchItems(isRefresh = false) {
         .map((u: any) => ({
           uid: String(u.uid || u.fuid || ''),
           username: u.username || u.fusername || u.displayUsername || u.userInfo?.username || '酷友',
-          userAvatar: u.userAvatar || u.fUserAvatar || u.userInfo?.userAvatar || ''
+          userAvatar: u.userAvatar || u.fUserAvatar || u.userInfo?.userAvatar || '',
+          bio: u.bio || u.sign || u.userInfo?.bio || ''
         }))
         .filter((u: any) => u.uid);
       if (isRefresh) {
@@ -354,6 +367,15 @@ onMounted(() => {
 .user-uid {
   font-size: var(--font-size-caption);
   color: var(--text-tertiary);
+}
+
+.user-bio {
+  font-size: var(--font-size-caption);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .loading-wrapper,

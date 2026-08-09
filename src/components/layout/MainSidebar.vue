@@ -118,6 +118,8 @@ const allSecondaryNavs = [
   { key: 'history', path: '/history', label: '历史', icon: 'far fa-clock' },
   { key: 'messages', path: '/messages', label: '消息', icon: 'far fa-comment-alt' },
   { key: 'following', path: '/following', label: '我关注的', icon: 'far fa-user' },
+  { key: 'albums', path: '/albums', label: '专辑', icon: 'fas fa-layer-group' },
+  { key: 'pictures', path: '/pictures', label: '酷图', icon: 'far fa-image' },
 ];
 
 const primaryNavs = computed(() => {

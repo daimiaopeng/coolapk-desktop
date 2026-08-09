@@ -10,19 +10,37 @@
           <span class="page-subtitle">数码产品深度测评与体验分享</span>
         </div>
 
-        <!-- 搜索框 -->
-        <div class="search-box">
-          <i class="fas fa-search search-icon"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="搜索指定测评或数码产品..."
-            class="search-input"
-            @keyup.enter="handleSearch"
-          />
-          <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
-            <i class="fas fa-times"></i>
-          </button>
+        <!-- 搜索区 -->
+        <div class="search-area">
+          <div class="search-mode-toggle" role="group" aria-label="搜索模式">
+            <button
+              class="mode-btn"
+              :class="{ active: searchMode === 'feed' }"
+              @click="switchSearchMode('feed')"
+            >
+              动态
+            </button>
+            <button
+              class="mode-btn"
+              :class="{ active: searchMode === 'product' }"
+              @click="switchSearchMode('product')"
+            >
+              产品
+            </button>
+          </div>
+          <div class="search-box">
+            <i class="fas fa-search search-icon"></i>
+            <input
+              v-model="searchQuery"
+              type="text"
+              :placeholder="searchMode === 'product' ? '输入产品名称直达产品页...' : '搜索指定测评或数码产品...'"
+              class="search-input"
+              @keyup.enter="handleSearch"
+            />
+            <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -39,8 +57,29 @@
       </div>
     </div>
 
+    <!-- 产品搜索中状态 -->
+    <div v-if="searchMode === 'product' && searchingProduct" class="loading-wrapper">
+      <LoadingState text="正在查找产品..." />
+    </div>
+
+    <!-- 产品搜索状态 -->
+    <div v-else-if="searchMode === 'product'" class="empty-wrapper">
+      <EmptyState
+        v-if="productError"
+        icon="fas fa-box-open"
+        title="未找到该产品"
+        :description="productError"
+      />
+      <EmptyState
+        v-else
+        icon="fas fa-box-open"
+        title="产品直达"
+        description="输入产品名称并回车，将直接跳转到产品详情页"
+      />
+    </div>
+
     <!-- 加载中状态 -->
-    <div v-if="loading && feeds.length === 0" class="loading-wrapper">
+    <div v-else-if="loading && feeds.length === 0" class="loading-wrapper">
       <LoadingState :text="isSearching ? `正在搜索 &quot;${searchQuery}&quot; 相关测评...` : '正在加载评测动态...'" />
     </div>
 
@@ -60,7 +99,7 @@
     <!-- 动态列表 -->
     <div v-else class="feed-list-wrapper">
       <div class="feed-list">
-        <FeedCard v-for="item in feeds" :key="item.id" :feed="item" />
+        <FeedCard v-for="item in feeds" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
       </div>
       <div v-if="loadingMore" class="loading-more-footer">
         <i class="fas fa-circle-notch fa-spin"></i> 正在加载更多评测...
@@ -74,6 +113,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import FeedCard from '../components/feed/FeedCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -91,13 +131,22 @@ const reviewTabs = [
 
 const activeTab = ref('review');
 const searchQuery = ref('');
+const searchMode = ref<'feed' | 'product'>('feed');
 const isSearching = ref(false);
+const searchingProduct = ref(false);
+const productError = ref('');
 const feeds = ref<any[]>([]);
+
+function handleFeedDeleted(id: string | number) {
+  feeds.value = feeds.value.filter((f: any) => String(f.id) !== String(id));
+}
 const page = ref(1);
 const loading = ref(false);
 const loadingMore = ref(false);
 const noMore = ref(false);
 const error = ref('');
+
+const router = useRouter();
 
 function extractList(res: any): any[] {
   if (!res) return [];
@@ -173,16 +222,53 @@ async function loadFeeds(isRefresh: boolean = false) {
 
 function switchTab(key: string) {
   activeTab.value = key;
-  if (isSearching.value) {
+  if (isSearching.value || searchMode.value === 'product') {
     isSearching.value = false;
+    searchMode.value = 'feed';
+    productError.value = '';
     searchQuery.value = '';
   }
   loadFeeds(true);
 }
 
+function switchSearchMode(mode: 'feed' | 'product') {
+  if (searchMode.value === mode) return;
+  searchMode.value = mode;
+  productError.value = '';
+  if (mode === 'feed') {
+    isSearching.value = false;
+    loadFeeds(true);
+  }
+}
+
+async function searchProduct(name: string) {
+  searchingProduct.value = true;
+  productError.value = '';
+  const notFoundMsg = `未找到“${name}”相关产品，可尝试更换关键词`;
+  try {
+    const res: any = await CoolapkTauriAPI.getProductDetailByName(name);
+    const product = res && res.data ? res.data : res;
+    if (product && product.id) {
+      router.push(`/product/${product.id}`);
+      return;
+    }
+    productError.value = notFoundMsg;
+  } catch (err: any) {
+    console.warn('搜索产品失败:', err);
+    productError.value = notFoundMsg;
+  } finally {
+    searchingProduct.value = false;
+  }
+}
+
 function handleSearch() {
-  if (searchQuery.value.trim()) {
+  const query = searchQuery.value.trim();
+  if (!query) return;
+  if (searchMode.value === 'product') {
+    searchProduct(query);
+  } else {
     isSearching.value = true;
+    productError.value = '';
     loadFeeds(true);
   }
 }
@@ -190,6 +276,8 @@ function handleSearch() {
 function clearSearch() {
   searchQuery.value = '';
   isSearching.value = false;
+  searchMode.value = 'feed';
+  productError.value = '';
   loadFeeds(true);
 }
 
@@ -243,6 +331,44 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
+}
+
+.search-area {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.search-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background-color: var(--background-secondary);
+  flex-shrink: 0;
+}
+
+.mode-btn {
+  padding: 5px var(--space-3);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.mode-btn.active {
+  background-color: var(--surface);
+  color: var(--brand-primary);
 }
 
 .header-titles {

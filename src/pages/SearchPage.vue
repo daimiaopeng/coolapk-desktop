@@ -55,7 +55,7 @@
       </div>
 
       <div v-else-if="results.length > 0" class="search-result-list">
-        <FeedCard v-for="item in results" :key="item.id" :feed="item" />
+        <FeedCard v-for="item in results" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
       </div>
     </template>
 
@@ -146,6 +146,10 @@ const authStore = useAuthStore();
 const queryStr = computed(() => (route.query.q as string) || '');
 const loading = ref(false);
 const results = ref<any[]>([]);
+
+function handleFeedDeleted(id: string | number) {
+  results.value = results.value.filter((f: any) => String(f.id) !== String(id));
+}
 const searchQuery = ref('');
 const searchSuggestions = ref<any[]>([]);
 const showSuggestions = ref(false);

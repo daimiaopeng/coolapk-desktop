@@ -63,6 +63,42 @@
 
           <!-- 未登录或重新绑定凭据流程 -->
           <div v-else class="login-body">
+            <div v-if="!authStore.isLoggedIn && authStore.accounts.length > 0" class="account-switch-section saved-account-section">
+              <span class="section-label">已保存账户</span>
+              <div class="account-switch-list">
+                <div
+                  v-for="acc in authStore.accounts"
+                  :key="acc.uid"
+                  :class="['account-switch-item', { 'is-expired': expiredUid === String(acc.uid) }]"
+                >
+                  <AppAvatar :src="acc.userAvatar" size="sm" />
+                  <div class="switch-item-info">
+                    <span class="switch-item-name">{{ acc.username || `酷友_${String(acc.uid).slice(-4)}` }}</span>
+                    <span class="switch-item-uid">UID: {{ acc.uid }}</span>
+                    <span v-if="expiredUid === String(acc.uid)" class="expired-label">凭据已过期</span>
+                  </div>
+                  <div class="saved-account-actions">
+                    <button
+                      class="saved-account-login"
+                      :disabled="Boolean(switchingUid || removingUid)"
+                      @click="expiredUid === String(acc.uid) ? handleReauthorizeAccount(acc) : handleSwitchAccount(acc)"
+                    >
+                      <i v-if="switchingUid === String(acc.uid)" class="fas fa-circle-notch fa-spin"></i>
+                      <span v-else>{{ expiredUid === String(acc.uid) ? '重新授权' : '登录' }}</span>
+                    </button>
+                    <button
+                      class="saved-account-remove"
+                      :disabled="Boolean(switchingUid || removingUid)"
+                      title="删除本地账户"
+                      @click="handleRemoveSavedAccount(acc)"
+                    >
+                      <i :class="removingUid === String(acc.uid) ? 'fas fa-circle-notch fa-spin' : 'fas fa-trash-can'"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- 官方直连授权核心主视觉卡片 -->
             <div class="official-login-card">
               <div class="card-hero-icon">
@@ -170,6 +206,16 @@
     </div>
     </Transition>
   </Teleport>
+  <AppConfirmDialog
+    :is-open="Boolean(pendingRemovalAccount)"
+    title="删除本地账户"
+    :message="`确定删除本地账户“${pendingRemovalAccountName}”吗？该操作不会注销酷安账号。`"
+    confirm-text="删除"
+    danger
+    :loading="Boolean(removingUid)"
+    @cancel="cancelRemoveSavedAccount"
+    @confirm="confirmRemoveSavedAccount"
+  />
 </template>
 
 <script setup lang="ts">
@@ -178,6 +224,7 @@ import { useAuthStore } from '../../stores/auth';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import AppButton from '../common/AppButton.vue';
 import AppAvatar from '../common/AppAvatar.vue';
+import AppConfirmDialog from '../common/AppConfirmDialog.vue';
 
 const authStore = useAuthStore();
 
@@ -242,6 +289,14 @@ const errorMessage = ref('');
 const successMessage = ref('');
 const isRebinding = ref(false);
 const debugStatus = ref('');
+const expiredUid = ref('');
+const removingUid = ref('');
+const pendingRemovalAccount = ref<any | null>(null);
+
+const pendingRemovalAccountName = computed(() => {
+  const account = pendingRemovalAccount.value;
+  return account?.username || (account?.uid ? `UID ${account.uid}` : '');
+});
 
 // 已保存的其他账户（排除当前登录的）
 const otherAccounts = computed(() => {
@@ -256,18 +311,57 @@ async function handleSwitchAccount(acc: any) {
   successMessage.value = '';
   try {
     const profile = await authStore.loginAs(String(acc.uid));
+    expiredUid.value = '';
     successMessage.value = `已切换到账号：${profile.username}`;
     setTimeout(() => {
       authStore.closeLoginModal();
     }, 800);
   } catch (err: any) {
-    errorMessage.value = err?.message || '切换账号失败，凭据可能已过期';
+    expiredUid.value = String(acc.uid);
+    const detail = typeof err === 'string' ? err : err?.message;
+    const name = acc.username || `UID ${acc.uid}`;
+    errorMessage.value = `${name} 登录失败：${detail || '凭据已过期'}。请重新授权或删除该账户。`;
   } finally {
     switchingUid.value = '';
   }
 }
 
 const switchingUid = ref('');
+
+function handleReauthorizeAccount(acc: any) {
+  expiredUid.value = String(acc.uid);
+  errorMessage.value = '';
+  successMessage.value = `请在官方窗口重新登录 ${acc.username || `UID ${acc.uid}`}，完成后会自动更新凭据。`;
+  handleOpenWebAuth();
+}
+
+function handleRemoveSavedAccount(acc: any) {
+  if (removingUid.value || switchingUid.value) return;
+  pendingRemovalAccount.value = acc;
+}
+
+function cancelRemoveSavedAccount() {
+  if (!removingUid.value) pendingRemovalAccount.value = null;
+}
+
+async function confirmRemoveSavedAccount() {
+  const acc = pendingRemovalAccount.value;
+  if (!acc || removingUid.value || switchingUid.value) return;
+  const name = acc.username || `UID ${acc.uid}`;
+  removingUid.value = String(acc.uid);
+  errorMessage.value = '';
+  try {
+    await authStore.removeAccount(String(acc.uid));
+    if (expiredUid.value === String(acc.uid)) expiredUid.value = '';
+    pendingRemovalAccount.value = null;
+    successMessage.value = `已删除本地账户：${name}`;
+  } catch (err: any) {
+    const detail = typeof err === 'string' ? err : err?.message;
+    errorMessage.value = detail || '删除账户失败，请稍后重试';
+  } finally {
+    removingUid.value = '';
+  }
+}
 
 watch(
   () => authStore.isLoginModalOpen,
@@ -277,6 +371,9 @@ watch(
       successMessage.value = '';
       isRebinding.value = false;
       debugStatus.value = '';
+      expiredUid.value = '';
+      removingUid.value = '';
+      pendingRemovalAccount.value = null;
       authStore.loadAccounts();
     }
   }
@@ -289,6 +386,7 @@ function switchTab(tab: 'cookie') {
 }
 
 function handleClose() {
+  pendingRemovalAccount.value = null;
   authStore.closeLoginModal();
 }
 
@@ -319,6 +417,7 @@ async function handleLogout() {
   successMessage.value = '';
   errorMessage.value = '';
   isRebinding.value = false;
+  authStore.closeLoginModal();
 }
 
 onUnmounted(() => {
@@ -505,6 +604,11 @@ onUnmounted(() => {
   background-color: var(--surface-hover);
 }
 
+.account-switch-item.is-expired {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border-light));
+  background-color: color-mix(in srgb, var(--danger) 6%, var(--background));
+}
+
 .switch-item-info {
   flex: 1;
   min-width: 0;
@@ -525,6 +629,54 @@ onUnmounted(() => {
 .switch-item-uid {
   font-size: var(--font-size-caption);
   color: var(--text-tertiary);
+}
+
+.expired-label {
+  margin-top: 2px;
+  color: var(--danger);
+  font-size: var(--font-size-caption);
+}
+
+.saved-account-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.saved-account-login,
+.saved-account-remove {
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.saved-account-login {
+  min-width: 64px;
+  padding: 0 10px;
+}
+
+.saved-account-remove {
+  width: 30px;
+  color: var(--danger);
+}
+
+.saved-account-login:hover:not(:disabled) {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+.saved-account-remove:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+
+.saved-account-login:disabled,
+.saved-account-remove:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .switch-icon {

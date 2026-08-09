@@ -91,6 +91,16 @@
               <i class="fa-regular fa-comment"></i>
               回复
             </button>
+            <button
+              v-if="isOwn(c)"
+              type="button"
+              class="comment-delete-btn"
+              aria-label="删除评论"
+              @click.stop="handleDeleteComment(c)"
+            >
+              <i class="fa-solid fa-trash-can"></i>
+              删除
+            </button>
           </div>
 
           <!-- 2. 带竖线的多层级楼中楼回复 -->
@@ -136,6 +146,16 @@
                     <i :class="[isLiked(sub) ? 'fa-solid fa-heart' : 'fa-regular fa-heart']"></i>
                     <span>{{ getLikeCount(sub) > 0 ? formatLikeCount(getLikeCount(sub)) : '赞' }}</span>
                   </button>
+                  <button
+                    v-if="isOwn(sub)"
+                    type="button"
+                    class="comment-delete-btn sub-delete-btn"
+                    aria-label="删除回复"
+                    @click.stop="handleDeleteSubReply(c, sub)"
+                  >
+                    <i class="fa-solid fa-trash-can"></i>
+                    删除
+                  </button>
                 </div>
               </div>
             </div>
@@ -172,6 +192,9 @@ import Button from '../ui/Button.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
 import { handleAnchorClick } from '../../utils/anchorClick';
+import { showToast } from '../../utils/toast';
+import { requestConfirmation } from '../../utils/confirm';
+import { getErrorMessage } from '../../utils/errors';
 
 const props = defineProps<{
   feedUid?: string | number;
@@ -184,6 +207,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'send-comment', text: string): void;
+  (e: 'delete-comment', id: string | number): void;
 }>();
 
 const authStore = useAuthStore();
@@ -191,6 +215,58 @@ const inputMsg = ref('');
 const sending = ref(false);
 const inputRef = ref<HTMLInputElement | null>(null);
 const replyTargetUser = ref('');
+
+const myUid = computed(() => (authStore.isLoggedIn ? String(authStore.user?.uid ?? '') : ''));
+
+function isOwn(item: any): boolean {
+  const uid = String(item?.uid ?? item?.userInfo?.uid ?? '');
+  return !!uid && !!myUid.value && uid === myUid.value;
+}
+
+async function handleDeleteComment(comment: any) {
+  const confirmed = await requestConfirmation({
+    title: '删除评论',
+    message: '确定要删除这条评论吗？',
+    confirmText: '删除',
+    danger: true
+  });
+  if (!confirmed) return;
+  try {
+    const res = await CoolapkTauriAPI.deleteReply(String(comment.id));
+    if (res && res.code === 200) {
+      showToast('评论已删除');
+      emit('delete-comment', comment.id);
+    } else {
+      showToast(res?.message || '删除评论失败', 'error');
+    }
+  } catch (err: any) {
+    showToast(getErrorMessage(err, '删除评论失败'), 'error');
+  }
+}
+
+async function handleDeleteSubReply(floor: any, sub: any) {
+  const confirmed = await requestConfirmation({
+    title: '删除回复',
+    message: '确定要删除这条回复吗？',
+    confirmText: '删除',
+    danger: true
+  });
+  if (!confirmed) return;
+  try {
+    const res = await CoolapkTauriAPI.deleteReply(String(sub.id));
+    if (res && res.code === 200) {
+      showToast('回复已删除');
+      const source = props.comments.find((c: any) => String(c.id) === String(floor.id));
+      if (source && Array.isArray(source.replyRows)) {
+        source.replyRows = source.replyRows.filter((r: any) => String(r.id) !== String(sub.id));
+      }
+    } else {
+      showToast(res?.message || '删除回复失败', 'error');
+    }
+  } catch (err: any) {
+    showToast(getErrorMessage(err, '删除回复失败'), 'error');
+  }
+}
 
 type LikeState = { liked: boolean; count: number };
 
@@ -572,6 +648,28 @@ function handleSend() {
 .comment-reply-btn:hover,
 .comment-like-btn.is-liked {
   color: var(--brand-primary);
+}
+
+.comment-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.comment-delete-btn:hover {
+  color: var(--danger);
+}
+
+.sub-delete-btn {
+  font-size: 0.7rem;
 }
 
 .comment-like-btn.is-liked i {

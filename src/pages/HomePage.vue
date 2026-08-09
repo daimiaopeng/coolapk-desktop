@@ -93,20 +93,51 @@
           </div>
         </div>
 
-        <!-- 动态列表与 Loading/Error/Empty 状态 -->
-        <div v-if="loading && feeds.length === 0" class="skeleton-padding">
+        <!-- 看看号 Tab (`dyh`) 专属：看看号卡片网格 -->
+        <div v-if="activeTab === 'dyh' && loading && feeds.length === 0" class="skeleton-padding">
           <FeedSkeleton :count="4" />
         </div>
 
-        <div v-else-if="error && feeds.length === 0" class="error-padding">
+        <div v-else-if="activeTab === 'dyh' && feeds.length === 0 && !loading" class="empty-padding">
+          <EmptyState title="暂无看看号" />
+        </div>
+
+        <div v-if="activeTab === 'dyh' && !loading" class="dyh-tab-grid">
+          <div
+            v-for="item in feeds"
+            :key="item.id"
+            class="dyh-tab-card"
+            @click="openDyh(item.id)"
+          >
+            <AppImage v-if="item.logo" :src="item.logo" fit="cover" image-class="dyh-tab-logo" />
+            <div v-else class="dyh-tab-logo-fallback"><i class="fas fa-building-columns"></i></div>
+            <div class="dyh-tab-info">
+              <strong class="dyh-tab-name">{{ item.title || item.dyhName }}</strong>
+              <span class="dyh-tab-desc">{{ item.description }}</span>
+              <span class="dyh-tab-follow"><i class="fas fa-user-plus"></i> {{ formatDyhCount(item.follownum) }} 关注</span>
+            </div>
+            <i class="fas fa-chevron-right dyh-tab-arrow"></i>
+          </div>
+          <div v-if="loadingMore" class="loading-more">
+            <LoadingState text="加载更多看看号..." />
+          </div>
+          <div v-else-if="noMore && feeds.length > 0" class="dyh-tab-no-more">没有更多看看号了</div>
+        </div>
+
+        <!-- 动态列表与 Loading/Error/Empty 状态 -->
+        <div v-if="activeTab !== 'dyh' && loading && feeds.length === 0" class="skeleton-padding">
+          <FeedSkeleton :count="4" />
+        </div>
+
+        <div v-else-if="activeTab !== 'dyh' && error && feeds.length === 0" class="error-padding">
           <ErrorState title="加载动态失败" :message="error" @retry="loadFeeds(true)" />
         </div>
 
-        <div v-else-if="feeds.length === 0" class="empty-padding">
+        <div v-else-if="activeTab !== 'dyh' && feeds.length === 0" class="empty-padding">
           <EmptyState title="暂无动态内容" />
         </div>
 
-        <div v-else class="feed-list-padding">
+        <div v-else-if="activeTab !== 'dyh'" class="feed-list-padding">
           <FeedCard
             v-for="(item, idx) in feeds"
             :key="item.id || idx"
@@ -114,6 +145,7 @@
             :rank-index="activeTab === 'hot' ? idx + 1 : undefined"
             :class="{ 'feed-card-focused': idx === navIndex }"
             :ref="(el) => setCardRef(el, idx)"
+            @deleted="handleFeedDeleted"
           />
 
           <div v-if="loadingMore" class="loading-more">
@@ -137,6 +169,7 @@ import RightSidebar from '../components/layout/RightSidebar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
+import AppImage from '../components/common/AppImage.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
 import { shouldHideFeed } from '../utils/feedFilter';
@@ -220,7 +253,7 @@ function syncTabFromRoute() {
       activeTab.value = 'index_v8';
       break;
     default:
-      if (!['hot', 'latest', 'digest', 'cool_picture', 'secondhand'].includes(activeTab.value)) {
+      if (!['hot', 'latest', 'digest', 'cool_picture', 'secondhand', 'pictures', 'dyh'].includes(activeTab.value)) {
         activeTab.value = 'index_v8';
       }
       break;
@@ -269,6 +302,8 @@ async function fetchTabApi(tab: string, p: number) {
     case 'digest': return await CoolapkTauriAPI.getDigestFeeds(p);
     case 'cool_picture': return await CoolapkTauriAPI.getCoolPictureRank(p);
     case 'secondhand': return await CoolapkTauriAPI.getSecondHandFeeds(p);
+    case 'pictures': return await CoolapkTauriAPI.getPictureList('', p);
+    case 'dyh': return await CoolapkTauriAPI.getDyhList(p);
     default: return await CoolapkTauriAPI.getIndexV8Feeds(p);
   }
 }
@@ -419,6 +454,20 @@ const onNavPrev = () => handleFeedNav(-1);
 const onRefreshFeeds = () => {
   if (!loading.value && !loadingMore.value) loadFeeds(true);
 };
+
+function handleFeedDeleted(id: string | number) {
+  feeds.value = feeds.value.filter((f: any) => String(f.id) !== String(id));
+}
+
+function formatDyhCount(n: any): string {
+  const num = Number(n) || 0;
+  if (num >= 10000) return (num / 10000).toFixed(1) + '万';
+  return String(num);
+}
+
+function openDyh(dyhId: any) {
+  if (dyhId) router.push(`/dyh/${String(dyhId)}`);
+}
 
 onMounted(() => {
   fetchTabConfig();
@@ -700,6 +749,100 @@ onUnmounted(() => {
   flex-direction: column;
   gap: var(--feed-card-gap, 12px);
   padding: var(--space-4);
+}
+
+.dyh-tab-grid {
+  padding: var(--space-4);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.dyh-tab-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 14px;
+  background: var(--background);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-default), transform var(--duration-fast) var(--ease-default);
+}
+
+.dyh-tab-card:hover {
+  border-color: var(--brand-primary);
+  transform: translateY(-2px);
+}
+
+.dyh-tab-logo {
+  width: 44px !important;
+  height: 44px !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 12px !important;
+  background: var(--brand-soft) !important;
+}
+
+.dyh-tab-logo-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: var(--brand-primary);
+  background: var(--brand-soft);
+  font-size: 18px;
+}
+
+.dyh-tab-info {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.dyh-tab-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dyh-tab-desc {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dyh-tab-follow {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.dyh-tab-follow i {
+  margin-right: 3px;
+  color: var(--brand-primary);
+}
+
+.dyh-tab-arrow {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.dyh-tab-no-more {
+  grid-column: 1 / -1;
+  padding: 12px 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
 }
 
 .feed-card-focused {

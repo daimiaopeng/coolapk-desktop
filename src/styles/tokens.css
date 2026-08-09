@@ -3,12 +3,12 @@
   /* 基础字号规范 */
   --font-family-base: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   --font-size-title-lg: 24px;
-  --font-size-title-md: 18px;
-  --font-size-title-sm: 16px;
-  --font-size-body: 15px;
-  --font-size-sub: 14px;
-  --font-size-caption: 12px;
-  --font-size-btn: 14px;
+  --font-size-title-md: 19px;
+  --font-size-title-sm: 17px;
+  --font-size-body: 15.5px;
+  --font-size-sub: 14.5px;
+  --font-size-caption: 13px;
+  --font-size-btn: 14.5px;
 
   --font-weight-regular: 400;
   --font-weight-medium: 550;

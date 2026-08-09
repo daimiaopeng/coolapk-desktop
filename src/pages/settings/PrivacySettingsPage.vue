@@ -21,7 +21,7 @@
           v-model="settingsStore.settings.deviceSignature"
           type="text"
           class="text-input"
-          placeholder="如：小米13 Pro"
+          placeholder="如：酷安桌面版"
           maxlength="40"
         />
       </div>

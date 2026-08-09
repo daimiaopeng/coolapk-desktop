@@ -53,6 +53,13 @@ onMounted(async () => {
       const data = result?.data || result || {};
       const currentUid = String(data.uid || data.id || '').trim();
       validated = Boolean(currentUid && currentUid !== '0' && currentUid !== '10000');
+      if (validated) {
+        await CoolapkTauriAPI.persistCurrentAccount(
+          currentUid,
+          data.username || data.displayUsername || '',
+          data.userAvatar || data.avatar || data.user_avatar || ''
+        );
+      }
     }
     statusText.value = validated ? '登录成功，正在同步会话...' : '未完成登录或凭据无效，请重新登录';
     if (!validated) {

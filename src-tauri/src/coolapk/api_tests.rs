@@ -12,7 +12,7 @@ fn clip(body: &str, n: usize) -> String {
 #[ignore]
 async fn probe_all_write_endpoints_http_method() {
     let client = CoolapkClient::new();
-    let token = client.auth.get_app_token().unwrap();
+    let token = client.get_token().unwrap();
 
     // 先获取一个真实 feed_id 和 reply_id
     let feed_id = match client.get_index_v8_feeds(1).await {
@@ -757,7 +757,7 @@ async fn probe_extra_endpoints_from_web() {
 #[ignore]
 async fn probe_more_endpoints_deep() {
     let client = CoolapkClient::new();
-    let token = client.auth.get_app_token().unwrap();
+    let token = client.get_token().unwrap();
 
     #[allow(clippy::type_complexity)]
     let cases: &[(&str, &str, &[(&str, String)])] = &[
@@ -904,7 +904,7 @@ async fn probe_more_endpoints_deep() {
 #[ignore]
 async fn probe_api2_and_static_endpoints() {
     let client = CoolapkClient::new();
-    let token = client.auth.get_app_token().unwrap();
+    let token = client.get_token().unwrap();
 
     // === api2.coolapk.com 专用路由 ===
     // Tab 初始化数据中 Api2.List2 指定这些端点走 api2路由
@@ -1033,7 +1033,7 @@ async fn probe_api2_and_static_endpoints() {
 #[ignore]
 async fn probe_undocumented_endpoints() {
     let client = CoolapkClient::new();
-    let token = client.auth.get_app_token().unwrap();
+    let token = client.get_token().unwrap();
 
     #[allow(clippy::type_complexity)]
     let cases: &[(&str, &str, &[(&str, String)])] = &[
@@ -1367,11 +1367,110 @@ async fn probe_uwp_collected_endpoints() {
     assert!(deprecated <= 2, "废弃接口过多，期望 <= 2，实际 {}", deprecated);
 }
 
+/// 探测新增功能候选接口（删除/编辑/转发/评论删除/APK 收藏等写接口）
+/// 未登录 GET 探测：返回 401"你还没有登录"= 接口存在且方法正确；
+/// "does not exists" / "API unsupported." = 接口不存在或已废弃。
+#[tokio::test]
+#[ignore]
+async fn probe_new_write_endpoints() {
+    let client = CoolapkClient::new();
+    let token = client.get_token().unwrap();
+
+    // 先获取一个真实 feed_id 和 reply_id
+    let feed_id = match client.get_index_v8_feeds(1).await {
+        Ok(f) => f["data"]
+            .as_array()
+            .and_then(|arr| arr.iter().find(|f| f.get("replynum").and_then(|v| v.as_u64()).unwrap_or(0) > 0))
+            .and_then(|f| f.get("id").and_then(|v| v.as_str()))
+            .map(String::from)
+            .unwrap_or_else(|| "73077541".to_string()),
+        Err(_) => "73077541".to_string(),
+    };
+
+    let reply_id = match client.get_feed_replies(&feed_id, 1).await {
+        Ok(r) => r["data"]
+            .as_array()
+            .and_then(|arr| arr.first())
+            .and_then(|r| r.get("id").and_then(|v| v.as_str()))
+            .map(String::from)
+            .unwrap_or_else(|| "601225687".to_string()),
+        Err(_) => "601225687".to_string(),
+    };
+
+    #[allow(clippy::type_complexity)]
+    let cases: &[(&str, &str, &[(&str, String)])] = &[
+        // === 动态删除/编辑 ===
+        ("删除动态", "/v6/feed/deleteFeed", &[("id", feed_id.clone())]),
+        ("编辑动态", "/v6/feed/updateFeed", &[("id", feed_id.clone()), ("message", "api-probe-test".to_string())]),
+        ("编辑动态(备选)", "/v6/feed/editFeed", &[("id", feed_id.clone()), ("message", "api-probe-test".to_string())]),
+        ("删除动态(备选)", "/v6/feed/delete", &[("id", feed_id.clone())]),
+        ("动态删除回复", "/v6/feed/deleteReply", &[("id", reply_id.clone())]),
+        ("回复删除", "/v6/reply/delete", &[("id", reply_id.clone())]),
+        ("回复删除(备选)", "/v6/reply/deleteReply", &[("id", reply_id.clone())]),
+        ("转发动态", "/v6/feed/forward", &[("id", feed_id.clone()), ("message", "api-probe-test".to_string())]),
+        ("转发动态(备选)", "/v6/feed/repost", &[("id", feed_id.clone()), ("message", "api-probe-test".to_string())]),
+        ("转发动态(createFeed)", "/v6/feed/createFeed", &[("fid", feed_id.clone()), ("message", "api-probe-test".to_string())]),
+        ("收藏应用", "/v6/apk/favorite", &[("id", "com.coolapk.market".to_string())]),
+        ("取消收藏应用", "/v6/apk/unFavorite", &[("id", "com.coolapk.market".to_string())]),
+        ("收藏应用(targetType)", "/v6/apk/favorite", &[("id", "com.coolapk.market".to_string()), ("targetType", "apk".to_string())]),
+        ("回答问题", "/v6/question/answer", &[("id", feed_id.clone()), ("message", "api-probe-test".to_string())]),
+        ("点赞回复", "/v6/reply/like", &[("id", reply_id.clone())]),
+        ("取消点赞回复", "/v6/reply/unlike", &[("id", reply_id.clone())]),
+    ];
+
+    println!("\n======== 新增功能候选写接口探测 ({}) ========", cases.len());
+    println!("feed_id={}, reply_id={}\n", feed_id, reply_id);
+
+    let mut exist = 0;
+    let mut deprecated = 0;
+    let mut unknown = 0;
+
+    for (name, path, params) in cases {
+        let url = format!("https://api.coolapk.com{path}");
+        let res = client
+            .client
+            .get(&url)
+            .header("X-App-Token", token.clone())
+            .header("X-Requested-With", "XMLHttpRequest")
+            .query(params)
+            .send()
+            .await;
+
+        match res {
+            Ok(r) => {
+                let status = r.status();
+                let body = r.text().await.unwrap_or_default();
+                let clip_body = clip(&body, 100);
+                if status == 401 || clip_body.contains("你还没有登录") || clip_body.contains("请先登录") {
+                    println!("  [  ✓ 需登录 ] {name:24} HTTP {status} (接口存在，方法正确)");
+                    exist += 1;
+                } else if clip_body.contains("does not exists") || clip_body.contains("API unsupported") || clip_body.contains("已下线") {
+                    println!("  [  ✗ 已废弃 ] {name:24} HTTP {status}: {}", clip_body);
+                    deprecated += 1;
+                } else if status == 200 {
+                    let msg = clip_body;
+                    println!("  [  ? 返回200 ] {name:24} {msg}");
+                    exist += 1;
+                } else {
+                    println!("  [  ? 其他 ] {name:24} HTTP {status}: {}", clip_body);
+                    unknown += 1;
+                }
+            }
+            Err(e) => {
+                println!("  [  ✗ 网络错误 ] {name:24} {}", e);
+                unknown += 1;
+            }
+        }
+    }
+
+    println!("\n新增候选写接口 ({cases_len}): 存在 {exist} · 废弃 {deprecated} · 其他 {unknown}", cases_len = cases.len());
+}
+
 #[tokio::test]
 #[ignore]
 async fn probe_hot_reply_target_row() {
     let client = CoolapkClient::new();
-    let token = client.auth.get_app_token().unwrap();
+    let token = client.get_token().unwrap();
     for feed_id in ["73077541", "72984525"] {
         let url = format!(
             "https://api.coolapk.com/v6/feed/hotReplyList?id={}&page=1&discussMode=1",
@@ -1419,6 +1518,41 @@ async fn probe_hot_reply_target_row() {
             }
         } else {
             println!("  [hotReply] {} no data: {}", feed_id, clip(&body, 150));
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn probe_dyh_square_endpoints() {
+    let client = CoolapkClient::new();
+    let token = client.auth.get_app_token().unwrap();
+    let cases: &[(&str, &str, &[(&str, String)])] = &[
+        ("看看号发现A", "/v6/page/dataList", &[("url", "/user/dyhSubscribe".to_string()), ("page", "1".to_string())]),
+        ("看看号发现B", "/v6/page/dataList", &[("url", "#/dyhSquare".to_string()), ("page", "1".to_string())]),
+        ("看看号发现C", "/v6/page/dataList", &[("url", "/page?url=/user/dyhSubscribe".to_string()), ("page", "1".to_string())]),
+        ("看看号列表D", "/v6/dyh/list", &[("page", "1".to_string())]),
+        ("看看号列表E", "/v6/dyhArticle/list", &[("page", "1".to_string())]),
+    ];
+    for (name, path, params) in cases {
+        let url = format!("https://api.coolapk.com{path}");
+        let res = client.client.get(&url)
+            .header("X-App-Token", token.clone())
+            .header("X-Requested-With", "XMLHttpRequest")
+            .query(params).send().await;
+        match res {
+            Ok(r) => {
+                let body = r.text().await.unwrap_or_default();
+                let clip = body.chars().take(120).collect::<String>();
+                if body.contains("does not exists") || body.contains("API unsupported") {
+                    println!("  [废弃] {name}: {}", clip);
+                } else if body.contains("登录") || r.status() == 401 {
+                    println!("  [需登录] {name}");
+                } else {
+                    println!("  [{status}] {name}: {}", r.status(), clip);
+                }
+            }
+            Err(e) => println!("  [网络错误] {name}: {e}"),
         }
     }
 }

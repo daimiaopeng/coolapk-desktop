@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container custom-scrollbar" @scroll="handleDiscussionsScroll">
+  <div class="page-container custom-scrollbar" @scroll="handlePageScroll">
     <!-- 顶栏返回工具条 -->
     <div class="detail-nav-bar">
       <button class="back-btn" @click="handleGoBack">
@@ -77,6 +77,15 @@
           >
             {{ isFollowed ? '已关注' : '关注应用' }}
           </AppButton>
+          <AppButton
+            :variant="isFavorited ? 'secondary' : 'soft'"
+            size="md"
+            :icon="isFavorited ? 'fas fa-star' : 'far fa-star'"
+            :loading="favoriteLoading"
+            @click="toggleFavorite"
+          >
+            {{ isFavorited ? '已收藏' : '收藏应用' }}
+          </AppButton>
         </div>
       </div>
 
@@ -129,6 +138,131 @@
           <h3 class="section-title"><i class="fas fa-clock-rotate-left icon"></i> 新版更新日志</h3>
           <div class="changelog-body" v-html="formattedChangeLog" @click="handleAnchorClick"></div>
         </div>
+
+        <!-- 相关推荐 -->
+        <div class="section-card">
+          <h3 class="section-title"><i class="fas fa-thumbs-up icon"></i> 相关推荐</h3>
+
+          <div v-if="recommendLoading" class="loading-wrapper">
+            <LoadingState text="正在加载推荐..." />
+          </div>
+
+          <div v-else-if="recommendError" class="error-wrapper">
+            <ErrorState title="加载推荐失败" :message="recommendError" @retry="loadRecommendations()" />
+          </div>
+
+          <EmptyState v-else-if="recommendList.length === 0" title="暂无相关推荐" description="暂时没有更多相关应用推荐" />
+
+          <div v-else class="recommend-grid">
+            <div
+              v-for="app in recommendList"
+              :key="app.packageName || app.title || app.appName"
+              class="recommend-card"
+              @click="goApp(app)"
+            >
+              <AppImage :src="recommendIcon(app)" alt="App Logo" image-class="recommend-icon" />
+              <div class="recommend-info">
+                <span class="recommend-name">{{ recommendName(app) }}</span>
+                <span v-if="recommendMeta(app)" class="recommend-meta">{{ recommendMeta(app) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Tab: 版本历史 -->
+      <template v-if="activeDetailTab === 'versions'">
+        <div v-if="versionsLoading && versionsList.length === 0" class="loading-wrapper">
+          <LoadingState text="正在加载版本历史..." />
+        </div>
+
+        <div v-else-if="versionsError && versionsList.length === 0" class="error-wrapper">
+          <ErrorState title="加载版本历史失败" :message="versionsError" @retry="loadVersions()" />
+        </div>
+
+        <div v-else-if="versionsList.length === 0" class="empty-wrapper">
+          <EmptyState title="暂无版本记录" description="该应用暂时没有历史版本信息" />
+        </div>
+
+        <div v-else class="versions-list">
+          <div v-for="(ver, idx) in versionsList" :key="idx" class="version-card">
+            <div class="version-card-main">
+              <span class="version-name">{{ versionName(ver) }}</span>
+              <span v-if="versionSize(ver)" class="version-size">{{ versionSize(ver) }}</span>
+            </div>
+            <span v-if="versionDate(ver)" class="version-date">{{ versionDate(ver) }}</span>
+            <div v-if="versionLog(ver)" class="version-log">{{ versionLog(ver) }}</div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Tab: 发现者 -->
+      <template v-if="activeDetailTab === 'discoverers'">
+        <div v-if="discoverersLoading && discoverersList.length === 0" class="loading-wrapper">
+          <LoadingState text="正在加载发现者..." />
+        </div>
+
+        <div v-else-if="discoverersError && discoverersList.length === 0" class="error-wrapper">
+          <ErrorState title="加载发现者失败" :message="discoverersError" @retry="loadDiscoverers(true)" />
+        </div>
+
+        <div v-else-if="discoverersList.length === 0" class="empty-wrapper">
+          <EmptyState title="暂无发现者" description="还没有人发现过该应用" />
+        </div>
+
+        <div v-else class="discoverer-list">
+          <div
+            v-for="user in discoverersList"
+            :key="user.uid || user.username"
+            class="discoverer-item"
+            @click="goUser(user)"
+          >
+            <AppImage :src="user.userAvatar || ''" alt="头像" image-class="discoverer-avatar" />
+            <span class="discoverer-name">{{ user.username || user.uid || '酷安用户' }}</span>
+            <i class="fas fa-chevron-right discoverer-arrow"></i>
+          </div>
+
+          <div class="pagination-footer">
+            <LoadingState v-if="discoverersLoading && discoverersPage > 1" text="加载更多中..." />
+            <div v-else-if="discoverersNoMore" class="no-more">没有更多发现者了</div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Tab: 礼包 -->
+      <template v-if="activeDetailTab === 'gifts'">
+        <div v-if="giftsLoading && giftsList.length === 0" class="loading-wrapper">
+          <LoadingState text="正在加载礼包..." />
+        </div>
+
+        <div v-else-if="giftsError && giftsList.length === 0" class="error-wrapper">
+          <ErrorState title="加载礼包失败" :message="giftsError" @retry="loadGifts(true)" />
+        </div>
+
+        <div v-else-if="giftsList.length === 0" class="empty-wrapper">
+          <EmptyState title="暂无礼包" description="该应用暂时没有可领取的礼包" />
+        </div>
+
+        <div v-else class="gift-list">
+          <div v-for="gift in giftsList" :key="gift.id || gift.title || gift.giftName || gift.name" class="gift-card">
+            <AppImage v-if="giftLogo(gift)" :src="giftLogo(gift)" alt="礼包图片" image-class="gift-logo" />
+            <div class="gift-info">
+              <span class="gift-title">{{ giftTitle(gift) }}</span>
+              <span v-if="giftDesc(gift)" class="gift-desc">{{ giftDesc(gift) }}</span>
+            </div>
+            <button
+              :class="['gift-btn', { 'is-disabled': !giftLink(gift) }]"
+              @click="handleGiftClaim(gift)"
+            >
+              {{ giftLink(gift) ? '领取' : '已领取' }}
+            </button>
+          </div>
+
+          <div class="pagination-footer">
+            <LoadingState v-if="giftsLoading && giftsPage > 1" text="加载更多中..." />
+            <div v-else-if="giftsNoMore" class="no-more">没有更多礼包了</div>
+          </div>
+        </div>
       </template>
 
       <!-- Tab: 讨论 -->
@@ -146,7 +280,7 @@
         </div>
 
         <div v-else class="feed-list">
-          <FeedCard v-for="item in discussionFeeds" :key="item.id" :feed="item" />
+          <FeedCard v-for="item in discussionFeeds" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
 
           <div class="pagination-footer">
             <LoadingState v-if="discussionsLoading && discussionsPage > 1" text="加载更多中..." />
@@ -163,6 +297,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAppStore } from '../stores/app';
+import { useAuthStore } from '../stores/auth';
 import AppButton from '../components/common/AppButton.vue';
 import AppImage from '../components/common/AppImage.vue';
 import AppDialog from '../components/common/AppDialog.vue';
@@ -176,12 +311,15 @@ import { handleAnchorClick } from '../utils/anchorClick';
 const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
+const authStore = useAuthStore();
 const packageName = computed(() => (route.params.packageName as string) || '');
 
 
 const loading = ref(false);
 const appInfo = ref<any>(null);
 const isFollowed = ref(false);
+const isFavorited = ref(false);
+const favoriteLoading = ref(false);
 
 const downloadLoading = ref(false);
 const qrLoading = ref(false);
@@ -191,14 +329,41 @@ const qrImageUrl = ref('');
 const activeDetailTab = ref('detail');
 const detailTabs = [
   { key: 'detail', label: '应用详情' },
+  { key: 'versions', label: '版本历史' },
+  { key: 'discoverers', label: '发现者' },
   { key: 'discussions', label: '讨论' },
+  { key: 'gifts', label: '礼包' },
 ];
 
 const discussionFeeds = ref<any[]>([]);
+
+function handleFeedDeleted(id: string | number) {
+  discussionFeeds.value = discussionFeeds.value.filter((f: any) => String(f.id) !== String(id));
+}
 const discussionsPage = ref(1);
 const discussionsLoading = ref(false);
 const discussionsNoMore = ref(false);
 const discussionsError = ref('');
+
+const versionsList = ref<any[]>([]);
+const versionsLoading = ref(false);
+const versionsError = ref('');
+
+const discoverersList = ref<any[]>([]);
+const discoverersPage = ref(1);
+const discoverersLoading = ref(false);
+const discoverersNoMore = ref(false);
+const discoverersError = ref('');
+
+const giftsList = ref<any[]>([]);
+const giftsPage = ref(1);
+const giftsLoading = ref(false);
+const giftsNoMore = ref(false);
+const giftsError = ref('');
+
+const recommendList = ref<any[]>([]);
+const recommendLoading = ref(false);
+const recommendError = ref('');
 
 const logoUrl = computed(() => appInfo.value?.apkRomIcon || appInfo.value?.logo || appInfo.value?.icon || '');
 const appTitle = computed(() => appInfo.value?.title || appInfo.value?.shorttitle || packageName.value);
@@ -247,6 +412,9 @@ async function fetchAppDetail() {
     const data = res?.data || res;
     if (data) {
       appInfo.value = data;
+      if (recommendList.value.length === 0 && !recommendLoading.value) {
+        loadRecommendations();
+      }
     }
   } catch (err) {
     console.warn('App detail fetch error', err);
@@ -290,20 +458,136 @@ async function loadDiscussions(reset: boolean = false) {
   }
 }
 
+async function loadVersions() {
+  if (!packageName.value || versionsLoading.value) return;
+  versionsLoading.value = true;
+  versionsError.value = '';
+  try {
+    const res = await CoolapkTauriAPI.getDownloadVersionList(packageName.value);
+    const data = res?.data || [];
+    versionsList.value = Array.isArray(data) ? data : [];
+  } catch (err: any) {
+    versionsError.value = err?.message || '加载版本历史失败';
+  } finally {
+    versionsLoading.value = false;
+  }
+}
+
+async function loadDiscoverers(reset: boolean = false) {
+  if (!packageName.value || discoverersLoading.value) return;
+  if (!reset && discoverersNoMore.value) return;
+
+  if (reset) {
+    discoverersPage.value = 1;
+    discoverersNoMore.value = false;
+    discoverersList.value = [];
+    discoverersError.value = '';
+  }
+
+  discoverersLoading.value = true;
+
+  try {
+    const res = await CoolapkTauriAPI.getApkDiscoverers(packageName.value, discoverersPage.value);
+    const data = res?.data || [];
+    const items = Array.isArray(data) ? data : [];
+
+    if (items.length === 0) {
+      discoverersNoMore.value = true;
+    } else {
+      if (reset) {
+        discoverersList.value = items;
+      } else {
+        discoverersList.value.push(...items);
+      }
+      discoverersPage.value++;
+    }
+  } catch (err: any) {
+    discoverersError.value = err?.message || '加载发现者失败';
+  } finally {
+    discoverersLoading.value = false;
+  }
+}
+
+async function loadGifts(reset: boolean = false) {
+  if (!packageName.value || giftsLoading.value) return;
+  if (!reset && giftsNoMore.value) return;
+
+  if (reset) {
+    giftsPage.value = 1;
+    giftsNoMore.value = false;
+    giftsList.value = [];
+    giftsError.value = '';
+  }
+
+  giftsLoading.value = true;
+
+  try {
+    const res = await CoolapkTauriAPI.getApkGiftList(packageName.value, giftsPage.value);
+    const data = res?.data || [];
+    const items = Array.isArray(data) ? data : [];
+
+    if (items.length === 0) {
+      giftsNoMore.value = true;
+    } else {
+      if (reset) {
+        giftsList.value = items;
+      } else {
+        giftsList.value.push(...items);
+      }
+      giftsPage.value++;
+    }
+  } catch (err: any) {
+    giftsError.value = err?.message || '加载礼包失败';
+  } finally {
+    giftsLoading.value = false;
+  }
+}
+
+async function loadRecommendations() {
+  if (recommendLoading.value) return;
+  recommendLoading.value = true;
+  recommendError.value = '';
+  try {
+    const res = await CoolapkTauriAPI.getApkRecommendList('1', '推荐', 1);
+    const data = res?.data || [];
+    const items = Array.isArray(data) ? data : [];
+    recommendList.value = items.filter((item: any) => item.packageName || item.title || item.appName);
+  } catch (err: any) {
+    recommendError.value = err?.message || '加载推荐失败';
+  } finally {
+    recommendLoading.value = false;
+  }
+}
+
 function selectDetailTab(key: string) {
   activeDetailTab.value = key;
   if (key === 'discussions' && discussionFeeds.value.length === 0) {
     loadDiscussions(true);
+  } else if (key === 'versions' && versionsList.value.length === 0) {
+    loadVersions();
+  } else if (key === 'discoverers' && discoverersList.value.length === 0) {
+    loadDiscoverers(true);
+  } else if (key === 'gifts' && giftsList.value.length === 0) {
+    loadGifts(true);
   }
 }
 
-function handleDiscussionsScroll(e: Event) {
-  if (activeDetailTab.value !== 'discussions') return;
+function handlePageScroll(e: Event) {
   const el = e.target as HTMLElement;
   if (!el) return;
   if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
-    if (!discussionsLoading.value && !discussionsNoMore.value) {
-      loadDiscussions(false);
+    if (activeDetailTab.value === 'discussions') {
+      if (!discussionsLoading.value && !discussionsNoMore.value) {
+        loadDiscussions(false);
+      }
+    } else if (activeDetailTab.value === 'discoverers') {
+      if (!discoverersLoading.value && !discoverersNoMore.value) {
+        loadDiscoverers(false);
+      }
+    } else if (activeDetailTab.value === 'gifts') {
+      if (!giftsLoading.value && !giftsNoMore.value) {
+        loadGifts(false);
+      }
     }
   }
 }
@@ -408,8 +692,106 @@ async function handleCheckUpdate() {
   }
 }
 
+async function toggleFavorite() {
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  if (favoriteLoading.value || !packageName.value) return;
+
+  const prev = isFavorited.value;
+  isFavorited.value = !prev;
+  favoriteLoading.value = true;
+
+  try {
+    if (prev) {
+      await CoolapkTauriAPI.unfavoriteApk(packageName.value);
+    } else {
+      await CoolapkTauriAPI.favoriteApk(packageName.value);
+    }
+  } catch (err: any) {
+    isFavorited.value = prev;
+    console.error('Toggle favorite failed', err);
+    alert(`收藏操作失败：${err?.message || '请检查网络或登录状态'}`);
+  } finally {
+    favoriteLoading.value = false;
+  }
+}
+
 function toggleFollow() {
   isFollowed.value = !isFollowed.value;
+}
+
+function versionName(ver: any): string {
+  return ver?.versionName || ver?.version_name || ver?.apkversionname || ver?.version || '未知版本';
+}
+
+function versionSize(ver: any): string {
+  return ver?.versionSize || ver?.apkSizeFormatted || ver?.apksize || ver?.size || '';
+}
+
+function versionDate(ver: any): string {
+  const raw = ver?.versionDate || ver?.version_date || ver?.updateTime || ver?.lastupdate;
+  if (typeof raw === 'number') {
+    const d = new Date(raw * 1000);
+    if (!isNaN(d.getTime())) {
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+  }
+  return raw || '';
+}
+
+function versionLog(ver: any): string {
+  return ver?.changeLog || ver?.changelog || ver?.title || ver?.message || '';
+}
+
+function recommendIcon(app: any): string {
+  return app?.logo || app?.apkRomIcon || app?.icon || app?.pic || 'https://c2.coolapk.com/coolmarket/apk/default_avatar.png';
+}
+
+function recommendName(app: any): string {
+  return app?.appName || app?.title || app?.shorttitle || '推荐应用';
+}
+
+function recommendMeta(app: any): string {
+  return app?.apkSizeFormatted || app?.apkSize || app?.size || app?.downCountFormatted || app?.downCount || '';
+}
+
+function goApp(app: any) {
+  const pkg = app?.packageName || app?.id || app?.appId;
+  if (pkg) {
+    router.push(`/app/${pkg}`);
+  }
+}
+
+function goUser(user: any) {
+  const uid = user?.uid || user?.uidStr;
+  if (uid) {
+    router.push(`/user/${uid}`);
+  }
+}
+
+function giftLogo(gift: any): string {
+  return gift?.logo || gift?.pic || gift?.icon || gift?.giftPic || '';
+}
+
+function giftTitle(gift: any): string {
+  return gift?.title || gift?.giftName || gift?.name || '酷安礼包';
+}
+
+function giftDesc(gift: any): string {
+  return gift?.description || gift?.desc || gift?.content || '';
+}
+
+function giftLink(gift: any): string {
+  return gift?.url || gift?.link || gift?.jumpUrl || gift?.apkUrl || '';
+}
+
+function handleGiftClaim(gift: any) {
+  const link = giftLink(gift);
+  if (!link) return;
+  CoolapkTauriAPI.openUrl(link, 'system');
 }
 
 function handleGoBack() {
@@ -426,6 +808,23 @@ watch(packageName, () => {
   discussionsPage.value = 1;
   discussionsNoMore.value = false;
   discussionsError.value = '';
+  versionsList.value = [];
+  versionsLoading.value = false;
+  versionsError.value = '';
+  discoverersList.value = [];
+  discoverersPage.value = 1;
+  discoverersLoading.value = false;
+  discoverersNoMore.value = false;
+  discoverersError.value = '';
+  giftsList.value = [];
+  giftsPage.value = 1;
+  giftsLoading.value = false;
+  giftsNoMore.value = false;
+  giftsError.value = '';
+  recommendList.value = [];
+  recommendLoading.value = false;
+  recommendError.value = '';
+  isFavorited.value = false;
   fetchAppDetail();
 });
 
@@ -712,5 +1111,233 @@ onMounted(() => fetchAppDetail());
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
   color: var(--text-secondary);
+}
+
+.recommend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-3);
+}
+
+.recommend-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.recommend-card:hover {
+  border-color: var(--brand-primary);
+  background-color: var(--surface-hover);
+  transform: translateY(-2px);
+}
+
+.recommend-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.recommend-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recommend-name {
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recommend-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.versions-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.version-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--space-4);
+}
+
+.version-card-main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.version-name {
+  font-size: var(--font-size-title-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--brand-primary);
+}
+
+.version-size {
+  font-size: var(--font-size-caption);
+  color: var(--text-tertiary);
+  background-color: var(--surface-hover);
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+}
+
+.version-date {
+  font-size: var(--font-size-caption);
+  color: var(--text-tertiary);
+}
+
+.version-log {
+  font-size: var(--font-size-sub);
+  line-height: var(--line-height-body);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.discoverer-list,
+.gift-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.discoverer-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.discoverer-item:hover {
+  border-color: var(--brand-primary);
+  background-color: var(--surface-hover);
+}
+
+.discoverer-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.discoverer-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.discoverer-arrow {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.gift-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--space-4);
+}
+
+.gift-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.gift-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.gift-title {
+  font-size: var(--font-size-title-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.gift-desc {
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-sub);
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.gift-btn {
+  flex-shrink: 0;
+  border: none;
+  padding: 6px 14px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  background-color: var(--brand-primary);
+  color: var(--text-inverse);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.gift-btn:hover:not(.is-disabled) {
+  background-color: var(--brand-hover);
+}
+
+.gift-btn.is-disabled {
+  background-color: var(--surface-hover);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+.pagination-footer {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2) 0;
+}
+
+.no-more {
+  font-size: var(--font-size-caption);
+  color: var(--text-tertiary);
 }
 </style>

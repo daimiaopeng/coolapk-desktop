@@ -26,6 +26,14 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoginModalOpen = ref(false);
   const accounts = ref<any[]>([]);
 
+  function clearFrontendAuthState() {
+    user.value = null;
+    isLoggedIn.value = false;
+    rawCookie.value = '';
+    localStorage.removeItem('coolapk_cookie');
+    localStorage.removeItem('coolapk_user');
+  }
+
   function getAvatarUrlByUid(uidStr: string): string {
     const s = String(uidStr).trim();
     if (!s || s === '10000') return '';
@@ -65,7 +73,8 @@ export const useAuthStore = defineStore('auth', () => {
     // 2. 发起 API 验证登录有效性并抓取个人资料
     let profile: UserProfile;
     try {
-      const data = await CoolapkTauriAPI.checkLoginStatus();
+      const res = await CoolapkTauriAPI.checkLoginStatus();
+      const data = res?.data || res || {};
       // 解析 API 返回的用户属性
       const uid = String(data.uid || data.id || '');
       const username = data.username || data.displayUsername || data.user_name || '酷友';
@@ -81,42 +90,20 @@ export const useAuthStore = defineStore('auth', () => {
       const fans = Number(data.fans ?? data.fansNum ?? data.fans_num ?? 0);
       const follow = Number(data.follow ?? data.followNum ?? data.follow_num ?? 0);
 
-      if (!uid) {
+      if (!uid || uid === '0' || uid === '10000') {
         throw new Error('无效的 Cookie 凭据，未能识别酷安 UID 账号身份');
       }
 
       profile = { uid, username, userAvatar, level, bio, likenum, fans, follow };
     } catch (err: any) {
-      // 只有显式声明了 uid=xxxx 数字 ID 并且带有有效 Session 时，才进行补充识别
-      const uidMatch = trimmed.match(/uid=(\d+)/i);
-      const nameMatch = trimmed.match(/username=([^;]+)/i);
-      let parsedUsername = '';
-      if (nameMatch && nameMatch[1]) {
-        try {
-          parsedUsername = decodeURIComponent(nameMatch[1]);
-        } catch (e) {
-          parsedUsername = nameMatch[1];
-        }
-      }
-
-      if (uidMatch && uidMatch[1] && uidMatch[1] !== '10000') {
-        const uid = uidMatch[1];
-        profile = {
-          uid: uid,
-          username: parsedUsername || `酷友_${uid.slice(-4)}`,
-          userAvatar: getAvatarUrlByUid(uid),
-          level: 1
-        };
-      } else {
-        await CoolapkTauriAPI.clearCookie();
-        throw new Error(err?.message || '凭据无效或已过期（服务端返回：登录信息有误），请登录酷安网页后拷贝完整的 Cookie');
-      }
+      await CoolapkTauriAPI.clearCookie();
+      throw new Error(err?.message || '凭据无效或已过期，请登录酷安网页后复制包含 SESSID 的完整 Cookie');
     }
 
     // 3. 校验成功，持久化并更新内存 Store
     // 安全说明：登录 Cookie 只写入 Rust 侧（accounts.json），
     // 绝不写入 localStorage —— 否则任一 XSS 都可直接窃取 SESSID
-    rawCookie.value = trimmed;
+    rawCookie.value = '';
     user.value = profile;
     isLoggedIn.value = true;
 
@@ -150,19 +137,29 @@ export const useAuthStore = defineStore('auth', () => {
    */
   async function logout() {
     try {
-      if (user.value?.uid) {
-        await CoolapkTauriAPI.removeAccount(String(user.value.uid));
-      } else {
-        await CoolapkTauriAPI.clearCookie();
-      }
+      await CoolapkTauriAPI.clearCookie();
     } catch (e) {
       console.warn('清除底层 Cookie 失败:', e);
     }
-    user.value = null;
-    isLoggedIn.value = false;
-    rawCookie.value = '';
-    localStorage.removeItem('coolapk_cookie');
-    localStorage.removeItem('coolapk_user');
+    clearFrontendAuthState();
+    await loadAccounts();
+  }
+
+  /**
+   * 从本地账户库中删除指定账户。删除当前账户时同时退出登录。
+   */
+  async function removeAccount(uid: string) {
+    const targetUid = String(uid);
+    const removingCurrent = String(user.value?.uid || '') === targetUid;
+    await CoolapkTauriAPI.removeAccount(targetUid);
+    if (removingCurrent) {
+      try {
+        await CoolapkTauriAPI.clearCookie();
+      } catch {
+        // remove_account 已经尽力清理底层会话
+      }
+      clearFrontendAuthState();
+    }
     await loadAccounts();
   }
 
@@ -214,15 +211,14 @@ export const useAuthStore = defineStore('auth', () => {
     } catch {
       // 忽略清理异常
     }
-    const savedUser = localStorage.getItem('coolapk_user');
-
     // 凭据由 Rust 侧在启动时自动载入（persist_cookie_to），
     // 这里直接校验 Rust 内存态中的 Cookie 即可恢复登录态
     try {
       const res = await CoolapkTauriAPI.checkLoginStatus();
       const data = res?.data || res || {};
-      if (data && (data.uid || data.username)) {
-        const uid = String(data.uid || user.value?.uid || '');
+      const resolvedUid = String(data?.uid || data?.id || '').trim();
+      if (data && resolvedUid && resolvedUid !== '0' && resolvedUid !== '10000') {
+        const uid = resolvedUid;
         let userAvatar = data.userAvatar || data.avatar || data.user_avatar || '';
         if (!userAvatar && uid) {
           userAvatar = getAvatarUrlByUid(uid);
@@ -240,24 +236,12 @@ export const useAuthStore = defineStore('auth', () => {
         localStorage.setItem('coolapk_user', JSON.stringify(user.value));
       }
     } catch (e) {
-      // 静默恢复失败：可能是未登录或网络异常，保留离线 UI 兜底
+      // 静默恢复失败：保持未登录，避免缓存资料伪装成有效会话
       console.warn('静默恢复并同步 Cookie 状态:', e);
     }
 
-    // 校验失败时，用缓存的用户资料兜底恢复界面（非敏感信息）
-    if (!isLoggedIn.value && savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        if (parsed && parsed.uid) {
-          if (!parsed.userAvatar) {
-            parsed.userAvatar = getAvatarUrlByUid(parsed.uid);
-          }
-          user.value = parsed;
-          isLoggedIn.value = true;
-        }
-      } catch {
-        // 忽略解析错误
-      }
+    if (!isLoggedIn.value) {
+      clearFrontendAuthState();
     }
   }
 
@@ -294,8 +278,9 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('coolapk_user', JSON.stringify(profile));
 
     const tokenStr = `SESSID=${sessid}; uid=${uid}`;
-    rawCookie.value = tokenStr;
     await CoolapkTauriAPI.saveCookie(tokenStr);
+    await saveProfileToAccounts(profile, tokenStr);
+    rawCookie.value = '';
 
     return profile;
   }
@@ -344,9 +329,9 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('coolapk_user', JSON.stringify(profile));
 
     const tokenStr = `SESSID=${sessid}; uid=${uid}`;
-    rawCookie.value = tokenStr;
     await CoolapkTauriAPI.saveCookie(tokenStr);
     await saveProfileToAccounts(profile, tokenStr);
+    rawCookie.value = '';
 
     return profile;
   }
@@ -404,11 +389,23 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
         isLoggedIn.value = true;
         updateProfileStats(data);
         localStorage.setItem('coolapk_user', JSON.stringify(user.value));
+        try {
+          await CoolapkTauriAPI.persistCurrentAccount(
+            uid,
+            user.value?.username || '',
+            user.value?.userAvatar || ''
+          );
+          await loadAccounts();
+        } catch (e) {
+          console.warn('持久化当前账户失败:', e);
+        }
         return true;
       }
+      clearFrontendAuthState();
       return false;
     } catch (e) {
       console.warn('checkStatus 校验失败:', e);
+      clearFrontendAuthState();
       return false;
     }
   }
@@ -485,6 +482,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
     initAuth,
     loadAccounts,
     loginAs,
+    removeAccount,
     updateProfileStats
   };
 });

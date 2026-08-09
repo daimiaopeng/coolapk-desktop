@@ -78,7 +78,7 @@
     </div>
 
     <div v-else class="feed-list">
-      <FeedCard v-for="item in productFeeds" :key="item.id || item.ttype + item.uid" :feed="item" />
+      <FeedCard v-for="item in productFeeds" :key="item.id || item.ttype + item.uid" :feed="item" @deleted="handleFeedDeleted" />
 
       <div class="pagination-footer">
         <LoadingState v-if="feedsLoading && page > 1" text="加载更多中..." />
@@ -108,6 +108,10 @@ const headerLoading = ref(false);
 const headerError = ref(false);
 
 const productFeeds = ref<any[]>([]);
+
+function handleFeedDeleted(id: string | number) {
+  productFeeds.value = productFeeds.value.filter((f: any) => String(f.id) !== String(id));
+}
 const feedsLoading = ref(false);
 const feedsError = ref(false);
 const page = ref(1);

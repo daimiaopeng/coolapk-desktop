@@ -17,6 +17,15 @@
             <span class="detail-username">{{ feedDetail.userInfo?.username || feedDetail.username || '酷友' }}</span>
             <span class="detail-dateline">{{ formatDateline(feedDetail.dateline) }}</span>
           </div>
+          <button
+            v-if="isMyFeedDetail"
+            class="detail-delete-btn"
+            title="删除动态"
+            aria-label="删除动态"
+            @click="handleDeleteFeed"
+          >
+            <i class="fas fa-trash-alt"></i>
+          </button>
         </div>
         <div v-if="feedDetail.title" class="feed-detail-title">{{ feedDetail.title }}</div>
         <div class="feed-detail-message" v-html="formatRichText(detailMessage || '（无文字内容）')" @click="handleAnchorClick"></div>
@@ -33,6 +42,7 @@
           :sharenum="actionInfo.sharenum"
           :user-action="actionInfo.userAction"
           @toggle-fav="toggleFavDetail"
+          @forward="openForward"
         />
       </div>
       <div v-else-if="detailError" class="detail-error-box">
@@ -69,6 +79,7 @@
             :key="getItemKey(item, i)"
             :feed="item"
             :rank-index="i"
+            @deleted="removeFromList"
           />
         </template>
         <template v-else-if="activeMoreTab === 'like'">
@@ -82,7 +93,7 @@
               <span class="like-user-name">{{ item.username || item.userInfo?.username || '酷友' }}</span>
               <span class="like-user-arrow"><i class="fas fa-chevron-right"></i></span>
             </div>
-            <FeedCard v-else :feed="item" :rank-index="i" />
+            <FeedCard v-else :feed="item" :rank-index="i" @deleted="removeFromList" />
           </template>
         </template>
         <template v-else-if="activeMoreTab === 'history'">
@@ -95,14 +106,14 @@
         <template v-else-if="activeMoreTab === 'question'">
           <EmptyState v-if="!questionList.length" icon="fas fa-comment-dots" title="暂无问答" />
           <template v-for="(item, i) in questionList" :key="getItemKey(item, i)">
-            <FeedCard v-if="isFeedLike(item)" :feed="item" :rank-index="i" />
+            <FeedCard v-if="isFeedLike(item)" :feed="item" :rank-index="i" @deleted="removeFromList" />
             <div v-else class="simple-row">{{ item?.message || item?.content || fallbackRaw(item) }}</div>
           </template>
         </template>
         <template v-else-if="activeMoreTab === 'vote'">
           <EmptyState v-if="!voteList.length" icon="fas fa-poll" title="暂无投票" />
           <template v-for="(item, i) in voteList" :key="getItemKey(item, i)">
-            <FeedCard v-if="isFeedLike(item)" :feed="item" :rank-index="i" />
+            <FeedCard v-if="isFeedLike(item)" :feed="item" :rank-index="i" @deleted="removeFromList" />
             <div v-else class="simple-row">{{ item?.message || item?.content || item?.option || fallbackRaw(item) }}</div>
           </template>
         </template>
@@ -116,8 +127,15 @@
         :normalize-img="normalizeImg"
         :format-rich-text="formatRichText"
         @send-comment="sendComment"
+        @delete-comment="removeComment"
       />
     </div>
+
+    <ForwardDialog
+      v-model:show="forwardOpen"
+      :feed="forwardSource"
+      @success="handleForwardSuccess"
+    />
   </AppDrawer>
 </template>
 
@@ -126,6 +144,7 @@ import { ref, watch, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppStore } from '../../stores/app';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import AppDrawer from '../common/AppDrawer.vue';
 import AppAvatar from '../common/AppAvatar.vue';
@@ -133,12 +152,17 @@ import LoadingState from '../common/LoadingState.vue';
 import FeedImageGrid from '../feed/FeedImageGrid.vue';
 import FeedActionBar from '../feed/FeedActionBar.vue';
 import FeedCommentSection from '../feed/FeedCommentSection.vue';
+import ForwardDialog from '../overlays/ForwardDialog.vue';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import { isFavorite, addFavorite, removeFavorite } from '../../utils/favoritesStore';
+import { showToast } from '../../utils/toast';
+import { requestConfirmation } from '../../utils/confirm';
+import { getErrorMessage } from '../../utils/errors';
 
 const appStore = useAppStore();
 const router = useRouter();
+const authStore = useAuthStore();
 
 const feedId = computed(() => appStore.activeCommentFeedId);
 const isOpen = computed(() => !!feedId.value);
@@ -173,6 +197,65 @@ function toggleFavDetail() {
     const f = feedDetail.value || {};
     addFavorite({ ...f, id: feedId.value, message: f.message || f.message_raw_output || f.title || '' } as any);
   }
+}
+
+const isMyFeedDetail = computed(() => {
+  if (!authStore.isLoggedIn || !authStore.user) return false;
+  const f = feedDetail.value;
+  const feedUid = String(f?.uid ?? f?.userInfo?.uid ?? '');
+  return !!feedUid && feedUid === String(authStore.user.uid);
+});
+
+const forwardOpen = ref(false);
+const forwardSource = computed(() => feedDetail.value || contextFeed.value || { id: feedId.value });
+
+function openForward() {
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  forwardOpen.value = true;
+}
+
+function handleForwardSuccess() {
+  if (feedDetail.value) {
+    feedDetail.value.sharenum = (Number(feedDetail.value.sharenum) || 0) + 1;
+  }
+}
+
+async function handleDeleteFeed() {
+  if (!feedId.value) return;
+  const confirmed = await requestConfirmation({
+    title: '删除动态',
+    message: '确定要删除这条动态吗？删除后无法恢复。',
+    confirmText: '删除',
+    danger: true
+  });
+  if (!confirmed) return;
+  try {
+    const res = await CoolapkTauriAPI.deleteFeed(String(feedId.value));
+    if (res && res.code === 200) {
+      showToast('动态已删除');
+      close();
+      window.dispatchEvent(new Event('refresh-feeds'));
+    } else {
+      showToast(res?.message || '删除动态失败', 'error');
+    }
+  } catch (err: any) {
+    showToast(getErrorMessage(err, '删除动态失败'), 'error');
+  }
+}
+
+function removeComment(id: string | number) {
+  comments.value = comments.value.filter((c: any) => String(c.id) !== String(id));
+}
+
+function removeFromList(id: string | number) {
+  const filter = (list: any[]) => list.filter((item: any) => String(item?.id) !== String(id));
+  forwardList.value = filter(forwardList.value);
+  likeList.value = filter(likeList.value);
+  questionList.value = filter(questionList.value);
+  voteList.value = filter(voteList.value);
 }
 
 // "更多" Tab：转发 / 点赞 / 修改历史 / 问答 / 投票（评论区保留在 comments tab）
@@ -535,6 +618,24 @@ watch(feedId, (newId) => {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.detail-delete-btn {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-control);
+  color: var(--text-tertiary);
+  font-size: 13px;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.detail-delete-btn:hover {
+  color: var(--danger);
+  background-color: var(--surface-hover);
 }
 
 .detail-author {

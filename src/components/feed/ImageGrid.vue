@@ -72,11 +72,6 @@ function handleImgError(e: Event) {
   width: 100%;
   height: 100%;
   display: block;
-  transition: transform 0.25s ease;
-}
-
-.img-item-wrapper:hover .feed-img {
-  transform: scale(1.03);
 }
 
 /* 1 张图：保持高尚美感，不压缩为小方块 */

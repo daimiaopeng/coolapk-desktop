@@ -113,7 +113,7 @@
           </div>
 
           <div v-else class="feed-list">
-            <FeedCard v-for="item in collectionItems" :key="item.id" :feed="item" />
+            <FeedCard v-for="item in collectionItems" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
             <div class="pagination-footer">
               <LoadingState v-if="collectionItemsLoadingMore" text="加载更多中..." />
               <div v-else-if="collectionItemsNoMore" class="no-more">没有更多内容了</div>
@@ -174,7 +174,7 @@
           </div>
 
           <div v-else class="feed-list">
-            <FeedCard v-for="item in cloudFeeds" :key="item.id" :feed="item" />
+            <FeedCard v-for="item in cloudFeeds" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
             <div class="pagination-footer">
               <LoadingState v-if="loadingMore" text="加载更多收藏中..." />
               <div v-else-if="noMore" class="no-more">没有更多收藏了</div>
@@ -222,6 +222,12 @@ const collectionFavnum = ref(0);
 const collectionFollownum = ref(0);
 const collectionItemNum = ref(0);
 const collectionFollowed = ref(false);
+
+function handleFeedDeleted(id: string | number) {
+  const filter = (list: any[]) => list.filter((f: any) => String(f.id) !== String(id));
+  cloudFeeds.value = filter(cloudFeeds.value);
+  collectionItems.value = filter(collectionItems.value);
+}
 const collectionLiked = ref(false);
 const collectionFollowPending = ref(false);
 const collectionLikePending = ref(false);

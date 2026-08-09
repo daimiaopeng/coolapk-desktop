@@ -11,18 +11,31 @@
         </div>
 
         <!-- 应用搜索框 -->
-        <div class="search-box">
-          <i class="fas fa-search search-icon"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="搜索指定应用或包名..."
-            class="search-input"
-            @keyup.enter="handleSearch"
-          />
-          <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
-            <i class="fas fa-times"></i>
-          </button>
+        <div class="search-group">
+          <div class="search-mode-switch" role="group" aria-label="搜索方式">
+            <button
+              v-for="mode in searchModes"
+              :key="mode.key"
+              :class="['mode-btn', { 'is-active': searchMode === mode.key }]"
+              @click="selectSearchMode(mode.key)"
+            >
+              <i :class="mode.icon"></i> {{ mode.label }}
+            </button>
+          </div>
+
+          <div class="search-box">
+            <i class="fas fa-search search-icon"></i>
+            <input
+              v-model="searchQuery"
+              type="text"
+              :placeholder="searchPlaceholder"
+              class="search-input"
+              @keyup.enter="handleSearch"
+            />
+            <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -101,9 +114,16 @@ import EmptyState from '../components/common/EmptyState.vue';
 const router = useRouter();
 const activeCat = ref('recommend');
 const searchQuery = ref('');
+const searchMode = ref('name');
 const isSearching = ref(false);
 const loading = ref(false);
 const apps = ref<any[]>([]);
+
+const searchModes = [
+  { key: 'name', label: '应用名', icon: 'fas fa-magnifying-glass' },
+  { key: 'developer', label: '开发者', icon: 'fas fa-user' },
+  { key: 'tag', label: '标签', icon: 'fas fa-tags' },
+];
 
 const categories = [
   { key: 'recommend', name: '推荐榜', icon: 'fas fa-fire' },
@@ -117,6 +137,12 @@ const categories = [
 const loadingText = computed(() => {
   if (isSearching.value) return `正在搜索 "${searchQuery.value}" 相关应用...`;
   return '正在探索酷安应用列表...';
+});
+
+const searchPlaceholder = computed(() => {
+  if (searchMode.value === 'developer') return '输入开发者名称搜索...';
+  if (searchMode.value === 'tag') return '输入标签名称搜索...';
+  return '搜索指定应用或包名...';
 });
 
 function getAppIcon(app: any): string {
@@ -135,7 +161,15 @@ async function loadApps() {
 
   try {
     if (isSearching.value && searchQuery.value.trim()) {
-      const res = await CoolapkTauriAPI.searchApks(searchQuery.value.trim(), 1);
+      const query = searchQuery.value.trim();
+      let res: any;
+      if (searchMode.value === 'developer') {
+        res = await CoolapkTauriAPI.searchApksByDeveloper(query, 1);
+      } else if (searchMode.value === 'tag') {
+        res = await CoolapkTauriAPI.searchApksByTag(query, '1', 1);
+      } else {
+        res = await CoolapkTauriAPI.searchApks(query, 1);
+      }
       const list = res?.data || res || [];
       if (Array.isArray(list)) {
         apps.value = list.filter((item: any) => item.title || item.packageName);
@@ -167,6 +201,14 @@ function selectCategory(catKey: string) {
 function handleSearch() {
   if (searchQuery.value.trim()) {
     isSearching.value = true;
+    loadApps();
+  }
+}
+
+function selectSearchMode(mode: string) {
+  if (searchMode.value === mode) return;
+  searchMode.value = mode;
+  if (isSearching.value && searchQuery.value.trim()) {
     loadApps();
   }
 }
@@ -235,6 +277,48 @@ onMounted(() => loadApps());
 .page-subtitle {
   font-size: var(--font-size-sub);
   color: var(--text-tertiary);
+}
+
+.search-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.search-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+}
+
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.mode-btn.is-active {
+  background-color: var(--surface);
+  color: var(--brand-primary);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .search-box {

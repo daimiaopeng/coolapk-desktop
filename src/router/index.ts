@@ -17,6 +17,8 @@ import AppDetailPage from '../pages/AppDetailPage.vue';
 import ProductPage from '../pages/ProductPage.vue';
 import DyhPage from '../pages/DyhPage.vue';
 import AlbumPage from '../pages/AlbumPage.vue';
+import AlbumsPage from '../pages/AlbumsPage.vue';
+import PicturesPage from '../pages/PicturesPage.vue';
 import HeadlinePage from '../pages/HeadlinePage.vue';
 import ReviewPage from '../pages/ReviewPage.vue';
 import SecondHandPage from '../pages/SecondHandPage.vue';
@@ -31,6 +33,7 @@ import AppearanceSettingsPage from '../pages/settings/AppearanceSettingsPage.vue
 import ShortcutSettingsPage from '../pages/settings/ShortcutSettingsPage.vue';
 import AboutSettingsPage from '../pages/settings/AboutSettingsPage.vue';
 import StartupSettingsPage from '../pages/settings/StartupSettingsPage.vue';
+import DeviceSettingsPage from '../pages/settings/DeviceSettingsPage.vue';
 
 import AuthCallbackView from '../pages/AuthCallbackView.vue';
 
@@ -58,6 +61,8 @@ const routes = [
   { path: '/product/:productId', name: 'Product', component: ProductPage },
   { path: '/dyh/:dyhId', name: 'Dyh', component: DyhPage },
   { path: '/album/:albumId', name: 'AlbumDetail', component: AlbumPage },
+  { path: '/albums', name: 'Albums', component: AlbumsPage },
+  { path: '/pictures', name: 'Pictures', component: PicturesPage },
   { path: '/headline', name: 'Headline', component: HeadlinePage },
   {
     path: '/settings',
@@ -72,6 +77,7 @@ const routes = [
       { path: 'appearance', component: AppearanceSettingsPage },
       { path: 'shortcuts', component: ShortcutSettingsPage },
       { path: 'startup', component: StartupSettingsPage },
+      { path: 'device', component: DeviceSettingsPage },
       { path: 'about', component: AboutSettingsPage },
     ]
   }

@@ -126,13 +126,20 @@
               <!-- 活跃状态与属性 Chip 标签组 -->
               <div class="app-chips-row">
                 <span class="chip-item chip-online">
+                  <span class="chip-status-dot"></span>
                   {{ formatLoginTime(profile.logintime) }}活跃
                 </span>
                 <span class="chip-item chip-glass" v-if="getGenderAgeTag(profile)">
+                  <i :class="getGenderIcon(profile)"></i>
                   {{ getGenderAgeTag(profile) }}
                 </span>
                 <span class="chip-item chip-glass" v-if="getAstroTag(profile)">
+                  <i class="fas fa-meteor chip-icon-astro"></i>
                   {{ getAstroTag(profile) }}
+                </span>
+                <span class="chip-item chip-glass" v-if="getCityTag(profile)">
+                  <i class="fas fa-location-dot chip-icon-location"></i>
+                  {{ getCityTag(profile) }}
                 </span>
               </div>
 
@@ -171,12 +178,25 @@
     <div class="tab-content-container">
       <!-- 1. 「主页」聚合视图 (关注的人 + 关注的板块 + 热门动态) -->
       <div v-if="activeTab === 'home'" class="home-aggregated-view">
+        <!-- 我的卡片配置 -->
+        <div v-if="isSelfUser && configEntries.length > 0" class="home-section-card">
+          <div class="section-header">
+            <h3 class="section-title">我的卡片配置</h3>
+          </div>
+          <div class="config-grid">
+            <div v-for="entry in configEntries" :key="entry.key" class="config-item">
+              <span class="config-key">{{ entry.key }}</span>
+              <span class="config-value">{{ entry.value }}</span>
+            </div>
+          </div>
+        </div>
         <!-- 模块 1：他/我关注的人 -->
         <div class="home-section-card">
           <div class="section-header">
             <h3 class="section-title">{{ isSelfUser ? '我关注的人' : '他关注的人' }}</h3>
             <i class="fas fa-chevron-right section-arrow"></i>
           </div>
+
           <div v-if="followNodes.length > 0" class="follow-nodes-row custom-scrollbar-hidden">
             <span class="node-chip node-chip-all">全部</span>
             <span v-for="node in followNodes" :key="node.id" class="node-chip">
@@ -217,6 +237,29 @@
           </div>
         </div>
 
+        <!-- 模块 2.5：常用设备（仅自己可见，点击一键应用到设备信息） -->
+        <div v-if="isSelfUser && commonDevices.length > 0" class="home-section-card">
+          <div class="section-header">
+            <h3 class="section-title">我的常用设备</h3>
+            <span class="section-sub-hint">点击设备一键应用到设置</span>
+          </div>
+          <div class="common-devices-grid">
+            <button
+              v-for="d in commonDevices"
+              :key="d.name"
+              class="common-device-item"
+              :disabled="d.applying"
+              @click="applyCommonDevice(d)"
+              :title="d.name"
+            >
+              <i class="fas fa-mobile-alt common-device-icon"></i>
+              <span class="common-device-name">{{ d.name }}</span>
+              <span class="common-device-count">{{ d.count }} 次</span>
+              <i v-if="d.applying" class="fas fa-spinner fa-spin common-device-spinner"></i>
+            </button>
+          </div>
+        </div>
+
         <!-- 模块 3：热门动态 -->
         <div class="home-section-card no-padding">
           <div class="section-header with-padding">
@@ -230,7 +273,7 @@
             <EmptyState title="暂无热门动态" />
           </div>
           <div v-else class="feed-list">
-            <FeedCard v-for="item in userFeeds.slice(0, 5)" :key="item.id" :feed="item" />
+            <FeedCard v-for="item in userFeeds.slice(0, 5)" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
           </div>
         </div>
       </div>
@@ -272,7 +315,7 @@
           <EmptyState title="暂无相关内容" />
         </div>
         <div v-else class="feed-list">
-          <FeedCard v-for="item in userFeeds" :key="item.id" :feed="item" />
+          <FeedCard v-for="item in userFeeds" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
         </div>
       </div>
 
@@ -299,10 +342,15 @@ import RatingCard from '../components/feed/RatingCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import { useAuthStore } from '../stores/auth';
+import { useSettingsStore } from '../stores/settings';
+import { findPresetByDeviceTitle } from '../utils/devicePresets';
+import { showToast } from '../utils/toast';
+import { requestConfirmation } from '../utils/confirm';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const settingsStore = useSettingsStore();
 
 const rawUid = computed(() => (route.params.uid as string) || 'me');
 
@@ -322,7 +370,23 @@ const followLoading = ref(false);
 
 const profile = ref<any>(null);
 const userFeeds = ref<any[]>([]);
+
+function handleFeedDeleted(id: string | number) {
+  userFeeds.value = userFeeds.value.filter((f: any) => String(f.id) !== String(id));
+}
 const followingUsers = ref<any[]>([]);
+const loadConfig = ref<any>(null);
+
+const configEntries = computed<{ key: string; value: string }[]>(() => {
+  const data = loadConfig.value;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return [];
+  return Object.entries(data)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => ({
+      key: k,
+      value: typeof v === 'object' ? JSON.stringify(v) : String(v)
+    }));
+});
 
 const activeTab = ref('home');
 const tabs = [
@@ -344,17 +408,70 @@ const ratingFilters = [
 const followTopics = ref<any[]>([]);
 const loadingTopics = ref(false);
 
+// ---- 常用设备：统计自己动态里的发帖设备（deviceTitle），点击一键应用到设备信息 ----
+interface CommonDevice {
+  name: string;
+  count: number;
+  applying: boolean;
+}
+
+const commonDevices = computed<CommonDevice[]>(() => {
+  if (!isSelfUser.value) return [];
+  const counter = new Map<string, number>();
+  for (const f of userFeeds.value) {
+    const title = (f && (f.deviceTitle || f.device_title)) as string | undefined;
+    if (title && typeof title === 'string' && title.trim()) {
+      const t = title.trim();
+      counter.set(t, (counter.get(t) || 0) + 1);
+    }
+  }
+  return [...counter.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([name, count]) => ({ name, count, applying: false }));
+});
+
+function applyCommonDevice(device: CommonDevice) {
+  const preset = findPresetByDeviceTitle(device.name);
+  if (!preset) {
+    showToast(`暂不支持机型模板：${device.name}`, 'error');
+    return;
+  }
+  device.applying = true;
+  const f = settingsStore.settings.deviceFingerprint;
+  f.customFingerprint = true;
+  f.model = preset.model;
+  f.androidVersion = preset.androidVersion;
+  f.build = preset.build;
+  showToast(`已应用设备：${preset.label}`);
+  setTimeout(() => {
+    device.applying = false;
+  }, 600);
+}
+
 const getFollowCount = (p: any) => p?.follow ?? p?.followNum ?? p?.follow_num ?? 0;
 const getFansCount = (p: any) => p?.fans ?? p?.fansNum ?? p?.fans_num ?? 0;
 const getLikeCount = (p: any) => p?.be_like_num ?? p?.likeNum ?? 0;
 
+const getGenderIcon = (p: any) => {
+  if (p?.gender === 1 || p?.gender === '1') return 'fas fa-mars gender-mars';
+  if (p?.gender === 0 || p?.gender === '0' || p?.gender === 2) return 'fas fa-venus gender-venus';
+  return 'fas fa-mars gender-mars';
+};
+
 const getGenderAgeTag = (p: any) => {
-  if (p?.gender === 1) return '♂95后';
-  if (p?.gender === 0) return '♀95后';
-  return '♂95后';
+  const ageGroup = p?.age_group || p?.ageGroup || '95后';
+  if (p?.gender === 1 || p?.gender === '1') return ageGroup;
+  if (p?.gender === 0 || p?.gender === '0' || p?.gender === 2) return ageGroup;
+  return ageGroup;
 };
 
 const getAstroTag = (p: any) => p?.astro || '天蝎座';
+
+const getCityTag = (p: any) => {
+  const city = p?.city || p?.province || p?.location;
+  return city ? String(city).trim() : '';
+};
 
 const getAvatarUrlByUid = (uid: any) => {
   try {
@@ -498,9 +615,20 @@ async function fetchTabFeeds(isRefresh: boolean = true) {
   }
 
   try {
-    const fetchType = activeTab.value === 'home' ? 'feed' : activeTab.value;
-    const feedsRes = await CoolapkTauriAPI.getUserFeeds(targetUid, userFeedsPage.value, fetchType);
-    const list = (feedsRes && feedsRes.data && Array.isArray(feedsRes.data)) ? feedsRes.data : [];
+    let list: any[] = [];
+    if (activeTab.value === 'rating') {
+      try {
+        const ratingRes = await CoolapkTauriAPI.getUserRatingList(targetUid, userFeedsPage.value);
+        list = (ratingRes && ratingRes.data && Array.isArray(ratingRes.data)) ? ratingRes.data : [];
+      } catch (ratingErr) {
+        console.warn('获取评分列表异常，回退到动态接口', ratingErr);
+      }
+    }
+    if (list.length === 0) {
+      const fetchType = activeTab.value === 'home' ? 'feed' : activeTab.value;
+      const feedsRes = await CoolapkTauriAPI.getUserFeeds(targetUid, userFeedsPage.value, fetchType);
+      list = (feedsRes && feedsRes.data && Array.isArray(feedsRes.data)) ? feedsRes.data : [];
+    }
 
     if (list.length < 3) {
       userFeedsNoMore.value = true;
@@ -562,7 +690,15 @@ async function toggleBlacklist() {
     authStore.openLoginModal();
     return;
   }
-  if (!isBlacklisted.value && !confirm('确定要拉黑该用户吗？')) return;
+  if (!isBlacklisted.value) {
+    const confirmed = await requestConfirmation({
+      title: '拉黑用户',
+      message: '确定要拉黑该用户吗？',
+      confirmText: '拉黑',
+      danger: true
+    });
+    if (!confirmed) return;
+  }
   blacklistLoading.value = true;
   try {
     if (isBlacklisted.value) {
@@ -588,7 +724,15 @@ async function toggleIgnore() {
     authStore.openLoginModal();
     return;
   }
-  if (!isIgnored.value && !confirm('确定要屏蔽该用户吗？')) return;
+  if (!isIgnored.value) {
+    const confirmed = await requestConfirmation({
+      title: '屏蔽用户',
+      message: '确定要屏蔽该用户吗？',
+      confirmText: '屏蔽',
+      danger: true
+    });
+    if (!confirmed) return;
+  }
   ignoreLoading.value = true;
   try {
     if (isIgnored.value) {
@@ -627,6 +771,20 @@ function openFollowTopic(topic: any) {
   }
 }
 
+async function fetchLoadConfig() {
+  if (!isSelfUser.value) {
+    loadConfig.value = null;
+    return;
+  }
+  try {
+    const res = await CoolapkTauriAPI.getLoadConfig();
+    const data = res?.data || null;
+    loadConfig.value = (data && typeof data === 'object' && Object.keys(data).length > 0) ? data : null;
+  } catch (err) {
+    console.warn('获取我的卡片配置失败', err);
+  }
+}
+
 function handleGoBack() {
   if (window.history.length > 1) {
     router.back();
@@ -642,6 +800,7 @@ watch(effectiveUid, (newUid) => {
     fetchUserProfile();
     fetchFollowingUsers();
     fetchFollowNodes();
+    fetchLoadConfig();
     fetchTabFeeds();
   }
 }, { immediate: true });
@@ -989,28 +1148,79 @@ watch(activeTab, () => {
 .app-chips-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+  margin-top: 2px;
 }
 
 .chip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-radius: 12px;
   font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.chip-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.9);
+  display: inline-block;
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 0.5; transform: scale(0.9); }
+}
+
+.gender-mars {
+  color: #60a5fa;
+  font-size: 11px;
+}
+
+.gender-venus {
+  color: #f472b6;
+  font-size: 11px;
+}
+
+.chip-icon-astro {
+  color: #f59e0b;
+  font-size: 10px;
+}
+
+.chip-icon-location {
+  color: #38bdf8;
+  font-size: 10px;
 }
 
 .chip-glass {
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+}
+
+.chip-glass:hover {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .chip-online {
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(8px);
-  color: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 /* 他的装备 Card 毛玻璃入口条 */
@@ -1018,20 +1228,22 @@ watch(activeTab, () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255, 255, 255, 0.16);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  padding: 11px 16px;
-  border-radius: 14px;
-  margin-top: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 9px 14px;
+  border-radius: 12px;
+  margin-top: 2px;
   cursor: pointer;
   color: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
   transition: all 0.2s ease;
 }
 
 .equipment-entry-bar-glass:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.35);
   transform: translateY(-1px);
 }
 
@@ -1156,6 +1368,94 @@ watch(activeTab, () => {
   font-size: 12px;
   color: var(--text-tertiary);
   cursor: pointer;
+}
+
+.section-sub-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.common-devices-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.common-device-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.common-device-item:hover {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+.common-device-item:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.common-device-icon {
+  color: var(--brand-primary);
+  font-size: 14px;
+}
+
+.common-device-name {
+  font-weight: 600;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.common-device-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.common-device-spinner {
+  font-size: 12px;
+  color: var(--brand-primary);
+}
+
+.config-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  font-size: var(--font-size-caption);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background-color: var(--background-secondary, rgba(0, 0, 0, 0.02));
+  min-width: 0;
+}
+
+.config-key {
+  flex-shrink: 0;
+  min-width: 90px;
+  color: var(--text-tertiary);
+  word-break: break-all;
+}
+
+.config-value {
+  min-width: 0;
+  color: var(--text-primary);
+  word-break: break-all;
 }
 
 .follow-users-grid {

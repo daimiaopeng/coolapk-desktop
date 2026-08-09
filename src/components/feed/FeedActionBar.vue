@@ -1,23 +1,23 @@
 <template>
   <div class="feed-action-bar">
-    <button :class="['action-btn', { 'is-liked': isLiked }]" @click.stop="toggleLike">
+    <button :class="['action-btn', 'like-btn', { 'is-liked': isLiked }]" @click.stop="toggleLike" title="点赞">
       <i :class="[isLiked ? 'fas fa-heart' : 'far fa-heart', 'action-icon']"></i>
-      <span>{{ likeCount > 0 ? likeCount : '点赞' }}</span>
+      <span>{{ formatCount(likeCount, '点赞') }}</span>
     </button>
 
-    <button class="action-btn" @click.stop="$emit('open-comment')">
+    <button class="action-btn comment-btn" @click.stop="$emit('open-comment')" title="评论">
       <i class="far fa-comment action-icon"></i>
-      <span>{{ replyCount > 0 ? replyCount : '评论' }}</span>
+      <span>{{ formatCount(replyCount, '评论') }}</span>
     </button>
 
-    <button class="action-btn" @click.stop="shareFeed">
-      <i class="far fa-share-square action-icon"></i>
-      <span>{{ shareCount > 0 ? shareCount : '转发' }}</span>
+    <button class="action-btn share-btn" @click.stop="shareFeed" title="转发">
+      <i class="fas fa-retweet action-icon"></i>
+      <span>{{ formatCount(shareCount, '转发') }}</span>
     </button>
 
-    <button :class="['action-btn', { 'is-fav': isFav }]" @click.stop="toggleFav">
+    <button :class="['action-btn', 'fav-btn', { 'is-fav': isFav }]" @click.stop="toggleFav" title="收藏">
       <i :class="[isFav ? 'fas fa-bookmark' : 'far fa-bookmark', 'action-icon']"></i>
-      <span>{{ favnum ? favnum : '收藏' }}</span>
+      <span>{{ formatCount(favnum, '收藏') }}</span>
     </button>
   </div>
 </template>
@@ -44,6 +44,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'open-comment'): void;
   (e: 'toggle-fav'): void;
+  (e: 'forward'): void;
 }>();
 
 const isLiked = ref(props.userAction?.like === 1);
@@ -54,7 +55,16 @@ const isFav = ref(props.userAction?.favorite === 1);
 const replyCount = ref(props.replynum || 0);
 const shareCount = ref(props.sharenum || 0);
 
-// 动态详情可能异步到达（如评论抽屉先渲染上下文再拉取权威详情），需同步 props 更新
+function formatCount(num?: number, defaultText: string = ''): string {
+  if (!num || num <= 0) return defaultText;
+  if (num >= 10000) {
+    const val = (num / 10000).toFixed(1);
+    return `${val.endsWith('.0') ? val.slice(0, -2) : val}万`;
+  }
+  return String(num);
+}
+
+// 动态详情可能异步到达，需同步 props 更新
 watch(
   () => [props.likenum, props.replynum, props.sharenum] as const,
   ([like, reply, share]) => {
@@ -98,7 +108,11 @@ function toggleFav() {
 }
 
 function shareFeed() {
-  console.log('Share feed:', props.feedId);
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  emit('forward');
 }
 </script>
 
@@ -106,56 +120,80 @@ function shareFeed() {
 .feed-action-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  border-top: 1px solid var(--border-light);
-  padding-top: var(--space-3);
-  margin-top: var(--space-2);
+  justify-content: space-around;
+  border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+  padding-top: 8px;
+  margin-top: 10px;
 }
 
 .action-btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  justify-content: center;
+  gap: 6px;
   color: var(--text-tertiary);
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
-  transition: all var(--duration-fast) var(--ease-default);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 6px 16px;
+  border-radius: 18px;
   background: transparent;
+  border: none;
   cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.2, 0, 0.2, 1);
 }
 
 .action-btn:hover {
+  background-color: var(--background-secondary, rgba(0, 0, 0, 0.04));
   color: var(--text-primary);
-  background-color: var(--surface-hover);
 }
 
 .action-btn:hover .action-icon {
   transform: scale(1.15);
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.action-btn.is-liked {
+.like-btn:hover {
   color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.08);
 }
 
-.action-btn.is-liked .action-icon {
-  animation: heartPulse 0.3s ease-in-out;
+.like-btn.is-liked {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.like-btn.is-liked .action-icon {
+  animation: heartPulse 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.comment-btn:hover {
+  color: var(--brand-primary, #10b981);
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+.share-btn:hover {
+  color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+.fav-btn:hover {
+  color: #f59e0b;
+  background-color: rgba(245, 158, 11, 0.08);
+}
+
+.fav-btn.is-fav {
+  color: #f59e0b;
+  font-weight: 600;
 }
 
 @keyframes heartPulse {
   0% { transform: scale(1); }
-  50% { transform: scale(1.35); }
+  40% { transform: scale(1.4); }
+  80% { transform: scale(0.9); }
   100% { transform: scale(1); }
-}
-
-.action-btn.is-fav {
-  color: var(--warning);
 }
 
 .action-icon {
   font-size: 15px;
-  transition: transform var(--duration-fast);
+  transition: transform 0.2s ease;
 }
 </style>

@@ -30,6 +30,12 @@ impl CoolapkAuth {
         }
     }
 
+    /// 运行时切换设备码（登录/切换账号/游客态之间切换时调用）。
+    /// Token V3 与设备码绑定，切换后所有后续请求的签名使用新设备码。
+    pub fn set_device_code(&mut self, device_code: String) {
+        self.device_code = device_code;
+    }
+
     pub fn get_app_token(&self) -> Result<String, String> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)

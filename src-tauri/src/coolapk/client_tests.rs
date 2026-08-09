@@ -1,15 +1,31 @@
 use super::*;
 
-/// 设备码必须跨调用稳定（同一机器同一结果），酷安据此识别设备；
-/// 若每次生成不同码，写接口（点赞/评论）会被判定为网络环境异常
+/// 随机设备码：每次调用生成不同结果（游客态/新账号首次生成随机并持久化）
 #[test]
-fn test_device_code_is_stable() {
-    let a = load_or_create_device_code();
-    let b = load_or_create_device_code();
-    assert_eq!(a, b, "同一台机器上设备码应保持稳定");
+fn test_device_code_is_random() {
+    let a = generate_random_device_code();
+    let b = generate_random_device_code();
+    assert_ne!(a, b, "两次生成的设备码不应相同");
+    assert!(a.len() >= 100, "设备码应有足够长度");
     assert!(!a.is_empty());
     // 设备码应是合法的 header 值
     assert!(HeaderValue::from_str(&a).is_ok(), "设备码必须是合法 HTTP header 值");
+}
+
+#[test]
+fn test_account_cookie_requires_real_sessid() {
+    assert!(CoolapkClient::has_valid_session_cookie(
+        "SESSID=valid-session; uid=12345; username=test"
+    ));
+    assert!(!CoolapkClient::has_valid_session_cookie(
+        "uid=12345; username=test; token=only-token"
+    ));
+    assert!(!CoolapkClient::has_valid_session_cookie(
+        "SESSID=deleted; uid=12345"
+    ));
+    assert!(!CoolapkClient::has_valid_session_cookie(
+        "SESSID=expired; uid=12345"
+    ));
 }
 
 #[tokio::test]
@@ -66,7 +82,7 @@ async fn test_reply_list_api() {
     // 测试 replyList API，打印原始 id/rid/rrid 值
     let url = format!("https://api.coolapk.com/v6/feed/replyList?id={}&rid={}&page=1", feed_id, target_cid);
     println!("\nTesting URL: {}", url);
-    let token = client.auth.get_app_token().unwrap();
+    let token = client.get_token().unwrap();
     let res = client.client.get(&url).header("X-App-Token", token).send().await.unwrap();
     let json: Value = res.json().await.unwrap();
     if let Some(arr) = json.get("data").and_then(Value::as_array) {

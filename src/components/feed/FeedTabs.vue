@@ -33,11 +33,21 @@ const defaultTabs = [
   { key: 'secondhand', label: '二手' },
 ];
 
+const extraTabs = [
+  { key: 'pictures', label: '酷图' },
+  { key: 'dyh', label: '看看号' },
+];
+
 const tabs = computed(() => {
-  if (props.dynamicTabs && props.dynamicTabs.length > 0) {
-    return props.dynamicTabs;
+  const base =
+    props.dynamicTabs && props.dynamicTabs.length > 0 ? props.dynamicTabs : defaultTabs;
+  const merged = [...base];
+  const seenKeys = new Set(merged.map((t) => t.key));
+  const seenLabels = new Set(merged.map((t) => t.label));
+  for (const t of extraTabs) {
+    if (!seenKeys.has(t.key) && !seenLabels.has(t.label)) merged.push(t);
   }
-  return defaultTabs;
+  return merged;
 });
 </script>
 

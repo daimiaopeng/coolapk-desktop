@@ -47,14 +47,14 @@
 
     <!-- 加载中状态 -->
     <div v-if="loading && page === 1" class="loading-wrapper">
-      <LoadingState text="正在加载话题列表..." />
+      <LoadingState :text="searchMode ? '正在搜索话题...' : '正在加载话题列表...'" />
     </div>
 
     <!-- 空数据状态 -->
     <div v-else-if="filteredTopics.length === 0" class="empty-wrapper">
       <EmptyState
-        title="暂无相关话题"
-        description="未能找到相关话题，可尝试切换上方分类标签或重新搜索"
+        :title="searchMode ? '未找到相关话题' : '暂无相关话题'"
+        :description="searchMode ? '未找到相关话题，可尝试更换关键词重新搜索' : '未能找到相关话题，可尝试切换上方分类标签或重新搜索'"
       />
     </div>
 
@@ -79,7 +79,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import TopicCard from '../components/topic/TopicCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -90,8 +89,6 @@ interface CategoryItem {
   icon: string;
   url: string;
 }
-
-const router = useRouter();
 
 const categories = ref<CategoryItem[]>([
   { title: '热门话题', icon: 'fas fa-fire', url: '/v6/topic/tagList?sort=hot' },
@@ -105,12 +102,13 @@ const categories = ref<CategoryItem[]>([
 const activeCategoryUrl = ref<string>('/v6/topic/tagList?sort=hot');
 const rawTopicItems = ref<any[]>([]);
 const searchQuery = ref('');
+const searchMode = ref(false);
 const loading = ref(false);
 const page = ref(1);
 const noMore = ref(false);
 
 const filteredTopics = computed(() => {
-  if (!searchQuery.value.trim()) {
+  if (searchMode.value || !searchQuery.value.trim()) {
     return rawTopicItems.value;
   }
   const q = searchQuery.value.trim().toLowerCase();
@@ -127,22 +125,27 @@ async function fetchTopicData(url: string = '/v6/topic/tagList?sort=hot', isLoad
 
   try {
     const currentPage = isLoadMore ? page.value : 1;
-    const res = await CoolapkTauriAPI.getTopicHubData(url, currentPage);
-    const dataList = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    let extractedTopics: any[];
 
-    const extractedTopics: any[] = [];
+    if (searchMode.value && searchQuery.value.trim()) {
+      extractedTopics = await fetchSearchTopics(searchQuery.value.trim(), currentPage);
+    } else {
+      const res = await CoolapkTauriAPI.getTopicHubData(url, currentPage);
+      const dataList = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+      extractedTopics = [];
 
-    dataList.forEach((item: any) => {
-      if (item.entityType === 'card' && Array.isArray(item.entities)) {
-        item.entities.forEach((sub: any) => {
-          if (isTopicEntity(sub)) {
-            extractedTopics.push(sub);
-          }
-        });
-      } else if (isTopicEntity(item)) {
-        extractedTopics.push(item);
-      }
-    });
+      dataList.forEach((item: any) => {
+        if (item.entityType === 'card' && Array.isArray(item.entities)) {
+          item.entities.forEach((sub: any) => {
+            if (isTopicEntity(sub)) {
+              extractedTopics.push(sub);
+            }
+          });
+        } else if (isTopicEntity(item)) {
+          extractedTopics.push(item);
+        }
+      });
+    }
 
     if (extractedTopics.length === 0) {
       noMore.value = true;
@@ -171,9 +174,61 @@ function isTopicEntity(item: any): boolean {
   return false;
 }
 
+function extractItems(res: any): any[] {
+  if (!res) return [];
+  const raw = Array.isArray(res)
+    ? res
+    : Array.isArray(res.data)
+      ? res.data
+      : Array.isArray(res.data?.rows)
+        ? res.data.rows
+        : Array.isArray(res.rows)
+          ? res.rows
+          : [];
+  const out: any[] = [];
+  raw.forEach((item: any) => {
+    if (item && item.entityType === 'card' && Array.isArray(item.entities)) {
+      out.push(...item.entities);
+    } else if (item) {
+      out.push(item);
+    }
+  });
+  return out;
+}
+
+function isTagEntity(item: any): boolean {
+  if (!item) return false;
+  const type = item.entityType || '';
+  if (type === 'topic' || type === 'tag') return true;
+  return !!item.tag && !item.message;
+}
+
+function topicKey(item: any): string {
+  const raw = item?.tag || item?.title || item?.title_format || item?.entityTemplate || '';
+  return String(raw).replace(/^#|#$/g, '').trim().toLowerCase();
+}
+
+async function fetchSearchTopics(query: string, currentPage: number): Promise<any[]> {
+  const [tagsRes, feedTopicsRes] = await Promise.all([
+    CoolapkTauriAPI.searchTags(query, currentPage).catch(() => null),
+    CoolapkTauriAPI.searchFeedTopics(query, currentPage).catch(() => null),
+  ]);
+  const merged: any[] = [];
+  const seen = new Set<string>();
+  [...extractItems(tagsRes).filter(isTagEntity), ...extractItems(feedTopicsRes).filter(isTopicEntity)]
+    .forEach((item: any) => {
+      const key = topicKey(item);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      merged.push(item);
+    });
+  return merged;
+}
+
 function switchCategory(cat: CategoryItem) {
   activeCategoryUrl.value = cat.url;
   searchQuery.value = '';
+  searchMode.value = false;
   page.value = 1;
   noMore.value = false;
   rawTopicItems.value = [];
@@ -188,14 +243,24 @@ function refreshCurrent() {
 }
 
 function handleSearch() {
-  const name = searchQuery.value.trim().replace(/^#|#$/g, '');
-  if (name) {
-    router.push(`/topic/${encodeURIComponent(name)}`);
-  }
+  const query = searchQuery.value.trim().replace(/^#|#$/g, '');
+  if (!query) return;
+  searchMode.value = true;
+  page.value = 1;
+  noMore.value = false;
+  rawTopicItems.value = [];
+  fetchTopicData(activeCategoryUrl.value, false);
 }
 
 function clearSearch() {
+  if (!searchQuery.value.trim()) return;
   searchQuery.value = '';
+  if (!searchMode.value) return;
+  searchMode.value = false;
+  page.value = 1;
+  noMore.value = false;
+  rawTopicItems.value = [];
+  fetchTopicData(activeCategoryUrl.value, false);
 }
 
 function handleScroll(e: Event) {

@@ -8,12 +8,22 @@
         <span class="username clickable" title="查看用户主页" @click.stop="handleUserClick">
           {{ username || '酷友' }}
         </span>
-        <span v-if="level" class="user-level">Lv.{{ level }}</span>
-        <span v-if="verifyTitle" class="verify-badge">{{ verifyTitle }}</span>
+        <span v-if="level" :class="['user-level', `level-${Math.min(level, 12)}`]">
+          Lv.{{ level }}
+        </span>
+        <span v-if="verifyTitle" class="verify-badge" :title="verifyTitle">
+          <i class="fas fa-check-circle verify-icon"></i>
+          <span>{{ verifyTitle }}</span>
+        </span>
       </div>
       <div class="meta-row">
-        <span v-if="recommendSource" :class="['source-tag', { clickable: entityType === 'product' || entityType === 'dyh' }]" @click.stop="handleSourceClick">{{ recommendSource }}</span>
+        <span v-if="recommendSource" :class="['source-tag', { clickable: entityType === 'product' || entityType === 'dyh' }]" @click.stop="handleSourceClick">
+          <i class="fas fa-compass source-icon" v-if="entityType === 'dyh' || entityType === 'product'"></i>
+          {{ recommendSource }}
+        </span>
+        <span class="meta-dot" v-if="recommendSource">•</span>
         <span class="dateline">{{ formatDateline(dateline) }}</span>
+        <span class="meta-dot" v-if="showDeviceInfo && device">•</span>
         <span v-if="showDeviceInfo && device" class="device-badge" :title="device">
           <i class="fas fa-mobile-alt device-icon"></i>
           <span>{{ device }}</span>
@@ -21,13 +31,14 @@
       </div>
     </div>
 
-    <!-- 酷安 App 原生热榜名次 01/02 醒目标记 -->
-    <div v-if="rankIndex" class="rank-badge">
-      <i class="fas fa-chart-line rank-icon"></i>
-      <span>{{ rankIndex < 10 ? '0' + rankIndex : rankIndex }}</span>
-    </div>
-    <div v-else class="action-more">
-      <AppIconButton icon="fas fa-ellipsis-h" size="sm" title="更多" aria-label="更多" />
+    <div class="action-more">
+      <AppIconButton
+        icon="fas fa-ellipsis-h"
+        size="sm"
+        title="更多"
+        aria-label="更多"
+        @click.stop="emit('more')"
+      />
     </div>
   </div>
 </template>
@@ -57,6 +68,10 @@ const props = withDefaults(defineProps<{
 
 const router = useRouter();
 const settingsStore = useSettingsStore();
+
+const emit = defineEmits<{
+  (e: 'more'): void;
+}>();
 
 function handleUserClick() {
   const targetUid = props.uid || props.username;
@@ -96,8 +111,8 @@ function formatDateline(time?: number | string): string {
 .feed-header {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
 .user-info {
@@ -105,21 +120,31 @@ function formatDateline(time?: number | string): string {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  min-width: 0;
 }
 
 .user-row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .user-clickable {
   cursor: pointer;
-  transition: transform var(--duration-fast);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
 }
 
 .user-clickable:hover {
   transform: scale(1.05);
+}
+
+.username {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
 }
 
 .username.clickable {
@@ -128,88 +153,111 @@ function formatDateline(time?: number | string): string {
 
 .username.clickable:hover {
   color: var(--brand-primary);
-  text-decoration: underline;
-}
-
-.username {
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
 }
 
 .user-level {
-  font-size: 10px;
-  background-color: var(--brand-soft);
-  color: var(--brand-primary);
-  padding: 1px 5px;
-  border-radius: var(--radius-xs);
-  font-weight: bold;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  line-height: 1.2;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25);
+  font-style: italic;
 }
 
 .verify-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  padding: 1px 7px;
+  border-radius: 8px;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  line-height: 1.2;
+}
+
+.verify-icon {
   font-size: 11px;
-  color: var(--warning);
 }
 
 .meta-row {
-  font-size: var(--font-size-caption);
+  font-size: 13px;
   color: var(--text-tertiary);
-  margin-top: 2px;
+  margin-top: 3px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.meta-dot {
+  color: var(--border-dark, rgba(0, 0, 0, 0.2));
+  font-size: 11px;
 }
 
 .source-tag {
   color: var(--brand-primary, #10b981);
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
   background-color: var(--brand-soft, rgba(16, 185, 129, 0.1));
-  padding: 0 4px;
-  border-radius: 3px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.source-icon {
+  font-size: 11px;
 }
 
 .source-tag.clickable {
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .source-tag.clickable:hover {
-  text-decoration: underline;
-  opacity: 0.85;
+  background-color: rgba(16, 185, 129, 0.2);
+  transform: translateY(-1px);
 }
 
 .device-badge {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   background-color: var(--background-secondary, rgba(0, 0, 0, 0.04));
-  color: var(--text-tertiary);
-  font-size: 11px;
-  padding: 1px 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 1px 8px;
   border-radius: 10px;
-  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
-  margin-left: 4px;
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
 }
 
 .device-icon {
-  font-size: 9px;
-  opacity: 0.8;
+  font-size: 11px;
+  color: var(--brand-primary);
 }
 
 .rank-badge {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
   color: #ffffff;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font-size: 14px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
   font-weight: 800;
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
   font-style: italic;
+  letter-spacing: 0.5px;
 }
 
 .rank-icon {
-  font-size: 12px;
+  font-size: 11px;
 }
 </style>

@@ -323,7 +323,7 @@ async function handlePublish() {
       errorMessage.value = res?.message || '发布动态失败';
     }
   } catch (err: any) {
-    errorMessage.value = err?.message || '发布动态服务异常';
+    errorMessage.value = typeof err === 'string' ? err : (err?.message || '发布动态服务异常');
     // 失败时保持弹窗打开并聚焦输入框，便于用户修改重试
     nextTick(() => messageInput.value?.focus());
   } finally {

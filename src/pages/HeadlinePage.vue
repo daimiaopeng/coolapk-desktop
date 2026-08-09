@@ -29,6 +29,7 @@
         v-for="(item, idx) in feeds"
         :key="item.id || idx"
         :feed="item"
+        @deleted="handleFeedDeleted"
       />
 
       <div v-if="loadingMore" class="loading-more">
@@ -135,6 +136,10 @@ function handleScroll(e: Event) {
 const onRefreshFeeds = () => {
   if (!loading.value && !loadingMore.value) loadFeeds(true);
 };
+
+function handleFeedDeleted(id: string | number) {
+  feeds.value = feeds.value.filter((f: any) => String(f.id) !== String(id));
+}
 
 onMounted(() => {
   loadFeeds(true);

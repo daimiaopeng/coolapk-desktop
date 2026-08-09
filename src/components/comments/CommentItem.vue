@@ -20,6 +20,9 @@
         <button class="action-link" @click="$emit('reply', comment)">
           <i class="far fa-comment"></i> 回复
         </button>
+        <button v-if="isOwnComment" class="action-link delete-btn" @click="handleDelete">
+          <i class="fas fa-trash-alt"></i> 删除
+        </button>
       </div>
 
       <!-- 楼中楼列表：先展示接口内嵌的 rlist，可展开加载全部 -->
@@ -33,6 +36,15 @@
           >
             <i :class="[isSubLiked(reply) ? 'fas fa-heart' : 'far fa-heart']"></i>
             <span>{{ getSubLikeCount(reply) > 0 ? formatCount(getSubLikeCount(reply)) : '赞' }}</span>
+          </button>
+          <button
+            v-if="isOwnReply(reply)"
+            class="sub-delete-btn"
+            title="删除回复"
+            aria-label="删除回复"
+            @click.stop="handleDeleteSubReply(reply)"
+          >
+            <i class="fas fa-trash-alt"></i>
           </button>
         </div>
 
@@ -69,6 +81,9 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { handleAnchorClick } from '../../utils/anchorClick';
+import { showToast } from '../../utils/toast';
+import { requestConfirmation } from '../../utils/confirm';
+import { getErrorMessage } from '../../utils/errors';
 
 const authStore = useAuthStore();
 
@@ -78,9 +93,70 @@ const props = defineProps<{
   isLouzhu?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'reply', comment: CommentType): void;
+  (e: 'deleted', id: string | number): void;
 }>();
+
+const myUid = computed(() => (authStore.isLoggedIn ? String(authStore.user?.uid ?? '') : ''));
+
+const isOwnComment = computed(() => {
+  const uid = String(props.comment.uid ?? props.comment.userInfo?.uid ?? '');
+  return !!uid && !!myUid.value && uid === myUid.value;
+});
+
+function isOwnReply(reply: any): boolean {
+  const uid = String(reply?.uid ?? reply?.userInfo?.uid ?? '');
+  return !!uid && !!myUid.value && uid === myUid.value;
+}
+
+async function handleDelete() {
+  const confirmed = await requestConfirmation({
+    title: '删除评论',
+    message: '确定要删除这条评论吗？',
+    confirmText: '删除',
+    danger: true
+  });
+  if (!confirmed) return;
+  try {
+    const res = await CoolapkTauriAPI.deleteReply(String(props.comment.id));
+    if (res && res.code === 200) {
+      showToast('评论已删除');
+      emit('deleted', props.comment.id);
+    } else {
+      showToast(res?.message || '删除评论失败', 'error');
+    }
+  } catch (err: any) {
+    showToast(getErrorMessage(err, '删除评论失败'), 'error');
+  }
+}
+
+async function handleDeleteSubReply(reply: any) {
+  const confirmed = await requestConfirmation({
+    title: '删除回复',
+    message: '确定要删除这条回复吗？',
+    confirmText: '删除',
+    danger: true
+  });
+  if (!confirmed) return;
+  try {
+    const res = await CoolapkTauriAPI.deleteReply(String(reply.id));
+    if (res && res.code === 200) {
+      showToast('回复已删除');
+      const fetchedIdx = fetchedSubs.value.findIndex((i: any) => String(i.id) === String(reply.id));
+      if (fetchedIdx >= 0) fetchedSubs.value.splice(fetchedIdx, 1);
+      const embedded = props.comment.rlist;
+      if (Array.isArray(embedded)) {
+        const embeddedIdx = embedded.findIndex((i: any) => String(i.id) === String(reply.id));
+        if (embeddedIdx >= 0) embedded.splice(embeddedIdx, 1);
+      }
+    } else {
+      showToast(res?.message || '删除回复失败', 'error');
+    }
+  } catch (err: any) {
+    showToast(getErrorMessage(err, '删除回复失败'), 'error');
+  }
+}
 
 const isLiked = ref(props.comment.userAction?.like === 1);
 const likeCount = ref(props.comment.likenum || 0);
@@ -334,6 +410,26 @@ async function loadSubReplies(reset: boolean) {
 }
 
 .action-link.is-liked {
+  color: var(--danger);
+}
+
+.delete-btn:hover {
+  color: var(--danger);
+}
+
+.sub-delete-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 4px;
+  vertical-align: baseline;
+  transition: color 0.15s ease;
+}
+
+.sub-delete-btn:hover {
   color: var(--danger);
 }
 
