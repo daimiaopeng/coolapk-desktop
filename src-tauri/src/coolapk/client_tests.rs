@@ -1,5 +1,23 @@
 use super::*;
 
+#[test]
+fn test_clean_feed_keeps_edit_metadata() {
+    let raw = json!({
+        "id": 123,
+        "uid": 456,
+        "username": "测试用户",
+        "message": "测试正文",
+        "isModified": 1,
+        "change_count": 2,
+        "last_change_time": 1_786_000_100_u64
+    });
+
+    let cleaned = CoolapkClient::clean_single_feed(&raw, 0).expect("动态应能正常清洗");
+    assert_eq!(cleaned["isModified"], 1);
+    assert_eq!(cleaned["changeCount"], 2);
+    assert_eq!(cleaned["lastChangeTime"], 1_786_000_100_u64);
+}
+
 /// 随机设备码：每次调用生成不同结果（游客态/新账号首次生成随机并持久化）
 #[test]
 fn test_device_code_is_random() {

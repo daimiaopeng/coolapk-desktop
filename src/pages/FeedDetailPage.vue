@@ -22,8 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onMounted, ref, watch } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAppStore } from '../stores/app';
 import FeedCard from '../components/feed/FeedCard.vue';
@@ -33,10 +32,13 @@ import EmptyState from '../components/common/EmptyState.vue';
 
 defineOptions({ name: 'FeedDetailPage' });
 
-const route = useRoute();
+const props = defineProps<{
+  feedId: string;
+}>();
+
 const appStore = useAppStore();
-// 每个动态详情路由拥有独立缓存实例，固定本实例的动态编号。
-const feedId = String(route.params.feedId || '');
+// 路由缓存通常会为每个动态保留独立实例；同时监听参数可兼容热更新或组件复用。
+const feedId = computed(() => String(props.feedId || ''));
 
 function normalizeContextFeed(item: any): any {
   if (!item) return null;
@@ -50,12 +52,13 @@ function normalizeContextFeed(item: any): any {
   )) || null;
 }
 
-const feedDetail = ref<any>(normalizeContextFeed(appStore.getFeedDetailContext(feedId)));
+const feedDetail = ref<any>(normalizeContextFeed(appStore.getFeedDetailContext(feedId.value)));
 const loading = ref(false);
 const error = ref('');
+let requestVersion = 0;
 
-async function fetchWebFallback() {
-  const response: any = await CoolapkTauriAPI.fetchExternalPage(`https://www.coolapk.com/feed/${feedId}`);
+async function fetchWebFallback(targetFeedId: string) {
+  const response: any = await CoolapkTauriAPI.fetchExternalPage(`https://www.coolapk.com/feed/${targetFeedId}`);
   const raw = response?.data?.html;
   if (!raw) return null;
   const parsed = JSON.parse(raw);
@@ -63,33 +66,44 @@ async function fetchWebFallback() {
 }
 
 async function fetchDetail() {
-  if (!feedId || loading.value) return;
+  if (!feedId.value) return;
+  const requestedFeedId = feedId.value;
+  const currentRequest = ++requestVersion;
   loading.value = true;
   error.value = '';
   try {
-    const response: any = await CoolapkTauriAPI.getFeedDetail(feedId);
+    const response: any = await CoolapkTauriAPI.getFeedDetail(requestedFeedId);
     const detail = response?.data;
     if (!detail) throw new Error('接口没有返回原动态内容');
+    if (currentRequest !== requestVersion || requestedFeedId !== feedId.value) return;
     feedDetail.value = detail;
-    appStore.setFeedDetailContext(feedId, detail);
+    appStore.setFeedDetailContext(requestedFeedId, detail);
   } catch (requestError) {
     try {
-      const fallback = await fetchWebFallback();
-      if (fallback) {
+      const fallback = await fetchWebFallback(requestedFeedId);
+      if (fallback && currentRequest === requestVersion && requestedFeedId === feedId.value) {
         feedDetail.value = fallback;
-        appStore.setFeedDetailContext(feedId, fallback);
+        appStore.setFeedDetailContext(requestedFeedId, fallback);
         return;
       }
     } catch {
       // 网页兜底失败后显示原始请求错误。
     }
-    error.value = requestError instanceof Error ? requestError.message : String(requestError);
+    if (currentRequest === requestVersion) {
+      error.value = requestError instanceof Error ? requestError.message : String(requestError);
+    }
   } finally {
-    loading.value = false;
+    if (currentRequest === requestVersion) loading.value = false;
   }
 }
 
 onMounted(() => {
+  void fetchDetail();
+});
+
+watch(feedId, (nextFeedId) => {
+  feedDetail.value = normalizeContextFeed(appStore.getFeedDetailContext(nextFeedId));
+  error.value = '';
   void fetchDetail();
 });
 </script>

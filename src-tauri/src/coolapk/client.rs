@@ -962,6 +962,9 @@ impl CoolapkClient {
         let fav_num = get_u64_by_keys(obj, &["favnum", "fav_num", "favorite_num"]);
         let share_num = get_u64_by_keys(obj, &["sharenum", "share_num"]);
         let hit_num = get_u64_by_keys(obj, &["hitnum", "clicknum", "read_num", "view_num", "hit_num"]);
+        let is_modified = get_u64_by_keys(obj, &["isModified", "is_modified"]);
+        let change_count = get_u64_by_keys(obj, &["change_count", "changeCount"]);
+        let last_change_time = get_u64_by_keys(obj, &["last_change_time", "lastChangeTime"]);
 
         let user_level = get_str_by_keys(obj, &["userLevel", "level", "user_level"]).unwrap_or_default();
 
@@ -988,6 +991,9 @@ impl CoolapkClient {
             "favnum": fav_num,
             "sharenum": share_num,
             "isTop": is_top,
+            "isModified": is_modified,
+            "changeCount": change_count,
+            "lastChangeTime": last_change_time,
             "targetType": target_type,
             "uid": raw_uid,
             "dateline": get_u64_by_keys(obj, &["dateline", "create_time", "lastupdate", "createTime"])

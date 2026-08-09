@@ -25,6 +25,12 @@ export interface FeedItem {
   picArr?: string[];
   device_title?: string;
   dateline?: number | string;
+  isModified?: boolean | number | string;
+  is_modified?: boolean | number | string;
+  changeCount?: number | string;
+  change_count?: number | string;
+  lastChangeTime?: number | string;
+  last_change_time?: number | string;
   likenum?: number;
   replynum?: number;
   favnum?: number;

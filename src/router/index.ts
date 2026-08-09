@@ -57,7 +57,7 @@ const routes = [
   { path: '/notifications', name: 'Notifications', component: NotificationsPage },
   { path: '/messages', name: 'Messages', component: MessagesPage },
   { path: '/user/:uid', name: 'User', component: UserPage },
-  { path: '/feed/:feedId', name: 'FeedDetail', component: FeedDetailPage },
+  { path: '/feed/:feedId', name: 'FeedDetail', component: FeedDetailPage, props: true },
   { path: '/blacklist', name: 'BlackList', component: BlackListPage },
   { path: '/topic/:tag', name: 'Topic', component: TopicPage },
   { path: '/app/:packageName', name: 'AppDetail', component: AppDetailPage },

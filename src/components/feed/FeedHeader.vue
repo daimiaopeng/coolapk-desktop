@@ -23,6 +23,13 @@
         </span>
         <span class="meta-dot" v-if="recommendSource">•</span>
         <span class="dateline">{{ formatDateline(dateline) }}</span>
+        <template v-if="isEdited">
+          <span class="meta-dot">•</span>
+          <button class="edited-badge" type="button" title="查看编辑记录" @click.stop="emit('edit-history')">
+            <i class="fas fa-pen-to-square"></i>
+            已编辑
+          </button>
+        </template>
         <span class="meta-dot" v-if="showDeviceInfo && device">•</span>
         <span v-if="showDeviceInfo && device" class="device-badge" :title="device">
           <i class="fas fa-mobile-alt device-icon"></i>
@@ -62,6 +69,7 @@ const props = withDefaults(defineProps<{
   showDeviceInfo?: boolean;
   entityType?: string;
   entityId?: string | number;
+  isEdited?: boolean;
 }>(), {
   showDeviceInfo: true,
 });
@@ -71,6 +79,7 @@ const settingsStore = useSettingsStore();
 
 const emit = defineEmits<{
   (e: 'more'): void;
+  (e: 'edit-history'): void;
 }>();
 
 function handleUserClick() {
@@ -197,6 +206,29 @@ function formatDateline(time?: number | string): string {
 .meta-dot {
   color: var(--border-dark, rgba(0, 0, 0, 0.2));
   font-size: 11px;
+}
+
+.edited-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-default);
+}
+
+.edited-badge i {
+  font-size: 10px;
+}
+
+.edited-badge:hover {
+  color: var(--brand-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .source-tag {

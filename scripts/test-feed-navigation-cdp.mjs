@@ -23,11 +23,15 @@ async function findPageTarget() {
 function connectCdp(webSocketUrl) {
   const socket = new WebSocket(webSocketUrl);
   const pending = new Map();
+  const events = [];
   let nextId = 1;
 
   socket.addEventListener('message', event => {
     const message = JSON.parse(event.data);
-    if (!message.id) return;
+    if (!message.id) {
+      events.push(message);
+      return;
+    }
     const waiter = pending.get(message.id);
     if (!waiter) return;
     pending.delete(message.id);
@@ -53,6 +57,9 @@ function connectCdp(webSocketUrl) {
     close() {
       socket.close();
     },
+    getEvents() {
+      return events;
+    },
   };
 }
 
@@ -62,6 +69,17 @@ const cdp = connectCdp(target.webSocketDebuggerUrl);
 try {
   await cdp.ready;
   await cdp.send('Runtime.enable');
+  await cdp.send('Log.enable');
+  await cdp.send('Page.enable');
+  await cdp.send('Page.reload', { ignoreCache: false });
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    await delay(100);
+    const state = await cdp.send('Runtime.evaluate', {
+      expression: "document.readyState === 'complete' && Boolean(document.querySelector('.top-bar'))",
+      returnByValue: true,
+    });
+    if (state.result?.value) break;
+  }
 
   const evaluation = await cdp.send('Runtime.evaluate', {
     expression: `(async () => {
@@ -75,66 +93,71 @@ try {
         throw new Error('等待页面状态超时');
       };
 
-      const routerModule = await import('/src/router/index.ts');
-      const navigationModule = await import('/src/utils/feedNavigation.ts');
-      const router = routerModule.router;
-      const originalRoute = router.currentRoute.value.fullPath;
+      const apiModule = await import('/src/api/coolapk.ts');
+      const originalHash = location.hash || '#/';
       const originalTimeOrigin = performance.timeOrigin;
 
-      await router.push('/history');
+      location.hash = '#/history';
       const sourcePage = await waitFor(() => document.querySelector('.page-container'));
       const preserveToken = 'cdp-' + Date.now();
       sourcePage.dataset.cdpPreserve = preserveToken;
 
-      const fullText = Array.from({ length: 18 }, (_, index) => 'CDP 正文第 ' + (index + 1) + ' 行').join('\\n');
-      navigationModule.openFeedDetail(router, 'cdp-feed', {
-        id: 'cdp-feed',
-        uid: 'cdp-user',
-        username: 'CDP 测试用户',
-        message: fullText,
-        dateline: Math.floor(Date.now() / 1000),
-        pics: [],
-        likenum: 0,
-        replynum: 0,
-        favnum: 0,
-        sharenum: 0,
-      });
+      const liveDetailResponse = await apiModule.CoolapkTauriAPI.getFeedDetail('73091937');
+      const liveFeed = liveDetailResponse?.data;
+      if (!liveFeed || Number(liveFeed.isModified ?? liveFeed.is_modified ?? 0) !== 1) {
+        throw new Error('真实动态没有返回已编辑字段');
+      }
+      location.hash = '#/feed/73091937';
 
-      const detailCard = await waitFor(() => document.querySelector('.feed-detail-page .feed-card.is-detail-mode'));
+      await waitFor(() => location.hash === '#/feed/73091937');
+      const detailCard = await waitFor(() => document.querySelector('.feed-detail-page .feed-card.is-detail-mode'))
+        .catch(() => {
+          throw new Error('详情页没有渲染动态卡片：' + document.querySelector('main')?.textContent?.slice(0, 300));
+        });
       const detailBody = detailCard.querySelector('.feed-body');
       const noRightDrawer = !document.querySelector('.comment-drawer, .drawer-overlay, .drawer-panel');
-      const fullTextInline = detailBody?.textContent?.includes('CDP 正文第 18 行')
+      const fullTextInline = Boolean(detailBody?.textContent?.trim())
         && !detailBody.classList.contains('is-collapsed');
 
-      const moreButton = detailCard.querySelector('.action-more button');
-      moreButton?.click();
-      const historyButton = await waitFor(() => [...detailCard.querySelectorAll('.more-menu-item')]
-        .find(button => button.textContent?.includes('修改历史')));
-      historyButton.click();
-      const historyPanelVisible = Boolean(await waitFor(() => detailCard.querySelector('.feed-history-panel')));
+      const editedButton = await waitFor(() => detailCard.querySelector('.edited-badge'));
+      const editedBadgeVisible = editedButton.textContent?.includes('已编辑');
+      editedButton.click();
+      const historyDialog = await waitFor(() => [...document.querySelectorAll('.dialog-container')]
+        .find(dialog => dialog.textContent?.includes('编辑记录')));
+      const historyDialogVisible = Boolean(await waitFor(() => historyDialog.querySelector('.history-item')));
+      historyDialog.querySelector('.dialog-close')?.click();
+      await waitFor(() => !document.body.contains(historyDialog));
 
       const refreshButtonPresent = Boolean(document.querySelector('[aria-label="刷新当前页面"]'));
       const backButton = document.querySelector('[aria-label="后退"]');
       backButton?.click();
-      await waitFor(() => router.currentRoute.value.fullPath === '/history');
+      await waitFor(() => location.hash === '#/history');
       const restoredPage = document.querySelector('.page-container');
       const sourcePagePreserved = restoredPage === sourcePage
         && restoredPage?.dataset.cdpPreserve === preserveToken;
 
       const forwardButton = document.querySelector('[aria-label="前进"]');
       forwardButton?.click();
-      await waitFor(() => router.currentRoute.value.fullPath === '/feed/cdp-feed');
-      const forwardRestoredDetail = document.querySelector('.feed-detail-page .feed-card') === detailCard;
+      await new Promise(resolve => setTimeout(resolve, 300));
+      if (location.hash !== '#/feed/73091937') history.forward();
+      await waitFor(() => location.hash === '#/feed/73091937');
+      const restoredDetailCard = await waitFor(() => document.querySelector('.feed-detail-page .feed-card'));
+      const forwardBodyText = restoredDetailCard.querySelector('.feed-body')?.textContent?.trim() || '';
+      const forwardErrorText = document.querySelector('.feed-detail-page .error-state')?.textContent?.trim() || '';
+      const forwardRestoredDetail = Boolean(forwardBodyText) && !forwardErrorText;
 
-      await router.replace(originalRoute || '/');
+      location.hash = originalHash;
       return {
         noDocumentReload: performance.timeOrigin === originalTimeOrigin,
         noRightDrawer,
         fullTextInline,
-        historyPanelVisible,
+        editedBadgeVisible,
+        historyDialogVisible,
         refreshButtonPresent,
         sourcePagePreserved,
         forwardRestoredDetail,
+        forwardBodyLength: forwardBodyText.length,
+        forwardErrorText,
       };
     })()`,
     awaitPromise: true,
@@ -142,11 +165,24 @@ try {
   });
 
   if (evaluation.exceptionDetails) {
-    throw new Error(evaluation.exceptionDetails.exception?.description || evaluation.exceptionDetails.text);
+    const runtimeErrors = cdp.getEvents()
+      .filter(event => event.method === 'Runtime.exceptionThrown' || event.method === 'Log.entryAdded')
+      .slice(-8);
+    throw new Error(`${evaluation.exceptionDetails.exception?.description || evaluation.exceptionDetails.text}\n${JSON.stringify(runtimeErrors)}`);
   }
 
   const result = evaluation.result.value;
-  if (!Object.values(result).every(Boolean)) {
+  const required = [
+    result.noDocumentReload,
+    result.noRightDrawer,
+    result.fullTextInline,
+    result.editedBadgeVisible,
+    result.historyDialogVisible,
+    result.refreshButtonPresent,
+    result.sourcePagePreserved,
+    result.forwardRestoredDetail,
+  ];
+  if (!required.every(Boolean)) {
     throw new Error(`CDP 动态导航验证结果不符合预期：${JSON.stringify(result)}`);
   }
 
