@@ -293,8 +293,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAppStore } from '../stores/app';
 import { useAuthStore } from '../stores/auth';
@@ -312,7 +313,8 @@ const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
 const authStore = useAuthStore();
-const packageName = computed(() => (route.params.packageName as string) || '');
+// 每个完整路径对应独立缓存实例，固定本实例的路由参数，避免页面隐藏后响应其他路由。
+const packageName = ref((route.params.packageName as string) || '');
 
 
 const loading = ref(false);
@@ -795,38 +797,8 @@ function handleGiftClaim(gift: any) {
 }
 
 function handleGoBack() {
-  if (window.history.state && window.history.state.back) {
-    router.back();
-  } else {
-    router.push('/apps');
-  }
+  navigateBack(router, '/apps');
 }
-
-watch(packageName, () => {
-  activeDetailTab.value = 'detail';
-  discussionFeeds.value = [];
-  discussionsPage.value = 1;
-  discussionsNoMore.value = false;
-  discussionsError.value = '';
-  versionsList.value = [];
-  versionsLoading.value = false;
-  versionsError.value = '';
-  discoverersList.value = [];
-  discoverersPage.value = 1;
-  discoverersLoading.value = false;
-  discoverersNoMore.value = false;
-  discoverersError.value = '';
-  giftsList.value = [];
-  giftsPage.value = 1;
-  giftsLoading.value = false;
-  giftsNoMore.value = false;
-  giftsError.value = '';
-  recommendList.value = [];
-  recommendLoading.value = false;
-  recommendError.value = '';
-  isFavorited.value = false;
-  fetchAppDetail();
-});
 
 onMounted(() => fetchAppDetail());
 </script>

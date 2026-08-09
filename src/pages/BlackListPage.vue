@@ -86,6 +86,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { navigateBack } from '../utils/navigation';
 import AppButton from '../components/common/AppButton.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -132,11 +133,7 @@ function getAvatarUrlByUid(uid: any) {
 }
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/');
-  }
+  navigateBack(router);
 }
 
 function goUser(item: any) {

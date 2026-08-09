@@ -163,7 +163,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
@@ -177,6 +177,7 @@ import EmptyState from '../components/common/EmptyState.vue';
 
 const router = useRouter();
 const route = useRoute();
+const initialTab = String(route.query.tab || '');
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 
@@ -388,15 +389,10 @@ function onSidebarScroll(e: Event) {
 }
 
 function syncTabFromRoute() {
-  const queryTab = route.query.tab as string;
-  if (queryTab === 'fans') {
+  if (initialTab === 'fans') {
     switchSidebarTab('fans');
   }
 }
-
-watch(() => route.query.tab, () => {
-  syncTabFromRoute();
-});
 
 function navigateToUser(uid: string | number) {
   if (!uid) return;

@@ -125,6 +125,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import FeedCommentSection from '../components/feed/FeedCommentSection.vue';
@@ -137,7 +138,8 @@ import { renderCoolapkRichText } from '../utils/richText';
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const albumId = computed(() => route.params.albumId as string);
+// 固定当前缓存页面的参数，返回该页面时直接恢复原实例。
+const albumId = ref(route.params.albumId as string);
 
 const albumDetail = ref<any>(null);
 const headerLoading = ref(false);
@@ -177,11 +179,7 @@ const subCount = computed(() => {
 });
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/discover');
-  }
+  navigateBack(router, '/discover');
 }
 
 function formatNumber(num: number | string) {

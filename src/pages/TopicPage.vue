@@ -123,6 +123,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import FeedCard from '../components/feed/FeedCard.vue';
@@ -133,7 +134,8 @@ import EmptyState from '../components/common/EmptyState.vue';
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const tag = computed(() => (route.params.tag as string) || '薅羊毛小分队');
+// 固定当前缓存页面的话题参数，返回时恢复原页面实例。
+const tag = ref((route.params.tag as string) || '薅羊毛小分队');
 
 const topicDetail = ref<any>(null);
 const headerLoading = ref(false);
@@ -193,11 +195,7 @@ const viewCount = computed(() => {
 });
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/topics');
-  }
+  navigateBack(router, '/topics');
 }
 
 function formatNumber(num: number | string) {

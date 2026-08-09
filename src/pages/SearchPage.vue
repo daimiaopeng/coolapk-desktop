@@ -143,7 +143,8 @@ import AppButton from '../components/common/AppButton.vue';
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const queryStr = computed(() => (route.query.q as string) || '');
+// 每个查询地址拥有独立缓存实例，固定本实例的查询词。
+const queryStr = ref((route.query.q as string) || '');
 const loading = ref(false);
 const results = ref<any[]>([]);
 

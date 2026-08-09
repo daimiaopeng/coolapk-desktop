@@ -334,6 +334,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppImage from '../components/common/AppImage.vue';
@@ -352,7 +353,8 @@ const router = useRouter();
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 
-const rawUid = computed(() => (route.params.uid as string) || 'me');
+// 固定当前缓存页面的用户参数，避免进入其他页面时在后台重新请求。
+const rawUid = ref((route.params.uid as string) || 'me');
 
 const effectiveUid = computed(() => {
   const rUid = rawUid.value;
@@ -786,11 +788,7 @@ async function fetchLoadConfig() {
 }
 
 function handleGoBack() {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/home');
-  }
+  navigateBack(router);
 }
 
 watch(effectiveUid, (newUid) => {

@@ -6,7 +6,14 @@
     </div>
 
     <div class="top-bar-center">
-
+      <AppIconButton
+        v-if="showGlobalBack"
+        icon="fas fa-arrow-left"
+        title="返回上一页"
+        aria-label="返回上一页"
+        class="global-back-button"
+        @click="goBack"
+      />
       <div class="search-input-wrapper" @click="appStore.openSearch">
         <i class="fas fa-search search-icon"></i>
         <span class="placeholder-text">搜索应用、动态、用户、话题</span>
@@ -150,21 +157,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../../stores/app';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { desktopNotify } from '../../utils/desktopNotify';
+import { canNavigateBack, navigateBack } from '../../utils/navigation';
 import AppButton from '../common/AppButton.vue';
 import AppIconButton from '../common/AppIconButton.vue';
 import AppAvatar from '../common/AppAvatar.vue';
 
 const router = useRouter();
+const route = useRoute();
 const appStore = useAppStore();
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
+
+// 由路由器维护桌面端页面栈。
+// 通过当前路由的变化触发计算，保证页面进入、替换和返回后按钮状态同步更新。
+const canGoBack = computed(() => Boolean(route.fullPath && canNavigateBack(router)));
+const showGlobalBack = computed(() => canGoBack.value && route.meta.hasOwnBackButton !== true);
+
+function goBack() {
+  navigateBack(router);
+}
 
 const unreadNotificationCount = ref(0);
 let notifTimer: any = null;
@@ -365,9 +383,18 @@ function handleUserClick() {
   max-width: 560px;
   margin: 0 var(--space-3);
   min-width: 120px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.global-back-button {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
 }
 
 .search-input-wrapper {
+  flex: 1;
   display: flex;
   align-items: center;
   height: 40px;

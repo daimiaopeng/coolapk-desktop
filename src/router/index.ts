@@ -34,6 +34,7 @@ import ShortcutSettingsPage from '../pages/settings/ShortcutSettingsPage.vue';
 import AboutSettingsPage from '../pages/settings/AboutSettingsPage.vue';
 import StartupSettingsPage from '../pages/settings/StartupSettingsPage.vue';
 import DeviceSettingsPage from '../pages/settings/DeviceSettingsPage.vue';
+import { restoreRouteScrollPosition, saveRouteScrollPosition } from '../utils/routeScroll';
 
 import AuthCallbackView from '../pages/AuthCallbackView.vue';
 
@@ -50,17 +51,17 @@ const routes = [
   { path: '/following', name: 'Following', component: FollowingPage },
   { path: '/reviews', name: 'Reviews', component: ReviewPage },
   { path: '/secondhand', name: 'SecondHand', component: SecondHandPage },
-  { path: '/external', name: 'External', component: ExternalPage },
+  { path: '/external', name: 'External', component: ExternalPage, meta: { hasOwnBackButton: true } },
   { path: '/search', name: 'Search', component: SearchPage },
   { path: '/notifications', name: 'Notifications', component: NotificationsPage },
   { path: '/messages', name: 'Messages', component: MessagesPage },
-  { path: '/user/:uid', name: 'User', component: UserPage },
-  { path: '/blacklist', name: 'BlackList', component: BlackListPage },
-  { path: '/topic/:tag', name: 'Topic', component: TopicPage },
-  { path: '/app/:packageName', name: 'AppDetail', component: AppDetailPage },
-  { path: '/product/:productId', name: 'Product', component: ProductPage },
-  { path: '/dyh/:dyhId', name: 'Dyh', component: DyhPage },
-  { path: '/album/:albumId', name: 'AlbumDetail', component: AlbumPage },
+  { path: '/user/:uid', name: 'User', component: UserPage, meta: { hasOwnBackButton: true } },
+  { path: '/blacklist', name: 'BlackList', component: BlackListPage, meta: { hasOwnBackButton: true } },
+  { path: '/topic/:tag', name: 'Topic', component: TopicPage, meta: { hasOwnBackButton: true } },
+  { path: '/app/:packageName', name: 'AppDetail', component: AppDetailPage, meta: { hasOwnBackButton: true } },
+  { path: '/product/:productId', name: 'Product', component: ProductPage, meta: { hasOwnBackButton: true } },
+  { path: '/dyh/:dyhId', name: 'Dyh', component: DyhPage, meta: { hasOwnBackButton: true } },
+  { path: '/album/:albumId', name: 'AlbumDetail', component: AlbumPage, meta: { hasOwnBackButton: true } },
   { path: '/albums', name: 'Albums', component: AlbumsPage },
   { path: '/pictures', name: 'Pictures', component: PicturesPage },
   { path: '/headline', name: 'Headline', component: HeadlinePage },
@@ -90,4 +91,12 @@ export const router = createRouter({
     if (savedPosition) return savedPosition;
     return { top: 0 };
   }
+});
+
+router.beforeEach((_to, from) => {
+  saveRouteScrollPosition(from.fullPath);
+});
+
+router.afterEach((to) => {
+  void restoreRouteScrollPosition(to.fullPath);
 });

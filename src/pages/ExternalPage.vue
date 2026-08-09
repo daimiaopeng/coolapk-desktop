@@ -31,6 +31,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { sanitizeCoolapkHtml } from '../utils/sanitizeHtml';
 import { handleAnchorClick } from '../utils/anchorClick';
@@ -42,7 +43,8 @@ import EmptyState from '../components/common/EmptyState.vue';
 const route = useRoute();
 const router = useRouter();
 
-const url = computed(() => String(route.query.url || ''));
+// 固定当前缓存页面的目标地址，避免切换路由时后台重新抓取。
+const url = ref(String(route.query.url || ''));
 const title = ref('外部链接');
 const html = ref('');
 const loading = ref(false);
@@ -84,11 +86,7 @@ function openInSystem() {
 }
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/');
-  }
+  navigateBack(router);
 }
 
 watch(url, (newUrl) => {

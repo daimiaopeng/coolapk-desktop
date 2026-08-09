@@ -1,8 +1,13 @@
 <template>
   <AppShell>
     <router-view v-slot="{ Component, route }">
-      <keep-alive :include="['HomePage', 'MessagesPage', 'DiscoverPage', 'NotificationsPage']">
-        <component :is="Component" :key="route.name || route.path" />
+      <!--
+        桌面端通过路由切换维护页面栈。缓存所有路由页面，进入详情页时不销毁下面的页面，
+        从而保留已加载数据、滚动位置、筛选条件、草稿和其他局部状态。
+        使用包含参数和查询条件的完整路径作为缓存标识，让不同页面拥有独立实例。
+      -->
+      <keep-alive>
+        <component :is="Component" :key="route.fullPath" />
       </keep-alive>
     </router-view>
 

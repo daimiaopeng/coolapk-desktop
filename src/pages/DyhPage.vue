@@ -102,6 +102,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { navigateBack } from '../utils/navigation';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import FeedCard from '../components/feed/FeedCard.vue';
 import AppImage from '../components/common/AppImage.vue';
@@ -113,7 +114,8 @@ import { useAuthStore } from '../stores/auth';
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const dyhId = computed(() => route.params.dyhId as string);
+// 固定当前缓存页面的参数，避免隐藏后跟随全局路由变化重新加载。
+const dyhId = ref(route.params.dyhId as string);
 
 const dyhDetail = ref<any>(null);
 const headerLoading = ref(false);
@@ -162,11 +164,7 @@ const dyhDescription = computed(() => {
 });
 
 function goBack() {
-  if (window.history.length > 1) {
-    router.back();
-  } else {
-    router.push('/discover');
-  }
+  navigateBack(router, '/discover');
 }
 
 async function fetchDyhHeader() {

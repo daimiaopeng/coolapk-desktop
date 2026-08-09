@@ -417,14 +417,6 @@ function handleBulletinClick(item: any) {
   }
 }
 
-watch(
-  () => route.path,
-  () => {
-    syncTabFromRoute();
-    loadFeeds(true);
-  }
-);
-
 watch(activeTab, () => {
   loadFeeds(true);
 });
