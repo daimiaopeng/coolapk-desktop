@@ -1356,76 +1356,74 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": topics }))
     }
 
-    // 右侧栏：推荐酷友 (关注页 V9_HOME_TAB_FOLLOW 的"热门酷友"卡片)
+    // 右侧栏：推荐酷友
+    // 酷安已下线 V9_HOME_TAB_FOLLOW 的"热门酷友"卡片与 /v6/user/statList、
+    // /v6/member/verifyList 等用户列表接口（实测均返回空），
+    // 现改为从首页推荐流（indexV8）的作者中提取活跃酷友，去重取前 5。
     pub async fn get_recommend_users(&self) -> Result<Value, String> {
         let raw = self
             .api_get(
-                "/v6/page/dataList",
-                &[
-                    ("url", "V9_HOME_TAB_FOLLOW".to_string()),
-                    ("page", "1".to_string()),
-                ],
+                "/v6/main/indexV8",
+                &[("page", "1".to_string()), ("show_type", "recommend".to_string())],
             )
             .await?;
 
-        let mut users = Vec::new();
+        let mut users: Vec<Value> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
         if let Some(arr) = raw.get("data").and_then(|v| v.as_array()) {
             for item in arr {
                 let obj = match item.as_object() {
                     Some(o) => o,
                     None => continue,
                 };
-                if obj.get("entityType").and_then(|v| v.as_str()) != Some("card")
-                    || obj.get("entityTemplate").and_then(|v| v.as_str()) != Some("iconGridCard")
-                {
+                if obj.get("entityType").and_then(|v| v.as_str()) != Some("feed") {
                     continue;
                 }
-                let entities = obj.get("entities").and_then(|v| v.as_array());
-                let is_user_card = entities
-                    .and_then(|es| es.first())
-                    .and_then(|e| e.get("entityType"))
+                let user_info = obj
+                    .get("userInfo")
+                    .or_else(|| obj.get("user"))
+                    .and_then(|v| v.as_object());
+                let uid = obj
+                    .get("uid")
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .or_else(|| user_info.and_then(|u| u.get("uid")).and_then(|v| v.as_str().map(str::to_owned)))
+                    .unwrap_or_default();
+                let username = obj
+                    .get("username")
                     .and_then(|v| v.as_str())
-                    == Some("user");
-                if !is_user_card {
+                    .or_else(|| user_info.and_then(|u| u.get("username")).and_then(|v| v.as_str()))
+                    .unwrap_or("")
+                    .to_string();
+                if uid.is_empty() || username.is_empty() || !seen.insert(uid.clone()) {
                     continue;
                 }
-                if let Some(es) = entities {
-                    for e in es {
-                        let eobj = match e.as_object() {
-                            Some(o) => o,
-                            None => continue,
-                        };
-                        if eobj.get("entityType").and_then(|v| v.as_str()) != Some("user") {
-                            continue;
-                        }
-                        let username = get_str_by_keys(eobj, &["username"]).unwrap_or_default();
-                        if username.is_empty() {
-                            continue;
-                        }
-                        let uid = get_str_by_keys(eobj, &["uid"]).unwrap_or_default();
-                        let raw_avatar =
-                            get_str_by_keys(eobj, &["userAvatar"]).unwrap_or_default();
-                        let avatar = if raw_avatar.starts_with("http") {
-                            raw_avatar
-                        } else if !raw_avatar.is_empty() {
-                            format!(
-                                "https://avatar.coolapk.com/{}",
-                                raw_avatar.trim_start_matches('/')
-                            )
-                        } else {
-                            String::new()
-                        };
-                        let verify_title =
-                            get_str_by_keys(eobj, &["verify_title"]).unwrap_or_default();
-                        users.push(json!({
-                            "uid": uid,
-                            "username": username,
-                            "avatar": avatar,
-                            "verifyTitle": verify_title
-                        }));
-                    }
+                let raw_avatar = obj
+                    .get("userAvatar")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| user_info.and_then(|u| u.get("userAvatar")).and_then(|v| v.as_str()))
+                    .unwrap_or("")
+                    .to_string();
+                let avatar = if raw_avatar.starts_with("http") {
+                    raw_avatar
+                } else if !raw_avatar.is_empty() {
+                    format!("https://avatar.coolapk.com/{}", raw_avatar.trim_start_matches('/'))
+                } else {
+                    String::new()
+                };
+                let verify_title = obj
+                    .get("verify_title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                users.push(json!({
+                    "uid": uid,
+                    "username": username,
+                    "avatar": avatar,
+                    "verifyTitle": verify_title
+                }));
+                if users.len() >= 5 {
+                    break;
                 }
-                break;
             }
         }
         Ok(json!({ "code": 200, "data": users }))
