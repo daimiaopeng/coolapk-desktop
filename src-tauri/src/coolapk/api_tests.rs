@@ -1526,7 +1526,12 @@ async fn probe_hot_reply_target_row() {
 #[ignore]
 async fn probe_dyh_square_endpoints() {
     let client = CoolapkClient::new();
-    let token = client.auth.get_app_token().unwrap();
+    let token = client
+        .auth
+        .read()
+        .unwrap()
+        .get_app_token()
+        .unwrap();
     let cases: &[(&str, &str, &[(&str, String)])] = &[
         ("看看号发现A", "/v6/page/dataList", &[("url", "/user/dyhSubscribe".to_string()), ("page", "1".to_string())]),
         ("看看号发现B", "/v6/page/dataList", &[("url", "#/dyhSquare".to_string()), ("page", "1".to_string())]),
@@ -1542,14 +1547,15 @@ async fn probe_dyh_square_endpoints() {
             .query(params).send().await;
         match res {
             Ok(r) => {
+                let status = r.status();
                 let body = r.text().await.unwrap_or_default();
                 let clip = body.chars().take(120).collect::<String>();
                 if body.contains("does not exists") || body.contains("API unsupported") {
                     println!("  [废弃] {name}: {}", clip);
-                } else if body.contains("登录") || r.status() == 401 {
+                } else if body.contains("登录") || status == 401 {
                     println!("  [需登录] {name}");
                 } else {
-                    println!("  [{status}] {name}: {}", r.status(), clip);
+                    println!("  [{status}] {name}: {clip}");
                 }
             }
             Err(e) => println!("  [网络错误] {name}: {e}"),
