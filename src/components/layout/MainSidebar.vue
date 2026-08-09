@@ -38,10 +38,16 @@
           :to="item.path"
           class="nav-item"
           active-class="is-active"
-          :title="item.label"
+          :title="getNavTitle(item)"
         >
           <i :class="[item.icon, 'nav-icon']"></i>
           <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
+          <span
+            v-if="getNavBadge(item.key) > 0"
+            :class="['nav-badge', { 'is-wide': getNavBadge(item.key) > 9 }]"
+          >
+            {{ getNavBadge(item.key) > 99 ? '99+' : getNavBadge(item.key) }}
+          </span>
         </router-link>
       </div>
 
@@ -85,10 +91,12 @@
 import { computed } from 'vue';
 import { useSettingsStore } from '../../stores/settings';
 import { useAuthStore } from '../../stores/auth';
+import { useNotificationStore } from '../../stores/notifications';
 import { APP_VERSION } from '../../constants/version';
 
 const settingsStore = useSettingsStore();
 const authStore = useAuthStore();
+const notificationStore = useNotificationStore();
 const appVersion = APP_VERSION;
 
 function requestUpdateCheck() {
@@ -132,6 +140,17 @@ const secondaryNavs = computed(() => {
   if (!vis) return allSecondaryNavs;
   return allSecondaryNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
 });
+
+function getNavBadge(key: string): number {
+  if (key === 'notifications') return notificationStore.notificationCount;
+  if (key === 'messages') return notificationStore.messageCount;
+  return 0;
+}
+
+function getNavTitle(item: { key: string; label: string }): string {
+  const count = getNavBadge(item.key);
+  return count > 0 ? `${item.label}（${count} 条未读）` : item.label;
+}
 
 
 function toggleTheme() {
@@ -257,6 +276,40 @@ function handleLogout() {
   margin-right: var(--space-3);
 }
 
+.nav-badge {
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  padding: 0;
+  border-radius: 50%;
+  background-color: var(--danger);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  line-height: 20px;
+  text-align: center;
+}
+
+.nav-badge.is-wide {
+  flex-basis: auto;
+  width: auto;
+  min-width: 20px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+}
+
+.main-sidebar.is-collapsed .nav-badge {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  line-height: 14px;
+  border-radius: 50%;
+}
+
 .main-sidebar.is-collapsed .nav-icon {
   margin-right: 0;
 }
@@ -295,7 +348,7 @@ function handleLogout() {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background-color: var(--background, #f5f7f9);
+  background-color: #ffffff;
   border: 1px solid var(--border-light, #e4e9ef);
   border-radius: var(--radius-control, 8px);
   padding: 8px 12px;
@@ -334,6 +387,16 @@ function handleLogout() {
   .nav-item {
     justify-content: center !important;
     padding: 0 !important;
+  }
+
+  .nav-badge {
+    position: absolute;
+    top: 4px;
+    right: 5px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    line-height: 14px;
   }
 }
 </style>

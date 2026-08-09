@@ -1,5 +1,21 @@
 <template>
   <div class="feed-comment-section">
+    <div class="comment-toolbar">
+      <strong class="comment-title">评论 <span>{{ sortedComments.length }}</span></strong>
+      <div class="comment-sort" aria-label="评论排序">
+        <button
+          v-for="option in commentSortOptions"
+          :key="option.value"
+          type="button"
+          :class="['comment-sort-button', { 'is-active': commentSortMode === option.value }]"
+          :aria-pressed="commentSortMode === option.value"
+          @click.stop="commentSortMode = option.value"
+        >
+          {{ option.label }}
+        </button>
+      </div>
+    </div>
+
     <!-- 评论发表输入框 -->
     <div class="comment-input-box">
       <input
@@ -28,14 +44,14 @@
     </div>
 
     <!-- 无评论提示 -->
-    <div v-else-if="!nestedComments || !nestedComments.length" class="comment-empty">
+    <div v-else-if="!sortedComments.length" class="comment-empty">
       <i class="fa-regular fa-comments empty-icon"></i>
       <span>暂无评论，快来抢沙发吧~</span>
     </div>
 
     <!-- 微博/酷安 规范楼中楼树状结构列表 -->
     <div v-else class="comment-list">
-      <div v-for="c in nestedComments" :key="c.id || c.uid" class="comment-row">
+      <div v-for="c in sortedComments" :key="c.id || c.uid" class="comment-row">
         <!-- 1. 一级评论人头像 -->
         <AppAvatar
           class="comment-avatar"
@@ -61,8 +77,33 @@
               <i class="fa-solid fa-user-pen"></i> 楼主
             </span>
 
-            <span v-if="c.userLevel" class="level-tag">LV{{ c.userLevel }}</span>
-            <span class="comment-time">{{ c.infoHtml || c.dateline || '刚刚' }}</span>
+            <span v-if="getCommentUserLevel(c)" class="level-tag">LV{{ getCommentUserLevel(c) }}</span>
+            <span v-if="getCommentVerifyTitle(c)" class="verify-tag" :title="getCommentVerifyTitle(c)">
+              <i class="fa-solid fa-circle-check"></i>
+              {{ getCommentVerifyTitle(c) }}
+            </span>
+          </div>
+
+          <div v-if="hasCommentDetails(c)" class="comment-detail-row">
+            <button
+              v-if="displayCommentTime(c)"
+              type="button"
+              class="comment-time-button"
+              :title="isAbsoluteTimeVisible(c) ? '点击恢复相对时间' : '点击查看完整时间'"
+              @click.stop="toggleCommentTime(c)"
+            >
+              <i class="fa-regular fa-clock"></i>
+              {{ displayCommentTime(c) }}
+            </button>
+            <span v-if="getCommentDeviceTitle(c)" class="comment-device" :title="getCommentDeviceTooltip(c)">
+              <i class="fa-solid fa-mobile-screen-button"></i>
+              {{ getCommentDeviceTitle(c) }}
+            </span>
+            <span v-if="getCommentFloor(c)" class="comment-secondary-meta">#{{ getCommentFloor(c) }}楼</span>
+            <span v-if="getCommentLocation(c)" class="comment-secondary-meta">
+              <i class="fa-solid fa-location-dot"></i>
+              {{ getCommentLocation(c) }}
+            </span>
           </div>
 
           <!-- 一级评论正文 -->
@@ -71,6 +112,13 @@
             v-html="formatRichText(c.message || c.replyRowsText || '')"
             @click="handleCommentTextClick($event, c)"
           ></div>
+
+          <FeedImageGrid
+            v-if="getCommentImages(c).length"
+            class="comment-image-grid"
+            :images="getCommentImages(c)"
+            variant="comment"
+          />
 
           <div class="comment-actions">
             <button
@@ -123,7 +171,11 @@
                 <div class="sub-reply-meta">
                   <span class="sub-user">{{ sub.username || sub.fromUserName || '酷友' }}</span>
                   <span v-if="isAuthor(sub)" class="badge-author sub-badge">楼主</span>
-                  <span v-if="sub.userLevel" class="level-tag">LV{{ sub.userLevel }}</span>
+                  <span v-if="getCommentUserLevel(sub)" class="level-tag">LV{{ getCommentUserLevel(sub) }}</span>
+                  <span v-if="getCommentVerifyTitle(sub)" class="verify-tag" :title="getCommentVerifyTitle(sub)">
+                    <i class="fa-solid fa-circle-check"></i>
+                    {{ getCommentVerifyTitle(sub) }}
+                  </span>
 
                   <!-- 被回复人 -->
                   <template v-if="sub.replyUsername || sub.rusername || sub.toUserName">
@@ -131,10 +183,35 @@
                     <span class="sub-target-user">@{{ sub.replyUsername || sub.rusername || sub.toUserName }}</span>
                   </template>
 
-                  <span class="comment-time">{{ sub.infoHtml || sub.dateline || '' }}</span>
+                </div>
+                <div v-if="hasCommentDetails(sub)" class="comment-detail-row sub-detail-row">
+                  <button
+                    v-if="displayCommentTime(sub)"
+                    type="button"
+                    class="comment-time-button"
+                    :title="isAbsoluteTimeVisible(sub) ? '点击恢复相对时间' : '点击查看完整时间'"
+                    @click.stop="toggleCommentTime(sub)"
+                  >
+                    <i class="fa-regular fa-clock"></i>
+                    {{ displayCommentTime(sub) }}
+                  </button>
+                  <span v-if="getCommentDeviceTitle(sub)" class="comment-device" :title="getCommentDeviceTooltip(sub)">
+                    <i class="fa-solid fa-mobile-screen-button"></i>
+                    {{ getCommentDeviceTitle(sub) }}
+                  </span>
+                  <span v-if="getCommentLocation(sub)" class="comment-secondary-meta">
+                    <i class="fa-solid fa-location-dot"></i>
+                    {{ getCommentLocation(sub) }}
+                  </span>
                 </div>
                 <!-- 子回复正文 -->
                 <div class="sub-reply-text" v-html="formatRichText(sub.message || '')" @click="handleAnchorClick"></div>
+                <FeedImageGrid
+                  v-if="getCommentImages(sub).length"
+                  class="comment-image-grid sub-comment-images"
+                  :images="getCommentImages(sub)"
+                  variant="comment"
+                />
                 <div class="sub-reply-actions">
                   <button
                     type="button"
@@ -186,17 +263,32 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import AppAvatar from '../common/AppAvatar.vue';
 import Button from '../ui/Button.vue';
+import FeedImageGrid from './FeedImageGrid.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import { showToast } from '../../utils/toast';
 import { requestConfirmation } from '../../utils/confirm';
 import { getErrorMessage } from '../../utils/errors';
+import {
+  COMMENT_SORT_OPTIONS,
+  DEFAULT_COMMENT_SORT_MODE,
+  formatCommentAbsoluteTime,
+  formatCommentTime,
+  getCommentDeviceTitle,
+  getCommentImages,
+  getCommentLocation,
+  getCommentUserLevel,
+  getCommentVerifyTitle,
+  sortComments,
+  type CommentSortMode,
+} from '../../utils/commentList';
 
 const props = defineProps<{
+  feedId?: string | number;
   feedUid?: string | number;
   feedUsername?: string;
   comments: any[];
@@ -215,6 +307,53 @@ const inputMsg = ref('');
 const sending = ref(false);
 const inputRef = ref<HTMLInputElement | null>(null);
 const replyTargetUser = ref('');
+const commentSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentSortOptions = COMMENT_SORT_OPTIONS;
+const absoluteTimeIds = ref<Set<string>>(new Set());
+
+function isAbsoluteTimeVisible(item: any): boolean {
+  return absoluteTimeIds.value.has(itemKey(item));
+}
+
+function displayCommentTime(item: any): string {
+  return isAbsoluteTimeVisible(item)
+    ? formatCommentAbsoluteTime(item)
+    : formatCommentTime(item);
+}
+
+function toggleCommentTime(item: any) {
+  const key = itemKey(item);
+  const nextSet = new Set(absoluteTimeIds.value);
+  if (nextSet.has(key)) nextSet.delete(key);
+  else nextSet.add(key);
+  absoluteTimeIds.value = nextSet;
+}
+
+function getCommentFloor(item: any): string {
+  const value = item?.floor ?? item?.rank ?? '';
+  return String(value).trim();
+}
+
+function getCommentDeviceRom(item: any): string {
+  return String(item?.deviceRom ?? item?.device_rom ?? '').trim();
+}
+
+function getCommentDeviceTooltip(item: any): string {
+  return [
+    getCommentDeviceTitle(item),
+    getCommentDeviceRom(item),
+    String(item?.deviceBuild ?? item?.device_build ?? '').trim(),
+  ].filter(Boolean).join(' · ');
+}
+
+function hasCommentDetails(item: any): boolean {
+  return Boolean(
+    displayCommentTime(item)
+    || getCommentDeviceTitle(item)
+    || getCommentFloor(item)
+    || getCommentLocation(item),
+  );
+}
 
 const myUid = computed(() => (authStore.isLoggedIn ? String(authStore.user?.uid ?? '') : ''));
 
@@ -276,6 +415,82 @@ const likePending = ref<Record<string, boolean>>({});
 function itemKey(item: any): string {
   return String(item?.id ?? `${item?.uid ?? 'unknown'}:${item?.dateline ?? item?.infoHtml ?? ''}`);
 }
+
+const replyDetails = ref<Record<string, any>>({});
+const requestedReplyDetailIds = new Set<string>();
+const replyDetailQueue: string[] = [];
+let activeReplyDetailRequests = 0;
+const MAX_REPLY_DETAIL_CONCURRENCY = 4;
+
+function collectReplyIds(items: any[]): string[] {
+  const result: string[] = [];
+  const visit = (item: any) => {
+    const id = String(item?.id ?? '').trim();
+    if (id) result.push(id);
+    const children = Array.isArray(item?.replyRows)
+      ? item.replyRows
+      : Array.isArray(item?.rlist)
+        ? item.rlist
+        : [];
+    children.forEach(visit);
+  };
+  items.forEach(visit);
+  return [...new Set(result)];
+}
+
+function mergeReplyDetail(item: any): any {
+  const detail = replyDetails.value[String(item?.id ?? '')];
+  if (!detail) return item;
+
+  const merged = { ...item };
+  Object.entries(detail).forEach(([key, value]) => {
+    const hasMeaningfulValue = value !== undefined
+      && value !== null
+      && value !== ''
+      && value !== 0
+      && (!Array.isArray(value) || value.length > 0);
+    if (hasMeaningfulValue) merged[key] = value;
+  });
+  return merged;
+}
+
+function pumpReplyDetailQueue() {
+  while (activeReplyDetailRequests < MAX_REPLY_DETAIL_CONCURRENCY && replyDetailQueue.length > 0) {
+    const replyId = replyDetailQueue.shift();
+    if (!replyId) continue;
+    activeReplyDetailRequests += 1;
+    void CoolapkTauriAPI.getReplyDetail(replyId)
+      .then((response: any) => {
+        if (!response?.data) return;
+        replyDetails.value = {
+          ...replyDetails.value,
+          [replyId]: response.data,
+        };
+      })
+      .catch(() => {
+        // 补充元数据失败不影响评论正文、点赞和回复等主要功能。
+      })
+      .finally(() => {
+        activeReplyDetailRequests -= 1;
+        pumpReplyDetailQueue();
+      });
+  }
+}
+
+function scheduleReplyDetails(ids: string[]) {
+  ids.forEach((id) => {
+    if (requestedReplyDetailIds.has(id)) return;
+    requestedReplyDetailIds.add(id);
+    replyDetailQueue.push(id);
+  });
+  pumpReplyDetailQueue();
+}
+
+watch(
+  () => collectReplyIds(props.comments).join(','),
+  () => scheduleReplyDetails(collectReplyIds(props.comments)),
+  { immediate: true },
+);
 
 function initialLikeState(item: any): LikeState {
   const like = item?.userAction?.like;
@@ -427,12 +642,17 @@ const nestedComments = computed(() => {
   const orphanSubs: any[] = [];
 
   // 第一遍扫描：识别一级楼层与已有 replyRows
-  const feedIdStr = String(props.feedUid || '');
+  const feedIdStr = String(props.feedId || '');
 
   props.comments.forEach((rawItem) => {
+    const enrichedItem = mergeReplyDetail(rawItem);
     const item = {
-      ...rawItem,
-      replyRows: Array.isArray(rawItem.replyRows) ? [...rawItem.replyRows] : [],
+      ...enrichedItem,
+      replyRows: Array.isArray(enrichedItem.replyRows)
+        ? enrichedItem.replyRows.map(mergeReplyDetail)
+        : Array.isArray(enrichedItem.rlist)
+          ? enrichedItem.rlist.map(mergeReplyDetail)
+          : [],
     };
 
     const ridStr = String(item.rid || '0');
@@ -470,6 +690,8 @@ const nestedComments = computed(() => {
   return topList;
 });
 
+const sortedComments = computed(() => sortComments(nestedComments.value, commentSortMode.value));
+
 function handleSend() {
   const val = inputMsg.value.trim();
   if (!val) return;
@@ -486,6 +708,58 @@ function handleSend() {
   background: var(--background);
   border-radius: var(--radius-card);
   border: 1px solid var(--border-light);
+}
+
+.comment-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.comment-title {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.comment-title span {
+  color: var(--text-tertiary);
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.comment-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-muted, var(--surface));
+  border: 1px solid var(--border-light);
+}
+
+.comment-sort-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: color var(--duration-fast), background var(--duration-fast), box-shadow var(--duration-fast);
+}
+
+.comment-sort-button:hover {
+  color: var(--text-primary);
+}
+
+.comment-sort-button.is-active {
+  color: var(--brand-primary);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
 }
 
 /* 输入框 */
@@ -566,6 +840,7 @@ function handleSend() {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   font-size: 0.82rem;
 }
 
@@ -608,9 +883,86 @@ function handleSend() {
   font-weight: 600;
 }
 
-.comment-time {
+.verify-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(280px, 45vw);
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fff6e8;
+  color: #d87a00;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comment-detail-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 9px;
+  min-height: 18px;
+}
+
+.sub-detail-row {
+  margin-top: 1px;
+}
+
+.comment-time-button,
+.comment-device,
+.comment-secondary-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 0.76rem;
   color: var(--text-tertiary);
+}
+
+.comment-time-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--duration-fast);
+}
+
+.comment-time-button:hover {
+  color: var(--brand-primary);
+}
+
+.comment-device {
+  max-width: min(210px, 40vw);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  opacity: 0.82;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--duration-fast), opacity var(--duration-fast);
+}
+
+.comment-device:hover {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.comment-device i {
+  font-size: 0.68rem;
+}
+
+.comment-image-grid {
+  align-self: flex-start;
+}
+
+.sub-comment-images {
+  max-width: 360px;
 }
 
 .comment-text {

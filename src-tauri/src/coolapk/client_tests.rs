@@ -164,6 +164,175 @@ async fn test_reply_list_api() {
     }
 }
 
+/// 验证公开动态在登录设备触发风控时，匿名设备仍可读取完整一级评论。
+/// 该测试只输出评论数量与层级字段，不读取或打印任何登录凭据。
+#[tokio::test]
+#[ignore]
+async fn probe_public_reply_list_for_single_comments() {
+    let client = CoolapkClient::new();
+    let query = [
+        ("id", "72018814".to_string()),
+        ("listType", "dateline_desc".to_string()),
+        ("page", "1".to_string()),
+        ("discussMode", "1".to_string()),
+        ("feedType", "feed".to_string()),
+        ("blockStatus", "0".to_string()),
+        ("fromFeedAuthor", "0".to_string()),
+    ];
+
+    for (name, result) in [
+        (
+            "api2",
+            client
+                .public_api_get_from("https://api2.coolapk.com", "/v6/feed/replyList", &query)
+                .await,
+        ),
+        (
+            "api",
+            client
+                .public_api_get_from("https://api.coolapk.com", "/v6/feed/replyList", &query)
+                .await,
+        ),
+    ] {
+        match result {
+            Ok(value) => {
+                let rows = value
+                    .get("data")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                let summary: Vec<Value> = rows
+                    .iter()
+                    .map(|item| {
+                        json!({
+                            "id": item.get("id").cloned().unwrap_or(Value::Null),
+                            "rid": item.get("rid").cloned().unwrap_or(Value::Null),
+                            "rrid": item.get("rrid").cloned().unwrap_or(Value::Null),
+                            "replyRowsCount": item
+                                .get("replyRowsCount")
+                                .cloned()
+                                .unwrap_or(Value::Null),
+                        })
+                    })
+                    .collect();
+                let field_names = rows
+                    .first()
+                    .and_then(Value::as_object)
+                    .map(|object| {
+                        let mut names = object.keys().cloned().collect::<Vec<_>>();
+                        names.sort();
+                        names
+                    })
+                    .unwrap_or_default();
+                let available_fields = [
+                    "device_title",
+                    "deviceTitle",
+                    "floor",
+                    "rank",
+                    "ipLocation",
+                    "ip_location",
+                    "location",
+                    "pic",
+                    "picArr",
+                    "images",
+                    "verify_title",
+                    "dateline",
+                ]
+                .into_iter()
+                .filter(|field| {
+                    rows.iter().any(|item| {
+                        let value = item.get(*field).unwrap_or(&Value::Null);
+                        !value.is_null()
+                            && value.as_str().is_none_or(|text| !text.trim().is_empty())
+                            && value.as_array().is_none_or(|items| !items.is_empty())
+                    })
+                })
+                .collect::<Vec<_>>();
+                let user_info_fields = rows
+                    .iter()
+                    .find_map(|item| item.get("userInfo").and_then(Value::as_object))
+                    .map(|object| {
+                        let mut names = object.keys().cloned().collect::<Vec<_>>();
+                        names.sort();
+                        names
+                    })
+                    .unwrap_or_default();
+                let nested_fields = rows
+                    .iter()
+                    .filter_map(|item| item.get("replyRows").and_then(Value::as_array))
+                    .flatten()
+                    .find_map(Value::as_object)
+                    .map(|object| {
+                        let mut names = object.keys().cloned().collect::<Vec<_>>();
+                        names.sort();
+                        names
+                    })
+                    .unwrap_or_default();
+                println!("{name}: count={}, rows={}", rows.len(), json!(summary));
+                println!("{name}: first_fields={field_names:?}");
+                println!("{name}: available_display_fields={available_fields:?}");
+                println!("{name}: user_info_fields={user_info_fields:?}");
+                println!("{name}: nested_fields={nested_fields:?}");
+            }
+            Err(error) => println!("{name}: error={error}"),
+        }
+    }
+}
+
+/// 探测评论是否存在可读取的详情接口，以确认能否补齐发表评论时的设备信息。
+/// 只打印状态码和字段名，不打印评论正文、用户信息或登录凭据。
+#[tokio::test]
+#[ignore]
+async fn probe_reply_detail_metadata() {
+    let client = CoolapkClient::new();
+    let reply_id = "601858220";
+
+    for path in ["/v6/feed/detail", "/v6/feed/replyDetail", "/v6/feed/reply"] {
+        let result = client
+            .public_api_get_from(
+                "https://api.coolapk.com",
+                path,
+                &[("id", reply_id.to_string())],
+            )
+            .await;
+
+        match result {
+            Ok(value) => {
+                let data = value.get("data").unwrap_or(&Value::Null);
+                let mut fields = data
+                    .as_object()
+                    .map(|object| object.keys().cloned().collect::<Vec<_>>())
+                    .unwrap_or_default();
+                fields.sort();
+                let has_device = data.get("device_title").is_some()
+                    || data.get("deviceTitle").is_some()
+                    || data.get("device_name").is_some();
+                let device_metadata = json!({
+                    "device_title": data.get("device_title").and_then(Value::as_str).unwrap_or(""),
+                    "device_name": data.get("device_name").and_then(Value::as_str).unwrap_or(""),
+                    "device_build": data.get("device_build").and_then(Value::as_str).unwrap_or(""),
+                    "device_rom": data.get("device_rom").and_then(Value::as_str).unwrap_or(""),
+                    "useragent": data.get("useragent").and_then(Value::as_str).unwrap_or(""),
+                });
+                println!(
+                    "path={path}, code={:?}, data_fields={fields:?}, has_device={has_device}, device_metadata={device_metadata}",
+                    value.get("code")
+                );
+            }
+            Err(error) => println!("path={path}, error={error}"),
+        }
+    }
+}
+
+#[test]
+fn test_parse_reply_user_agent_keeps_real_device_metadata() {
+    let user_agent = "Dalvik/2.1.0 (Linux; U; Android 16; 2210132C Build/BP2A.250605.031.A3) (#Build; Xiaomi; 2210132C; BP2A.250605.031.A3; HyperOS_3.0; 3.0.310.0) +CoolMarket/16.5.1";
+    let (device_title, device_build, device_rom) = parse_reply_user_agent(user_agent);
+    assert_eq!(device_title, "Xiaomi 2210132C");
+    assert_eq!(device_build, "BP2A.250605.031.A3");
+    assert_eq!(device_rom, "Android 16 · HyperOS 3.0.310.0");
+}
+
 /// 模拟「登录 → 保存 Cookie → 落盘 JSON → 重启恢复 → 登出」完整链路（不依赖网络）
 #[tokio::test]
 async fn test_login_cookie_persistence_flow() {

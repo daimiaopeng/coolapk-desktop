@@ -782,7 +782,7 @@ dependencies = [
 
 [[package]]
 name = "coolapk_desktop"
-version = "1.5.1"
+version = "1.6.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -791,6 +791,7 @@ dependencies = [
  "hex",
  "hmac",
  "md-5",
+ "notify-rust",
  "opener",
  "reqwest 0.12.28",
  "serde",
@@ -807,6 +808,8 @@ dependencies = [
  "tauri-plugin-stronghold",
  "tokio",
  "tracing",
+ "windows 0.61.3",
+ "winreg 0.55.0",
 ]
 
 [[package]]

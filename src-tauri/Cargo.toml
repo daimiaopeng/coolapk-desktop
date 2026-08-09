@@ -1,6 +1,6 @@
 [package]
 name = "coolapk_desktop"
-version = "1.5.1"
+version = "1.6.0"
 description = "基于 Tauri 2、Vue 3 和 Rust 的非官方酷安桌面客户端"
 authors = ["daimiaopeng"]
 edition = "2024"
@@ -19,6 +19,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
+notify-rust = "4.18"
 tauri-plugin-single-instance = "2"
 tauri-plugin-http = "2"
 tauri-plugin-store = "2"
@@ -37,6 +38,10 @@ chrono = "0.4"
 anyhow = "1.0"
 tracing = "0.1"
 opener = "0.7"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows = { version = "0.61", features = ["Data_Xml_Dom", "UI_Notifications"] }
 
 [features]
 default = ["custom-protocol"]

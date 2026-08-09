@@ -4,6 +4,8 @@ import { createPinia, setActivePinia } from 'pinia';
 
 const mocks = vi.hoisted(() => ({
   getFeedChangeHistory: vi.fn(),
+  getHotReplies: vi.fn(),
+  getFeedReplies: vi.fn(),
 }));
 
 vi.mock('vue-router', () => ({
@@ -17,6 +19,8 @@ vi.mock('../../../router', () => ({
 vi.mock('../../../api/coolapk', () => ({
   CoolapkTauriAPI: {
     getFeedChangeHistory: mocks.getFeedChangeHistory,
+    getHotReplies: mocks.getHotReplies,
+    getFeedReplies: mocks.getFeedReplies,
   },
 }));
 
@@ -25,6 +29,8 @@ import FeedCard from '../FeedCard.vue';
 describe('动态卡片编辑记录', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getHotReplies.mockResolvedValue({ data: [] });
+    mocks.getFeedReplies.mockResolvedValue({ data: [] });
     setActivePinia(createPinia());
   });
 
@@ -93,5 +99,111 @@ describe('动态卡片编辑记录', () => {
 
     expect(wrapper.find('.stub-edited').exists()).toBe(false);
     expect(mocks.getFeedChangeHistory).not.toHaveBeenCalled();
+  });
+
+  it('单动态详情页进入后自动展开并加载评论', async () => {
+    mocks.getHotReplies.mockResolvedValue({
+      data: [{ id: 'reply-1', username: '评论用户', message: '评论内容' }],
+    });
+
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: { id: '789', uid: '456', username: '测试用户', message: '动态正文' },
+        detailMode: true,
+        autoOpenComments: true,
+      },
+      global: {
+        stubs: {
+          FeedHeader: true,
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedActionBar: true,
+          FeedCommentSection: {
+            props: ['comments'],
+            template: '<div class="stub-comments">{{ comments.length }}</div>',
+          },
+          ForwardDialog: true,
+          LoadingState: true,
+          AppDialog: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(mocks.getHotReplies).toHaveBeenCalledWith('789', 1);
+    expect(wrapper.find('.stub-comments').text()).toBe('1');
+  });
+
+  it('通知摘要阶段不请求评论，完整动态准备好后再加载', async () => {
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: { id: 'summary-id', username: '测试用户', message: '通知摘要' },
+        detailMode: true,
+        autoOpenComments: false,
+      },
+      global: {
+        stubs: {
+          FeedHeader: true,
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedActionBar: true,
+          FeedCommentSection: true,
+          ForwardDialog: true,
+          LoadingState: true,
+          AppDialog: true,
+        },
+      },
+    });
+    await flushPromises();
+    expect(mocks.getHotReplies).not.toHaveBeenCalled();
+
+    await wrapper.setProps({
+      feed: { id: 'real-feed-id', username: '测试用户', message: '完整动态' },
+      autoOpenComments: true,
+    });
+    await flushPromises();
+
+    expect(mocks.getHotReplies).toHaveBeenCalledWith('real-feed-id', 1);
+    expect(mocks.getHotReplies).not.toHaveBeenCalledWith('summary-id', 1);
+  });
+
+  it('热门排序同时保留普通评论，并去除热门评论中的重复项', async () => {
+    mocks.getHotReplies.mockResolvedValue({
+      data: [{ id: 'hot-1', username: '热门用户', message: '热门评论' }],
+    });
+    mocks.getFeedReplies.mockResolvedValue({
+      data: [
+        { id: 'hot-1', username: '热门用户', message: '热门评论' },
+        { id: 'normal-1', username: '普通用户', message: '普通评论' },
+      ],
+    });
+
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: { id: 'all-comments-feed', uid: '456', username: '动态作者', message: '动态正文' },
+        detailMode: true,
+        autoOpenComments: true,
+      },
+      global: {
+        stubs: {
+          FeedHeader: true,
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedActionBar: true,
+          FeedCommentSection: {
+            props: ['comments'],
+            template: '<div class="stub-comments">{{ comments.map(item => item.id).join(",") }}</div>',
+          },
+          ForwardDialog: true,
+          LoadingState: true,
+          AppDialog: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(mocks.getHotReplies).toHaveBeenCalledWith('all-comments-feed', 1);
+    expect(mocks.getFeedReplies).toHaveBeenCalledWith('all-comments-feed', 1);
+    expect(wrapper.find('.stub-comments').text()).toBe('hot-1,normal-1');
   });
 });

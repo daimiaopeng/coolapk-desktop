@@ -186,6 +186,7 @@ defineOptions({
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import { useAppStore } from '../stores/app';
+import { useNotificationStore } from '../stores/notifications';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -203,6 +204,7 @@ import { useRoute, useRouter } from 'vue-router';
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const notificationStore = useNotificationStore();
 const currentUserUid = computed(() => authStore.user?.uid || '');
 
 const navigateToUser = (uid?: string | number) => {
@@ -468,6 +470,7 @@ const selectSession = async (session: any) => {
   if (session.isnew == 1 || session.isNew) {
     session.isnew = 0;
     session.isNew = false;
+    notificationStore.markViewed('message');
     // 标记已读不阻塞聊天记录显示，网络异常时只记录错误。
     void withTimeout(CoolapkTauriAPI.readMessage(sessionKey), 10_000, '标记已读请求超时').catch((err) => {
       console.error('标记会话已读失败', err);

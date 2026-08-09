@@ -63,7 +63,8 @@
 
     <div v-if="showComments" class="inline-comment-wrapper" @click.stop>
       <FeedCommentSection
-        :feed-uid="feed.id"
+        :feed-id="feed.id"
+        :feed-uid="feed.uid || feed.userInfo?.uid"
         :feed-username="feed.username"
         :comments="comments"
         :loading="commentsLoading"
@@ -103,7 +104,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import type { FeedItem } from '../../types/feed';
 import FeedHeader from './FeedHeader.vue';
@@ -116,6 +117,7 @@ import LoadingState from '../common/LoadingState.vue';
 import AppDialog from '../common/AppDialog.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkRichText } from '../../utils/richText';
+import { getReplyData, mergeReplies } from '../../utils/commentList';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { showToast } from '../../utils/toast';
@@ -130,6 +132,7 @@ const props = defineProps<{
   feed: FeedItem;
   rankIndex?: number;
   detailMode?: boolean;
+  autoOpenComments?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -276,6 +279,7 @@ const favnum = ref(props.feed.favnum || 0);
 const showComments = ref(false);
 const comments = ref<any[]>([]);
 const commentsLoading = ref(false);
+let commentsRequestVersion = 0;
 
 async function toggleFav() {
   if (!authStore.isLoggedIn) {
@@ -299,30 +303,72 @@ async function toggleFav() {
   }
 }
 
-async function toggleComments() {
-  showComments.value = !showComments.value;
-  if (showComments.value && comments.value.length === 0) {
+async function openComments() {
+  showComments.value = true;
+  if (comments.value.length === 0) {
+    const requestedFeedId = String(props.feed.id || '');
+    if (!requestedFeedId) return;
+    const currentRequest = ++commentsRequestVersion;
     commentsLoading.value = true;
     try {
-      let res: any;
+      let loadedComments: any[] = [];
       if (settingsStore.settings.commentSort === 'hot') {
-        res = await CoolapkTauriAPI.getHotReplies(String(props.feed.id), 1);
-        if (!res || !res.data || !res.data.length) {
-          res = await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1);
+        // 热门接口只返回部分评论，因此同时加载完整评论并合并，热门评论仍排在前面。
+        const [hotResult, allResult] = await Promise.allSettled([
+          CoolapkTauriAPI.getHotReplies(requestedFeedId, 1),
+          CoolapkTauriAPI.getFeedReplies(requestedFeedId, 1),
+        ]);
+        const hotReplies = hotResult.status === 'fulfilled' ? getReplyData(hotResult.value) : [];
+        const allReplies = allResult.status === 'fulfilled' ? getReplyData(allResult.value) : [];
+        loadedComments = mergeReplies(hotReplies, allReplies);
+
+        if (hotResult.status === 'rejected' && allResult.status === 'rejected') {
+          throw allResult.reason;
         }
       } else {
-        res = await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1);
+        loadedComments = getReplyData(await CoolapkTauriAPI.getFeedReplies(requestedFeedId, 1));
       }
-      if (res && res.data) {
-        comments.value = res.data;
+      if (
+        currentRequest === commentsRequestVersion
+        && requestedFeedId === String(props.feed.id || '')
+      ) {
+        comments.value = loadedComments;
       }
     } catch (err) {
       console.error('Failed to load comments', err);
     } finally {
-      commentsLoading.value = false;
+      if (currentRequest === commentsRequestVersion) commentsLoading.value = false;
     }
   }
 }
+
+async function toggleComments() {
+  if (showComments.value) {
+    showComments.value = false;
+    return;
+  }
+  await openComments();
+}
+
+watch(
+  () => props.autoOpenComments,
+  (shouldOpen) => {
+    // 完整动态准备好后再自动加载评论，不让摘要阶段的空请求抢先完成。
+    if (shouldOpen) void openComments();
+  },
+  { immediate: true }
+);
+
+watch(
+  () => String(props.feed.id || ''),
+  (nextFeedId, previousFeedId) => {
+    if (nextFeedId === previousFeedId) return;
+    commentsRequestVersion += 1;
+    comments.value = [];
+    commentsLoading.value = false;
+    if (props.autoOpenComments) void openComments();
+  }
+);
 
 function handleCardClick(e: MouseEvent) {
   if (props.detailMode) return;

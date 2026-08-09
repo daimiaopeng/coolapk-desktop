@@ -1,5 +1,8 @@
 <template>
-  <div v-if="processedImages && processedImages.length > 0" :class="['feed-image-grid', `count-${gridCount}`]">
+  <div
+    v-if="processedImages && processedImages.length > 0"
+    :class="['feed-image-grid', `count-${gridCount}`, `variant-${variant}`]"
+  >
     <div
       v-for="(url, index) in processedImages"
       :key="index"
@@ -34,12 +37,15 @@ import { computed, ref } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { useSettingsStore } from '../../stores/settings';
 import AppImage from '../common/AppImage.vue';
-import { getHdImageUrl } from '../../utils/image';
+import { getHdImageUrl, isPortraitLongImage } from '../../utils/image';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 
 const props = defineProps<{
   images?: string[];
+  variant?: 'feed' | 'comment';
 }>();
+
+const variant = computed(() => props.variant || 'feed');
 
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
@@ -69,7 +75,7 @@ const singleImageRatio = computed(() => {
   return url ? imageRatios.value[url] || 0 : 0;
 });
 
-const isLongImage = computed(() => singleImageRatio.value >= LONG_IMAGE_RATIO);
+const isLongImage = computed(() => isPortraitLongImage(singleImageRatio.value, LONG_IMAGE_RATIO));
 
 function handleImageLoad(url: string, event: Event) {
   const image = event.target as HTMLImageElement;
@@ -98,6 +104,27 @@ function openViewer(index: number) {
   gap: 8px;
   margin-bottom: var(--space-3, 12px);
   width: 100%;
+}
+
+.variant-comment {
+  max-width: 420px;
+  gap: 6px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
+.variant-comment .grid-item {
+  border-radius: 9px;
+  box-shadow: none;
+}
+
+.variant-comment.count-1 {
+  max-width: 260px;
+}
+
+.variant-comment.count-1 .grid-item {
+  min-height: 120px;
+  max-height: 360px;
 }
 
 .count-1 {

@@ -53,6 +53,16 @@ export function getOriginalImageUrl(url: string): string {
 }
 
 /**
+ * 判断图片是否为纵向长图。
+ * 参数使用浏览器 naturalWidth / naturalHeight 得到的宽高比，避免把横幅图片误判成长图。
+ */
+export function isPortraitLongImage(widthHeightRatio: number, minimumHeightWidthRatio = 1.8): boolean {
+  return Number.isFinite(widthHeightRatio)
+    && widthHeightRatio > 0
+    && widthHeightRatio <= 1 / minimumHeightWidthRatio;
+}
+
+/**
  * 图片 URL 协议白名单：仅放行 http/https、data:、blob: 与站内相对路径。
  * 用于直接交给 <img> 的路径（绕过 Rust 代理的降级分支），
  * 防止 file:、javascript: 等异常 scheme 被 WebView 加载/探测本地文件。

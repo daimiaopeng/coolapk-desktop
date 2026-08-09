@@ -18,11 +18,11 @@ use coolapk::commands::{
     get_ignore_list, get_image_data_url, get_index_v8_feeds, get_latest_feeds, get_limit_list,
     get_load_config, get_notification_count, get_notifications, get_picture_list,
     get_product_detail, get_product_detail_by_name, get_product_feeds, get_question_answers,
-    get_rank_feeds, get_recent_history, get_search_suggestions, get_search_suggestions_app,
-    get_secondhand_feeds, get_sub_replies, get_tab_config, get_topic_detail, get_topic_detail_v7,
-    get_topic_feeds, get_topic_hub_data, get_update_list, get_user_cookie, get_user_feeds,
-    get_user_follow_nodes, get_user_profile, get_user_rating_list, get_user_space,
-    get_vote_comments, install_update, like_collection, like_feed, list_accounts,
+    get_rank_feeds, get_recent_history, get_reply_detail, get_search_suggestions,
+    get_search_suggestions_app, get_secondhand_feeds, get_sub_replies, get_tab_config,
+    get_topic_detail, get_topic_detail_v7, get_topic_feeds, get_topic_hub_data, get_update_list,
+    get_user_cookie, get_user_feeds, get_user_follow_nodes, get_user_profile, get_user_rating_list,
+    get_user_space, get_vote_comments, install_update, like_collection, like_feed, list_accounts,
     list_chat_history, list_messages, login_as, login_by_account, login_by_mobile,
     open_cache_directory, open_login_webview, open_url, persist_current_account, quit_app,
     read_message, remove_account, remove_from_black_list, remove_from_ignore_list, reply_feed,
@@ -88,6 +88,117 @@ fn persist_window_geometry(app: &tauri::AppHandle, state: WindowState) {
 #[tauri::command]
 fn set_close_to_tray(enabled: bool) {
     CLOSE_TO_TRAY.store(enabled, Ordering::SeqCst);
+}
+
+#[cfg(windows)]
+fn windows_notification_icon_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let directory = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+    let path = directory.join("coolapk-notification-icon.png");
+    let icon = include_bytes!("../icons/icon.png");
+    if std::fs::read(&path).ok().as_deref() != Some(icon.as_slice()) {
+        std::fs::write(&path, icon).map_err(|error| error.to_string())?;
+    }
+    Ok(path)
+}
+
+#[cfg(windows)]
+fn register_windows_notification_identity(app: &tauri::AppHandle) -> Result<(), String> {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
+
+    let identifier = &app.config().identifier;
+    let display_name = app
+        .config()
+        .product_name
+        .clone()
+        .unwrap_or_else(|| "酷安".to_string());
+    let icon_path = windows_notification_icon_path(app)?;
+    let registry = RegKey::predef(HKEY_CURRENT_USER);
+    let path = format!("Software\\Classes\\AppUserModelId\\{identifier}");
+    let (key, _) = registry
+        .create_subkey(path)
+        .map_err(|error| error.to_string())?;
+    key.set_value("DisplayName", &display_name)
+        .map_err(|error| error.to_string())?;
+    key.set_value("IconUri", &icon_path.to_string_lossy().to_string())
+        .map_err(|error| error.to_string())?;
+    key.set_value("IconBackgroundColor", &"00B578")
+        .map_err(|error| error.to_string())?;
+    key.set_value("ShowInSettings", &1_u32)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn escape_notification_xml(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+#[tauri::command]
+async fn send_desktop_notification(
+    app: tauri::AppHandle,
+    title: String,
+    body: Option<String>,
+) -> Result<(), String> {
+    let identifier = app.config().identifier.clone();
+    #[cfg(windows)]
+    let icon_path = windows_notification_icon_path(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(windows)]
+        {
+            use windows::Data::Xml::Dom::XmlDocument;
+            use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
+            use windows::core::HSTRING;
+
+            let title = escape_notification_xml(&title);
+            let body = escape_notification_xml(body.as_deref().unwrap_or_default());
+            let icon_uri = format!(
+                "file:///{}",
+                icon_path.to_string_lossy().replace('\\', "/")
+            );
+            let xml = format!(
+                r#"<toast duration="short"><visual><binding template="ToastGeneric"><image placement="appLogoOverride" hint-crop="circle" src="{icon_uri}" alt="酷安"/><text>{title}</text><text>{body}</text></binding></visual></toast>"#
+            );
+            let document = XmlDocument::new().map_err(|error| error.to_string())?;
+            document
+                .LoadXml(&HSTRING::from(xml))
+                .map_err(|error| error.to_string())?;
+            let toast = ToastNotification::CreateToastNotification(&document)
+                .map_err(|error| error.to_string())?;
+            let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(
+                identifier,
+            ))
+            .map_err(|error| error.to_string())?;
+            notifier.Show(&toast).map_err(|error| error.to_string())?;
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            notifier.Hide(&toast).map_err(|error| error.to_string())?;
+            return Ok(());
+        }
+
+        #[cfg(not(windows))]
+        {
+            let mut notification = notify_rust::Notification::new();
+            notification.summary(&title).auto_icon();
+            if let Some(body) = body.filter(|value| !value.trim().is_empty()) {
+                notification.body(&body);
+            }
+            notification
+                .show()
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        }
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 /// 前端保存启动参数（静默启动 / 记忆窗口状态 / 置顶），重启后由 setup 读取生效
@@ -163,6 +274,11 @@ pub fn run() {
         })
         .manage(state)
         .setup(|app| {
+            #[cfg(windows)]
+            if let Err(error) = register_windows_notification_identity(app.app_handle()) {
+                eprintln!("注册酷安通知身份失败：{error}");
+            }
+
             // 读取启动参数并应用：窗口置顶 / 记忆上次窗口大小位置 / 静默启动到托盘
             if let Some(path) = startup_state_path(app.app_handle()) {
                 if let Ok(raw) = std::fs::read_to_string(&path) {
@@ -219,7 +335,7 @@ pub fn run() {
                 let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
                 let menu = Menu::with_items(app, &[&show, &quit])?;
 
-                let _tray = TrayIconBuilder::new()
+                let _tray = TrayIconBuilder::with_id("main-tray")
                     .icon(icon)
                     .menu(&menu)
                     .show_menu_on_left_click(false)
@@ -346,6 +462,7 @@ pub fn run() {
             get_apk_feeds,
             check_login_info,
             get_feed_detail,
+            get_reply_detail,
             get_hot_replies,
             search_all,
             search_feeds,
@@ -395,6 +512,7 @@ pub fn run() {
             get_fans_user_list,
             set_close_to_tray,
             set_startup_flags,
+            send_desktop_notification,
             download_update,
             install_update,
             quit_app,

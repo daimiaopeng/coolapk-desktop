@@ -355,6 +355,14 @@ pub async fn get_feed_detail(state: State<'_, AppState>, feed_id: String) -> Res
 }
 
 #[tauri::command]
+pub async fn get_reply_detail(
+    state: State<'_, AppState>,
+    reply_id: String,
+) -> Result<Value, String> {
+    state.client.get_reply_detail(&reply_id).await
+}
+
+#[tauri::command]
 pub async fn get_feed_replies(
     state: State<'_, AppState>,
     feed_id: String,

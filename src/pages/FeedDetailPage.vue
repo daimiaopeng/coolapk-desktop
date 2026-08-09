@@ -15,7 +15,12 @@
         :message="error"
         @retry="fetchDetail"
       />
-      <FeedCard v-else-if="feedDetail" :feed="feedDetail" detail-mode />
+      <FeedCard
+        v-else-if="feedDetail"
+        :feed="feedDetail"
+        detail-mode
+        :auto-open-comments="!loading"
+      />
       <EmptyState v-else title="原动态不存在" description="这条动态可能已经被删除" />
     </div>
   </div>
@@ -53,7 +58,8 @@ function normalizeContextFeed(item: any): any {
 }
 
 const feedDetail = ref<any>(normalizeContextFeed(appStore.getFeedDetailContext(feedId.value)));
-const loading = ref(false);
+// 有通知摘要时也先等待完整动态返回，再自动加载评论，避免拿摘要字段请求出空列表。
+const loading = ref(Boolean(feedId.value));
 const error = ref('');
 let requestVersion = 0;
 

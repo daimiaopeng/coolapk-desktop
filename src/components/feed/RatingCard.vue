@@ -77,7 +77,8 @@
     <!-- 评论区域折叠展示 -->
     <div v-if="showComments" class="inline-comment-wrapper" @click.stop>
       <FeedCommentSection
-        :feed-uid="feed.id"
+        :feed-id="feed.id"
+        :feed-uid="feed.uid || feed.userInfo?.uid"
         :feed-username="feed.username"
         :comments="comments"
         :loading="commentsLoading"
@@ -97,6 +98,7 @@ import FeedCommentSection from './FeedCommentSection.vue';
 import AppImage from '../common/AppImage.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkRichText } from '../../utils/richText';
+import { getReplyData, mergeReplies } from '../../utils/commentList';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
@@ -199,18 +201,19 @@ async function toggleComments() {
   if (showComments.value && comments.value.length === 0) {
     commentsLoading.value = true;
     try {
-      let res: any;
+      let loadedComments: any[] = [];
       if (settingsStore.settings.commentSort === 'hot') {
-        res = await CoolapkTauriAPI.getHotReplies(String(props.feed.id), 1);
-        if (!res || !res.data || !res.data.length) {
-          res = await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1);
-        }
+        const [hotResult, allResult] = await Promise.allSettled([
+          CoolapkTauriAPI.getHotReplies(String(props.feed.id), 1),
+          CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1),
+        ]);
+        const hotReplies = hotResult.status === 'fulfilled' ? getReplyData(hotResult.value) : [];
+        const allReplies = allResult.status === 'fulfilled' ? getReplyData(allResult.value) : [];
+        loadedComments = mergeReplies(hotReplies, allReplies);
       } else {
-        res = await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1);
+        loadedComments = getReplyData(await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1));
       }
-      if (res && res.data) {
-        comments.value = res.data;
-      }
+      comments.value = loadedComments;
     } catch (err) {
       console.error('Failed to load rating comments', err);
     } finally {

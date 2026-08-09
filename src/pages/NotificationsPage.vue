@@ -11,6 +11,9 @@
           @click="switchTab(tab.value)"
         >
           {{ tab.label }}
+          <span v-if="notificationStore.categoryCounts[tab.countKey] > 0" class="tab-badge">
+            {{ notificationStore.categoryCounts[tab.countKey] }}
+          </span>
         </button>
       </div>
     </div>
@@ -32,7 +35,7 @@
           <div class="notify-content">
             <div class="notify-header">
               <span class="notify-user">{{ getUsername(item) }}</span>
-              <span class="notify-time">{{ formatTime(item.dateline) }}</span>
+              <span class="notify-time">{{ formatTime(item.likeTime || item.dateline) }}</span>
             </div>
             
             <div v-if="getNote(item)" class="notify-action" v-html="renderCoolapkRichText(getNote(item))" @click="handleNotifyClick($event, item)"></div>
@@ -75,9 +78,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { onActivated, onDeactivated, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
+import { useNotificationStore } from '../stores/notifications';
+import type { NotificationCategory } from '../utils/notificationCount';
+import { getNotificationActor } from '../utils/notificationItem';
 import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
 import { openFeedDetail } from '../utils/feedNavigation';
@@ -86,14 +92,16 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 
 const router = useRouter();
+const route = useRoute();
+const notificationStore = useNotificationStore();
 
 // 分类 Tabs（接口路径与官方 UWP 客户端一致）
-const tabs = [
-  { label: '评论回复', value: 'list' },
-  { label: '@ 提及', value: 'atMeList' },
-  { label: '评论 @', value: 'atCommentMeList' },
-  { label: '动态点赞', value: 'feedLikeList' },
-  { label: '新关注', value: 'contactsFollowList' }
+const tabs: Array<{ label: string; value: string; countKey: NotificationCategory }> = [
+  { label: '评论回复', value: 'list', countKey: 'comment' },
+  { label: '@ 提及', value: 'atMeList', countKey: 'atMe' },
+  { label: '评论 @', value: 'atCommentMeList', countKey: 'atComment' },
+  { label: '收到的赞', value: 'feedLikeList', countKey: 'like' },
+  { label: '新关注', value: 'contactsFollowList', countKey: 'follow' }
 ];
 
 const currentTab = ref('list');
@@ -148,37 +156,39 @@ async function fetchNotifications() {
   }
 }
 
+async function refreshNotifications() {
+  if (loading.value) return;
+  page.value = 1;
+  hasMore.value = true;
+  await fetchNotifications();
+}
+
+function handleNotificationCountIncrease() {
+  void refreshNotifications();
+}
+
 // 数据提取工具函数，容错处理（兼容不同通知类型字段：
 // 通用 userInfo / 关注类 fromUserInfo / 点赞类 likeUserInfo / 私信类 messageUserInfo）
 function getAvatar(item: any): string {
-  return (
-    item.userAvatar ||
-    item.userInfo?.userAvatar ||
-    item.fromUserAvatar ||
-    item.fromUserInfo?.userAvatar ||
-    item.likeAvatar ||
-    item.likeUserInfo?.userAvatar ||
-    item.messageUserInfo?.userAvatar ||
-    item.pic ||
-    ''
-  );
+  return getNotificationActor(item, getCurrentCategory()).avatar
+    || item.messageUserInfo?.userAvatar
+    || '';
 }
 
 function getUsername(item: any): string {
-  return (
-    item.username ||
-    item.userInfo?.username ||
-    item.fromusername ||
-    item.fromUserInfo?.username ||
-    item.likeUsername ||
-    item.likeUserInfo?.username ||
-    item.messageUserInfo?.username ||
-    item.title ||
-    '匿名用户'
-  );
+  const actor = getNotificationActor(item, getCurrentCategory());
+  return actor.username === '酷友'
+    ? item.messageUserInfo?.username || '匿名用户'
+    : actor.username;
 }
 
 function getNote(item: any): string {
+  if (currentTab.value === 'feedLikeList') {
+    const target = String(item.feedTypeName || item.infoHtml || '动态')
+      .replace(/<[^>]+>/g, '')
+      .trim();
+    return `赞了你的${target}`;
+  }
   return item.note || item.message_title || item.feedInfo?.message_title || '';
 }
 
@@ -222,13 +232,17 @@ function getOriginalFeedSummary(item: any): string {
     || original?.message_title
     || original?.message
     || item?.targetTitle
+    || item?.message_title
+    || item?.message
     || '点击查看这条通知对应的完整动态';
   return String(text).replace(/<[^>]+>/g, '').trim();
 }
 
 function openOriginalFeed(item: any) {
   const id = getOriginalFeedId(item);
-  if (id) openFeedDetail(router, id, item);
+  if (!id) return;
+  markCurrentNotificationViewed();
+  openFeedDetail(router, id, item);
 }
 
 function formatTime(dateline: any): string {
@@ -249,6 +263,14 @@ function formatTime(dateline: any): string {
   return String(dateline);
 }
 
+function getCurrentCategory(): NotificationCategory {
+  return tabs.find((tab) => tab.value === currentTab.value)?.countKey || 'comment';
+}
+
+function markCurrentNotificationViewed() {
+  notificationStore.markViewed(getCurrentCategory());
+}
+
 function renderSafeHtml(text: string): string {
   return renderCoolapkRichText(text);
 }
@@ -256,20 +278,40 @@ function renderSafeHtml(text: string): string {
 // 通知内链接点击：动态链接携带通知上下文进入完整动态页，其余走统一处理。
 function handleNotifyClick(e: Event, item: any) {
   const anchor = (e.target as HTMLElement).closest('a');
-  if (!anchor?.href) return;
+  if (!anchor?.href) {
+    openOriginalFeed(item);
+    return;
+  }
   const href = anchor.getAttribute('href') || '';
   const feedMatch = href.match(/^\/feed\/(\d+)/);
   if (feedMatch?.[1]) {
     e.preventDefault();
+    markCurrentNotificationViewed();
     openFeedDetail(router, feedMatch[1], item);
     return;
   }
   handleAnchorClick(e);
 }
 
-onMounted(() => {
-  fetchNotifications();
+onActivated(() => {
+  window.addEventListener('coolapk-notification-count-increased', handleNotificationCountIncrease);
+  notificationStore.markAllNotificationsViewed();
+  const requestedTab = String(route.query.tab || '');
+  if (tabs.some((tab) => tab.value === requestedTab)) currentTab.value = requestedTab;
+  void refreshNotifications();
 });
+
+onDeactivated(() => {
+  window.removeEventListener('coolapk-notification-count-increased', handleNotificationCountIncrease);
+});
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    const requestedTab = String(tab || '');
+    if (tabs.some((item) => item.value === requestedTab)) void switchTab(requestedTab);
+  }
+);
 </script>
 
 <style scoped>
@@ -325,6 +367,22 @@ onMounted(() => {
   position: relative;
   transition: color 0.3s ease;
   white-space: nowrap;
+}
+
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background-color: var(--danger);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  line-height: 17px;
 }
 
 .tab-btn:hover {
@@ -419,6 +477,7 @@ onMounted(() => {
   font-size: var(--font-size-body);
   color: var(--text-primary);
   line-height: 1.5;
+  cursor: pointer;
 }
 
 .notify-message a,
@@ -437,6 +496,7 @@ onMounted(() => {
   margin-top: 2px;
   line-height: 1.5;
   word-break: break-all;
+  cursor: pointer;
 }
 
 .notify-target {

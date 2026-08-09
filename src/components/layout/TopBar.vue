@@ -43,18 +43,72 @@
         发布动态
       </AppButton>
 
-      <AppIconButton
-        icon="fas fa-bell"
-        title="通知"
-        aria-label="通知"
-        :badge="unreadNotificationCount"
-        @click="navigateTo('/notifications')"
-      />
+      <div
+        class="notification-wrapper"
+        @mouseenter="handleNotificationMouseEnter"
+        @mouseleave="handleNotificationMouseLeave"
+      >
+        <AppIconButton
+          icon="fas fa-bell"
+          :title="notificationStore.notificationCount > 0 ? `${notificationStore.notificationCount} 条未读通知` : '通知'"
+          aria-label="通知"
+          :badge="notificationStore.notificationCount"
+          @click="openNotificationCenter"
+        />
+
+        <Transition name="popover-fade">
+          <div
+            v-if="isNotificationPopoverVisible"
+            class="notification-popover"
+            @mouseenter="handleNotificationMouseEnter"
+            @mouseleave="handleNotificationMouseLeave"
+          >
+            <div class="notification-popover-header">
+              <div>
+                <strong>通知</strong>
+                <span v-if="notificationStore.notificationCount > 0">
+                  {{ notificationStore.notificationCount }} 条未读
+                </span>
+              </div>
+              <button type="button" @click="openNotificationCenter">查看全部</button>
+            </div>
+
+            <div v-if="notificationPreviewLoading" class="notification-popover-state">
+              <i class="fas fa-circle-notch fa-spin"></i>
+              <span>正在加载通知...</span>
+            </div>
+            <div v-else-if="notificationPreviews.length === 0" class="notification-popover-state">
+              <i class="far fa-bell-slash"></i>
+              <span>暂无未读通知</span>
+            </div>
+            <div v-else class="notification-preview-list">
+              <button
+                v-for="preview in notificationPreviews"
+                :key="preview.key"
+                type="button"
+                class="notification-preview-item"
+                @click="openNotificationPreview(preview)"
+              >
+                <AppAvatar :src="getNotificationPreviewAvatar(preview)" size="sm" />
+                <span class="notification-preview-content">
+                  <span class="notification-preview-meta">
+                    <strong>{{ getNotificationPreviewUsername(preview) }}</strong>
+                    <em>{{ preview.label }}</em>
+                  </span>
+                  <span class="notification-preview-text">{{ getNotificationPreviewText(preview) }}</span>
+                </span>
+                <i class="fas fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+        </Transition>
+      </div>
 
       <AppIconButton
         icon="fas fa-envelope"
-        title="私信"
+        :title="notificationStore.messageCount > 0 ? `${notificationStore.messageCount} 条未读私信` : '私信'"
         aria-label="私信"
+        :badge="notificationStore.messageCount"
         @click="navigateTo('/messages')"
       />
 
@@ -178,9 +232,14 @@ import { computed, ref, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../../stores/app';
 import { useAuthStore } from '../../stores/auth';
+import { useNotificationStore } from '../../stores/notifications';
 import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { desktopNotify } from '../../utils/desktopNotify';
+import { hasNotificationCountIncreased, type NotificationCategory } from '../../utils/notificationCount';
+import { getNotificationActor } from '../../utils/notificationItem';
+import { syncWindowsNotificationIcons } from '../../utils/taskbarNotificationDot';
+import { openFeedDetail } from '../../utils/feedNavigation';
 import {
   canNavigateBack,
   canNavigateForward,
@@ -196,6 +255,7 @@ const router = useRouter();
 const route = useRoute();
 const appStore = useAppStore();
 const authStore = useAuthStore();
+const notificationStore = useNotificationStore();
 const settingsStore = useSettingsStore();
 
 // 由路由器维护桌面端页面栈。
@@ -215,41 +275,202 @@ function refreshPage() {
   reloadCurrentPage();
 }
 
-const unreadNotificationCount = ref(0);
 let notifTimer: any = null;
-let lastNotifiedCount = 0;
+let notificationRequestRunning = false;
+
+interface NotificationPreview {
+  key: string;
+  apiType: string;
+  category: NotificationCategory;
+  label: string;
+  item: any;
+}
+
+const notificationPreviewSources: Array<{
+  apiType: string;
+  category: NotificationCategory;
+  label: string;
+}> = [
+  { apiType: 'list', category: 'comment', label: '评论回复' },
+  { apiType: 'atMeList', category: 'atMe', label: '@ 提及' },
+  { apiType: 'atCommentMeList', category: 'atComment', label: '评论 @' },
+  { apiType: 'feedLikeList', category: 'like', label: '收到的赞' },
+  { apiType: 'contactsFollowList', category: 'follow', label: '新关注' },
+];
+
+const isNotificationPopoverVisible = ref(false);
+const notificationPreviewLoading = ref(false);
+const notificationPreviews = ref<NotificationPreview[]>([]);
+let notificationPopoverHideTimer: ReturnType<typeof setTimeout> | null = null;
+let notificationPreviewLoadedAt = 0;
+
+function isDesktopNotificationEnabledFor(categories: NotificationCategory[]): boolean {
+  if (!settingsStore.settings.desktopNotifications) return false;
+  if (categories.length === 0) {
+    return settingsStore.settings.notifyReplies
+      || settingsStore.settings.notifyAt
+      || settingsStore.settings.notifyPm;
+  }
+  return categories.some((category) => {
+    if (category === 'comment') return settingsStore.settings.notifyReplies;
+    if (category === 'atMe' || category === 'atComment') return settingsStore.settings.notifyAt;
+    if (category === 'message') return settingsStore.settings.notifyPm;
+    // 收到的赞和新关注目前没有独立开关，开启桌面通知后默认提醒。
+    return category === 'like' || category === 'follow';
+  });
+}
 
 async function fetchNotificationCount() {
   if (!authStore.isLoggedIn) {
-    unreadNotificationCount.value = 0;
+    notificationStore.reset();
     return;
   }
+  if (notificationRequestRunning) return;
+  notificationRequestRunning = true;
   try {
     const res: any = await CoolapkTauriAPI.getNotificationCount();
-    const data = res?.data || res || {};
-    const count = Number(data?.count ?? data?.fcount ?? data ?? 0);
-    const safeCount = Number.isFinite(count) && count > 0 ? count : 0;
-    // 未读数增加时发送桌面通知（跳过首次加载，避免启动即打扰）
+    const { previous, count, increasedCategories } = notificationStore.applyServerResponse(res);
+    const countIncreased = hasNotificationCountIncreased(previous, count);
+    // 首次请求只建立基线；之后即使基线为零，第一条新通知也会触发提醒。
     if (
-      safeCount > 0 &&
-      lastNotifiedCount > 0 &&
-      safeCount > lastNotifiedCount &&
-      settingsStore.settings.desktopNotifications &&
-      (settingsStore.settings.notifyReplies || settingsStore.settings.notifyAt || settingsStore.settings.notifyPm)
+      countIncreased &&
+      isDesktopNotificationEnabledFor(increasedCategories)
     ) {
       void desktopNotify(
         {
           title: '酷安新通知',
-          body: `你有 ${safeCount} 条未读通知，点击查看详情。`,
+          body: `你有 ${count} 条未读通知，点击查看详情。`,
         },
         settingsStore.settings.notificationSound
       );
     }
-    lastNotifiedCount = safeCount;
-    unreadNotificationCount.value = safeCount;
+    if (countIncreased) {
+      notificationPreviewLoadedAt = 0;
+      window.dispatchEvent(new CustomEvent('coolapk-notification-count-increased', {
+        detail: { previous, count },
+      }));
+    }
   } catch (e) {
     console.warn('获取通知未读数失败:', e);
+  } finally {
+    notificationRequestRunning = false;
   }
+}
+
+function getNotificationItemTime(item: any): number {
+  const value = Number(item?.likeTime ?? item?.dateline ?? item?.createTime ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function getNotificationFeedId(item: any): string {
+  const direct = item?.feedInfo?.id
+    || item?.targetRow?.id
+    || item?.targetFeed?.id
+    || item?.feedId
+    || item?.targetId
+    || item?.target_id
+    || item?.id;
+  if (direct) return String(direct).replace(/^feed:/, '');
+  const source = [item?.url, item?.targetUrl, item?.note, item?.message]
+    .filter(Boolean)
+    .join(' ');
+  return source.match(/\/feed\/(\d+)/)?.[1] || '';
+}
+
+function stripNotificationHtml(value: unknown): string {
+  return String(value || '').replace(/<[^>]+>/g, '').trim();
+}
+
+function getNotificationPreviewAvatar(preview: NotificationPreview): string {
+  return getNotificationActor(preview.item, preview.category).avatar;
+}
+
+function getNotificationPreviewUsername(preview: NotificationPreview): string {
+  return getNotificationActor(preview.item, preview.category).username;
+}
+
+function getNotificationPreviewText(preview: NotificationPreview): string {
+  const item = preview.item;
+  if (preview.category === 'like') {
+    const target = stripNotificationHtml(item?.feedTypeName || item?.infoHtml || '动态');
+    return `赞了你的${target}`;
+  }
+  return stripNotificationHtml(
+    item?.note
+    || item?.message
+    || item?.message_title
+    || item?.feedInfo?.message_title
+    || item?.feedInfo?.message
+    || '点击查看通知详情'
+  );
+}
+
+async function fetchNotificationPreviews(force = false) {
+  if (!authStore.isLoggedIn || notificationPreviewLoading.value) return;
+  if (!force && Date.now() - notificationPreviewLoadedAt < 30_000) return;
+  notificationPreviewLoading.value = true;
+  try {
+    const sourcesWithUnread = notificationPreviewSources.filter(
+      (source) => notificationStore.categoryCounts[source.category] > 0
+    );
+    const sources = sourcesWithUnread.length > 0
+      ? sourcesWithUnread
+      : notificationStore.notificationCount > 0
+        ? notificationPreviewSources
+        : [];
+    const responses = await Promise.all(sources.map(async (source) => {
+      try {
+        const response = await CoolapkTauriAPI.getNotifications(source.apiType, 1);
+        const data = Array.isArray(response?.data) ? response.data : [];
+        const limit = Math.max(1, Math.min(notificationStore.categoryCounts[source.category] || 1, 3));
+        return data.slice(0, limit).map((item: any, index: number): NotificationPreview => ({
+          key: `${source.apiType}:${item?.id || item?.likeTime || item?.dateline || index}`,
+          ...source,
+          item,
+        }));
+      } catch {
+        return [];
+      }
+    }));
+    const previewLimit = Math.max(1, Math.min(notificationStore.notificationCount, 5));
+    notificationPreviews.value = responses
+      .flat()
+      .sort((a, b) => getNotificationItemTime(b.item) - getNotificationItemTime(a.item))
+      .slice(0, previewLimit);
+    notificationPreviewLoadedAt = Date.now();
+  } finally {
+    notificationPreviewLoading.value = false;
+  }
+}
+
+function handleNotificationMouseEnter() {
+  if (notificationPopoverHideTimer) clearTimeout(notificationPopoverHideTimer);
+  isNotificationPopoverVisible.value = true;
+  void fetchNotificationPreviews();
+}
+
+function handleNotificationMouseLeave() {
+  if (notificationPopoverHideTimer) clearTimeout(notificationPopoverHideTimer);
+  notificationPopoverHideTimer = setTimeout(() => {
+    isNotificationPopoverVisible.value = false;
+  }, 220);
+}
+
+function openNotificationCenter() {
+  isNotificationPopoverVisible.value = false;
+  void router.push('/notifications');
+}
+
+function openNotificationPreview(preview: NotificationPreview) {
+  notificationStore.markViewed(preview.category);
+  notificationPreviews.value = notificationPreviews.value.filter((item) => item.key !== preview.key);
+  isNotificationPopoverVisible.value = false;
+  const feedId = getNotificationFeedId(preview.item);
+  if (feedId) {
+    openFeedDetail(router, feedId, preview.item);
+    return;
+  }
+  void router.push({ path: '/notifications', query: { tab: preview.apiType } });
 }
 
 function startPolling() {
@@ -263,23 +484,51 @@ function startPolling() {
   notifTimer = setInterval(fetchNotificationCount, minutes * 60 * 1000);
 }
 
+function handleWindowFocus() {
+  void fetchNotificationCount();
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') void fetchNotificationCount();
+}
+
 onMounted(() => {
-  fetchNotificationCount();
+  void fetchNotificationCount();
   startPolling();
+  window.addEventListener('focus', handleWindowFocus);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
 onUnmounted(() => {
   if (notifTimer) clearInterval(notifTimer);
+  if (notificationPopoverHideTimer) clearTimeout(notificationPopoverHideTimer);
+  window.removeEventListener('focus', handleWindowFocus);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 
 watch(
   () => authStore.isLoggedIn,
-  () => fetchNotificationCount()
+  () => {
+    notificationPreviews.value = [];
+    notificationPreviewLoadedAt = 0;
+    void fetchNotificationCount();
+  }
 );
 
 watch(
-  () => settingsStore.settings.notificationPollInterval,
+  () => [
+    settingsStore.settings.notificationPollInterval,
+    settingsStore.settings.desktopNotifications,
+  ],
   () => startPolling()
+);
+
+watch(
+  () => notificationStore.unreadCount,
+  (unreadCount) => {
+    void syncWindowsNotificationIcons(unreadCount);
+  },
+  { immediate: true }
 );
 
 const isPopoverVisible = ref(false);
@@ -504,6 +753,139 @@ function handleUserClick() {
   align-items: center;
   gap: var(--space-3);
   flex-shrink: 0;
+}
+
+.notification-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.notification-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: -44px;
+  width: 360px;
+  overflow: hidden;
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-dropdown, 0 10px 30px rgba(0, 0, 0, 0.15));
+  z-index: 1000;
+}
+
+.notification-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.notification-popover-header > div {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.notification-popover-header strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-sub);
+}
+
+.notification-popover-header span {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption);
+}
+
+.notification-popover-header button {
+  color: var(--brand-primary);
+  font-size: var(--font-size-caption);
+  cursor: pointer;
+}
+
+.notification-popover-state {
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption);
+}
+
+.notification-popover-state i {
+  font-size: 20px;
+}
+
+.notification-preview-list {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+}
+
+.notification-preview-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.notification-preview-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.notification-preview-content {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.notification-preview-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.notification-preview-meta strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-preview-meta em {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background-color: var(--brand-soft);
+  color: var(--brand-primary);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.notification-preview-text {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-preview-item > i {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 10px;
 }
 
 @media (max-width: 1100px) {

@@ -187,7 +187,7 @@ impl CoolapkClient {
             USER_AGENT,
             HeaderValue::from_static("Dalvik/2.1.0 (Linux; U; Android 16; 23113RKC6C Build/AQ3A.250226.002) +CoolMarket/16.2.0-2604201-universal"),
         );
-        headers.insert("X-Sdk-Int", HeaderValue::from_static("36"));
+        headers.insert("X-Sdk-Int", HeaderValue::from_static("35"));
         headers.insert("X-Sdk-Locale", HeaderValue::from_static("zh-CN"));
         headers.insert("X-App-Mode", HeaderValue::from_static("universal"));
         headers.insert("X-App-Channel", HeaderValue::from_static("coolapk"));
@@ -738,8 +738,24 @@ impl CoolapkClient {
         query: &[(&str, String)],
         form: Option<&[(&str, String)]>,
     ) -> Result<Value, String> {
+        self.request_api_from("https://api.coolapk.com", method, path, query, form)
+            .await
+    }
+
+    async fn request_api_from(
+        &self,
+        api_origin: &str,
+        method: Method,
+        path: &str,
+        query: &[(&str, String)],
+        form: Option<&[(&str, String)]>,
+    ) -> Result<Value, String> {
+        // 该方法只供内部固定 API 主机调用，禁止把登录凭据发送到其他域名。
+        if api_origin != "https://api.coolapk.com" && api_origin != "https://api2.coolapk.com" {
+            return Err("不受信任的酷安 API 主机".to_string());
+        }
         let token = self.get_token()?;
-        let url = format!("https://api.coolapk.com{path}");
+        let url = format!("{api_origin}{path}");
         let requested_with = if method == Method::POST {
             "com.coolapk.market"
         } else {
@@ -773,6 +789,35 @@ impl CoolapkClient {
 
     async fn api_get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, String> {
         self.request_api(Method::GET, path, query, None).await
+    }
+
+    async fn public_api_get_from(
+        &self,
+        api_origin: &str,
+        path: &str,
+        query: &[(&str, String)],
+    ) -> Result<Value, String> {
+        if api_origin != "https://api.coolapk.com" && api_origin != "https://api2.coolapk.com" {
+            return Err("不受信任的酷安 API 主机".to_string());
+        }
+
+        // 公开内容只读回退使用本机持久化的游客设备码，不携带账号 Cookie。
+        // 这样既能避开登录设备触发的 -415，也不会改变已绑定账号的写操作指纹。
+        let public_device_code = self.guest_device_code();
+        let public_token = CoolapkAuth::new(public_device_code.clone()).get_app_token()?;
+        let device_header = HeaderValue::from_str(&public_device_code)
+            .map_err(|_| "公开读取设备码格式无效".to_string())?;
+        let response = self
+            .client
+            .get(format!("{api_origin}{path}"))
+            .header("X-App-Token", public_token)
+            .header("X-App-Device", device_header)
+            .header("X-Requested-With", "XMLHttpRequest")
+            .query(query)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        response_json(response).await
     }
 
     async fn api_post(
@@ -1580,7 +1625,9 @@ impl CoolapkClient {
                     let device_title = obj
                         .get("device_title")
                         .and_then(|v| v.as_str())
+                        .or_else(|| obj.get("deviceTitle").and_then(|v| v.as_str()))
                         .or_else(|| obj.get("device_name").and_then(|v| v.as_str()))
+                        .or_else(|| obj.get("device").and_then(|v| v.as_str()))
                         .unwrap_or("");
 
                     let user_level = user_info
@@ -1615,15 +1662,23 @@ impl CoolapkClient {
                         "id": item_id,
                         "rid": item_rid,
                         "rrid": item_rrid,
+                        "uid": obj.get("uid").map(value_to_string).or_else(|| user_info.and_then(|u| u.get("uid")).map(value_to_string)).unwrap_or_default(),
                         "username": username,
                         "rusername": obj.get("rusername").and_then(|v| v.as_str()).unwrap_or(""),
                         "userAvatar": avatar,
                         "userLevel": user_level,
-                        "verifyTitle": user_info.and_then(|u| u.get("verify_title")).and_then(|v| v.as_str()).unwrap_or(""),
+                        "verifyTitle": user_info.and_then(|u| u.get("verify_title")).and_then(|v| v.as_str()).or_else(|| obj.get("verify_title").and_then(|v| v.as_str())).unwrap_or(""),
                         "deviceTitle": device_title,
                         "message": message,
                         "pic": obj.get("pic").and_then(|v| v.as_str()).unwrap_or(""),
+                        "picArr": obj.get("picArr").cloned().unwrap_or(json!([])),
+                        "images": obj.get("images").cloned().unwrap_or(json!([])),
+                        "dateline": obj.get("dateline").cloned().unwrap_or(json!(0)),
                         "infoHtml": obj.get("dateline_text").and_then(|v| v.as_str()).or_else(|| obj.get("infoHtml").and_then(|v| v.as_str())).unwrap_or(""),
+                        "floor": obj.get("floor").map(value_to_string).or_else(|| obj.get("rank").map(value_to_string)).unwrap_or_default(),
+                        "ipLocation": obj.get("ipLocation").and_then(|v| v.as_str()).or_else(|| obj.get("ip_location").and_then(|v| v.as_str())).or_else(|| obj.get("location").and_then(|v| v.as_str())).unwrap_or(""),
+                        "isFeedAuthor": obj.get("isFeedAuthor").cloned().unwrap_or(json!(0)),
+                        "feedUid": obj.get("feedUid").map(value_to_string).unwrap_or_default(),
                         "likenum": obj.get("likenum").and_then(|v| v.as_u64()).unwrap_or(0),
                         "userAction": { "like": user_action_like },
                         "replyRowsCount": obj.get("replynum").and_then(|v| v.as_u64()).or_else(|| obj.get("replyRowsCount").and_then(|v| v.as_u64())).unwrap_or(0)
@@ -1635,44 +1690,82 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": cleaned_replies }))
     }
 
-    // 8. 楼层评论（具备 hotReplyList 与 replyList 双路自动平滑兜底，彻底解决 403 / 无评论响应问题）
+    // 8. 楼层评论：按扩展实测参数获取完整评论，热门评论仅作最后兜底。
     pub async fn get_feed_replies(&self, feed_id: &str, page: u32) -> Result<Value, String> {
-        let hot_res = self
-            .api_get(
-                "/v6/feed/hotReplyList",
-                &[
-                    ("id", feed_id.to_string()),
-                    ("page", page.to_string()),
-                    ("discussMode", "1".to_string()),
-                ],
-            )
-            .await;
+        let query = [
+            ("id", feed_id.to_string()),
+            ("listType", "dateline_desc".to_string()),
+            ("page", page.to_string()),
+            ("discussMode", "1".to_string()),
+            ("feedType", "feed".to_string()),
+            ("blockStatus", "0".to_string()),
+            ("fromFeedAuthor", "0".to_string()),
+        ];
 
-        let raw = match hot_res {
-            Ok(ref json)
-                if json
+        let login_result = self.api_get("/v6/feed/replyList", &query).await;
+        let public_result = match &login_result {
+            Ok(value)
+                if value
                     .get("data")
-                    .and_then(|v| v.as_array())
-                    .map_or(false, |a| !a.is_empty()) =>
+                    .and_then(Value::as_array)
+                    .is_some_and(|items| !items.is_empty()) =>
             {
-                json.clone()
+                None
             }
-            _ => {
-                // 酷安 replyList 要求 listType=lastupdate_desc（lastupdate 已不返回数据）
-                self.api_get(
-                    "/v6/feed/replyList",
-                    &[
-                        ("id", feed_id.to_string()),
-                        ("listType", "lastupdate_desc".to_string()),
-                        ("page", page.to_string()),
-                        ("discussMode", "1".to_string()),
-                        ("feedType", "feed".to_string()),
-                        ("blockStatus", "0".to_string()),
-                        ("fromFeedAuthor", "0".to_string()),
-                    ],
-                )
-                .await
-                .unwrap_or(json!({ "code": 200, "data": [] }))
+            _ => Some(
+                self.public_api_get_from("https://api.coolapk.com", "/v6/feed/replyList", &query)
+                    .await,
+            ),
+        };
+
+        let full_result = match public_result {
+            None => login_result,
+            Some(Ok(value))
+                if value
+                    .get("data")
+                    .and_then(Value::as_array)
+                    .is_some_and(|items| !items.is_empty()) =>
+            {
+                Ok(value)
+            }
+            Some(_) => {
+                self.public_api_get_from("https://api2.coolapk.com", "/v6/feed/replyList", &query)
+                    .await
+            }
+        };
+
+        let raw = match full_result {
+            Ok(value)
+                if value
+                    .get("data")
+                    .and_then(Value::as_array)
+                    .is_some_and(|items| !items.is_empty()) =>
+            {
+                value
+            }
+            full_empty_or_error => {
+                let hot_result = self
+                    .api_get(
+                        "/v6/feed/hotReplyList",
+                        &[
+                            ("id", feed_id.to_string()),
+                            ("page", page.to_string()),
+                            ("discussMode", "1".to_string()),
+                        ],
+                    )
+                    .await;
+
+                match hot_result {
+                    Ok(value) => value,
+                    Err(hot_error) => match full_empty_or_error {
+                        Ok(value) => value,
+                        Err(full_error) => {
+                            return Err(format!(
+                                "完整评论加载失败：{full_error}；热门评论加载失败：{hot_error}"
+                            ));
+                        }
+                    },
+                }
             }
         };
 
@@ -1680,6 +1773,19 @@ impl CoolapkClient {
         if let Some(data_arr) = raw.get("data").and_then(|v| v.as_array()) {
             for r in data_arr {
                 if let Some(obj) = r.as_object() {
+                    let reply_id = obj
+                        .get("id")
+                        .and_then(|value| {
+                            value
+                                .as_str()
+                                .map(ToString::to_string)
+                                .or_else(|| value.as_u64().map(|number| number.to_string()))
+                        })
+                        .unwrap_or_default();
+                    // replyList 会夹带没有评论 ID 的分隔卡，不能计入一级评论数量。
+                    if reply_id.is_empty() {
+                        continue;
+                    }
                     let user_info = obj.get("userInfo").or_else(|| obj.get("user"));
                     let username = obj
                         .get("username")
@@ -1721,7 +1827,9 @@ impl CoolapkClient {
                     let device_title = obj
                         .get("device_title")
                         .and_then(|v| v.as_str())
+                        .or_else(|| obj.get("deviceTitle").and_then(|v| v.as_str()))
                         .or_else(|| obj.get("device_name").and_then(|v| v.as_str()))
+                        .or_else(|| obj.get("device").and_then(|v| v.as_str()))
                         .unwrap_or("");
 
                     let user_level = user_info
@@ -1743,7 +1851,7 @@ impl CoolapkClient {
                         .unwrap_or(0);
 
                     cleaned_replies.push(json!({
-            "id": obj.get("id").and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_u64().map(|n| n.to_string()))).unwrap_or_default(),
+            "id": reply_id,
             "fid": obj.get("fid").map(value_to_string).unwrap_or_default(),
             "rid": obj.get("rid").map(value_to_string).unwrap_or_default(),
             "rrid": obj.get("rrid").map(value_to_string).unwrap_or_default(),
@@ -1752,11 +1860,18 @@ impl CoolapkClient {
             "rusername": obj.get("rusername").and_then(|v| v.as_str()).unwrap_or(""),
             "userAvatar": avatar,
             "userLevel": user_level,
-            "verifyTitle": user_info.and_then(|u| u.get("verify_title")).and_then(|v| v.as_str()).unwrap_or(""),
+            "verifyTitle": user_info.and_then(|u| u.get("verify_title")).and_then(|v| v.as_str()).or_else(|| obj.get("verify_title").and_then(|v| v.as_str())).unwrap_or(""),
             "deviceTitle": device_title,
             "message": message,
             "pic": obj.get("pic").and_then(|v| v.as_str()).unwrap_or(""),
+            "picArr": obj.get("picArr").cloned().unwrap_or(json!([])),
+            "images": obj.get("images").cloned().unwrap_or(json!([])),
+            "dateline": obj.get("dateline").cloned().unwrap_or(json!(0)),
             "infoHtml": obj.get("dateline_text").and_then(|v| v.as_str()).or_else(|| obj.get("infoHtml").and_then(|v| v.as_str())).unwrap_or(""),
+            "floor": obj.get("floor").map(value_to_string).or_else(|| obj.get("rank").map(value_to_string)).unwrap_or_default(),
+            "ipLocation": obj.get("ipLocation").and_then(|v| v.as_str()).or_else(|| obj.get("ip_location").and_then(|v| v.as_str())).or_else(|| obj.get("location").and_then(|v| v.as_str())).unwrap_or(""),
+            "isFeedAuthor": obj.get("isFeedAuthor").cloned().unwrap_or(json!(0)),
+            "feedUid": obj.get("feedUid").map(value_to_string).unwrap_or_default(),
             "likenum": obj.get("likenum").and_then(|v| v.as_u64()).unwrap_or(0),
             "userAction": { "like": user_action_like },
             "replyRows": reply_rows,
@@ -2072,6 +2187,60 @@ impl CoolapkClient {
             self.api_get("/v6/feed/detail", &[("id", feed_id.to_string())])
                 .await?,
         )
+    }
+
+    /// 获取单条评论的完整元数据。
+    /// 评论列表接口会省略设备型号等字段，详情接口用于后台补齐，不影响列表首屏显示。
+    pub async fn get_reply_detail(&self, reply_id: &str) -> Result<Value, String> {
+        let raw = self
+            .public_api_get_from(
+                "https://api.coolapk.com",
+                "/v6/feed/replyDetail",
+                &[("id", reply_id.to_string())],
+            )
+            .await?;
+        let obj = raw
+            .get("data")
+            .and_then(Value::as_object)
+            .ok_or_else(|| "评论详情数据为空".to_string())?;
+        let user_info = obj.get("userInfo").and_then(Value::as_object);
+        let user_agent = obj.get("useragent").and_then(Value::as_str).unwrap_or("");
+        let (ua_device_title, ua_device_build, ua_device_rom) = parse_reply_user_agent(user_agent);
+        let device_title = obj
+            .get("device_title")
+            .and_then(Value::as_str)
+            .or_else(|| obj.get("deviceTitle").and_then(Value::as_str))
+            .or_else(|| obj.get("device_name").and_then(Value::as_str))
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(&ua_device_title);
+        let device_build = obj
+            .get("device_build")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(&ua_device_build);
+        let device_rom = obj
+            .get("device_rom")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(&ua_device_rom);
+
+        Ok(json!({
+            "code": 200,
+            "data": {
+                "id": obj.get("id").map(value_to_string).unwrap_or_default(),
+                "deviceTitle": device_title,
+                "deviceName": obj.get("device_name").and_then(Value::as_str).unwrap_or(""),
+                "deviceBuild": device_build,
+                "deviceRom": device_rom,
+                "userAgent": user_agent,
+                "userLevel": user_info.and_then(|user| user.get("level")).map(value_to_string).unwrap_or_default(),
+                "verifyTitle": user_info.and_then(|user| user.get("verify_title")).and_then(Value::as_str).unwrap_or(""),
+                "pic": obj.get("pic").cloned().unwrap_or(Value::Null),
+                "dateline": obj.get("dateline").cloned().unwrap_or(json!(0)),
+                "isFeedAuthor": obj.get("isFeedAuthor").cloned().unwrap_or(json!(0)),
+                "ipLocation": obj.get("ipLocation").and_then(Value::as_str).or_else(|| obj.get("ip_location").and_then(Value::as_str)).unwrap_or("")
+            }
+        }))
     }
 
     pub async fn get_hot_replies(&self, feed_id: &str, page: u32) -> Result<Value, String> {
@@ -4046,6 +4215,73 @@ fn value_to_string(value: &Value) -> String {
 fn value_to_string_opt(value: &Value) -> Option<String> {
     let s = value_to_string(value);
     if s.is_empty() { None } else { Some(s) }
+}
+
+/// 从评论详情的酷安 UA 中提取真实设备代号、系统版本与构建号。
+/// 接口经常保留 useragent，却把 device_title 等便捷字段返回为空。
+fn parse_reply_user_agent(user_agent: &str) -> (String, String, String) {
+    let android_version = user_agent
+        .split("Android ")
+        .nth(1)
+        .and_then(|value| value.split(';').next())
+        .map(str::trim)
+        .unwrap_or("");
+    let build = user_agent
+        .split(" Build/")
+        .nth(1)
+        .and_then(|value| value.split([')', ' ']).next())
+        .map(str::trim)
+        .unwrap_or("");
+
+    let fallback_model = user_agent
+        .split(" Build/")
+        .next()
+        .and_then(|value| value.rsplit("; ").next())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("");
+
+    let build_metadata = user_agent
+        .split("(#Build; ")
+        .nth(1)
+        .and_then(|value| value.split(')').next())
+        .map(|value| value.split(';').map(str::trim).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let manufacturer = build_metadata.first().copied().unwrap_or("");
+    let model = build_metadata
+        .get(1)
+        .copied()
+        .filter(|value| !value.is_empty())
+        .unwrap_or(fallback_model);
+    let device_title = [manufacturer, model]
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let rom_family = build_metadata
+        .get(3)
+        .copied()
+        .unwrap_or("")
+        .split('_')
+        .next()
+        .unwrap_or("");
+    let rom_version = build_metadata.get(4).copied().unwrap_or("");
+    let rom_label = [rom_family, rom_version]
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let device_rom = [
+        (!android_version.is_empty()).then(|| format!("Android {android_version}")),
+        (!rom_label.is_empty()).then_some(rom_label),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" · ");
+
+    (device_title, build.to_string(), device_rom)
 }
 
 fn rank_feed_url(rank_type: &str) -> Option<&'static str> {

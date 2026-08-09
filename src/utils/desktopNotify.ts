@@ -40,6 +40,19 @@ function playNotificationSound() {
 export async function desktopNotify(options: DesktopNotifyOptions, sound = false) {
   try {
     if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) return;
+    const { invoke } = await import('@tauri-apps/api/core');
+    const notificationPromise = invoke('send_desktop_notification', {
+      title: options.title,
+      body: options.body || null,
+    });
+    if (sound) playNotificationSound();
+    await notificationPromise;
+    return;
+  } catch {
+    // 原生通知发送失败时，保留 Tauri 通知插件作为兜底。
+  }
+
+  try {
     const { isPermissionGranted, requestPermission, sendNotification } = await import('@tauri-apps/plugin-notification');
     let granted = await isPermissionGranted();
     if (!granted) {

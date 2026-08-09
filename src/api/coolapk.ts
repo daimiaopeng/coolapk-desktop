@@ -173,6 +173,11 @@ export class CoolapkTauriAPI {
     return await safeFetch(`/feed/replies?id=${feedId}&page=${page}`, 'get_feed_replies', { feedId, page });
   }
 
+  // 评论列表不包含完整设备信息，详情接口用于后台补齐评论元数据。
+  static async getReplyDetail(replyId: string) {
+    return await invokeNative('get_reply_detail', { replyId });
+  }
+
   static async getSubReplies(feedId: string, replyId: string, page: number = 1) {
     return await safeFetch(`/feed/replies?id=${feedId}&rid=${replyId}&page=${page}`, 'get_sub_replies', { feedId, replyId, page });
   }
