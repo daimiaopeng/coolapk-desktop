@@ -43,6 +43,12 @@
       <span>载入评论楼层中...</span>
     </div>
 
+    <div v-else-if="error" class="comment-error">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>{{ error }}</span>
+      <button type="button" @click="$emit('retry-comments')">重试</button>
+    </div>
+
     <!-- 无评论提示 -->
     <div v-else-if="!sortedComments.length" class="comment-empty">
       <i class="fa-regular fa-comments empty-icon"></i>
@@ -293,6 +299,7 @@ const props = defineProps<{
   feedUsername?: string;
   comments: any[];
   loading?: boolean;
+  error?: string;
   normalizeImg: (url: string, type: 'avatar' | 'feed') => string;
   formatRichText: (text: string) => string;
 }>();
@@ -300,6 +307,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'send-comment', text: string): void;
   (e: 'delete-comment', id: string | number): void;
+  (e: 'retry-comments'): void;
 }>();
 
 const authStore = useAuthStore();
@@ -788,6 +796,7 @@ function handleSend() {
 
 /* 加载与空提示 */
 .comment-loading,
+.comment-error,
 .comment-empty {
   display: flex;
   align-items: center;
@@ -797,6 +806,9 @@ function handleSend() {
   font-size: 0.82rem;
   color: var(--text-secondary);
 }
+
+.comment-error { gap: 8px; color: var(--danger); }
+.comment-error button { padding: 4px 10px; color: var(--brand-primary); background: var(--brand-soft); border: 0; border-radius: var(--radius-control); cursor: pointer; }
 
 .empty-icon {
   font-size: 1.1rem;

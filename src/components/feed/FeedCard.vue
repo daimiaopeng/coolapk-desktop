@@ -68,9 +68,11 @@
         :feed-username="feed.username"
         :comments="comments"
         :loading="commentsLoading"
+        :error="commentsError"
         :normalize-img="normalizeImg"
         :format-rich-text="formatRichText"
         @delete-comment="removeComment"
+        @retry-comments="openComments"
       />
     </div>
 
@@ -279,6 +281,7 @@ const favnum = ref(props.feed.favnum || 0);
 const showComments = ref(false);
 const comments = ref<any[]>([]);
 const commentsLoading = ref(false);
+const commentsError = ref('');
 let commentsRequestVersion = 0;
 
 async function toggleFav() {
@@ -305,6 +308,7 @@ async function toggleFav() {
 
 async function openComments() {
   showComments.value = true;
+  commentsError.value = '';
   if (comments.value.length === 0) {
     const requestedFeedId = String(props.feed.id || '');
     if (!requestedFeedId) return;
@@ -323,7 +327,7 @@ async function openComments() {
         loadedComments = mergeReplies(hotReplies, allReplies);
 
         if (hotResult.status === 'rejected' && allResult.status === 'rejected') {
-          throw allResult.reason;
+          throw allResult.reason || hotResult.reason;
         }
       } else {
         loadedComments = getReplyData(await CoolapkTauriAPI.getFeedReplies(requestedFeedId, 1));
@@ -336,6 +340,7 @@ async function openComments() {
       }
     } catch (err) {
       console.error('Failed to load comments', err);
+      commentsError.value = err instanceof Error ? err.message : String(err);
     } finally {
       if (currentRequest === commentsRequestVersion) commentsLoading.value = false;
     }
@@ -366,6 +371,7 @@ watch(
     commentsRequestVersion += 1;
     comments.value = [];
     commentsLoading.value = false;
+    commentsError.value = '';
     if (props.autoOpenComments) void openComments();
   }
 );

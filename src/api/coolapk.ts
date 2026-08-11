@@ -1,8 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { router } from '../router';
 import { getFeedDetailMessage, hasFeedMoreSuffix, parseWebFeedDetail } from '../utils/feedContent';
+import { requestWithPolicy, type RequestKind } from '../utils/requestCenter';
 
-async function safeFetch(pythonEndpoint: string, tauriCmd: string, tauriArgs: any = {}) {
+async function safeFetchOnce(pythonEndpoint: string, tauriCmd: string, tauriArgs: any = {}) {
   let rustError: unknown;
 
   // 1. 优先使用 Tauri 2 原生 Rust Core (`client.rs`) 发起零延迟 API 请求
@@ -40,14 +41,22 @@ async function safeFetch(pythonEndpoint: string, tauriCmd: string, tauriArgs: an
   } catch (pythonError) {
     const rustMessage = rustError instanceof Error ? rustError.message : String(rustError);
     const pythonMessage = pythonError instanceof Error ? pythonError.message : String(pythonError);
-    throw new Error(`评论服务请求失败。Rust: ${rustMessage}; Python: ${pythonMessage}`);
+    throw new Error(`接口请求失败。Rust: ${rustMessage}; Python: ${pythonMessage}`);
   }
 }
 
-async function invokeNative(tauriCmd: string, tauriArgs: any = {}) {
-  const response = await invoke(tauriCmd, tauriArgs);
-  if (response && (response as any).code === 200) return response as any;
-  throw new Error((response as any)?.message || `${tauriCmd} 返回格式不正确`);
+async function safeFetch(pythonEndpoint: string, tauriCmd: string, tauriArgs: any = {}) {
+  return requestWithPolicy(tauriCmd, () => safeFetchOnce(pythonEndpoint, tauriCmd, tauriArgs), { retry: true, kind: 'feed' });
+}
+
+type NativeRequestOptions = { retry?: boolean; maxAttempts?: number; timeoutMs?: number; kind?: RequestKind };
+
+async function invokeNative(tauriCmd: string, tauriArgs: any = {}, options: NativeRequestOptions = {}) {
+  return requestWithPolicy(tauriCmd, async () => {
+    const response = await invoke(tauriCmd, tauriArgs);
+    if (response && (response as any).code === 200) return response as any;
+    throw new Error((response as any)?.message || `${tauriCmd} 返回格式不正确`);
+  }, options);
 }
 
 export class CoolapkTauriAPI {
@@ -175,7 +184,7 @@ export class CoolapkTauriAPI {
 
   // 评论列表不包含完整设备信息，详情接口用于后台补齐评论元数据。
   static async getReplyDetail(replyId: string) {
-    return await invokeNative('get_reply_detail', { replyId });
+    return await invokeNative('get_reply_detail', { replyId }, { retry: true, kind: 'comment' });
   }
 
   static async getSubReplies(feedId: string, replyId: string, page: number = 1) {
@@ -187,7 +196,7 @@ export class CoolapkTauriAPI {
     let primaryError: unknown;
 
     try {
-      primaryResponse = await invokeNative('get_feed_detail', { feedId });
+      primaryResponse = await invokeNative('get_feed_detail', { feedId }, { retry: true, kind: 'feed' });
       const primaryMessage = getFeedDetailMessage(primaryResponse?.data);
       if (primaryMessage && !hasFeedMoreSuffix(primaryMessage)) return primaryResponse;
     } catch (error) {
@@ -198,7 +207,7 @@ export class CoolapkTauriAPI {
     try {
       const webResponse: any = await invokeNative('fetch_external_page', {
         url: `https://www.coolapk.com/feed/${encodeURIComponent(feedId)}`,
-      });
+      }, { retry: true, kind: 'feed' });
       const detail = parseWebFeedDetail(webResponse?.data?.html);
       if (detail && getFeedDetailMessage(detail)) {
         return { code: 200, data: detail };
@@ -212,7 +221,7 @@ export class CoolapkTauriAPI {
   }
 
   static async getHotReplies(feedId: string, page: number = 1) {
-    return await invokeNative('get_hot_replies', { feedId, page });
+    return await invokeNative('get_hot_replies', { feedId, page }, { retry: true, kind: 'comment' });
   }
 
   // 9. 酷友空间

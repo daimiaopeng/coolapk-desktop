@@ -1,5 +1,6 @@
 <template>
   <div class="app-shell">
+    <NetworkStatusBanner />
     <TopBar />
     <div class="app-body">
       <MainSidebar />
@@ -13,6 +14,7 @@
 <script setup lang="ts">
 import TopBar from './TopBar.vue';
 import MainSidebar from './MainSidebar.vue';
+import NetworkStatusBanner from '../common/NetworkStatusBanner.vue';
 </script>
 
 <style scoped>
