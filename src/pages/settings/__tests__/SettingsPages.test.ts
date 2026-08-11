@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { APP_VERSION } from '../../../constants/version';
 
 const mocks = vi.hoisted(() => ({
   getCacheInfo: vi.fn().mockResolvedValue({ bytes: 52.8 * 1024 * 1024, imageBytes: 48.4 * 1024 * 1024, webviewBytes: 0, updateBytes: 4.4 * 1024 * 1024, path: 'C:\\Cache' }),
@@ -160,7 +161,7 @@ describe('设置页面交互', () => {
     const eventSpy = vi.spyOn(window, 'dispatchEvent');
     const { wrapper } = mountPage(AboutSettingsPage);
     await flushPromises();
-    expect(wrapper.text()).toContain('1.6.0');
+    expect(wrapper.text()).toContain(APP_VERSION);
     expect(wrapper.text()).toContain('1.2k');
     await wrapper.get('.about-head button').trigger('click');
     expect(eventSpy).toHaveBeenCalled();
