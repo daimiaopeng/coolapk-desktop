@@ -1158,9 +1158,10 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
             var saved = false;
 
             function checkLogoutPage() {
-                var href = window.location.href || "";
                 var text = (document.body && document.body.innerText) || "";
-                if (href.indexOf('auth/logout') !== -1 || text.indexOf('已经退出登录') !== -1) {
+                // 必须等待退出页面真正加载完成，不能只看到 auth/logout URL 就跳转，
+                // 否则会取消服务端清理 Cookie 的请求，旧账号会被登录页再次自动识别。
+                if (text.indexOf('已经退出登录') !== -1) {
                     window.location.replace("https://account.coolapk.com/auth/loginByCoolapk?forward=" + encodeURIComponent(APP_ORIGIN + "/#/auth_callback"));
                     return true;
                 }
@@ -1243,20 +1244,6 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                     let app_origin = get_app_origin(&app_handle);
 
                     eprintln!("[login-debug:monitor] url_origin={}", redact_url(url_str));
-
-                    // 已落在登出提示页 auth/logout：自动跳至登录主页 loginByCoolapk
-                    if url_str.contains("auth/logout") {
-                        eprintln!(
-                            "[login-debug:monitor] landed on logout page, auto-navigating to loginByCoolapk"
-                        );
-                        let target_login = format!(
-                            "https://account.coolapk.com/auth/loginByCoolapk?forward={}/#/auth_callback",
-                            app_origin
-                        );
-                        let _ = win.eval(&format!("window.location.replace('{}');", target_login));
-                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                        continue;
-                    }
 
                     // 已回到本地回调页：凭据随 URL 带回，Rust 直接解析 ck 写入会话并关窗
                     if url_str.starts_with(&format!("{}/", app_origin)) {

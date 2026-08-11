@@ -432,8 +432,8 @@ function formatRichText(text: string) {
 }
 
 .feed-card:hover {
-  background-color: var(--surface-hover);
-  border-color: var(--border-dark, rgba(0, 0, 0, 0.12));
+  background-color: var(--surface);
+  border-color: var(--border);
 }
 
 .feed-card.is-detail-mode {

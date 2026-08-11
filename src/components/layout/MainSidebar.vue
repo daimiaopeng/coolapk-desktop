@@ -348,7 +348,7 @@ function handleLogout() {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background-color: #ffffff;
+  background-color: var(--surface-elevated);
   border: 1px solid var(--border-light, #e4e9ef);
   border-radius: var(--radius-control, 8px);
   padding: 8px 12px;

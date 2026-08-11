@@ -19,13 +19,21 @@ export function stripFeedMoreSuffix(message: string): string {
 /** 从动态详情对象中提取完整正文。 */
 export function getFeedDetailMessage(feed: any): string {
   if (!feed) return '';
-  return (
-    feed.message
-    || feed.message_raw_output
-    || feed.message_title
-    || feed.note
-    || ''
-  );
+  if (Array.isArray(feed)) {
+    return feed.map((item) => getFeedDetailMessage(item)).find(Boolean) || '';
+  }
+  if (typeof feed !== 'object') return '';
+
+  const directMessage = [feed.message, feed.message_raw_output, feed.content, feed.text, feed.note]
+    .find((value) => typeof value === 'string' && value.trim());
+  if (directMessage) return directMessage;
+
+  for (const nested of [feed.feedInfo, feed.feed, feed.targetRow, feed.targetFeed, feed.data]) {
+    const message = getFeedDetailMessage(nested);
+    if (message) return message;
+  }
+
+  return typeof feed.message_title === 'string' ? feed.message_title : '';
 }
 
 /** 解析酷安动态网页版返回的 JSON 正文，作为详情接口被验证码拦截时的兜底。 */
@@ -33,7 +41,8 @@ export function parseWebFeedDetail(raw: unknown): any | null {
   if (!raw) return null;
 
   try {
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const text = typeof raw === 'string' ? raw.trim() : raw;
+    const parsed = typeof text === 'string' ? JSON.parse(text) : text;
     if (!parsed || typeof parsed !== 'object') return null;
     const detail = (parsed as any).data ?? parsed;
     return detail && typeof detail === 'object' ? detail : null;

@@ -2174,7 +2174,15 @@ impl CoolapkClient {
         let body = resp.text().await.map_err(|e| e.to_string())?;
         let title = extract_html_title(&body).unwrap_or_else(|| "外部链接".to_string());
         // 只取正文：剥离导航/页脚/脚本等外壳噪音（酷安 /feed/ 分享页即为纯扫码落地页）
-        let content = extract_readable_content(&body);
+        // 动态接口在 XHR 模式下返回 JSON，必须保留原文，否则正文里的 HTML 可能被网页清洗器误删。
+        let content = if is_coolapk_target
+            && url.contains("coolapk.com/feed/")
+            && serde_json::from_str::<Value>(&body).is_ok()
+        {
+            body.clone()
+        } else {
+            extract_readable_content(&body)
+        };
 
         Ok(json!({
             "code": 200,
@@ -2183,10 +2191,34 @@ impl CoolapkClient {
     }
 
     pub async fn get_feed_detail(&self, feed_id: &str) -> Result<Value, String> {
-        wrap_api_data(
-            self.api_get("/v6/feed/detail", &[("id", feed_id.to_string())])
-                .await?,
-        )
+        let query = [("id", feed_id.to_string())];
+        let primary_error = match self.api_get("/v6/feed/detail", &query).await {
+            Ok(value) => match wrap_api_data(value) {
+                Ok(detail) => return Ok(detail),
+                Err(error) => error,
+            },
+            Err(error) => error,
+        };
+
+        // 动态属于公开内容：登录请求不可用时改用独立游客设备码，并且明确不携带账号 Cookie。
+        let mut public_errors = Vec::new();
+        for api_origin in ["https://api.coolapk.com", "https://api2.coolapk.com"] {
+            match self
+                .public_api_get_from(api_origin, "/v6/feed/detail", &query)
+                .await
+            {
+                Ok(value) => match wrap_api_data(value) {
+                    Ok(detail) => return Ok(detail),
+                    Err(error) => public_errors.push(format!("{api_origin}: {error}")),
+                },
+                Err(error) => public_errors.push(format!("{api_origin}: {error}")),
+            }
+        }
+
+        Err(format!(
+            "动态详情加载失败：{primary_error}；游客接口：{}",
+            public_errors.join("；")
+        ))
     }
 
     /// 获取单条评论的完整元数据。
