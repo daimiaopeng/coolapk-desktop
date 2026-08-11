@@ -254,11 +254,11 @@ export class CoolapkTauriAPI {
   }
 
   static async getNotificationCount() {
-    return await invokeNative('get_notification_count');
+    return await invokeNative('get_notification_count', {}, { retry: true });
   }
 
   static async getNotifications(notificationType: string = 'atme', page: number = 1) {
-    return await invokeNative('get_notifications', { notificationType, page });
+    return await invokeNative('get_notifications', { notificationType, page }, { retry: true });
   }
 
   static async listMessages(page: number = 1) {

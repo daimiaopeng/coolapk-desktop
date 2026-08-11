@@ -112,6 +112,15 @@ export const useNotificationStore = defineStore('notifications', () => {
     return true;
   }
 
+  function markCategoryViewed(category: NotificationCategory): number {
+    const count = categoryCounts[category];
+    if (count <= 0) return 0;
+    categoryCounts[category] = 0;
+    locallyViewed[category] += count;
+    unreadCount.value = Math.max(0, unreadCount.value - count);
+    return count;
+  }
+
   /** 进入通知中心即视为已查看所有站内通知，私信未读保持不变。 */
   function markAllNotificationsViewed(): number {
     const count = notificationCount.value;
@@ -149,6 +158,7 @@ export const useNotificationStore = defineStore('notifications', () => {
     messageCount,
     applyServerResponse,
     markViewed,
+    markCategoryViewed,
     markAllNotificationsViewed,
     reset,
   };

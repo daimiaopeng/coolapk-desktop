@@ -1,7 +1,13 @@
 <template>
   <div class="page-container custom-scrollbar">
     <div class="page-header">
-      <h2 class="page-title">通知中心</h2>
+      <div class="notification-title-row">
+        <h2 class="page-title">通知中心</h2>
+        <div class="notification-actions">
+          <button type="button" class="header-action-btn" :disabled="loading" @click="refreshNotifications"><i class="fas fa-sync-alt"></i> 刷新</button>
+          <button type="button" class="header-action-btn" :disabled="!notificationStore.categoryCounts[getCurrentCategory()]" @click="markCurrentTabViewed"><i class="fas fa-check-double"></i> 当前分类已读</button>
+        </div>
+      </div>
       
       <div class="tabs">
         <button 
@@ -21,6 +27,10 @@
     <div class="content-wrapper">
       <div v-if="loading && items.length === 0" class="loading-wrapper">
         <LoadingState text="正在获取通知..." />
+      </div>
+
+      <div v-else-if="notificationError && items.length === 0" class="empty-wrapper">
+        <ErrorState title="通知加载失败" :message="notificationError" @retry="refreshNotifications" />
       </div>
 
       <div v-else-if="!loading && items.length === 0" class="empty-wrapper">
@@ -60,6 +70,7 @@
         </div>
 
         <div class="load-more-wrapper" v-if="items.length > 0">
+          <div v-if="notificationError" class="notification-inline-error">{{ notificationError }} <button type="button" @click="refreshNotifications">重试</button></div>
           <button 
             v-if="hasMore" 
             class="load-more-btn" 
@@ -90,6 +101,7 @@ import { openFeedDetail } from '../utils/feedNavigation';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+import ErrorState from '../components/common/ErrorState.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -109,6 +121,7 @@ const loading = ref(false);
 const items = ref<any[]>([]);
 const page = ref(1);
 const hasMore = ref(true);
+const notificationError = ref('');
 
 // 切换 Tab
 async function switchTab(tabValue: string) {
@@ -131,6 +144,7 @@ async function loadMore() {
 async function fetchNotifications() {
   if (loading.value) return;
   loading.value = true;
+  notificationError.value = '';
   try {
     const res = await CoolapkTauriAPI.getNotifications(currentTab.value, page.value);
     const data = res?.data || [];
@@ -150,7 +164,8 @@ async function fetchNotifications() {
     }
   } catch (err) {
     console.warn('Notifications fetch warning', err);
-    hasMore.value = false;
+    notificationError.value = err instanceof Error ? err.message : String(err);
+    if (page.value > 1) page.value -= 1;
   } finally {
     loading.value = false;
   }
@@ -271,6 +286,10 @@ function markCurrentNotificationViewed() {
   notificationStore.markViewed(getCurrentCategory());
 }
 
+function markCurrentTabViewed() {
+  notificationStore.markCategoryViewed(getCurrentCategory());
+}
+
 function renderSafeHtml(text: string): string {
   return renderCoolapkRichText(text);
 }
@@ -344,6 +363,12 @@ watch(
   margin-bottom: var(--space-3);
   letter-spacing: -0.02em;
 }
+
+.notification-title-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.notification-actions { display: flex; gap: var(--space-2); }
+.header-action-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; color: var(--text-secondary); background: transparent; border: 1px solid var(--border); border-radius: var(--radius-control); cursor: pointer; font-size: var(--font-size-caption); }
+.header-action-btn:hover:not(:disabled) { color: var(--brand-primary); border-color: var(--brand-primary); background: var(--brand-soft); }
+.header-action-btn:disabled { color: var(--text-disabled); cursor: not-allowed; }
 
 .tabs {
   display: flex;
@@ -567,6 +592,9 @@ watch(
   justify-content: center;
   padding: var(--space-4) 0;
 }
+
+.notification-inline-error { margin-bottom: var(--space-3); color: var(--danger); font-size: var(--font-size-caption); }
+.notification-inline-error button { margin-left: 6px; color: var(--brand-primary); background: transparent; border: 0; cursor: pointer; }
 
 .load-more-btn {
   background: var(--surface);
