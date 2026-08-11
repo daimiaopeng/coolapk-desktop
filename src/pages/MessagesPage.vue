@@ -240,22 +240,22 @@ function getConversationKey(session: any = currentSession.value): string {
   return String(session?.ukey || session?.id || getSessionPartnerUid(session) || '');
 }
 
-function saveCurrentDraft() {
+async function saveCurrentDraft() {
   const key = getConversationKey();
   if (!key) return;
-  saveMessageDraft(currentUserUid.value, key, inputText.value);
+  await saveMessageDraft(currentUserUid.value, key, inputText.value);
   draftSaved.value = Boolean(inputText.value.trim());
 }
 
-function restoreDraft(session: any) {
+async function restoreDraft(session: any) {
   const key = getConversationKey(session);
-  inputText.value = key ? loadMessageDraft(currentUserUid.value, key) : '';
+  inputText.value = key ? await loadMessageDraft(currentUserUid.value, key) : '';
   draftSaved.value = Boolean(inputText.value.trim());
 }
 
 watch(inputText, () => {
   draftSaved.value = Boolean(inputText.value.trim());
-  saveCurrentDraft();
+  void saveCurrentDraft();
 });
 
 function sessionsCacheKey() {
@@ -474,10 +474,10 @@ const loadSessions = async () => {
 };
 
 const selectSession = async (session: any) => {
-  saveCurrentDraft();
+  await saveCurrentDraft();
   const requestSequence = ++historyRequestSequence;
   currentSession.value = session;
-  restoreDraft(session);
+  await restoreDraft(session);
   historyError.value = '';
   const partnerUid = getSessionPartnerUid(session);
   if (partnerUid && String(route.query.uid || '') !== String(partnerUid)) {
@@ -743,7 +743,7 @@ const sendMessage = async () => {
       chatScrollMap.delete(String(ukey));
     }
     inputText.value = '';
-    clearMessageDraft(currentUserUid.value, getConversationKey(currentSession.value));
+    await clearMessageDraft(currentUserUid.value, getConversationKey(currentSession.value));
     draftSaved.value = false;
     scrollToBottom();
   } catch (err: any) {
