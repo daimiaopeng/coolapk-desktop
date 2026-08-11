@@ -14,7 +14,7 @@
               type="text"
               placeholder="搜索应用、动态、用户、话题..."
               class="search-input"
-              @keydown.enter="handleEnterSearch"
+              @keydown="handleInputKeydown"
             />
             <button class="clear-btn" v-if="query" @click="query = ''"><i class="fas fa-times"></i></button>
             <kbd class="esc-kbd">ESC</kbd>
@@ -65,7 +65,9 @@
               <div
                 v-for="(item, i) in results"
                 :key="i"
-                class="result-item"
+                :class="['result-item', { 'is-active': activeResultIndex === i }]"
+                :aria-selected="activeResultIndex === i"
+                @mouseenter="activeResultIndex = i"
                 @click="selectResult(item)"
               >
                 <i :class="[getIcon(item.type), 'result-icon']"></i>
@@ -75,6 +77,7 @@
                 </div>
               </div>
             </div>
+            <div v-if="query && results.length" class="search-keyboard-hint"><kbd>↑</kbd><kbd>↓</kbd> 选择 <kbd>Enter</kbd> 打开 <kbd>Esc</kbd> 关闭</div>
           </div>
         </div>
       </div>
@@ -100,6 +103,8 @@ const loading = ref(false);
 const results = ref<any[]>([]);
 const searchSuggestions = ref<{ title: string }[]>([]);
 const searchInput = ref<HTMLInputElement | null>(null);
+const activeResultIndex = ref(-1);
+let searchRequestVersion = 0;
 
 const suggestions = ['小米15', 'RTX 5090', 'iOS 18', '酷安桌面版', '鸿蒙OS'];
 
@@ -108,6 +113,7 @@ watch(() => appStore.isSearchOpen, (open) => {
     query.value = '';
     results.value = [];
     searchSuggestions.value = [];
+    activeResultIndex.value = -1;
     nextTick(() => searchInput.value?.focus());
   }
 });
@@ -118,17 +124,21 @@ watch(query, (val) => {
   if (!val.trim()) {
     results.value = [];
     searchSuggestions.value = [];
+    activeResultIndex.value = -1;
     return;
   }
   timer = setTimeout(async () => {
+    const requestVersion = ++searchRequestVersion;
     loading.value = true;
     try {
       const [searchRes, suggestRes] = await Promise.all([
         CoolapkTauriAPI.searchAll(val.trim(), 1),
         CoolapkTauriAPI.getSearchSuggestions(val.trim())
       ]);
+      if (requestVersion !== searchRequestVersion) return;
       if (searchRes && searchRes.data) {
         results.value = searchRes.data.slice(0, 8);
+        activeResultIndex.value = results.value.length ? 0 : -1;
       }
       if (suggestRes?.data && Array.isArray(suggestRes.data)) {
         searchSuggestions.value = suggestRes.data;
@@ -158,15 +168,40 @@ function handleEnterSearch() {
   router.push({ path: '/search', query: { q: query.value.trim() } });
 }
 
+function handleInputKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (activeResultIndex.value >= 0 && results.value[activeResultIndex.value]) selectResult(results.value[activeResultIndex.value]);
+    else handleEnterSearch();
+    return;
+  }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (!results.value.length) return;
+    e.preventDefault();
+    const delta = e.key === 'ArrowDown' ? 1 : -1;
+    activeResultIndex.value = (activeResultIndex.value + delta + results.value.length) % results.value.length;
+    return;
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    appStore.closeSearch();
+  }
+}
+
 function clearHistory() {
   clearSearchHistory();
 }
 
 function selectResult(item: any) {
   appStore.closeSearch();
-  if (item.id) {
-    openFeedDetail(router, item.id, item);
-  }
+  const type = String(item.type || item.entityTemplate || item.entityType || '').toLowerCase();
+  const uid = item.uid || item.userId || item.entityId;
+  const packageName = item.packageName || item.package_name || item.pkg;
+  const tag = item.tag || item.topicTag;
+  if (type.includes('user') && uid) return void router.push(`/user/${uid}`);
+  if (type.includes('topic') && tag) return void router.push(`/topic/${encodeURIComponent(tag)}`);
+  if ((type.includes('apk') || type.includes('app') || type.includes('game')) && packageName) return void router.push(`/app/${encodeURIComponent(packageName)}`);
+  if (item.id) openFeedDetail(router, item.id, item);
 }
 
 function getIcon(type?: string) {
@@ -318,6 +353,10 @@ onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown));
 .result-item:hover {
   background-color: var(--surface-hover);
 }
+
+.result-item.is-active { background-color: var(--brand-soft); color: var(--brand-primary); }
+.search-keyboard-hint { padding: 8px 4px 0; color: var(--text-tertiary); font-size: var(--font-size-caption); text-align: right; }
+.search-keyboard-hint kbd { margin: 0 2px; padding: 1px 5px; color: var(--text-secondary); background: var(--surface-hover); border: 1px solid var(--border); border-radius: 4px; font-size: 11px; }
 
 .result-icon {
   font-size: 16px;
