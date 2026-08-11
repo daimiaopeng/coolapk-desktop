@@ -118,14 +118,17 @@
 import { ref, computed, watch, nextTick } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { useSettingsStore } from '../../stores/settings';
+import { useAuthStore } from '../../stores/auth';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkEmoji, EMOJI_MAP, EMOJI_BASE } from '../../utils/coolapkEmoji';
 import { renderCoolapkRichText } from '../../utils/richText';
+import { clearPublishDraft, loadPublishDraft, savePublishDraft } from '../../utils/publishDrafts';
 import AppDialog from '../common/AppDialog.vue';
 import AppButton from '../common/AppButton.vue';
 
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
+const authStore = useAuthStore();
 const MAX_IMAGES = 9;
 const message = ref('');
 const images = ref<{ file: File; preview: string }[]>([]);
@@ -140,6 +143,11 @@ const topicsLoading = ref(false);
 const previewMode = ref(false);
 const messageInput = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
+let restoringDraft = false;
+
+function currentDraftAccount(): string {
+  return String(authStore.user?.uid || 'guest');
+}
 
 const previewHtml = computed(() => {
   // 预览统一走安全化渲染（先 sanitize 再渲染酷安表情），
@@ -147,8 +155,9 @@ const previewHtml = computed(() => {
   return renderCoolapkRichText(message.value);
 });
 
-watch(() => appStore.isPublishOpen, (open) => {
+watch(() => appStore.isPublishOpen, async (open) => {
   if (open) {
+    restoringDraft = true;
     message.value = '';
     images.value = [];
     uploadingImages.value = false;
@@ -156,11 +165,17 @@ watch(() => appStore.isPublishOpen, (open) => {
     previewMode.value = false;
     showEmojiPanel.value = false;
     showTopicPanel.value = false;
+    message.value = await loadPublishDraft(currentDraftAccount());
+    restoringDraft = false;
     if (topics.value.length === 0 && !topicsLoading.value) {
       fetchHotTopics();
     }
     nextTick(() => messageInput.value?.focus());
   }
+});
+
+watch(message, (value) => {
+  if (!restoringDraft) void savePublishDraft(currentDraftAccount(), value);
 });
 
 function insertAtCursor(text: string) {
@@ -307,6 +322,7 @@ async function handlePublish() {
     }
     const res = await CoolapkTauriAPI.createFeed(buildFinalMessage(), pic || undefined);
     if (res && res.code === 200) {
+      await clearPublishDraft(currentDraftAccount());
       message.value = '';
       images.value = [];
       // 给用户明确反馈后延迟关闭
