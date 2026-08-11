@@ -38,6 +38,12 @@
             </div>
 
             <div v-else-if="!query" class="quick-suggestions">
+              <div v-if="searchHistory.length" class="quick-history">
+                <div class="quick-section-header"><span class="group-title">最近搜索</span><button type="button" @click="clearHistory">清空</button></div>
+                <div class="recent-search-list">
+                  <button v-for="item in searchHistory.slice(0, 8)" :key="item" type="button" class="recent-search-item" @click="applySearch(item)"><i class="far fa-clock"></i>{{ item }}</button>
+                </div>
+              </div>
               <span class="group-title">热门搜索</span>
               <div class="tag-cloud">
                 <span
@@ -84,6 +90,7 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import LoadingState from '../common/LoadingState.vue';
 import EmptyState from '../common/EmptyState.vue';
 import { openFeedDetail } from '../../utils/feedNavigation';
+import { addSearchHistory, clearSearchHistory, searchHistory } from '../../utils/searchHistory';
 
 const appStore = useAppStore();
 const router = useRouter();
@@ -146,8 +153,13 @@ function selectSuggestion(title: string) {
 
 function handleEnterSearch() {
   if (!query.value.trim()) return;
+  addSearchHistory(query.value);
   appStore.closeSearch();
   router.push({ path: '/search', query: { q: query.value.trim() } });
+}
+
+function clearHistory() {
+  clearSearchHistory();
 }
 
 function selectResult(item: any) {
@@ -247,6 +259,12 @@ onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown));
   padding: var(--space-4);
   overflow-y: auto;
 }
+
+.quick-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.quick-section-header button { color: var(--brand-primary); background: transparent; border: 0; cursor: pointer; font-size: var(--font-size-caption); }
+.recent-search-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.recent-search-item { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; color: var(--text-secondary); background: var(--surface-hover); border: 1px solid var(--border-light); border-radius: var(--radius-pill); cursor: pointer; font-size: var(--font-size-caption); }
+.recent-search-item:hover { color: var(--brand-primary); border-color: var(--brand-primary); background: var(--brand-soft); }
 
 .quick-suggestions {
   display: flex;

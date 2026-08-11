@@ -20,6 +20,12 @@
           <i class="fas fa-times"></i>
         </button>
       </div>
+      <div v-if="showHistory && !searchQuery.trim() && searchHistory.length" class="search-history-dropdown">
+        <div class="search-history-header"><span>最近搜索</span><button type="button" @mousedown.prevent="clearHistory">清空</button></div>
+        <button v-for="item in searchHistory" :key="item" type="button" class="search-history-item" @mousedown.prevent="selectHistory(item)">
+          <i class="far fa-clock"></i><span>{{ item }}</span><i class="fas fa-times remove-history" @mousedown.stop.prevent="removeHistory(item)"></i>
+        </button>
+      </div>
       <div v-if="searchSuggestions.length > 0 && showSuggestions" class="suggestions-dropdown custom-scrollbar">
         <div
           v-for="(item, i) in searchSuggestions"
@@ -139,6 +145,7 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppButton from '../components/common/AppButton.vue';
+import { addSearchHistory, clearSearchHistory, removeSearchHistory, searchHistory } from '../utils/searchHistory';
 
 const route = useRoute();
 const router = useRouter();
@@ -154,6 +161,7 @@ function handleFeedDeleted(id: string | number) {
 const searchQuery = ref('');
 const searchSuggestions = ref<any[]>([]);
 const showSuggestions = ref(false);
+const showHistory = ref(false);
 const searchAreaRef = ref<HTMLElement | null>(null);
 
 const activeTab = ref<'all' | 'users' | 'topics'>('all');
@@ -176,6 +184,7 @@ const topicsNoMore = ref(false);
 let suggestTimer: any = null;
 
 function onInputFocus() {
+  showHistory.value = !searchQuery.value.trim();
   if (searchSuggestions.value.length > 0) {
     showSuggestions.value = true;
   }
@@ -191,6 +200,22 @@ function clearSearch() {
   searchQuery.value = '';
   searchSuggestions.value = [];
   showSuggestions.value = false;
+  showHistory.value = false;
+}
+
+function selectHistory(value: string) {
+  searchQuery.value = value;
+  showHistory.value = false;
+  doSearch(value);
+}
+
+function removeHistory(value: string) {
+  removeSearchHistory(value);
+}
+
+function clearHistory() {
+  clearSearchHistory();
+  showHistory.value = false;
 }
 
 function selectSuggestion(item: any) {
@@ -204,6 +229,8 @@ function doSearch(q: string) {
   const trimmed = q.trim();
   if (!trimmed) return;
   showSuggestions.value = false;
+  showHistory.value = false;
+  addSearchHistory(trimmed);
   router.push({ path: '/search', query: { q: trimmed } });
 }
 
@@ -379,6 +406,7 @@ async function fetchSuggestions(q: string) {
 }
 
 watch(searchQuery, (val) => {
+  showHistory.value = !val.trim();
   if (suggestTimer) clearTimeout(suggestTimer);
   if (!val.trim()) {
     searchSuggestions.value = [];
@@ -500,6 +528,15 @@ onUnmounted(() => {
   z-index: 100;
   padding: var(--space-1);
 }
+
+.search-history-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; padding: 8px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--radius-control); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); }
+.search-history-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 8px; color: var(--text-tertiary); font-size: var(--font-size-caption); }
+.search-history-header button { color: var(--brand-primary); background: transparent; border: 0; cursor: pointer; }
+.search-history-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px; color: var(--text-secondary); background: transparent; border: 0; border-radius: var(--radius-xs); cursor: pointer; text-align: left; }
+.search-history-item:hover { color: var(--text-primary); background: var(--surface-hover); }
+.search-history-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.remove-history { padding: 3px; color: var(--text-tertiary); }
+.remove-history:hover { color: var(--danger); }
 
 .suggestion-item {
   display: flex;
