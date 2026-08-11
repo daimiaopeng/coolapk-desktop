@@ -17,6 +17,8 @@ export interface NavVisibilitySettings {
   topics: boolean;
   reviews: boolean;
   secondhand: boolean;
+  albums: boolean;
+  pictures: boolean;
   notifications: boolean;
   favorites: boolean;
   history: boolean;

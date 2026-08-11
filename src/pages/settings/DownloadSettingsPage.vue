@@ -97,13 +97,21 @@
         </div>
       </div>
 
-      <div class="setting-row">
-        <div class="row-info">
+      <div class="setting-row cache-usage-row">
+        <div class="row-info cache-usage-info">
           <span class="row-label">缓存占用</span>
-          <span class="row-sub">{{ cacheInfoText }}</span>
-          <span class="row-sub">{{ cacheBreakdownText }}</span>
+          <div class="cache-total-line">
+            <span class="cache-total-label">当前总占用</span>
+            <strong v-if="cacheBytes !== null" class="cache-total-value">{{ formatBytes(cacheBytes) }}</strong>
+            <span v-else class="cache-total-value is-loading">正在统计...</span>
+          </div>
+          <div class="cache-breakdown">
+            <span class="cache-breakdown-item"><span>图片</span><strong>{{ formatBytes(cacheImageBytes) }}</strong></span>
+            <span class="cache-breakdown-item"><span>WebView</span><strong>{{ formatBytes(cacheWebviewBytes) }}</strong></span>
+            <span class="cache-breakdown-item"><span>更新包</span><strong>{{ formatBytes(cacheUpdateBytes) }}</strong></span>
+          </div>
         </div>
-        <div class="row-actions">
+        <div class="row-actions cache-usage-actions">
           <AppButton variant="ghost" size="sm" :disabled="cacheBusy" @click="cleanExpiredCache">
             清理过期项
           </AppButton>
@@ -205,15 +213,6 @@ const cacheDirectory = ref('');
 const displayDownloadPath = computed(
   () => settingsStore.settings.downloadPath || '（系统下载目录）'
 );
-
-const cacheInfoText = computed(() => {
-  if (cacheBytes.value === null) return '正在统计缓存占用...';
-  return `当前总占用约 ${formatBytes(cacheBytes.value)}`;
-});
-
-const cacheBreakdownText = computed(() => (
-  `图片 ${formatBytes(cacheImageBytes.value)} · WebView ${formatBytes(cacheWebviewBytes.value)} · 更新包 ${formatBytes(cacheUpdateBytes.value)}`
-));
 
 const cacheDirectoryText = computed(() => (
   cacheDirectory.value || (settingsStore.settings.cachePath
@@ -434,6 +433,55 @@ onMounted(() => {
   align-items: flex-start;
 }
 
+.cache-usage-info {
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 4px;
+}
+
+.cache-total-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.cache-total-label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+.cache-total-value {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.35;
+}
+
+.cache-total-value.is-loading {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
+}
+
+.cache-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--space-3);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption);
+}
+
+.cache-breakdown-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.cache-breakdown-item strong {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
 .cache-path {
   max-width: 500px;
   color: var(--text-secondary);
@@ -447,6 +495,17 @@ onMounted(() => {
   gap: var(--space-2);
   flex-shrink: 0;
   margin-left: var(--space-4);
+}
+
+.cache-usage-actions {
+  gap: 4px;
+  margin-left: var(--space-3);
+  white-space: nowrap;
+}
+
+.cache-usage-actions :deep(.app-button) {
+  padding: 4px 8px;
+  font-size: 12px;
 }
 
 .row-label {

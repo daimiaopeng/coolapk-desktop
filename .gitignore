@@ -3,6 +3,7 @@ node_modules/
 dist/
 *.log
 npm-debug.log*
+coverage/
 
 # Rust / Tauri
 src-tauri/target/

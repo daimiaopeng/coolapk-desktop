@@ -8,7 +8,9 @@ import { CoolapkTauriAPI } from './api/coolapk';
 import { useSettingsStore } from './stores/settings';
 
 const app = createApp(App);
-app.use(createPinia());
+const pinia = createPinia();
+app.use(pinia);
+const settingsStore = useSettingsStore(pinia);
 
 // 全局挂载外部链接打开器，供 DOM v-html 中的 <a onclick="..."> 安全调用
 (window as any).__openCoolapkUrl = (url: string) => {
@@ -72,4 +74,9 @@ window.addEventListener('unhandledrejection', (e) => {
   showGlobalError(msg);
 });
 
-app.mount('#app');
+async function bootstrap() {
+  await settingsStore.initializeSettings();
+  app.mount('#app');
+}
+
+void bootstrap();

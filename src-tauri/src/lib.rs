@@ -256,6 +256,7 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 重复启动时聚焦已有实例的主窗口
             if let Some(w) = app.get_webview_window("main") {

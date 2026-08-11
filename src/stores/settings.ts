@@ -12,6 +12,7 @@ import type {
 } from '../types/settings';
 
 const STORAGE_KEY = 'coolapk_desktop_settings';
+const SETTINGS_FILE = 'settings.json';
 const DEFAULT_ZOOM = 100;
 const MIN_ZOOM = 50;
 const MAX_ZOOM = 200;
@@ -38,6 +39,8 @@ const defaultNavVisibility: NavVisibilitySettings = {
   topics: true,
   reviews: true,
   secondhand: true,
+  albums: true,
+  pictures: true,
   notifications: true,
   favorites: true,
   history: true,
@@ -120,6 +123,115 @@ const defaultSettings: AppSettings = {
   deviceFingerprint: { ...defaultDeviceFingerprint },
 };
 
+type SettingsFileStore = {
+  entries<T>(): Promise<Array<[string, T]>>;
+  keys(): Promise<string[]>;
+  set(key: string, value: unknown): Promise<void>;
+  delete(key: string): Promise<boolean>;
+  save(): Promise<void>;
+};
+
+function cloneDefaultSettings(): AppSettings {
+  return {
+    ...defaultSettings,
+    navVisibility: { ...defaultNavVisibility },
+    blockedKeywords: [],
+    deviceFingerprint: { ...defaultDeviceFingerprint },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isOneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
+  return typeof value === 'string' && (values as readonly string[]).includes(value);
+}
+
+function readBoolean(value: unknown, fallback: boolean) {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function readString(value: unknown, fallback: string) {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function readNumber(value: unknown, fallback: number, min: number, max: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(Math.max(value, min), max);
+}
+
+/** 只接受已知类型和取值，避免损坏的 JSON 让页面出现不可用设置。 */
+export function normalizeSettings(value: unknown): AppSettings {
+  const source = isRecord(value) ? value : {};
+  const result = cloneDefaultSettings();
+  if (isOneOf(source.theme, ['light', 'dark', 'system'])) result.theme = source.theme;
+  if (isOneOf(source.density, ['comfortable', 'standard', 'compact'])) result.density = source.density;
+  if (isOneOf(source.accentColor, ['green', 'blue', 'violet', 'orange'])) result.accentColor = source.accentColor;
+  if (isOneOf(source.commentSort, ['hot', 'latest'])) result.commentSort = source.commentSort;
+  if (isOneOf(source.defaultHomeTab, ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'])) result.defaultHomeTab = source.defaultHomeTab;
+  if (isOneOf(source.imageQuality, ['standard', 'hd', 'raw'])) result.imageQuality = source.imageQuality;
+  if (isOneOf(source.externalLinkMode, ['internal', 'system'])) result.externalLinkMode = source.externalLinkMode;
+  if (isOneOf(source.timeDisplay, ['relative', 'absolute'])) result.timeDisplay = source.timeDisplay;
+  if (isOneOf(source.imageOpenMode, ['internal', 'system'])) result.imageOpenMode = source.imageOpenMode;
+  if (isOneOf(source.updateChannel, ['stable', 'beta'])) result.updateChannel = source.updateChannel;
+  result.fontSize = readNumber(source.fontSize, result.fontSize, 12, 20);
+  result.zoom = readNumber(source.zoom, result.zoom, MIN_ZOOM, MAX_ZOOM);
+  result.zoomManuallySet = readBoolean(source.zoomManuallySet, result.zoomManuallySet);
+  result.sidebarCollapsed = readBoolean(source.sidebarCollapsed, result.sidebarCollapsed);
+  result.reduceMotion = readBoolean(source.reduceMotion, result.reduceMotion);
+  result.collapseLines = [0, 8, 12, 18].includes(Number(source.collapseLines)) ? Number(source.collapseLines) : result.collapseLines;
+  result.infiniteScroll = readBoolean(source.infiniteScroll, result.infiniteScroll);
+  result.autoPlayGif = readBoolean(source.autoPlayGif, result.autoPlayGif);
+  result.showDeviceInfo = readBoolean(source.showDeviceInfo, result.showDeviceInfo);
+  result.downloadPath = readString(source.downloadPath, result.downloadPath);
+  result.maxConcurrentDownloads = [1, 2, 3, 4, 5, 6, 8].includes(Number(source.maxConcurrentDownloads)) ? Number(source.maxConcurrentDownloads) : result.maxConcurrentDownloads;
+  result.autoCleanCache = readBoolean(source.autoCleanCache, result.autoCleanCache);
+  result.cacheThresholdMB = [200, 500, 1000, 2000].includes(Number(source.cacheThresholdMB)) ? Number(source.cacheThresholdMB) : result.cacheThresholdMB;
+  result.cacheTtlDays = [0, 1, 3, 7, 14, 30].includes(Number(source.cacheTtlDays)) ? Number(source.cacheTtlDays) : result.cacheTtlDays;
+  result.cachePath = readString(source.cachePath, result.cachePath);
+  result.checkUpdateOnStartup = readBoolean(source.checkUpdateOnStartup, result.checkUpdateOnStartup);
+  result.ignoredUpdateVersion = readString(source.ignoredUpdateVersion, result.ignoredUpdateVersion);
+  result.ignoreAllUpdates = readBoolean(source.ignoreAllUpdates, result.ignoreAllUpdates);
+  result.closeToTray = readBoolean(source.closeToTray, result.closeToTray);
+  result.autostart = readBoolean(source.autostart, result.autostart);
+  result.startMinimized = readBoolean(source.startMinimized, result.startMinimized);
+  result.alwaysOnTop = readBoolean(source.alwaysOnTop, result.alwaysOnTop);
+  result.rememberWindowState = readBoolean(source.rememberWindowState, result.rememberWindowState);
+  result.notifyReplies = readBoolean(source.notifyReplies, result.notifyReplies);
+  result.notifyAt = readBoolean(source.notifyAt, result.notifyAt);
+  result.notifyPm = readBoolean(source.notifyPm, result.notifyPm);
+  result.desktopNotifications = readBoolean(source.desktopNotifications, result.desktopNotifications);
+  result.notificationSound = readBoolean(source.notificationSound, result.notificationSound);
+  result.notificationPollInterval = [1, 5, 10, 30].includes(Number(source.notificationPollInterval)) ? Number(source.notificationPollInterval) : result.notificationPollInterval;
+  result.hideAdCards = readBoolean(source.hideAdCards, result.hideAdCards);
+  result.blockedKeywords = Array.isArray(source.blockedKeywords) ? [...new Set(source.blockedKeywords.filter((item): item is string => typeof item === 'string' && item.trim().length > 0))] : result.blockedKeywords;
+  result.publishDeviceSignature = readBoolean(source.publishDeviceSignature, result.publishDeviceSignature);
+  result.deviceSignature = readString(source.deviceSignature, result.deviceSignature).slice(0, 40);
+  result.updateSpeedLimitKBps = [0, 500, 1024, 2048, 5120].includes(Number(source.updateSpeedLimitKBps)) ? Number(source.updateSpeedLimitKBps) : result.updateSpeedLimitKBps;
+  result.proxyUrl = readString(source.proxyUrl, result.proxyUrl);
+  result.notifyDownloadComplete = readBoolean(source.notifyDownloadComplete, result.notifyDownloadComplete);
+  result.experimentalFeatures = readBoolean(source.experimentalFeatures, result.experimentalFeatures);
+  if (!result.experimentalFeatures && result.updateChannel === 'beta') result.updateChannel = 'stable';
+  if (isRecord(source.navVisibility)) {
+    for (const key of Object.keys(defaultNavVisibility) as Array<keyof NavVisibilitySettings>) result.navVisibility![key] = readBoolean(source.navVisibility[key], result.navVisibility![key]);
+  }
+  if (isRecord(source.deviceFingerprint)) {
+    const fingerprint = source.deviceFingerprint;
+    result.deviceFingerprint.customFingerprint = readBoolean(fingerprint.customFingerprint, result.deviceFingerprint.customFingerprint);
+    result.deviceFingerprint.model = readString(fingerprint.model, result.deviceFingerprint.model);
+    result.deviceFingerprint.androidVersion = readString(fingerprint.androidVersion, result.deviceFingerprint.androidVersion);
+    result.deviceFingerprint.build = readString(fingerprint.build, result.deviceFingerprint.build);
+    result.deviceFingerprint.appVersion = readString(fingerprint.appVersion, result.deviceFingerprint.appVersion);
+    result.deviceFingerprint.appCode = readString(fingerprint.appCode, result.deviceFingerprint.appCode);
+    result.deviceFingerprint.sdkInt = readString(fingerprint.sdkInt, result.deviceFingerprint.sdkInt);
+    result.deviceFingerprint.locale = readString(fingerprint.locale, result.deviceFingerprint.locale);
+    if (isOneOf(fingerprint.darkMode, ['0', '1'])) result.deviceFingerprint.darkMode = fingerprint.darkMode;
+  }
+  if (result.deviceSignature === '酷安桌面版') result.deviceSignature = '';
+  return result;
+}
+
 type AccentPalette = {
   primary: string;
   hover: string;
@@ -148,42 +260,91 @@ const ACCENT_PALETTES: Record<AccentColor, { light: AccentPalette; dark: AccentP
 };
 
 export const useSettingsStore = defineStore('settings', () => {
-  const settings = ref<AppSettings>({ ...defaultSettings });
+  const settings = ref<AppSettings>(cloneDefaultSettings());
+  const isTauriRuntime = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__);
+  let fileStore: SettingsFileStore | null = null;
+  let persistenceReady = !isTauriRuntime;
+  let saveQueue = Promise.resolve();
+  let initializationPromise: Promise<void> | null = null;
 
-  // 从 localStorage 加载持久化设置
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
+  function loadLegacySettings(): AppSettings {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved) return cloneDefaultSettings();
       const parsed = JSON.parse(saved);
-      const hasManualZoomFlag = typeof parsed.zoomManuallySet === 'boolean';
-      settings.value = {
-        ...defaultSettings,
-        ...parsed,
-        // 旧版本没有记录手动缩放标志：早期版本的"自动"值（devicePixelRatio×100）
-        // 会与系统 DPI 双重放大导致界面过大，因此一律视为自动，按新算法重置为 100%。
-        zoomManuallySet: hasManualZoomFlag ? parsed.zoomManuallySet : false,
-        // 旧默认签名"来自酷安桌面版"已取消，改为空；用户自定义签名保留
-        deviceSignature: parsed.deviceSignature === '酷安桌面版' ? '' : (parsed.deviceSignature ?? ''),
-        navVisibility: { ...defaultNavVisibility, ...(parsed.navVisibility || {}) },
-        deviceFingerprint: { ...defaultDeviceFingerprint, ...(parsed.deviceFingerprint || {}) }
-      };
+      const normalized = normalizeSettings(parsed);
+      if (!normalized.zoomManuallySet) normalized.zoom = getSystemZoom();
+      return normalized;
+    } catch (err) {
+      console.error('加载旧版设置失败，将使用默认设置', err);
+      return cloneDefaultSettings();
     }
-  } catch (err) {
-    console.error('Failed to load settings from storage', err);
   }
 
-  if (!settings.value.zoomManuallySet) {
-    settings.value.zoom = getSystemZoom();
+  async function saveSettingsFile(snapshot: AppSettings) {
+    if (!fileStore) return;
+    const currentKeys = new Set(Object.keys(snapshot));
+    const oldKeys = await fileStore.keys();
+    for (const key of oldKeys) {
+      if (!currentKeys.has(key)) await fileStore.delete(key);
+    }
+    for (const [key, value] of Object.entries(snapshot)) await fileStore.set(key, value);
+    await fileStore.save();
+  }
+
+  function queueFileSave(snapshot: AppSettings) {
+    const copy = JSON.parse(JSON.stringify(snapshot)) as AppSettings;
+    saveQueue = saveQueue.then(() => saveSettingsFile(copy)).catch((err) => {
+      console.error('保存 settings.json 失败', err);
+    });
+    return saveQueue;
+  }
+
+  async function initialize() {
+    if (!isTauriRuntime) return;
+    try {
+      const { Store } = await import('@tauri-apps/plugin-store');
+      const store = await Store.load(SETTINGS_FILE, { autoSave: false });
+      const entries = await store.entries<unknown>();
+      const diskSettings = Object.fromEntries(entries);
+      settings.value = normalizeSettings(entries.length ? diskSettings : loadLegacySettings());
+      if (!settings.value.zoomManuallySet) settings.value.zoom = getSystemZoom();
+      fileStore = store;
+      persistenceReady = true;
+      await queueFileSave(settings.value);
+    } catch (err) {
+      console.error('加载 settings.json 失败，将回退到 localStorage', err);
+      settings.value = loadLegacySettings();
+      if (!settings.value.zoomManuallySet) settings.value.zoom = getSystemZoom();
+      persistenceReady = true;
+    }
+  }
+
+  if (!isTauriRuntime) settings.value = loadLegacySettings();
+
+  function initializeSettings() {
+    if (!initializationPromise) initializationPromise = initialize();
+    return initializationPromise;
+  }
+
+  function flushSettings() {
+    return saveQueue;
   }
 
   // 持久化与生效应用
   watch(
     settings,
     (newVal) => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(newVal));
-      } catch (err) {
-        console.error('Failed to save settings', err);
+      if (persistenceReady) {
+        if (fileStore) {
+          void queueFileSave(newVal);
+        } else {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(newVal));
+          } catch (err) {
+            console.error('保存本地设置失败', err);
+          }
+        }
       }
       applyTheme(newVal.theme);
       applyAccent(newVal.accentColor);
@@ -199,6 +360,8 @@ export const useSettingsStore = defineStore('settings', () => {
     },
     { deep: true, immediate: true }
   );
+
+  void initializeSettings();
 
   function applyTheme(theme: ThemeMode) {
     const root = document.documentElement;
@@ -385,6 +548,8 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     settings,
+    initializeSettings,
+    flushSettings,
     setTheme,
     toggleSidebar,
     setZoom,

@@ -1,6 +1,6 @@
 {
   "identifier": "main-window-default",
-  "description": "主窗口默认能力：仅保留实际初始化的插件权限（http/store/stronghold 插件未注册，已移除对应权限）",
+  "description": "主窗口默认能力：包含设置文件所需的 Store 插件权限",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -8,6 +8,7 @@
     "core:tray:allow-set-icon",
     "autostart:default",
     "dialog:default",
-    "notification:default"
+    "notification:default",
+    "store:default"
   ]
 }
