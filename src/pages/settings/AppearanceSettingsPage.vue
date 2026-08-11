@@ -122,12 +122,29 @@
         </div>
       </div>
     </div>
+
+    <div class="setting-group">
+      <h4 class="group-title">首页频道排序</h4>
+      <p class="group-sub">调整首页推荐、头条、热榜等频道的显示顺序，设置会自动保存</p>
+      <div class="home-tab-order-list">
+        <div v-for="(tab, index) in homeTabItems" :key="tab.key" class="home-tab-order-item">
+          <span class="home-tab-order-index">{{ index + 1 }}</span>
+          <span class="home-tab-order-name">{{ tab.label }}</span>
+          <div class="home-tab-order-actions">
+            <button type="button" :disabled="index === 0" aria-label="上移频道" @click="settingsStore.moveHomeTab(tab.key, -1)"><i class="fas fa-chevron-up"></i></button>
+            <button type="button" :disabled="index === homeTabItems.length - 1" aria-label="下移频道" @click="settingsStore.moveHomeTab(tab.key, 1)"><i class="fas fa-chevron-down"></i></button>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="reset-order-btn" @click="settingsStore.resetHomeTabOrder">恢复默认顺序</button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useSettingsStore } from '../../stores/settings';
-import type { AccentColor, FeedDensity } from '../../types/settings';
+import type { AccentColor, FeedDensity, HomeTabKey } from '../../types/settings';
 import AppSwitch from '../../components/common/AppSwitch.vue';
 
 const settingsStore = useSettingsStore();
@@ -144,6 +161,18 @@ const densityOptions: { key: FeedDensity; label: string; icon: string }[] = [
   { key: 'standard', label: '标准', icon: '▦' },
   { key: 'compact', label: '紧凑', icon: '▤' },
 ];
+
+const homeTabCatalog: Array<{ key: HomeTabKey; label: string }> = [
+  { key: 'index_v8', label: '推荐' },
+  { key: 'digest', label: '头条' },
+  { key: 'hot', label: '热榜' },
+  { key: 'latest', label: '快讯' },
+  { key: 'cool_picture', label: '酷图' },
+  { key: 'secondhand', label: '二手' },
+  { key: 'pictures', label: '图片' },
+  { key: 'dyh', label: '看看号' },
+];
+const homeTabItems = computed(() => (settingsStore.settings.homeTabOrder || []).map((key) => homeTabCatalog.find((item) => item.key === key)).filter((item): item is { key: HomeTabKey; label: string } => Boolean(item)));
 
 function adjustFontSize(delta: number) {
   const next = Math.min(Math.max(settingsStore.settings.fontSize + delta, 12), 20);
@@ -248,6 +277,16 @@ function toggleNav(key: string) {
   color: var(--text-primary);
   font-weight: var(--font-weight-medium);
 }
+
+.home-tab-order-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.home-tab-order-item { display: flex; align-items: center; gap: var(--space-3); padding: 8px 12px; background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-control); }
+.home-tab-order-index { width: 20px; color: var(--text-tertiary); text-align: center; font-size: var(--font-size-caption); }
+.home-tab-order-name { flex: 1; color: var(--text-primary); font-size: var(--font-size-sub); }
+.home-tab-order-actions { display: flex; gap: 4px; }
+.home-tab-order-actions button { width: 28px; height: 28px; color: var(--text-secondary); background: transparent; border: 1px solid var(--border); border-radius: var(--radius-xs); cursor: pointer; }
+.home-tab-order-actions button:hover:not(:disabled) { color: var(--brand-primary); border-color: var(--brand-primary); background: var(--brand-soft); }
+.home-tab-order-actions button:disabled { color: var(--text-disabled); cursor: not-allowed; }
+.reset-order-btn { align-self: flex-start; padding: 6px 10px; color: var(--brand-primary); background: var(--brand-soft); border: 0; border-radius: var(--radius-control); cursor: pointer; font-size: var(--font-size-caption); }
 
 
 .theme-options {

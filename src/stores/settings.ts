@@ -9,6 +9,7 @@ import type {
   AccentColor,
   NavVisibilitySettings,
   DeviceFingerprintSettings,
+  HomeTabKey,
 } from '../types/settings';
 
 const STORAGE_KEY = 'coolapk_desktop_settings';
@@ -16,6 +17,7 @@ const SETTINGS_FILE = 'settings.json';
 const DEFAULT_ZOOM = 100;
 const MIN_ZOOM = 50;
 const MAX_ZOOM = 200;
+export const DEFAULT_HOME_TAB_ORDER: HomeTabKey[] = ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'];
 
 function clampZoom(zoom: number) {
   const safeZoom = Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM;
@@ -86,6 +88,7 @@ const defaultSettings: AppSettings = {
   autoPlayGif: true,
   showDeviceInfo: true,
   defaultHomeTab: 'index_v8',
+  homeTabOrder: [...DEFAULT_HOME_TAB_ORDER],
   downloadPath: '',
   maxConcurrentDownloads: 3,
   autoCleanCache: true,
@@ -135,6 +138,7 @@ function cloneDefaultSettings(): AppSettings {
   return {
     ...defaultSettings,
     navVisibility: { ...defaultNavVisibility },
+    homeTabOrder: [...DEFAULT_HOME_TAB_ORDER],
     blockedKeywords: [],
     deviceFingerprint: { ...defaultDeviceFingerprint },
   };
@@ -170,6 +174,10 @@ export function normalizeSettings(value: unknown): AppSettings {
   if (isOneOf(source.accentColor, ['green', 'blue', 'violet', 'orange'])) result.accentColor = source.accentColor;
   if (isOneOf(source.commentSort, ['hot', 'latest'])) result.commentSort = source.commentSort;
   if (isOneOf(source.defaultHomeTab, ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'])) result.defaultHomeTab = source.defaultHomeTab;
+  if (Array.isArray(source.homeTabOrder)) {
+    const valid = source.homeTabOrder.filter((item): item is HomeTabKey => isOneOf(item, DEFAULT_HOME_TAB_ORDER));
+    result.homeTabOrder = [...new Set([...valid, ...DEFAULT_HOME_TAB_ORDER])];
+  }
   if (isOneOf(source.imageQuality, ['standard', 'hd', 'raw'])) result.imageQuality = source.imageQuality;
   if (isOneOf(source.externalLinkMode, ['internal', 'system'])) result.externalLinkMode = source.externalLinkMode;
   if (isOneOf(source.timeDisplay, ['relative', 'absolute'])) result.timeDisplay = source.timeDisplay;
@@ -533,6 +541,19 @@ export const useSettingsStore = defineStore('settings', () => {
     settings.value.navVisibility[key] = !settings.value.navVisibility[key];
   }
 
+  function moveHomeTab(key: HomeTabKey, direction: -1 | 1) {
+    const order = [...settings.value.homeTabOrder];
+    const index = order.indexOf(key);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    settings.value.homeTabOrder = order;
+  }
+
+  function resetHomeTabOrder() {
+    settings.value.homeTabOrder = [...DEFAULT_HOME_TAB_ORDER];
+  }
+
   function ignoreUpdateVersion(version: string) {
     settings.value.ignoredUpdateVersion = version;
   }
@@ -556,6 +577,8 @@ export const useSettingsStore = defineStore('settings', () => {
     refreshAutoZoom,
     setAccent,
     toggleNavVisibility,
+    moveHomeTab,
+    resetHomeTabOrder,
     ignoreUpdateVersion,
     setIgnoreAllUpdates,
     resetUpdateNotifications,

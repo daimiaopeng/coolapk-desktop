@@ -65,6 +65,7 @@ export interface AppSettings {
   autoPlayGif: boolean;
   showDeviceInfo: boolean;
   defaultHomeTab: HomeTabKey;
+  homeTabOrder: HomeTabKey[];
   downloadPath: string;
   maxConcurrentDownloads: number;
   autoCleanCache: boolean;

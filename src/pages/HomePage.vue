@@ -1,7 +1,7 @@
 <template>
   <div class="home-page-layout">
     <div class="main-feed-column">
-      <FeedTabs v-model:active-key="activeTab" :dynamic-tabs="dynamicTabs" />
+      <FeedTabs v-model:active-key="activeTab" :dynamic-tabs="orderedDynamicTabs" />
 
       <div class="feed-scroll-container custom-scrollbar" @scroll="handleScroll">
         <!-- 1. 头条 Tab (`digest`) 专属：今日酷安日历 & 金刚位入口 & 关照关注栏 -->
@@ -163,6 +163,7 @@ import AppImage from '../components/common/AppImage.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
 import { shouldHideFeed } from '../utils/feedFilter';
+import { DEFAULT_HOME_TAB_ORDER } from '../stores/settings';
 
 const settingsStore = useSettingsStore();
 
@@ -176,6 +177,23 @@ const loadingMore = ref(false);
 const noMore = ref(false);
 const error = ref('');
 const dynamicTabs = ref<{ key: string; label: string }[]>([]);
+const fallbackHomeTabs = [
+  { key: 'index_v8', label: '推荐' },
+  { key: 'digest', label: '头条' },
+  { key: 'hot', label: '热榜' },
+  { key: 'latest', label: '快讯' },
+  { key: 'cool_picture', label: '酷图' },
+  { key: 'secondhand', label: '二手' },
+];
+const orderedDynamicTabs = computed(() => {
+  const source = dynamicTabs.value.length ? dynamicTabs.value : fallbackHomeTabs;
+  const order = settingsStore.settings.homeTabOrder || DEFAULT_HOME_TAB_ORDER;
+  return [...source].sort((a, b) => {
+    const aIndex = order.indexOf(a.key as any);
+    const bIndex = order.indexOf(b.key as any);
+    return (aIndex < 0 ? order.length : aIndex) - (bIndex < 0 ? order.length : bIndex);
+  });
+});
 
 const knownTabMap: Record<string, string> = {
   '关注': 'index_v8',

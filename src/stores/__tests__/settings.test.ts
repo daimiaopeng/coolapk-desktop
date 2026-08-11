@@ -90,6 +90,7 @@ describe('settings store', () => {
       autoPlayGif: false,
       showDeviceInfo: false,
       defaultHomeTab: 'dyh',
+      homeTabOrder: ['dyh', 'hot', 'index_v8', 'digest', 'latest', 'cool_picture', 'secondhand', 'pictures'],
       downloadPath: 'D:\\Downloads',
       maxConcurrentDownloads: 8,
       autoCleanCache: false,
@@ -248,6 +249,16 @@ describe('settings store', () => {
     (store.settings as any).navVisibility = undefined;
     store.toggleNavVisibility('pictures');
     expect(store.settings.navVisibility?.pictures).toBe(false);
+  });
+
+  it('moveHomeTab persists the customized channel order', () => {
+    const store = useSettingsStore();
+    const first = store.settings.homeTabOrder[0];
+    const second = store.settings.homeTabOrder[1];
+    store.moveHomeTab(second, -1);
+    expect(store.settings.homeTabOrder.slice(0, 2)).toEqual([second, first]);
+    store.resetHomeTabOrder();
+    expect(store.settings.homeTabOrder[0]).toBe('index_v8');
   });
 
   it('ignoreUpdateVersion sets the ignored version', () => {
