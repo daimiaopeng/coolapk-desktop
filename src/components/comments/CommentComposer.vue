@@ -38,11 +38,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch, onMounted } from 'vue';
 import AppButton from '../common/AppButton.vue';
 import AppIconButton from '../common/AppIconButton.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
+import { clearCommentDraft, loadCommentDraft, saveCommentDraft } from '../../utils/commentDrafts';
 
 const props = defineProps<{
   feedId: string | number;
@@ -59,6 +60,32 @@ const authStore = useAuthStore();
 const content = ref('');
 const submitting = ref(false);
 const errorMsg = ref('');
+let restoringDraft = false;
+
+function currentDraftAccount(): string {
+  return String(authStore.user?.uid || 'guest');
+}
+
+async function restoreDraft() {
+  restoringDraft = true;
+  try {
+    content.value = await loadCommentDraft(currentDraftAccount(), props.feedId, props.replyTo?.rid);
+  } finally {
+    restoringDraft = false;
+  }
+}
+
+watch([() => props.feedId, () => props.replyTo?.rid, () => authStore.user?.uid], () => {
+  void restoreDraft();
+});
+
+watch(content, (value) => {
+  if (!restoringDraft) void saveCommentDraft(currentDraftAccount(), props.feedId, props.replyTo?.rid, value);
+});
+
+onMounted(() => {
+  void restoreDraft();
+});
 
 async function handleSubmit() {
   if (!content.value.trim() || submitting.value) return;
@@ -76,6 +103,7 @@ async function handleSubmit() {
       content.value.trim(),
       props.replyTo ? String(props.replyTo.rid) : undefined
     );
+    await clearCommentDraft(currentDraftAccount(), props.feedId, props.replyTo?.rid);
     content.value = '';
     emit('success');
   } catch (err: any) {
