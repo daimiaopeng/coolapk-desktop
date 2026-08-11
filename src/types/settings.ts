@@ -1,5 +1,6 @@
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type FeedDensity = 'comfortable' | 'standard' | 'compact';
+export type FeedLayout = 'single' | 'double';
 export type ImageQuality = 'standard' | 'hd' | 'raw';
 export type AccentColor = 'green' | 'blue' | 'violet' | 'orange';
 export type CommentSort = 'hot' | 'latest';
@@ -53,6 +54,7 @@ export interface DeviceFingerprintSettings {
 export interface AppSettings {
   theme: ThemeMode;
   density: FeedDensity;
+  feedLayout: FeedLayout;
   fontSize: number;
   zoom: number;
   zoomManuallySet: boolean;

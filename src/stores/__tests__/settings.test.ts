@@ -78,6 +78,7 @@ describe('settings store', () => {
     const expected: AppSettings = {
       theme: 'dark',
       density: 'compact',
+      feedLayout: 'double',
       fontSize: 18,
       zoom: 125,
       zoomManuallySet: true,

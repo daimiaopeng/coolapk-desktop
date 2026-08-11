@@ -76,6 +76,7 @@ export function buildDeviceUserAgent(f: DeviceFingerprintSettings): string {
 const defaultSettings: AppSettings = {
   theme: 'system',
   density: 'standard',
+  feedLayout: 'single',
   fontSize: 15,
   zoom: DEFAULT_ZOOM,
   zoomManuallySet: false,
@@ -171,6 +172,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   const result = cloneDefaultSettings();
   if (isOneOf(source.theme, ['light', 'dark', 'system'])) result.theme = source.theme;
   if (isOneOf(source.density, ['comfortable', 'standard', 'compact'])) result.density = source.density;
+  if (isOneOf(source.feedLayout, ['single', 'double'])) result.feedLayout = source.feedLayout;
   if (isOneOf(source.accentColor, ['green', 'blue', 'violet', 'orange'])) result.accentColor = source.accentColor;
   if (isOneOf(source.commentSort, ['hot', 'latest'])) result.commentSort = source.commentSort;
   if (isOneOf(source.defaultHomeTab, ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'])) result.defaultHomeTab = source.defaultHomeTab;

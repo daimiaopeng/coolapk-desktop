@@ -1,7 +1,10 @@
 <template>
   <div class="home-page-layout">
     <div class="main-feed-column">
-      <FeedTabs v-model:active-key="activeTab" :dynamic-tabs="orderedDynamicTabs" />
+      <div class="feed-toolbar-row">
+        <FeedTabs v-model:active-key="activeTab" :dynamic-tabs="orderedDynamicTabs" />
+        <FeedLayoutToggle v-model="feedLayout" />
+      </div>
 
       <div class="feed-scroll-container custom-scrollbar" @scroll="handleScroll">
         <!-- 1. 头条 Tab (`digest`) 专属：今日酷安日历 & 金刚位入口 & 关照关注栏 -->
@@ -127,8 +130,20 @@
           <EmptyState title="暂无动态内容" />
         </div>
 
-        <div v-else-if="activeTab !== 'dyh'" class="feed-list-padding">
+        <div v-else-if="activeTab !== 'dyh'" :class="['feed-list-padding', { 'is-double-column': isDoubleColumn }]">
+          <template v-if="isDoubleColumn">
+            <FeedCard
+              v-for="entry in feedEntries"
+              :key="entry.item.id || entry.index"
+              :feed="entry.item"
+              :rank-index="activeTab === 'hot' ? entry.index + 1 : undefined"
+              :class="{ 'feed-card-focused': entry.index === navIndex }"
+              :ref="(el) => setCardRef(el, entry.index)"
+              @deleted="handleFeedDeleted"
+            />
+          </template>
           <FeedCard
+            v-else
             v-for="(item, idx) in feeds"
             :key="item.id || idx"
             :feed="item"
@@ -153,6 +168,7 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FeedTabs from '../components/feed/FeedTabs.vue';
+import FeedLayoutToggle from '../components/feed/FeedLayoutToggle.vue';
 import FeedCard from '../components/feed/FeedCard.vue';
 import FeedSkeleton from '../components/feed/FeedSkeleton.vue';
 import RightSidebar from '../components/layout/RightSidebar.vue';
@@ -164,8 +180,16 @@ import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
 import { shouldHideFeed } from '../utils/feedFilter';
 import { DEFAULT_HOME_TAB_ORDER } from '../stores/settings';
+import type { FeedLayout } from '../types/settings';
 
 const settingsStore = useSettingsStore();
+
+const feedLayout = computed<FeedLayout>({
+  get: () => settingsStore.settings.feedLayout,
+  set: (value) => { settingsStore.settings.feedLayout = value; },
+});
+const isDoubleColumn = computed(() => feedLayout.value === 'double' && activeTab.value !== 'dyh');
+const feedEntries = computed(() => feeds.value.map((item, index) => ({ item, index })));
 
 const route = useRoute();
 const router = useRouter();
@@ -534,6 +558,21 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.feed-toolbar-row {
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-width: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+}
+
+.feed-toolbar-row :deep(.feed-tabs) {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: 0;
+}
+
 .feed-scroll-container {
   flex: 1;
   overflow-y: auto;
@@ -797,6 +836,35 @@ onUnmounted(() => {
   border-right: 0;
   border-left: 0;
   border-radius: 0;
+}
+
+.feed-list-padding.is-double-column {
+  display: block;
+  width: 100%;
+  column-count: 2;
+  column-gap: 12px;
+  column-fill: balance;
+  padding: 12px;
+}
+
+.feed-list-padding.is-double-column :deep(.feed-card) {
+  display: inline-block;
+  width: 100%;
+  margin-bottom: 0;
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  border-radius: 14px;
+  overflow: hidden;
+  break-inside: avoid;
+}
+
+.feed-list-padding.is-double-column > .loading-more {
+  column-span: all;
+}
+
+@container layout (max-width: 760px) {
+  .feed-list-padding.is-double-column {
+    column-count: 1;
+  }
 }
 
 .dyh-tab-grid {

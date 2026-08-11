@@ -1,8 +1,8 @@
 <template>
   <div class="sidebar-card">
     <div class="card-header">
-      <h3 class="card-title"><i class="fas fa-fire icon-hot"></i> 今日热榜</h3>
-      <button class="refresh-btn" title="刷新热榜" @click="fetchHot">
+      <h3 class="card-title">本月热榜</h3>
+      <button class="refresh-btn" title="刷新本月热榜" @click="fetchHot">
         <i class="fas fa-sync-alt"></i>
       </button>
     </div>
@@ -47,7 +47,7 @@ const items = ref<any[]>([]);
 async function fetchHot() {
   loading.value = true;
   try {
-    const res = await CoolapkTauriAPI.getHotFeeds(1);
+    const res = await CoolapkTauriAPI.getRankFeeds('month', 1);
     if (res && res.data) {
       items.value = res.data.filter((i: any) => i.title || i.message);
     }
@@ -84,21 +84,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-3);
+  margin-bottom: 10px;
 }
 
 .card-title {
   margin: 0;
-  font-size: var(--font-size-title-sm);
-  font-weight: var(--font-weight-semibold);
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 700;
   color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.icon-hot {
-  color: #ff6b6b;
 }
 
 .refresh-btn {
@@ -116,15 +113,15 @@ onMounted(() => {
 .trending-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
 }
 
 .trending-item {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
+  align-items: center;
+  gap: 8px;
+  min-height: 46px;
   cursor: pointer;
-  padding: var(--space-1) 0;
+  padding: 4px 0;
   transition: opacity var(--duration-fast) var(--ease-default);
 }
 
@@ -133,55 +130,52 @@ onMounted(() => {
 }
 
 .rank-num {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-tertiary);
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background-color: var(--background-secondary, rgba(0, 0, 0, 0.04));
-  margin-top: 1px;
+  background-color: transparent;
 }
 
 .rank-1 {
-  background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
-  color: #ffffff;
-  box-shadow: 0 2px 6px rgba(255, 71, 87, 0.35);
+  color: #ff4757;
 }
 
 .rank-2 {
-  background: linear-gradient(135deg, #ffa502 0%, #ff7f50 100%);
-  color: #ffffff;
-  box-shadow: 0 2px 6px rgba(255, 165, 2, 0.35);
+  color: #ffa502;
 }
 
 .rank-3 {
-  background: linear-gradient(135deg, #eccc68 0%, #ffa502 100%);
-  color: #ffffff;
-  box-shadow: 0 2px 6px rgba(236, 204, 104, 0.35);
+  color: #f5bd2e;
 }
 
 .item-info {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
 }
 
 .item-title {
-  font-size: var(--font-size-sub);
+  font-size: 15px;
+  line-height: 20px;
   color: var(--text-primary);
-  font-weight: var(--font-weight-medium);
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .item-meta {
-  font-size: var(--font-size-caption);
+  font-size: 12px;
+  line-height: 18px;
   color: var(--text-tertiary);
   margin-top: 2px;
 }
