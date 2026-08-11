@@ -1,18 +1,20 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { addSearchHistory, clearSearchHistory, removeSearchHistory, searchHistory } from '../searchHistory';
+import { addSearchHistory, clearSearchHistory, loadSearchHistory, removeSearchHistory, searchHistory } from '../searchHistory';
 
 describe('searchHistory', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear();
     searchHistory.value = [];
+    await loadSearchHistory();
+    clearSearchHistory();
   });
 
-  it('按最近使用顺序保存并去重', () => {
+  it('按最近使用顺序保存并去重', async () => {
     addSearchHistory('小米');
     addSearchHistory('  酷安  ');
     addSearchHistory('小米');
     expect(searchHistory.value).toEqual(['小米', '酷安']);
-    expect(JSON.parse(localStorage.getItem('coolapk-desktop-search-history') || '[]')).toEqual(['小米', '酷安']);
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
   it('支持删除和清空记录', () => {

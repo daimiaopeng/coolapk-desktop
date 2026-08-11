@@ -145,7 +145,7 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppButton from '../components/common/AppButton.vue';
-import { addSearchHistory, clearSearchHistory, removeSearchHistory, searchHistory } from '../utils/searchHistory';
+import { addSearchHistory, clearSearchHistory, loadSearchHistory, removeSearchHistory, searchHistory } from '../utils/searchHistory';
 
 const route = useRoute();
 const router = useRouter();
@@ -429,6 +429,7 @@ watch(queryStr, () => {
 });
 
 onMounted(() => {
+  void loadSearchHistory();
   document.addEventListener('click', handleClickOutside);
   if (queryStr.value) {
     searchQuery.value = queryStr.value;

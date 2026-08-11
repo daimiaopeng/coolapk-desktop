@@ -93,7 +93,7 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import LoadingState from '../common/LoadingState.vue';
 import EmptyState from '../common/EmptyState.vue';
 import { openFeedDetail } from '../../utils/feedNavigation';
-import { addSearchHistory, clearSearchHistory, searchHistory } from '../../utils/searchHistory';
+import { addSearchHistory, clearSearchHistory, loadSearchHistory, searchHistory } from '../../utils/searchHistory';
 
 const appStore = useAppStore();
 const router = useRouter();
@@ -224,7 +224,10 @@ function handleGlobalKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', handleGlobalKeydown));
+onMounted(() => {
+  void loadSearchHistory();
+  window.addEventListener('keydown', handleGlobalKeydown);
+});
 onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown));
 </script>
 
