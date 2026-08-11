@@ -158,6 +158,7 @@
           placeholder="发消息..."
           @keydown="handleKeydown"
         ></textarea>
+        <div v-if="draftSaved" class="draft-status"><i class="far fa-save"></i> 草稿已自动保存</div>
         <div class="input-actions">
           <AppButton 
             variant="primary" 
@@ -178,7 +179,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, computed } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue';
 
 defineOptions({
   name: 'MessagesPage'
@@ -197,6 +198,7 @@ import { EMOJI_MAP, EMOJI_BASE } from '../utils/coolapkEmoji';
 import { renderCoolapkRichText } from '../utils/richText';
 import { coolapkHtmlToPlainText } from '../utils/sanitizeHtml';
 import { handleAnchorClick } from '../utils/anchorClick';
+import { clearMessageDraft, loadMessageDraft, saveMessageDraft } from '../utils/messageDrafts';
 
 import { useRoute, useRouter } from 'vue-router';
 
@@ -224,6 +226,7 @@ const chatHistoryCache = new Map<string, any[]>();
 let historyRequestSequence = 0;
 
 const inputText = ref('');
+const draftSaved = ref(false);
 const sending = ref(false);
 const sendingImage = ref(false);
 const followingPartner = ref(false);
@@ -232,6 +235,28 @@ const showEmojiPicker = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const chatAreaRef = ref<HTMLElement | null>(null);
+
+function getConversationKey(session: any = currentSession.value): string {
+  return String(session?.ukey || session?.id || getSessionPartnerUid(session) || '');
+}
+
+function saveCurrentDraft() {
+  const key = getConversationKey();
+  if (!key) return;
+  saveMessageDraft(currentUserUid.value, key, inputText.value);
+  draftSaved.value = Boolean(inputText.value.trim());
+}
+
+function restoreDraft(session: any) {
+  const key = getConversationKey(session);
+  inputText.value = key ? loadMessageDraft(currentUserUid.value, key) : '';
+  draftSaved.value = Boolean(inputText.value.trim());
+}
+
+watch(inputText, () => {
+  draftSaved.value = Boolean(inputText.value.trim());
+  saveCurrentDraft();
+});
 
 function sessionsCacheKey() {
   return `coolapk_message_sessions_${currentUserUid.value || 'guest'}`;
@@ -449,8 +474,10 @@ const loadSessions = async () => {
 };
 
 const selectSession = async (session: any) => {
+  saveCurrentDraft();
   const requestSequence = ++historyRequestSequence;
   currentSession.value = session;
+  restoreDraft(session);
   historyError.value = '';
   const partnerUid = getSessionPartnerUid(session);
   if (partnerUid && String(route.query.uid || '') !== String(partnerUid)) {
@@ -716,6 +743,8 @@ const sendMessage = async () => {
       chatScrollMap.delete(String(ukey));
     }
     inputText.value = '';
+    clearMessageDraft(currentUserUid.value, getConversationKey(currentSession.value));
+    draftSaved.value = false;
     scrollToBottom();
   } catch (err: any) {
     console.error('发送消息失败', err);
@@ -732,6 +761,10 @@ const sendMessage = async () => {
 onMounted(() => {
   restoreSessionsCache();
   void loadSessions();
+});
+
+onUnmounted(() => {
+  saveCurrentDraft();
 });
 </script>
 
@@ -1275,6 +1308,9 @@ textarea {
 textarea::placeholder {
   color: var(--text-tertiary);
 }
+
+.draft-status { color: var(--text-tertiary); font-size: var(--font-size-caption); }
+.draft-status i { margin-right: 5px; color: var(--brand-primary); }
 
 .input-actions {
   display: flex;
