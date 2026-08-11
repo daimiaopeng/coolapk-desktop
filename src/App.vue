@@ -19,6 +19,7 @@
     <LoginModal />
     <AppConfirmHost />
     <BackToTop />
+    <AppContextMenu />
 
     <AppDialog :is-open="Boolean(updateInfo)" :title="updateInfo?.hasNew ? '发现新版本' : '检查更新'" :width="460" @close="updateInfo = null">
       <div v-if="updateInfo" class="startup-update">
@@ -74,6 +75,7 @@ import SearchCommand from './components/overlays/SearchCommand.vue';
 import LoginModal from './components/overlays/LoginModal.vue';
 import AppConfirmHost from './components/common/AppConfirmHost.vue';
 import BackToTop from './components/common/BackToTop.vue';
+import AppContextMenu from './components/common/AppContextMenu.vue';
 import AppDialog from './components/common/AppDialog.vue';
 import { useAuthStore } from './stores/auth';
 import { useSettingsStore } from './stores/settings';

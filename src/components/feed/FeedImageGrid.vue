@@ -13,6 +13,8 @@
           'is-long-image': gridCount === 1 && isLongImage,
         },
       ]"
+      data-context-kind="image"
+      :data-context-image-url="url"
       @click.stop="openViewer(index)"
     >
       <AppImage

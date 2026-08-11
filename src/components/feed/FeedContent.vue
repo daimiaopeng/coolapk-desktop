@@ -129,10 +129,15 @@ watch(
 <style scoped>
 .feed-content-wrapper {
   margin-bottom: 10px;
+  user-select: text;
+}
+
+.feed-content-wrapper * {
+  user-select: text;
 }
 
 .feed-title {
-  font-size: 17px;
+  font-size: calc(var(--font-size-body, 15px) + 2px);
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 8px;
@@ -141,7 +146,7 @@ watch(
 }
 
 .feed-body {
-  font-size: 15.5px;
+  font-size: var(--font-size-body, 15.5px);
   line-height: 1.65;
   color: var(--text-primary);
   word-break: break-word;

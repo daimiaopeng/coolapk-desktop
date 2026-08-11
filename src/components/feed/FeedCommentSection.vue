@@ -57,7 +57,16 @@
 
     <!-- 微博/酷安 规范楼中楼树状结构列表 -->
     <div v-else class="comment-list">
-      <div v-for="c in sortedComments" :key="c.id || c.uid" class="comment-row">
+      <div
+        v-for="c in sortedComments"
+        :key="c.id || c.uid"
+        class="comment-row"
+        data-context-kind="comment"
+        :data-context-feed-id="feedId"
+        :data-context-comment-id="c.id"
+        :data-comment-username="c.username || c.userInfo?.username || '酷友'"
+        :data-comment-text="c.message || c.replyRowsText || ''"
+      >
         <!-- 1. 一级评论人头像 -->
         <AppAvatar
           class="comment-avatar"
@@ -163,6 +172,11 @@
               v-for="sub in getVisibleSubReplies(c)"
               :key="sub.id || sub.uid"
               class="sub-reply-row"
+              data-context-kind="comment"
+              :data-context-feed-id="feedId"
+              :data-context-comment-id="sub.id"
+              :data-comment-username="sub.username || sub.fromUserName || '酷友'"
+              :data-comment-text="sub.message || ''"
               @click="setReplyTarget(sub.username || sub.fromUserName)"
             >
               <!-- 子回复头像 -->
@@ -269,7 +283,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import AppAvatar from '../common/AppAvatar.vue';
 import Button from '../ui/Button.vue';
 import FeedImageGrid from './FeedImageGrid.vue';
@@ -610,6 +624,15 @@ function setReplyTarget(username?: string) {
   }
   inputRef.value?.focus();
 }
+
+function handleContextReplyComment(event: Event) {
+  const detail = (event as CustomEvent<{ feedId?: string | number; username?: string }>).detail;
+  if (String(detail?.feedId || '') !== String(props.feedId || '')) return;
+  setReplyTarget(detail?.username || '酷友');
+}
+
+onMounted(() => window.addEventListener('coolapk-context-reply-comment', handleContextReplyComment));
+onUnmounted(() => window.removeEventListener('coolapk-context-reply-comment', handleContextReplyComment));
 
 function handleCommentTextClick(e: MouseEvent, c: any) {
   // 点中了评论内的链接则交给统一链接处理，否则视为点击评论（设置为回复对象）
@@ -983,6 +1006,13 @@ function handleSend() {
   line-height: 1.6;
   word-break: break-word;
   cursor: pointer;
+  user-select: text;
+}
+
+.comment-text *,
+.sub-reply-text,
+.sub-reply-text * {
+  user-select: text;
 }
 
 .comment-text :deep(a.coolapk-user-link),

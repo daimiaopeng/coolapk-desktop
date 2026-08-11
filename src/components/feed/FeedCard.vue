@@ -1,5 +1,11 @@
 <template>
-  <article :class="['feed-card', { 'is-detail-mode': detailMode }]" @click="handleCardClick">
+    <article
+      :class="['feed-card', { 'is-detail-mode': detailMode }]"
+      :data-feed-id="feed.id"
+      :data-feed-text="feed.message || feed.message_raw_output || ''"
+      :data-feed-images="JSON.stringify(feedImages)"
+      @click="handleCardClick"
+    >
     <FeedHeader
       :uid="feed.uid || feed.userInfo?.uid"
       :avatar="feed.userAvatar || feed.userInfo?.userAvatar || feed.pic"
@@ -33,7 +39,7 @@
       :force-expanded="detailMode"
     />
 
-    <FeedImageGrid :images="feed.pics || feed.picArr || (feed.pic ? [feed.pic] : [])" />
+    <FeedImageGrid :images="feedImages" />
 
     <!-- 被回复的原动态 / 被引用的卡片预览 -->
     <div v-if="feed.targetRow || feed.replyRows?.length" class="quoted-feed-box">
@@ -136,6 +142,20 @@ const props = defineProps<{
   detailMode?: boolean;
   autoOpenComments?: boolean;
 }>();
+
+const feedImages = computed<string[]>(() => {
+  const raw = props.feed.pics || props.feed.picArr || (props.feed.pic ? [props.feed.pic] : []);
+  if (Array.isArray(raw)) return raw.filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter((url): url is string => typeof url === 'string' && url.trim().length > 0) : [raw];
+    } catch {
+      return [raw];
+    }
+  }
+  return [];
+});
 
 const emit = defineEmits<{
   (e: 'deleted', id: string | number): void;
@@ -425,7 +445,7 @@ function formatRichText(text: string) {
   background-color: var(--surface);
   border-radius: var(--radius-card, 14px);
   border: 1px solid var(--border);
-  padding: 16px 18px;
+  padding: var(--feed-card-padding, 16px) 18px;
   margin-bottom: var(--feed-card-gap, 12px);
   transition: background-color 0.2s ease, border-color 0.2s ease;
   cursor: pointer;
