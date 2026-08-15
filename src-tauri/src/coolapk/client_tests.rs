@@ -35,6 +35,48 @@ fn test_clean_feed_keeps_edit_metadata() {
     assert_eq!(cleaned["lastChangeTime"], 1_786_000_100_u64);
 }
 
+#[test]
+fn test_user_page_data_url_allowlist() {
+    assert!(CoolapkClient::is_allowed_user_page_url(
+        "#/feed/userCoolPictureFeedList?fragmentTemplate=flex"
+    ));
+    assert!(CoolapkClient::is_allowed_user_page_url(
+        "#/feed/nodeRatingList?uid=123&targetType=all&parseRatingToFeed=1"
+    ));
+    assert!(CoolapkClient::is_allowed_user_page_url(
+        "#/feed/userDeleteFeedList"
+    ));
+    assert!(!CoolapkClient::is_allowed_user_page_url(
+        "https://example.com/anything"
+    ));
+    assert!(!CoolapkClient::is_allowed_user_page_url(
+        "#/feed/userCoolPictureFeedList?fragmentTemplate=flex&proxy=https://example.com"
+    ));
+}
+
+#[test]
+fn test_user_entity_rows_preserve_unknown_templates() {
+    let raw = json!({
+        "data": [
+            {
+                "entityType": "future_template",
+                "entityTemplate": "server_v99",
+                "title": "服务端新卡片",
+                "unknownField": {"keep": true}
+            },
+            {
+                "entityType": "card",
+                "entities": [{"entityType": "apk", "id": 7, "title": "应用"}]
+            }
+        ]
+    });
+    let rows = CoolapkClient::extract_entity_rows(&raw);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["entityTemplate"], "server_v99");
+    assert_eq!(rows[0]["unknownField"]["keep"], true);
+    assert_eq!(rows[1]["id"], 7);
+}
+
 /// 随机设备码：每次调用生成不同结果（游客态/新账号首次生成随机并持久化）
 #[test]
 fn test_device_code_is_random() {

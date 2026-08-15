@@ -41,18 +41,53 @@
 
     <FeedImageGrid :images="feedImages" />
 
-    <!-- 被回复的原动态 / 被引用的卡片预览 -->
-    <div v-if="feed.targetRow || feed.replyRows?.length" class="quoted-feed-box">
-      <div class="quoted-header" v-if="feed.targetRow?.username || feed.targetRow?.userInfo?.username">
-        <span class="quoted-author">@{{ feed.targetRow?.username || feed.targetRow?.userInfo?.username }}</span>
+    <!-- 1. 被回复/转发的原动态 -->
+    <!-- 1. 被回复/转发的原动态 -->
+    <div
+      v-if="isTargetFeed && targetRow"
+      class="quoted-feed-box"
+      @click.stop="openQuotedFeed"
+    >
+      <div class="quoted-header" v-if="quotedAuthor">
+        <span class="quoted-author">@{{ quotedAuthor }}</span>
       </div>
-      <div class="quoted-message">
-        {{ feed.targetRow?.message || feed.targetRow?.title || feed.replyRows?.[0]?.message || '原动态内容' }}
-      </div>
+      <div
+        class="quoted-message"
+        v-html="formattedQuotedMessage"
+      ></div>
       <FeedImageGrid 
-        v-if="feed.targetRow?.pics || feed.targetRow?.pic" 
-        :images="feed.targetRow?.pics || (feed.targetRow?.pic ? [feed.targetRow?.pic] : [])" 
+        v-if="quotedImages.length" 
+        :images="quotedImages" 
+        variant="comment"
       />
+    </div>
+
+    <!-- 2. 关联的标的卡片（如机型“华为Pura70 Pro+”、应用、话题） -->
+    <div v-else-if="isTargetObject && targetRow" class="feed-target-wrapper">
+      <div
+        class="feed-target-chip"
+        @click.stop="openTarget"
+        :title="targetRow.title || targetRow.name"
+      >
+        <div class="target-chip-media" v-if="targetRow.logo || targetRow.pic">
+          <AppImage
+            :src="targetRow.logo || targetRow.pic"
+            :alt="targetRow.title"
+            image-class="target-chip-logo"
+            fit="contain"
+          />
+        </div>
+        <div v-else class="target-chip-icon">
+          <i :class="targetIconClass"></i>
+        </div>
+        <div class="target-chip-text">
+          <span class="target-chip-title">{{ targetRow.title || targetRow.name }}</span>
+          <span v-if="targetRow.subTitle || targetRow.subtitle" class="target-chip-subtitle">
+            {{ targetRow.subTitle || targetRow.subtitle }}
+          </span>
+        </div>
+        <i class="fas fa-chevron-right target-chip-arrow"></i>
+      </div>
     </div>
 
     <FeedActionBar
@@ -123,6 +158,7 @@ import FeedCommentSection from './FeedCommentSection.vue';
 import ForwardDialog from '../overlays/ForwardDialog.vue';
 import LoadingState from '../common/LoadingState.vue';
 import AppDialog from '../common/AppDialog.vue';
+import AppImage from '../common/AppImage.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { getReplyData, mergeReplies } from '../../utils/commentList';
@@ -176,6 +212,104 @@ const isEdited = computed(() => {
   const lastChangeTime = Number(props.feed.lastChangeTime ?? props.feed.last_change_time ?? 0);
   return changeCount > 0 || lastChangeTime > 0;
 });
+
+const targetRow = computed<any>(() =>
+  props.feed.targetRow ||
+  (props.feed as any).targetFeed ||
+  (props.feed as any).replyFeed ||
+  (props.feed as any).feedInfo ||
+  (props.feed as any).feed ||
+  null
+);
+
+const isTargetFeed = computed(() => {
+  const target = targetRow.value;
+  if (!target) return false;
+  const type = String(target.entityType || target.type || '').toLowerCase();
+  if (type === 'feed' || type === 'feed_reply' || type === 'feedreply' || type === 'article') return true;
+  if (Boolean((props.feed as any).replyFeed || (props.feed as any).feedInfo || (props.feed as any).feed)) return true;
+  return Boolean((target.username || target.userName || target.userInfo?.username) && (target.message || target.content) && !target.title);
+});
+
+const isTargetObject = computed(() => {
+  if (isTargetFeed.value) return false;
+  const target = targetRow.value;
+  if (!target) return false;
+  return Boolean(target.title || target.name || target.subTitle || target.logo || target.pic || target.id);
+});
+
+const quotedAuthor = computed(() => {
+  const t = targetRow.value;
+  if (!t) return '';
+  return t.username || t.userName || t.displayUserName || t.userInfo?.username || '';
+});
+
+const formattedQuotedMessage = computed(() => {
+  const t = targetRow.value;
+  if (!t) return '原动态内容';
+  const text = t.message || t.content || t.text || t.title || '原动态内容';
+  return renderCoolapkRichText(text);
+});
+
+const quotedImages = computed<string[]>(() => {
+  const t = targetRow.value;
+  if (!t) return [];
+  const raw = t.pics || t.picArr || (t.pic ? [t.pic] : []) || (t.xsPic ? [t.xsPic] : []);
+  const list = Array.isArray(raw) ? raw : (typeof raw === 'string' && raw.trim().length > 0 ? [raw] : []);
+  return list
+    .map((u: string) => {
+      if (typeof u !== 'string') return '';
+      const trimmed = u.trim();
+      if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return '';
+      if (trimmed.startsWith('http') || trimmed.startsWith('//') || trimmed.startsWith('data:')) return trimmed;
+      return `https://image.coolapk.com/${trimmed.replace(/^\/+/, '')}`;
+    })
+    .filter((u): u is string => Boolean(u && u.length > 5));
+});
+
+const targetIconClass = computed(() => {
+  const target = targetRow.value;
+  if (!target) return 'fas fa-tag';
+  const type = String(target.entityType || target.type || '').toLowerCase();
+  const title = String(target.title || target.name || '').toLowerCase();
+  if (type.includes('product') || type.includes('device') || title.includes('pro') || title.includes('ultra') || title.includes('phone') || title.includes('mate') || title.includes('pura')) return 'fas fa-mobile-screen';
+  if (type.includes('apk') || type.includes('app')) return 'fas fa-cubes';
+  if (type.includes('topic') || type.includes('node') || type.includes('tag') || title.includes('os') || title.includes('ui')) return 'fas fa-hashtag';
+  if (type.includes('goods') || type.includes('mall')) return 'fas fa-bag-shopping';
+  return 'fas fa-tag';
+});
+
+function openTarget() {
+  const target = targetRow.value;
+  if (!target) return;
+  if (typeof target.url === 'string' && target.url) {
+    if (target.url.startsWith('/')) {
+      void router.push(target.url);
+    } else {
+      void CoolapkTauriAPI.openUrl(target.url);
+    }
+    return;
+  }
+  const type = String(target.entityType || target.type || '').toLowerCase();
+  const id = target.id || target.entityId || target.target_id;
+  if (id) {
+    if (type.includes('apk') || type.includes('app')) {
+      void router.push(`/apk/${id}`);
+    } else if (type.includes('topic') || type.includes('node')) {
+      void router.push(`/topic/${id}`);
+    } else if (type.includes('product')) {
+      void router.push(`/product/${id}`);
+    }
+  }
+}
+
+function openQuotedFeed() {
+  const target = targetRow.value;
+  const feedId = target?.id || target?.feed_id || target?.entityId || props.feed.replyRows?.[0]?.id;
+  if (feedId) {
+    void router.push(`/feed/${feedId}`);
+  }
+}
 
 const forwardOpen = ref(false);
 const moreMenuOpen = ref(false);
@@ -468,19 +602,20 @@ function formatRichText(text: string) {
 .quoted-feed-box {
   background: var(--background-secondary, rgba(0, 0, 0, 0.03));
   border: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
-  border-left: 3px solid var(--brand-primary, #10b981);
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 10px 14px;
-  margin: 10px 0;
+  margin: 8px 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-size: 14px;
-  transition: background-color 0.2s ease;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .quoted-feed-box:hover {
   background: var(--surface-hover, rgba(0, 0, 0, 0.05));
+  border-color: var(--border);
 }
 
 .quoted-author {
@@ -490,11 +625,146 @@ function formatRichText(text: string) {
 
 .quoted-message {
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.55;
+  font-size: 13.5px;
+  word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.quoted-message :deep(a) {
+  color: var(--brand-primary, #10b981);
+  font-weight: 500;
+  text-decoration: none;
+  padding: 0 2px;
+}
+
+.quoted-message :deep(a):hover {
+  text-decoration: underline;
+}
+
+.quoted-message :deep(.coolapk-emoji) {
+  display: inline-block;
+  vertical-align: -3px;
+  width: 18px;
+  height: 18px;
+  margin: 0 2px;
+}
+
+/* 标的卡片（如机型“华为Pura70 Pro+”、产品、话题、应用等）精致胶囊 */
+.feed-target-wrapper {
+  display: block;
+  width: 100%;
+  margin: 6px 0 8px 0;
+}
+
+.feed-target-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  width: fit-content;
+  height: 30px;
+  padding: 0 10px 0 5px;
+  border-radius: 15px;
+  background: var(--background-secondary, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.feed-target-chip:hover {
+  background: var(--surface-hover, var(--background-secondary));
+  border-color: rgba(16, 185, 129, 0.35);
+  transform: translateY(-1px);
+}
+
+.target-chip-media {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  max-width: 20px;
+  min-height: 20px;
+  max-height: 20px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.target-chip-logo {
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 4px;
+  background: transparent !important;
+}
+
+.target-chip-logo :deep(img) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.target-chip-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.target-chip-text {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.target-chip-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.target-chip-subtitle {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.target-chip-arrow {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  margin-left: 2px;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.feed-target-chip:hover .target-chip-arrow {
+  transform: translateX(2px);
+  color: #10b981;
+  opacity: 1;
 }
 
 .inline-comment-wrapper {

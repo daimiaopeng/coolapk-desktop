@@ -7,7 +7,8 @@
 
     <!-- 用户资料不存在防护 -->
     <div v-else-if="!profile" class="empty-wrapper-full">
-      <EmptyState title="未找到酷友空间" description="该用户不存在或个人主页暂不可访问" />
+      <EmptyState :title="profileError || '未找到酷友空间'" description="该用户不存在或个人主页暂不可访问" />
+      <button class="profile-retry-button" type="button" @click="fetchUserProfile">重试</button>
     </div>
 
     <!-- 正常主卡片与全套 Tab 页面 -->
@@ -22,10 +23,10 @@
           <!-- 悬浮顶部交互栏；页面导航统一放在全局顶栏。 -->
           <div class="banner-top-bar">
             <div class="top-bar-right">
-              <button class="icon-circle-btn" title="搜索">
+              <button class="icon-circle-btn" title="搜索" @click="router.push('/search')">
                 <i class="fas fa-search"></i>
               </button>
-              <button class="icon-circle-btn" title="更多设置">
+              <button class="icon-circle-btn" title="更多设置" @click="openProfileMenu">
                 <i class="fas fa-ellipsis-v"></i>
               </button>
             </div>
@@ -35,54 +36,37 @@
           <div class="banner-hero-content">
             <!-- 1. 头像与行动按钮组 -->
             <div class="banner-avatar-row">
-              <AppAvatar 
+              <AppAvatar
                 :src="profile.userAvatar || getAvatarUrlByUid(profile.uid)" 
                 :plugin-url="profile.avatar_plugin_url"
                 size="xl" 
                 class="app-hero-avatar" 
+                @click="showAvatarPreview"
               />
               <div class="banner-actions">
                 <template v-if="isSelfUser">
-                  <button class="app-btn btn-secondary-glass">
+                  <button class="app-btn btn-secondary-glass" @click="router.push('/settings/account')">
                     <i class="fas fa-edit"></i> 编辑资料
                   </button>
-                  <button class="app-btn btn-icon-glass" title="二维码">
+                  <button class="app-btn btn-icon-glass" title="二维码" @click="showUserQr">
                     <i class="fas fa-qrcode"></i>
                   </button>
                 </template>
                 <template v-else>
                   <button 
-                    :class="['app-btn', profile.isFollow ? 'btn-following' : 'btn-follow-primary']"
+                    :class="['app-btn', isFlag(profile.isFollow) ? 'btn-following' : 'btn-follow-primary']"
                     :disabled="followLoading"
                     @click="toggleFollow"
                   >
-                    <i :class="profile.isFollow ? 'fas fa-check' : 'fas fa-plus'"></i>
-                    {{ profile.isFollow ? (profile.isSpecialFollow ? '特别关注' : '已关注') : '关注' }}
+                    <i :class="isFlag(profile.isFollow) ? 'fas fa-check' : 'fas fa-plus'"></i>
+                    {{ isFlag(profile.isFollow) ? (isFlag(profile.isSpecialFollow) ? '特别关注' : '已关注') : '关注' }}
                   </button>
                   <button class="app-btn btn-icon-glass" @click="sendMessage" title="私信">
                     <i class="far fa-envelope"></i>
                   </button>
-                  <button
-                    :class="['app-btn', isBlacklisted ? 'btn-blacklisted' : 'btn-danger-glass']"
-                    :disabled="blacklistLoading"
-                    @click="toggleBlacklist"
-                    :title="isBlacklisted ? '取消拉黑' : '拉黑该用户'"
-                  >
-                    <i class="fas fa-ban"></i>
-                    {{ isBlacklisted ? '已拉黑' : '拉黑' }}
+                  <button class="app-btn btn-icon-glass" @click="openProfileMenu" title="更多操作">
+                    <i class="fas fa-ellipsis-h"></i>
                   </button>
-                  <button
-                    :class="['app-btn', isIgnored ? 'btn-ignored' : 'btn-danger-ghost']"
-                    :disabled="ignoreLoading"
-                    @click="toggleIgnore"
-                    :title="isIgnored ? '取消屏蔽' : '屏蔽该用户'"
-                  >
-                    <i class="fas fa-eye-slash"></i>
-                    {{ isIgnored ? '已屏蔽' : '屏蔽' }}
-                  </button>
-                  <router-link to="/blacklist" class="blacklist-manage-link" title="黑名单管理">
-                    <i class="fas fa-list"></i> 黑名单管理
-                  </router-link>
                 </template>
               </div>
             </div>
@@ -106,49 +90,73 @@
 
               <!-- 获赞·关注·粉丝 高对比度白字行 -->
               <div class="app-stats-row">
-                <div class="stat-cell">
+                <button class="stat-cell stat-cell-button" type="button" @click="profileDetailsOpen = true">
                   <span class="num">{{ getLikeCount(profile) }}</span>
                   <span class="label">获赞</span>
-                </div>
-                <div class="stat-cell">
+                </button>
+                <button class="stat-cell stat-cell-button" type="button" @click="openRelations('follow')">
                   <span class="num">{{ getFollowCount(profile) }}</span>
                   <span class="label">关注</span>
-                </div>
-                <div class="stat-cell">
+                </button>
+                <button class="stat-cell stat-cell-button" type="button" @click="openRelations('fans')">
                   <span class="num">{{ getFansCount(profile) }}</span>
                   <span class="label">粉丝</span>
-                </div>
+                </button>
               </div>
 
-              <!-- 活跃状态与属性 Chip 标签组 -->
+              <!-- 活跃状态与属性 Chip 标签组（点击可直接打开详细档案） -->
               <div class="app-chips-row">
-                <span class="chip-item chip-online">
+                <span class="chip-item chip-online" v-if="profile.logintime" @click="profileDetailsOpen = true">
                   <span class="chip-status-dot"></span>
                   {{ formatLoginTime(profile.logintime) }}活跃
                 </span>
-                <span class="chip-item chip-glass" v-if="getGenderAgeTag(profile)">
+                <span class="chip-item chip-glass" v-if="getGenderLabel(profile) || getGenderAgeTag(profile)" @click="profileDetailsOpen = true">
                   <i :class="getGenderIcon(profile)"></i>
-                  {{ getGenderAgeTag(profile) }}
+                  {{ getGenderAgeTag(profile) || getGenderLabel(profile) }}
                 </span>
-                <span class="chip-item chip-glass" v-if="getAstroTag(profile)">
+                <span class="chip-item chip-glass" v-if="getAstroTag(profile)" @click="profileDetailsOpen = true">
                   <i class="fas fa-meteor chip-icon-astro"></i>
                   {{ getAstroTag(profile) }}
                 </span>
-                <span class="chip-item chip-glass" v-if="getCityTag(profile)">
+                <span class="chip-item chip-glass" v-if="getCityTag(profile)" @click="profileDetailsOpen = true">
                   <i class="fas fa-location-dot chip-icon-location"></i>
                   {{ getCityTag(profile) }}
                 </span>
+                <span class="chip-item chip-glass" v-if="getIpLocationTag(profile)" @click="profileDetailsOpen = true">
+                  <i class="fas fa-network-wired chip-icon-location"></i>
+                  IP属地 {{ getIpLocationTag(profile) }}
+                </span>
+                <span class="chip-item chip-glass" v-if="getRegDaysTag(profile)" @click="profileDetailsOpen = true">
+                  <i class="fas fa-calendar-check chip-icon-astro"></i>
+                  {{ getRegDaysTag(profile) }}
+                </span>
+                <span class="chip-item chip-glass chip-verify" v-if="getVerifyBadgeTag(profile)" @click="profileDetailsOpen = true">
+                  <i class="fas fa-certificate chip-icon-verify"></i>
+                  {{ getVerifyBadgeTag(profile) }}
+                </span>
               </div>
 
-              <!-- 他的装备 / 我的装备 高斯模糊毛玻璃通栏 Card -->
-              <div class="equipment-entry-bar-glass" @click="activeTab = 'home'">
-                <div class="equipment-left">
-                  <i class="fas fa-laptop-code equipment-icon"></i>
-                  <span class="equipment-title">{{ isSelfUser ? '我的装备' : '他的装备' }}</span>
+              <!-- 他的装备 / 我的装备 / 商品店铺 并排入口条 -->
+              <div class="equipment-entries-row">
+                <div class="equipment-entry-bar-glass" @click="openEquipment">
+                  <div class="equipment-left">
+                    <i class="fas fa-laptop-code equipment-icon"></i>
+                    <span class="equipment-title">{{ isSelfUser ? '我的装备' : '他的装备' }}</span>
+                  </div>
+                  <div class="equipment-right">
+                    <span class="equipment-count">{{ profile.product_owner_count || 0 }}个装备</span>
+                    <i class="fas fa-chevron-right arrow-icon"></i>
+                  </div>
                 </div>
-                <div class="equipment-right">
-                  <span class="equipment-count">{{ profile.product_owner_count || 0 }}个装备</span>
-                  <i class="fas fa-chevron-right arrow-icon"></i>
+                <div v-if="Number(profile.goods_count || profile.goodsCount || 0) > 0 || Number(profile.goods_store_status || 0) === 1" class="equipment-entry-bar-glass" @click="openGoodsStore">
+                  <div class="equipment-left">
+                    <i class="fas fa-store equipment-icon"></i>
+                    <span class="equipment-title">商品店铺</span>
+                  </div>
+                  <div class="equipment-right">
+                    <span class="equipment-count">{{ profile.goods_count || profile.goodsCount || 0 }}件商品</span>
+                    <i class="fas fa-chevron-right arrow-icon"></i>
+                  </div>
                 </div>
               </div>
             </div>
@@ -157,7 +165,7 @@
 
         <!-- App 官方全系 Tab 栏 -->
         <div class="app-tab-navigation">
-          <div class="tab-scroll-container custom-scrollbar-hidden">
+          <div ref="tabScrollContainer" class="tab-scroll-container">
             <button 
               v-for="tab in tabs" 
               :key="tab.key"
@@ -173,106 +181,26 @@
 
     <!-- 各 Tab 内容展示区 -->
     <div class="tab-content-container">
-      <!-- 1. 「主页」聚合视图 (关注的人 + 关注的板块 + 热门动态) -->
+      <div v-if="activeTab !== 'home' && activeTabState.error" class="tab-content-toolbar">
+        <span class="tab-content-status">加载失败</span>
+      </div>
+      <div v-if="activeTab !== 'home' && activeTabState.error && !userFeeds.length" class="tab-error-state">
+        <p>{{ activeTabState.error }}</p>
+        <button class="tab-retry-button" type="button" @click="retryActiveTab">重试</button>
+      </div>
+
+      <!-- 1. 主页：完全按服务端 homeTabCardRows 的顺序和 Entity 渲染，支持热门动态向下无限滚动加载 -->
       <div v-if="activeTab === 'home'" class="home-aggregated-view">
-        <!-- 我的卡片配置 -->
-        <div v-if="isSelfUser && configEntries.length > 0" class="home-section-card">
-          <div class="section-header">
-            <h3 class="section-title">我的卡片配置</h3>
-          </div>
-          <div class="config-grid">
-            <div v-for="entry in configEntries" :key="entry.key" class="config-item">
-              <span class="config-key">{{ entry.key }}</span>
-              <span class="config-value">{{ entry.value }}</span>
-            </div>
-          </div>
-        </div>
-        <!-- 模块 1：他/我关注的人 -->
-        <div class="home-section-card">
-          <div class="section-header">
-            <h3 class="section-title">{{ isSelfUser ? '我关注的人' : '他关注的人' }}</h3>
-            <i class="fas fa-chevron-right section-arrow"></i>
-          </div>
-
-          <div v-if="followNodes.length > 0" class="follow-nodes-row custom-scrollbar-hidden">
-            <span class="node-chip node-chip-all">全部</span>
-            <span v-for="node in followNodes" :key="node.id" class="node-chip">
-              {{ node.title }}<span v-if="node.count > 0" class="node-count">{{ node.count }}</span>
-            </span>
-          </div>
-          <div class="follow-users-grid custom-scrollbar-hidden" v-if="followingUsers.length > 0">
-            <div v-for="user in followingUsers" :key="user.uid" class="follow-user-item" @click="openUserProfile(user)">
-              <AppAvatar :src="user.userAvatar" size="lg" />
-              <span class="follow-user-name">{{ user.username }}</span>
-            </div>
-          </div>
-          <div v-else class="section-loading-placeholder">
-            <div v-for="n in 5" :key="n" class="placeholder-user-item">
-              <div class="placeholder-avatar"></div>
-              <div class="placeholder-text"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 模块 2：他/我关注的板块 -->
-        <div class="home-section-card">
-          <div class="section-header">
-            <h3 class="section-title">{{ isSelfUser ? '我关注的板块' : '他关注的板块' }}</h3>
-            <i class="fas fa-chevron-right section-arrow"></i>
-          </div>
-          <div class="follow-topics-grid custom-scrollbar-hidden" v-if="followTopics.length > 0">
-            <div v-for="topic in followTopics" :key="topic.id || topic.name" class="follow-topic-item" @click="openFollowTopic(topic)">
-              <div class="topic-icon-wrapper" :style="{ background: topic.bg }">
-                <AppImage v-if="topic.icon" :src="topic.icon" image-class="topic-icon" />
-                <i v-else :class="['fas', topic.fallbackIcon || 'fa-layer-group', 'topic-fallback-icon']"></i>
-              </div>
-              <span class="topic-name">{{ topic.name }}</span>
-            </div>
-          </div>
-          <div v-else class="empty-section-tip">
-            <span>{{ loadingTopics ? '正在加载关注板块...' : '暂无关注的板块' }}</span>
-          </div>
-        </div>
-
-        <!-- 模块 2.5：常用设备（仅自己可见，点击一键应用到设备信息） -->
-        <div v-if="isSelfUser && commonDevices.length > 0" class="home-section-card">
-          <div class="section-header">
-            <h3 class="section-title">我的常用设备</h3>
-            <span class="section-sub-hint">点击设备一键应用到设置</span>
-          </div>
-          <div class="common-devices-grid">
-            <button
-              v-for="d in commonDevices"
-              :key="d.name"
-              class="common-device-item"
-              :disabled="d.applying"
-              @click="applyCommonDevice(d)"
-              :title="d.name"
-            >
-              <i class="fas fa-mobile-alt common-device-icon"></i>
-              <span class="common-device-name">{{ d.name }}</span>
-              <span class="common-device-count">{{ d.count }} 次</span>
-              <i v-if="d.applying" class="fas fa-spinner fa-spin common-device-spinner"></i>
-            </button>
-          </div>
-        </div>
-
-        <!-- 模块 3：热门动态 -->
-        <div class="home-section-card no-padding">
-          <div class="section-header with-padding">
-            <h3 class="section-title">{{ isSelfUser ? '我的热门动态' : '他的热门动态' }}</h3>
-            <i class="fas fa-chevron-right section-arrow"></i>
-          </div>
-          <div v-if="loadingFeeds" class="loading-wrapper">
-            <LoadingState text="加载热门动态中..." />
-          </div>
-          <div v-else-if="userFeeds.length === 0" class="empty-wrapper">
-            <EmptyState title="暂无热门动态" />
-          </div>
-          <div v-else class="feed-list">
-            <FeedCard v-for="item in userFeeds.slice(0, 5)" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
-          </div>
-        </div>
+        <UserHomeCardRows
+          v-if="homeTabCardRows.length"
+          :rows="homeTabCardRows"
+          :extra-feeds="homeExtraFeeds"
+          :uid="effectiveUid"
+          :is-self="isSelfUser"
+          @switch-tab="activeTab = $event"
+          @deleted="handleFeedDeleted"
+        />
+        <div v-else class="empty-wrapper"><EmptyState title="暂无主页卡片" /></div>
       </div>
 
       <!-- 2. 「点评」视图 (带机主评分、多维参数打分及二级筛选) -->
@@ -299,7 +227,7 @@
           <EmptyState title="暂无点评记录" />
         </div>
         <div v-else class="feed-list">
-          <RatingCard v-for="item in userFeeds" :key="item.id" :feed="item" />
+          <UserEntityCard v-for="(item, index) in userFeeds" :key="item.id || item.entityId || index" :entity="item" tab="rating" @deleted="handleFeedDeleted" />
         </div>
       </div>
 
@@ -312,7 +240,7 @@
           <EmptyState title="暂无相关内容" />
         </div>
         <div v-else class="feed-list">
-          <FeedCard v-for="item in userFeeds" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
+          <UserEntityCard v-for="(item, index) in userFeeds" :key="item.id || item.entityId || index" :entity="item" :tab="activeTab" @deleted="handleFeedDeleted" />
         </div>
       </div>
 
@@ -320,40 +248,334 @@
       <div v-if="userFeedsLoadingMore" class="loading-more-footer">
         <i class="fas fa-circle-notch fa-spin"></i> 正在读取下一页动态...
       </div>
-      <div v-else-if="userFeedsNoMore && userFeeds.length > 5" class="no-more-footer">
+      <div v-else-if="userFeedsNoMore && (userFeeds.length > 5 || (activeTab === 'home' && homeExtraFeeds.length > 0))" class="no-more-footer">
         已无更多动态内容
       </div>
     </div>
   </template>
+
+  <!-- 1. 用户二维码卡片 -->
+  <AppDialog :is-open="Boolean(qrImageUrl)" title="用户二维码" :width="360" @close="qrImageUrl = ''">
+    <div class="coolapk-qr-card" v-if="profile">
+      <div class="qr-header">
+        <AppAvatar :src="profile.userAvatar || getAvatarUrlByUid(profile.uid)" size="md" />
+        <div class="qr-header-text">
+          <span class="qr-username">{{ profile.username || '酷友' }}</span>
+          <span class="qr-hint">扫一扫，在手机酷安打开主页</span>
+        </div>
+      </div>
+      <div class="qr-image-frame">
+        <LoadingState v-if="qrLoading" text="正在生成二维码..." />
+        <AppImage v-else-if="qrImageUrl" :src="qrImageUrl" alt="用户二维码" image-class="user-qr-image" />
+      </div>
+      <div class="qr-footer-actions">
+        <button type="button" class="btn-copy-link" @click="copyShareLink">
+          <i class="fas fa-link"></i> 复制主页链接
+        </button>
+      </div>
+    </div>
+  </AppDialog>
+
+  <!-- 2. 用户操作更多菜单 (参考酷安 APK ActionSheet) -->
+  <AppDialog :is-open="profileActionOpen" title="用户操作" :width="400" @close="profileActionOpen = false">
+    <div class="user-action-sheet" v-if="profile">
+      <!-- 顶部用户信息概要条 -->
+      <div class="action-sheet-user-card">
+        <AppAvatar
+          :src="profile.userAvatar || getAvatarUrlByUid(profile.uid)"
+          :plugin-url="profile.avatar_plugin_url"
+          size="md"
+        />
+        <div class="user-info-text">
+          <div class="name-row">
+            <span class="user-name">{{ profile.username || '酷友' }}</span>
+            <span class="app-user-level" v-if="profile.level">Lv.{{ profile.level }}</span>
+          </div>
+          <span class="user-subtext">UID: {{ profile.uid }} · {{ formatLoginTime(profile.logintime) }}活跃</span>
+        </div>
+      </div>
+
+      <!-- 操作菜单项组 -->
+      <div class="action-menu-card">
+        <button
+          v-if="!isSelfUser && isFlag(profile?.isFollow)"
+          type="button"
+          class="action-menu-tile"
+          @click="toggleSpecialFollow"
+        >
+          <div class="tile-left">
+            <i :class="[isFlag(profile?.isSpecialFollow) ? 'fas fa-star' : 'far fa-star', 'tile-icon icon-star']"></i>
+            <span class="tile-title">{{ isFlag(profile?.isSpecialFollow) ? '取消特别关注' : '设为特别关注' }}</span>
+          </div>
+          <i class="fas fa-chevron-right tile-arrow"></i>
+        </button>
+
+        <button type="button" class="action-menu-tile" @click="openRemarkDialog">
+          <div class="tile-left">
+            <i class="fas fa-pen tile-icon"></i>
+            <span class="tile-title">设置备注名称</span>
+          </div>
+          <i class="fas fa-chevron-right tile-arrow"></i>
+        </button>
+
+        <button type="button" class="action-menu-tile" @click="copyUserInfo">
+          <div class="tile-left">
+            <i class="fas fa-copy tile-icon"></i>
+            <span class="tile-title">复制用户信息</span>
+          </div>
+          <i class="fas fa-chevron-right tile-arrow"></i>
+        </button>
+
+        <button type="button" class="action-menu-tile" @click="shareUserPage">
+          <div class="tile-left">
+            <i class="fas fa-share-nodes tile-icon"></i>
+            <span class="tile-title">分享用户主页</span>
+          </div>
+          <i class="fas fa-chevron-right tile-arrow"></i>
+        </button>
+
+        <button type="button" class="action-menu-tile" @click="profileActionOpen = false; profileDetailsOpen = true">
+          <div class="tile-left">
+            <i class="fas fa-id-card tile-icon"></i>
+            <span class="tile-title">查看详细资料</span>
+          </div>
+          <i class="fas fa-chevron-right tile-arrow"></i>
+        </button>
+      </div>
+
+      <!-- 敏感/危险操作组 -->
+      <div v-if="!isSelfUser" class="action-menu-card action-menu-card-danger">
+        <button
+          type="button"
+          class="action-menu-tile tile-danger"
+          :disabled="blacklistLoading"
+          @click="toggleBlacklist"
+        >
+          <div class="tile-left">
+            <i class="fas fa-ban tile-icon"></i>
+            <span class="tile-title">{{ isBlacklisted ? '取消拉黑' : '加入黑名单' }}</span>
+          </div>
+          <i class="fas fa-chevron-right tile-arrow"></i>
+        </button>
+
+        <button
+          type="button"
+          class="action-menu-tile tile-danger"
+          :disabled="ignoreLoading"
+          @click="toggleIgnore"
+        >
+          <div class="tile-left">
+            <i class="fas fa-eye-slash tile-icon"></i>
+            <span class="tile-title">{{ isIgnored ? '取消屏蔽' : '屏蔽该用户' }}</span>
+          </div>
+          <i class="fas fa-chevron-right tile-arrow"></i>
+        </button>
+
+        <button
+          v-if="profile?.isFans"
+          type="button"
+          class="action-menu-tile tile-danger"
+          @click="removeFollower"
+        >
+          <div class="tile-left">
+            <i class="fas fa-user-minus tile-icon"></i>
+            <span class="tile-title">移除粉丝</span>
+          </div>
+          <i class="fas fa-chevron-right tile-arrow"></i>
+        </button>
+
+        <button
+          type="button"
+          class="action-menu-tile"
+          @click="profileActionOpen = false; router.push('/blacklist')"
+        >
+          <div class="tile-left">
+            <i class="fas fa-list-check tile-icon"></i>
+            <span class="tile-title">黑名单与屏蔽管理</span>
+          </div>
+          <i class="fas fa-chevron-right tile-arrow"></i>
+        </button>
+
+        <button type="button" class="action-menu-tile tile-danger" @click="reportUser">
+          <div class="tile-left">
+            <i class="fas fa-flag tile-icon"></i>
+            <span class="tile-title">举报该用户</span>
+          </div>
+          <i class="fas fa-chevron-right tile-arrow"></i>
+        </button>
+      </div>
+    </div>
+  </AppDialog>
+
+  <!-- 3. 设置备注名称弹窗 (参考酷安 APK 原生样式) -->
+  <AppDialog :is-open="remarkDialogOpen" title="设置备注名称" :width="400" @close="remarkDialogOpen = false">
+    <div class="remark-dialog-container">
+      <div class="remark-user-preview" v-if="profile">
+        <AppAvatar
+          :src="profile.userAvatar || getAvatarUrlByUid(profile.uid)"
+          :plugin-url="profile.avatar_plugin_url"
+          size="sm"
+        />
+        <div class="preview-text">
+          <span class="original-title">原昵称：</span>
+          <span class="original-name">{{ profile.username || '酷友' }}</span>
+        </div>
+      </div>
+
+      <form class="remark-edit-form" @submit.prevent="saveRemark">
+        <div class="remark-input-box">
+          <i class="fas fa-pen input-prefix-icon"></i>
+          <input
+            v-model="remarkName"
+            class="remark-native-input"
+            maxlength="30"
+            placeholder="输入备注名称（留空则清除备注）"
+            autofocus
+          />
+          <button
+            v-if="remarkName"
+            type="button"
+            class="input-clear-btn"
+            title="清空"
+            @click="remarkName = ''"
+          >
+            <i class="fas fa-times-circle"></i>
+          </button>
+          <span class="char-count">{{ remarkName.length }}/30</span>
+        </div>
+
+        <div class="dialog-actions-row">
+          <button type="button" class="btn-cancel" @click="remarkDialogOpen = false">取消</button>
+          <button type="submit" class="btn-submit-primary" :disabled="remarkSaving">
+            <i v-if="remarkSaving" class="fas fa-circle-notch fa-spin"></i>
+            {{ remarkSaving ? '保存中...' : '确定保存' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </AppDialog>
+
+  <!-- 4. 查看详细资料档案弹窗 (参考酷安 APK 个人档案卡片) -->
+  <AppDialog :is-open="profileDetailsOpen" title="酷安档案 · 详细资料" :width="460" @close="profileDetailsOpen = false">
+    <div class="coolapk-profile-sheet" v-if="profile">
+      <!-- 头部概览卡片 -->
+      <div class="sheet-hero-card">
+        <AppAvatar
+          :src="profile.userAvatar || getAvatarUrlByUid(profile.uid)"
+          :plugin-url="profile.avatar_plugin_url"
+          size="lg"
+          class="sheet-avatar"
+        />
+        <div class="sheet-hero-info">
+          <div class="hero-name-row">
+            <h3 class="hero-name">{{ profile.username || '酷友' }}</h3>
+            <span class="app-user-level" v-if="profile.level">Lv.{{ profile.level }}</span>
+          </div>
+          <p class="hero-bio">{{ profile.bio || '这家伙很神秘，什么都没写' }}</p>
+        </div>
+      </div>
+
+      <!-- 档案详情网格分组 -->
+      <div class="profile-section-group">
+        <div class="section-header">
+          <i class="fas fa-id-badge section-icon"></i>
+          <span>账号信息</span>
+        </div>
+        <div class="profile-grid">
+          <div class="profile-grid-item" @click="copyUid" title="点击复制 UID">
+            <span class="grid-label"><i class="fas fa-fingerprint"></i> UID</span>
+            <div class="grid-value-interactive">
+              <span class="grid-value font-mono">{{ profile.uid }}</span>
+              <i class="far fa-copy copy-icon"></i>
+            </div>
+          </div>
+          <div class="profile-grid-item">
+            <span class="grid-label"><i class="fas fa-shield-halved"></i> 账号身份</span>
+            <span class="grid-value">{{ profile.verify_title || (profile.isDeveloper ? '认证开发者' : '普通酷友') }}</span>
+          </div>
+          <div class="profile-grid-item">
+            <span class="grid-label"><i class="fas fa-calendar-check"></i> 注册时间</span>
+            <span class="grid-value">{{ formatRegisterDate(profile.regdate || profile.regDate) || formatLoginTime(profile.regdate || profile.regDate) || '未公开' }}</span>
+          </div>
+          <div class="profile-grid-item">
+            <span class="grid-label"><i class="fas fa-clock"></i> 最近活跃</span>
+            <span class="grid-value highlight-green">{{ formatLoginTime(profile.logintime) }}活跃</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-section-group">
+        <div class="section-header">
+          <i class="fas fa-user-gear section-icon"></i>
+          <span>个人属性</span>
+        </div>
+        <div class="profile-grid">
+          <div class="profile-grid-item">
+            <span class="grid-label"><i class="fas fa-venus-mars"></i> 性别</span>
+            <span class="grid-value">{{ getGenderLabel(profile) || '未公开' }}</span>
+          </div>
+          <div class="profile-grid-item">
+            <span class="grid-label"><i class="fas fa-cake-candles"></i> 生日 / 年龄</span>
+            <span class="grid-value">{{ getBirthdayLabel(profile) || getGenderAgeTag(profile) || '未公开' }}</span>
+          </div>
+          <div class="profile-grid-item">
+            <span class="grid-label"><i class="fas fa-meteor"></i> 星座</span>
+            <span class="grid-value">{{ getAstroTag(profile) || '未公开' }}</span>
+          </div>
+          <div class="profile-grid-item">
+            <span class="grid-label"><i class="fas fa-location-dot"></i> 常居地区</span>
+            <span class="grid-value">{{ getCityTag(profile) || '未公开' }}</span>
+          </div>
+          <div class="profile-grid-item profile-grid-item-full">
+            <span class="grid-label"><i class="fas fa-network-wired"></i> IP 属地</span>
+            <span class="grid-value">{{ getIpLocationTag(profile) || '未公开' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </AppDialog>
+
+  <!-- 5. 头像原图预览 -->
+  <AppDialog :is-open="avatarPreviewOpen" title="头像原图预览" :width="440" @close="avatarPreviewOpen = false">
+    <div class="avatar-preview-lightbox" v-if="profile">
+      <div class="avatar-img-container">
+        <AppImage :src="getAvatarBigUrl(profile)" alt="用户头像" image-class="avatar-preview-image" />
+      </div>
+      <div class="avatar-preview-footer">
+        <button type="button" class="btn-preview-action" @click="copyAvatarUrl">
+          <i class="fas fa-copy"></i> 复制图片链接
+        </button>
+        <button type="button" class="btn-preview-action" @click="openAvatarInBrowser">
+          <i class="fas fa-arrow-up-right-from-square"></i> 在浏览器打开
+        </button>
+      </div>
+    </div>
+  </AppDialog>
 </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue';
+import { ref, reactive, watch, computed, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppImage from '../components/common/AppImage.vue';
-import FeedCard from '../components/feed/FeedCard.vue';
-import RatingCard from '../components/feed/RatingCard.vue';
+import UserEntityCard from '../components/user/UserEntityCard.vue';
+import UserHomeCardRows from '../components/user/UserHomeCardRows.vue';
+import AppDialog from '../components/common/AppDialog.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import { useAuthStore } from '../stores/auth';
-import { useSettingsStore } from '../stores/settings';
-import { findPresetByDeviceTitle } from '../utils/devicePresets';
 import { showToast } from '../utils/toast';
 import { requestConfirmation } from '../utils/confirm';
+import { asUserSpaceProfile, entityKey, normalizeEntityPage } from '../types/userSpace';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const settingsStore = useSettingsStore();
-
-// 固定当前缓存页面的用户参数，避免进入其他页面时在后台重新请求。
-const rawUid = ref((route.params.uid as string) || 'me');
 
 const effectiveUid = computed(() => {
-  const rUid = rawUid.value;
+  const rUid = (route.params.uid as string) || (route.params.id as string) || '';
   return String((!rUid || rUid === 'me') ? (authStore.user?.uid || '') : rUid);
 });
 
@@ -363,38 +585,118 @@ const isSelfUser = computed(() => {
 });
 
 const loadingProfile = ref(false);
-const loadingFeeds = ref(false);
+const profileError = ref('');
 const followLoading = ref(false);
+const qrImageUrl = ref('');
+const qrLoading = ref(false);
+const profileActionOpen = ref(false);
+const profileDetailsOpen = ref(false);
+const avatarPreviewOpen = ref(false);
+const remarkDialogOpen = ref(false);
+const remarkName = ref('');
+const remarkSaving = ref(false);
+const relationshipActionLoading = ref(false);
 
 const profile = ref<any>(null);
-const userFeeds = ref<any[]>([]);
+const homeTabCardRows = computed<any[]>(() => (
+  Array.isArray(profile.value?.homeTabCardRows) ? profile.value.homeTabCardRows : []
+));
+const activeTab = ref('home');
+const tabScrollContainer = ref<HTMLElement | null>(null);
 
-function handleFeedDeleted(id: string | number) {
-  userFeeds.value = userFeeds.value.filter((f: any) => String(f.id) !== String(id));
-}
-const followingUsers = ref<any[]>([]);
-const loadConfig = ref<any>(null);
+// APK 的 Tab 标题和顺序来自客户端资源；真正的主页卡片和列表内容仍由接口返回。
+// 这里保留 APK 已确认的客户端纯文本映射，并按 UserSpaceV9TabHelper 的权限规则筛选。
+const tabs = computed(() => {
+  const p = profile.value || {};
+  const homeRows = Array.isArray(p.homeTabCardRows) ? p.homeTabCardRows : [];
+  const session = (authStore.user || {}) as any;
+  const isModerator = Boolean(
+    Number(session.adminType || session.admin_type || p.adminType || p.admin_type || 0) > 0 ||
+    session.isAdmin || session.isModerator || p.isAdmin || p.isModerator
+  );
+  const isSelf = isSelfUser.value;
+  const optionalTabs = [
+    ...(Number(p.albumNum ?? p.album_num ?? 0) > 0
+      ? [{ key: 'album', label: '图集' }]
+      : []),
+    ...(Number(p.apkDevNum ?? p.apk_dev_num ?? 0) > 0 || isFlag(p.isDeveloper)
+      ? [{ key: 'developer_apps', label: '开发者应用' }]
+      : []),
+    ...(Number(p.apkFollowNum ?? p.apk_follow_num ?? 0) > 0
+      ? [{ key: 'apk_follow', label: '关注的应用' }]
+      : []),
+    ...(Number(p.discoveryNum ?? p.discovery_num ?? 0) > 0
+      ? [{ key: 'discovery', label: '发现' }]
+      : []),
+    ...(Number(p.goodsCount ?? p.goods_count ?? 0) > 0 || Number(p.goodsStoreStatus ?? p.goods_store_status ?? 0) === 1
+      ? [{ key: 'goods_store', label: '商品店铺' }]
+      : [])
+  ];
 
-const configEntries = computed<{ key: string; value: string }[]>(() => {
-  const data = loadConfig.value;
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return [];
-  return Object.entries(data)
-    .filter(([, v]) => v !== undefined && v !== null && v !== '')
-    .map(([k, v]) => ({
-      key: k,
-      value: typeof v === 'object' ? JSON.stringify(v) : String(v)
-    }));
+  return [
+    ...(homeRows.length > 0 ? [{ key: 'home', label: '主页' }] : []),
+    { key: 'feed', label: '动态' },
+    ...(isSelf || isModerator ? [{ key: 'reply', label: '回复' }] : []),
+    ...(isModerator ? [{ key: 'blacklist', label: '黑名单' }] : []),
+    { key: 'rating', label: '评分' },
+    { key: 'article', label: '图文' },
+    { key: 'qa', label: '问答' },
+    { key: 'coolpic', label: '酷图' },
+    { key: 'ershou', label: '二手' },
+    { key: 'goods', label: '好物' },
+    { key: 'goods_rank', label: '好物榜' },
+    { key: 'collection', label: '收藏' },
+    ...optionalTabs,
+    ...(isModerator ? [{ key: 'recycle', label: '回收站' }] : [])
+  ];
 });
 
-const activeTab = ref('home');
-const tabs = [
-  { key: 'home', label: '主页' },
-  { key: 'feed', label: '动态' },
-  { key: 'reply', label: '回复' },
-  { key: 'rating', label: '点评' },
-  { key: 'picture', label: '图文' },
-  { key: 'ershou', label: '二手' }
-];
+interface UserTabState {
+  items: any[];
+  page: number;
+  firstItem: string;
+  lastItem: string;
+  hasMore: boolean;
+  loading: boolean;
+  loadingMore: boolean;
+  error: string;
+  loaded: boolean;
+}
+
+function createTabState(): UserTabState {
+  return { items: [], page: 1, firstItem: '', lastItem: '', hasMore: true, loading: false, loadingMore: false, error: '', loaded: false };
+}
+
+const tabStates = reactive<Record<string, UserTabState>>({});
+
+function getTabState(key: string): UserTabState {
+  if (!tabStates[key]) tabStates[key] = createTabState();
+  return tabStates[key];
+}
+
+const activeTabState = computed(() => getTabState(activeTab.value));
+const userFeeds = computed(() => activeTabState.value.items);
+const homeExtraFeeds = computed(() => getTabState('home').items);
+const loadingFeeds = computed(() => activeTabState.value.loading);
+const userFeedsLoadingMore = computed(() => activeTabState.value.loadingMore);
+const userFeedsNoMore = computed(() => !activeTabState.value.hasMore);
+
+function resetTabStates() {
+  for (const key of Object.keys(tabStates)) tabStates[key] = createTabState();
+  const homeState = getTabState('home');
+  homeState.page = 2;
+  homeState.hasMore = true;
+  homeState.loaded = true;
+}
+
+function selectInitialTab(spaceData: any) {
+  const selectedTab = String(spaceData?.selectedTab || '');
+  const preferredTab = selectedTab === 'home' || selectedTab === 'feed'
+    ? selectedTab
+    : (isSelfUser.value || isFlag(spaceData?.isFollow) ? 'feed' : 'home');
+  if (tabs.value.some(tab => tab.key === preferredTab)) activeTab.value = preferredTab;
+  else if (tabs.value.length > 0) activeTab.value = tabs.value[0].key;
+}
 
 const activeRatingFilter = ref('all');
 const ratingFilters = [
@@ -403,72 +705,187 @@ const ratingFilters = [
   { key: 'digital', label: '只看数码' }
 ];
 
-const followTopics = ref<any[]>([]);
-const loadingTopics = ref(false);
-
-// ---- 常用设备：统计自己动态里的发帖设备（deviceTitle），点击一键应用到设备信息 ----
-interface CommonDevice {
-  name: string;
-  count: number;
-  applying: boolean;
-}
-
-const commonDevices = computed<CommonDevice[]>(() => {
-  if (!isSelfUser.value) return [];
-  const counter = new Map<string, number>();
-  for (const f of userFeeds.value) {
-    const title = (f && (f.deviceTitle || f.device_title)) as string | undefined;
-    if (title && typeof title === 'string' && title.trim()) {
-      const t = title.trim();
-      counter.set(t, (counter.get(t) || 0) + 1);
-    }
-  }
-  return [...counter.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([name, count]) => ({ name, count, applying: false }));
-});
-
-function applyCommonDevice(device: CommonDevice) {
-  const preset = findPresetByDeviceTitle(device.name);
-  if (!preset) {
-    showToast(`暂不支持机型模板：${device.name}`, 'error');
-    return;
-  }
-  device.applying = true;
-  const f = settingsStore.settings.deviceFingerprint;
-  f.customFingerprint = true;
-  f.model = preset.model;
-  f.androidVersion = preset.androidVersion;
-  f.build = preset.build;
-  showToast(`已应用设备：${preset.label}`);
-  setTimeout(() => {
-    device.applying = false;
-  }, 600);
-}
-
 const getFollowCount = (p: any) => p?.follow ?? p?.followNum ?? p?.follow_num ?? 0;
 const getFansCount = (p: any) => p?.fans ?? p?.fansNum ?? p?.fans_num ?? 0;
 const getLikeCount = (p: any) => p?.be_like_num ?? p?.likeNum ?? 0;
+const isFlag = (value: unknown) => value === true || value === 1 || value === '1';
 
 const getGenderIcon = (p: any) => {
-  if (p?.gender === 1 || p?.gender === '1') return 'fas fa-mars gender-mars';
-  if (p?.gender === 0 || p?.gender === '0' || p?.gender === 2) return 'fas fa-venus gender-venus';
-  return 'fas fa-mars gender-mars';
+  const gender = p?.gender ?? p?.userInfo?.gender;
+  if (gender === 1 || gender === '1') return 'fas fa-mars gender-mars';
+  if (gender === 0 || gender === '0' || gender === 2) return 'fas fa-venus gender-venus';
+  return 'fas fa-user';
+};
+
+const getGenderLabel = (p: any) => {
+  const gender = p?.gender ?? p?.userInfo?.gender;
+  if (gender === 1 || gender === '1') return '男';
+  if (gender === 0 || gender === '0' || gender === 2) return '女';
+  return '';
 };
 
 const getGenderAgeTag = (p: any) => {
-  const ageGroup = p?.age_group || p?.ageGroup || '95后';
-  if (p?.gender === 1 || p?.gender === '1') return ageGroup;
-  if (p?.gender === 0 || p?.gender === '0' || p?.gender === 2) return ageGroup;
-  return ageGroup;
+  const info = p?.userInfo || {};
+  const direct = p?.age_group ?? p?.ageGroup ?? p?.age_tag ?? p?.ageTag ?? p?.age_group_tag
+    ?? info.age_group ?? info.ageGroup ?? info.age_tag ?? info.ageTag ?? info.age_group_tag;
+  if (direct) return String(direct);
+
+  // APK r93.m61204：出生年份按 5 年分组显示，例如 1995 -> 95后。
+  const birthYear = Number(p?.birthyear ?? p?.birthYear ?? p?.birth_year
+    ?? info.birthyear ?? info.birthYear ?? info.birth_year ?? 0);
+  if (!Number.isFinite(birthYear) || birthYear <= 0) return '';
+  const cohort = (birthYear - (birthYear % 5)) % 100;
+  return `${String(cohort).padStart(2, '0')}后`;
 };
 
-const getAstroTag = (p: any) => p?.astro || '天蝎座';
+const getAstroTag = (p: any) => {
+  const info = p?.userInfo || {};
+  const direct = p?.astro ?? p?.constellation ?? p?.zodiacSign ?? p?.zodiac_sign
+    ?? info.astro ?? info.constellation ?? info.zodiacSign ?? info.zodiac_sign;
+  if (direct) return String(direct);
+
+  const month = Number(p?.birthmonth ?? p?.birthMonth ?? p?.birth_month
+    ?? info.birthmonth ?? info.birthMonth ?? info.birth_month ?? 0);
+  const day = Number(p?.birthday ?? p?.birthDay ?? p?.birth_day
+    ?? info.birthday ?? info.birthDay ?? info.birth_day ?? 0);
+  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1 || day > 31) return '';
+  const signs = [
+    ['摩羯座', 1, 19], ['水瓶座', 2, 18], ['双鱼座', 3, 20], ['白羊座', 4, 19],
+    ['金牛座', 5, 20], ['双子座', 6, 21], ['巨蟹座', 7, 22], ['狮子座', 8, 22],
+    ['处女座', 9, 22], ['天秤座', 10, 23], ['天蝎座', 11, 22], ['射手座', 12, 21],
+  ] as const;
+  const index = signs.findIndex(([, endMonth, endDay]) => month === endMonth && day <= endDay);
+  return index >= 0 ? signs[index][0] : (month === 12 ? '摩羯座' : signs[month - 1][0]);
+};
+
+const getBirthdayLabel = (p: any) => {
+  const info = p?.userInfo || {};
+  const year = Number(p?.birthyear ?? p?.birthYear ?? p?.birth_year ?? info.birthyear ?? info.birthYear ?? info.birth_year ?? 0);
+  const month = Number(p?.birthmonth ?? p?.birthMonth ?? p?.birth_month ?? info.birthmonth ?? info.birthMonth ?? info.birth_month ?? 0);
+  const day = Number(p?.birthday ?? p?.birthDay ?? p?.birth_day ?? info.birthday ?? info.birthDay ?? info.birth_day ?? 0);
+
+  if (year > 0 && month > 0 && day > 0) {
+    const currentYear = new Date().getFullYear();
+    const age = currentYear - year;
+    return `${year}年${month}月${day}日${age > 0 ? ` (${age}岁)` : ''}`;
+  }
+  if (year > 0 && month > 0) {
+    return `${year}年${month}月`;
+  }
+  if (year > 0) {
+    const currentYear = new Date().getFullYear();
+    const age = currentYear - year;
+    const cohort = (year - (year % 5)) % 100;
+    return `${year}年 (${String(cohort).padStart(2, '0')}后${age > 0 ? ` · ${age}岁` : ''})`;
+  }
+  if (month > 0 && day > 0) {
+    return `${month}月${day}日`;
+  }
+  return '';
+};
+
+function hasBirthProfileFields(value: any): boolean {
+  const info = value?.userInfo || {};
+  return [
+    value?.age_group, value?.ageGroup, value?.age_tag, value?.ageTag, value?.age_group_tag,
+    value?.zodiacSign, value?.zodiac_sign, value?.astro, value?.constellation,
+    value?.birthyear, value?.birthYear, value?.birth_year,
+    value?.birthmonth, value?.birthMonth, value?.birth_month,
+    value?.birthday, value?.birthDay, value?.birth_day,
+    info.age_group, info.ageGroup, info.age_tag, info.ageTag, info.age_group_tag,
+    info.zodiacSign, info.zodiac_sign, info.astro, info.constellation,
+    info.birthyear, info.birthYear, info.birth_year,
+    info.birthmonth, info.birthMonth, info.birth_month,
+    info.birthday, info.birthDay, info.birth_day,
+  ].some((item) => typeof item === 'number' ? item > 0 : item !== undefined && item !== null && item !== '');
+}
+
+async function enrichProfileDetails(uid: string, spaceData: any) {
+  try {
+    const detailRes: any = await CoolapkTauriAPI.getUserProfile(uid);
+    const detail = detailRes?.data;
+    if (!detail || String(effectiveUid.value) !== String(uid)) return;
+    const spaceUserInfo = (spaceData.userInfo && typeof spaceData.userInfo === 'object') ? spaceData.userInfo : {};
+    const detailUserInfo = (detail.userInfo && typeof detail.userInfo === 'object') ? detail.userInfo : {};
+
+    const merged = {
+      ...spaceUserInfo,
+      ...spaceData,
+      ...detail,
+      ...detailUserInfo,
+      homeTabCardRows: spaceData.homeTabCardRows || detail.homeTabCardRows || [],
+      selectedTab: spaceData.selectedTab || detail.selectedTab,
+      isFollow: spaceData.isFollow ?? detail.isFollow,
+      isFans: spaceData.isFans ?? detail.isFans,
+      isSpecialFollow: spaceData.isSpecialFollow ?? detail.isSpecialFollow,
+      isInBlackList: spaceData.isInBlackList ?? detail.isInBlackList,
+      isInIgnoreList: spaceData.isInIgnoreList ?? detail.isInIgnoreList,
+      userInfo: {
+        ...spaceUserInfo,
+        ...detailUserInfo,
+      },
+    };
+    profile.value = asUserSpaceProfile(merged, uid);
+  } catch (e) {
+    console.warn('获取用户详细资料失败:', e);
+  }
+}
+
+const formatRegisterDate = (ts: any) => {
+  try {
+    if (!ts) return '';
+    const num = Number(ts);
+    if (isNaN(num) || num <= 0) return '';
+    const date = new Date(num * 1000);
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    return `${year}年${month}月${day}日`;
+  } catch {
+    return '';
+  }
+};
+
+const getRegDaysTag = (p: any) => {
+  try {
+    const ts = p?.regdate || p?.regDate || p?.userInfo?.regdate || p?.userInfo?.regDate;
+    if (!ts) return '';
+    const num = Number(ts);
+    if (isNaN(num) || num <= 0) return '';
+    const diffDays = Math.floor((Date.now() - num * 1000) / (86400 * 1000));
+    if (diffDays > 365) {
+      const years = (diffDays / 365.25).toFixed(1).replace(/\.0$/, '');
+      return `酷龄 ${years}年`;
+    }
+    if (diffDays > 0) return `酷安第${diffDays}天`;
+    return '';
+  } catch { return ''; }
+};
+
+const getIpLocationTag = (p: any) => {
+  const info = p?.userInfo || {};
+  const loc = p?.ip_location || p?.ipLocation || p?.ip_region || p?.ipRegion || info.ip_location || info.ipLocation || info.ip_region || info.ipRegion;
+  if (loc && String(loc).trim() && String(loc).trim() !== '未知' && String(loc).trim() !== '保密' && String(loc).trim() !== '未公开') {
+    return String(loc).trim();
+  }
+  return '';
+};
+
+const getVerifyBadgeTag = (p: any) => {
+  const info = p?.userInfo || {};
+  const title = p?.verify_title || p?.verifyTitle || p?.verify_show_name || info.verify_title || info.verifyTitle;
+  if (title && String(title).trim()) return String(title).trim();
+  if (p?.isDeveloper || info.isDeveloper) return '认证开发者';
+  return '';
+};
 
 const getCityTag = (p: any) => {
-  const city = p?.city || p?.province || p?.location;
-  return city ? String(city).trim() : '';
+  const info = p?.userInfo || {};
+  const city = p?.city || p?.province || p?.location || info.city || info.province || info.location;
+  if (city && String(city).trim() && String(city).trim() !== '保密' && String(city).trim() !== '未知' && String(city).trim() !== '未公开') {
+    return String(city).trim();
+  }
+  return '';
 };
 
 const getAvatarUrlByUid = (uid: any) => {
@@ -476,8 +893,13 @@ const getAvatarUrlByUid = (uid: any) => {
     if (!uid) return '';
     const strUid = String(uid);
     const padded = strUid.padStart(9, '0');
-    return `http://avatar.coolapk.com/data/${padded.slice(0, 3)}/${padded.slice(3, 5)}/${padded.slice(5, 7)}/${strUid.slice(-2)}_avatar_middle.jpg`;
+    return `https://avatar.coolapk.com/data/${padded.slice(0, 3)}/${padded.slice(3, 5)}/${padded.slice(5, 7)}/${strUid.slice(-2)}_avatar_middle.jpg`;
   } catch { return ''; }
+};
+
+const getAvatarBigUrl = (p: any) => {
+  const source = String(p?.userAvatar || p?.avatar || getAvatarUrlByUid(p?.uid) || '');
+  return source.replace(/_(middle|small)(\.[a-z0-9]+)$/i, '_big$2');
 };
 
 const formatLoginTime = (ts: any) => {
@@ -499,178 +921,113 @@ async function fetchUserProfile() {
   if (!targetUid) return;
 
   loadingProfile.value = true;
-  loadingTopics.value = true;
+  profileError.value = '';
   try {
-    const profRes = await CoolapkTauriAPI.getUserSpace(targetUid);
+    let profRes: any;
+    try {
+      profRes = await CoolapkTauriAPI.getUserSpace(targetUid);
+    } catch (spaceError) {
+      // 与 APK 的降级路径一致：部分旧账号的 space 被拦截时仍可读取 profile。
+      profRes = await CoolapkTauriAPI.getUserProfile(targetUid).catch(() => { throw spaceError; });
+    }
     if (profRes && profRes.data) {
       const spaceData = profRes.data;
-      profile.value = {
-        ...spaceData,
-        ...(spaceData.userInfo || {})
-      };
-
-      // 从 spaceData.homeTabCardRows 中精准解析主页的各个组件卡片
-      const homeCards = spaceData.homeTabCardRows || [];
-      if (Array.isArray(homeCards)) {
-        // 1. 解析 TA关注的人 卡片
-        const followUsersCard = homeCards.find((c: any) => c.title && c.title.includes('关注的人'));
-        if (followUsersCard && Array.isArray(followUsersCard.entities)) {
-          followingUsers.value = followUsersCard.entities.map((u: any) => ({
-            uid: u.uid || u.fuid,
-            username: u.username || u.fusername || u.displayUsername || '酷友',
-            userAvatar: u.userAvatar || u.fUserAvatar || u.avatar || getAvatarUrlByUid(u.uid || u.fuid)
-          }));
-        }
-
-        // 2. 解析 TA关注的板块 卡片
-        const followTopicsCard = homeCards.find((c: any) => c.title && c.title.includes('关注的板块'));
-        if (followTopicsCard && Array.isArray(followTopicsCard.entities)) {
-          followTopics.value = followTopicsCard.entities.map((b: any) => ({
-            id: b.id || b.target_id,
-            name: b.title || b.name || b.short_title || '板块',
-            icon: b.logo || b.pic || b.icon || '',
-            bg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-            fallbackIcon: 'fa-layer-group'
-          }));
-        }
-      }
+      profile.value = asUserSpaceProfile(spaceData, targetUid);
+      isBlacklisted.value = isFlag(spaceData.isBlackList ?? spaceData.isInBlackList);
+      isIgnored.value = isFlag(spaceData.isIgnoreList ?? spaceData.isInIgnoreList);
+      selectInitialTab(spaceData);
+      await enrichProfileDetails(targetUid, spaceData);
     } else {
       const backupProf = await CoolapkTauriAPI.getUserProfile(targetUid);
       if (backupProf && backupProf.data) {
-        profile.value = {
-          ...backupProf.data,
-          ...(backupProf.data.userInfo || {})
-        };
+        profile.value = asUserSpaceProfile(backupProf.data, targetUid);
+        selectInitialTab(backupProf.data);
       }
     }
   } catch (err) {
+    profileError.value = err instanceof Error ? err.message : '用户资料加载失败';
     console.warn('获取用户信息异常:', err);
   } finally {
     loadingProfile.value = false;
-    loadingTopics.value = false;
   }
 }
 
-async function fetchFollowingUsers() {
+async function fetchTabFeeds(isRefresh = true, tabKey = activeTab.value) {
   const targetUid = effectiveUid.value;
   if (!targetUid) return;
-  // 如果已经在 fetchUserProfile 的 homeTabCardRows 中拉到了，不再重复覆盖
-  if (followingUsers.value.length > 0) return;
-
-  try {
-    const res = await CoolapkTauriAPI.getFollowUserList(targetUid, 1);
-    const list = res?.data || res;
-    if (Array.isArray(list) && list.length > 0) {
-      followingUsers.value = list.slice(0, 10).map((u: any) => ({
-        uid: u.uid || u.fuid,
-        username: u.fusername || u.username || u.fUserInfo?.username || '酷友',
-        userAvatar: u.fUserAvatar || u.userAvatar || u.fUserInfo?.userAvatar || getAvatarUrlByUid(u.uid || u.fuid)
-      }));
-    }
-  } catch (e) {
-    console.warn('获取关注列表接口异常:', e);
-  }
-}
-
-const userFeedsPage = ref(1);
-const userFeedsLoadingMore = ref(false);
-const userFeedsNoMore = ref(false);
-
-const followNodes = ref<any[]>([]);
-
-async function fetchFollowNodes() {
-  const targetUid = effectiveUid.value;
-  if (!targetUid) return;
-  try {
-    const res = await CoolapkTauriAPI.getUserFollowNodes(targetUid);
-    const list = res?.data || res;
-    if (Array.isArray(list)) {
-      followNodes.value = list.map((n: any) => ({
-        id: n.id || n.nid,
-        title: n.title || n.name || '未命名分组',
-        count: Number(n.count || n.userCount || 0),
-      }));
-    }
-  } catch (e) {
-    console.warn('获取关注分组异常:', e);
-  }
-}
-
-async function fetchTabFeeds(isRefresh: boolean = true) {
-  const targetUid = effectiveUid.value;
-  if (!targetUid) return;
-
-  if (loadingFeeds.value || (userFeedsLoadingMore.value && !isRefresh)) return;
+  const state = getTabState(tabKey);
+  if (state.loading || (!isRefresh && (state.loadingMore || !state.hasMore))) return;
 
   if (isRefresh) {
-    userFeedsPage.value = 1;
-    userFeedsNoMore.value = false;
-    userFeeds.value = [];
-    loadingFeeds.value = true;
+    state.page = tabKey === 'home' ? 2 : 1;
+    state.firstItem = '';
+    state.lastItem = '';
+    state.hasMore = true;
+    state.error = '';
+    state.items = [];
+    state.loading = tabKey !== 'home';
   } else {
-    if (userFeedsNoMore.value) return;
-    userFeedsLoadingMore.value = true;
+    state.loadingMore = true;
   }
 
   try {
-    let list: any[] = [];
-    if (activeTab.value === 'rating') {
-      try {
-        const ratingRes = await CoolapkTauriAPI.getUserRatingList(targetUid, userFeedsPage.value);
-        list = (ratingRes && ratingRes.data && Array.isArray(ratingRes.data)) ? ratingRes.data : [];
-      } catch (ratingErr) {
-        console.warn('获取评分列表异常，回退到动态接口', ratingErr);
-      }
-    }
-    if (list.length === 0) {
-      const fetchType = activeTab.value === 'home' ? 'feed' : activeTab.value;
-      const feedsRes = await CoolapkTauriAPI.getUserFeeds(targetUid, userFeedsPage.value, fetchType);
-      list = (feedsRes && feedsRes.data && Array.isArray(feedsRes.data)) ? feedsRes.data : [];
-    }
-
-    if (list.length < 3) {
-      userFeedsNoMore.value = true;
-    }
-
-    if (isRefresh) {
-      userFeeds.value = list;
-    } else {
-      const existingIds = new Set(userFeeds.value.map((i: any) => i.id));
-      const uniqueNew = list.filter((i: any) => !existingIds.has(i.id));
-      userFeeds.value.push(...uniqueNew);
-    }
-    userFeedsPage.value++;
-  } catch (err) {
-    console.warn('获取动态列表异常:', err);
+    const apiTab = tabKey === 'home' ? 'feed' : (tabKey === 'picture' ? 'coolpic' : tabKey);
+    const ratingTarget = activeRatingFilter.value === 'app' ? 'apk' : activeRatingFilter.value === 'digital' ? 'product' : 'all';
+    const response: any = await CoolapkTauriAPI.getUserTabData(targetUid, apiTab, state.page, state.firstItem, state.lastItem, ratingTarget);
+    const normalized = normalizeEntityPage(response, state.page);
+    const existing = new Set(state.items.map((item, index) => entityKey(item, index)));
+    const incoming = normalized.items.filter((item, index) => !existing.has(entityKey(item, index)));
+    state.items = isRefresh ? normalized.items : [...state.items, ...incoming];
+    state.firstItem = normalized.firstItem;
+    state.lastItem = normalized.lastItem;
+    state.hasMore = normalized.hasMore;
+    state.page = Math.max(state.page + 1, normalized.page + 1);
+    state.loaded = true;
+  } catch (err: any) {
+    state.error = err?.message || '内容加载失败，请重试';
+    console.warn(`获取用户 ${tabKey} 列表异常:`, err);
   } finally {
-    loadingFeeds.value = false;
-    userFeedsLoadingMore.value = false;
+    state.loading = false;
+    state.loadingMore = false;
   }
 }
+
+function handleFeedDeleted(id: string | number) {
+  activeTabState.value.items = activeTabState.value.items.filter((item: any) => String(item.id ?? item.entityId) !== String(id));
+}
+
+function refreshActiveTab() { void fetchTabFeeds(true); }
+function retryActiveTab() { void fetchTabFeeds(true); }
 
 function handleUserPageScroll(e: Event) {
   const el = e.target as HTMLElement;
   if (!el) return;
   if (el.scrollHeight - el.scrollTop - el.clientHeight < 220) {
     if (!loadingFeeds.value && !userFeedsLoadingMore.value && !userFeedsNoMore.value) {
-      fetchTabFeeds(false);
+      void fetchTabFeeds(false);
     }
   }
 }
 
 async function toggleFollow() {
   if (!profile.value) return;
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  const previousFollow = isFlag(profile.value.isFollow);
   followLoading.value = true;
+  profile.value.isFollow = !previousFollow;
   try {
-    if (profile.value.isFollow) {
+    if (previousFollow) {
       await CoolapkTauriAPI.unfollowUser(effectiveUid.value);
-      profile.value.isFollow = 0;
+      profile.value.isSpecialFollow = 0;
     } else {
       await CoolapkTauriAPI.followUser(effectiveUid.value);
-      profile.value.isFollow = 1;
     }
-  } catch (err) {
-    console.error('关注失败:', err);
+  } catch (err: any) {
+    profile.value.isFollow = previousFollow;
+    alert(err?.message || '关注操作失败，请稍后重试');
   } finally {
     followLoading.value = false;
   }
@@ -755,31 +1112,180 @@ function sendMessage() {
   }
 }
 
-function openUserProfile(user: any) {
-  const uid = user?.uid || user?.id;
-  if (uid) {
-    router.push(`/user/${uid}`);
+async function showUserQr() {
+  const uid = effectiveUid.value;
+  if (!uid || qrLoading.value) return;
+  qrLoading.value = true;
+  try {
+    const res: any = await CoolapkTauriAPI.getUserQrImage(uid);
+    const data = res?.data ?? res;
+    const image = typeof data === 'string'
+      ? data
+      : data?.image || data?.imageUrl || data?.image_url || data?.url || '';
+    if (!image) throw new Error('接口未返回二维码图片');
+    qrImageUrl.value = image;
+  } catch (err: any) {
+    alert(`获取二维码失败：${err?.message || '请检查网络或登录状态'}`);
+  } finally {
+    qrLoading.value = false;
   }
 }
 
-function openFollowTopic(topic: any) {
-  const name = topic?.name || topic?.title || topic?.tag;
-  if (name) {
-    router.push(`/topic/${encodeURIComponent(name)}`);
-  }
+function openProfileMenu() {
+  profileActionOpen.value = true;
 }
 
-async function fetchLoadConfig() {
-  if (!isSelfUser.value) {
-    loadConfig.value = null;
+function showAvatarPreview() {
+  if (profile.value) avatarPreviewOpen.value = true;
+}
+
+function openRelations(relation: 'follow' | 'fans') {
+  const uid = effectiveUid.value;
+  if (uid) void router.push(`/user/${uid}/relations/${relation}`);
+}
+
+async function toggleSpecialFollow() {
+  const uid = effectiveUid.value;
+  if (!uid || relationshipActionLoading.value || !profile.value?.isFollow) return;
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
     return;
   }
+  const previous = isFlag(profile.value.isSpecialFollow);
+  relationshipActionLoading.value = true;
+  profile.value.isSpecialFollow = !previous;
   try {
-    const res = await CoolapkTauriAPI.getLoadConfig();
-    const data = res?.data || null;
-    loadConfig.value = (data && typeof data === 'object' && Object.keys(data).length > 0) ? data : null;
-  } catch (err) {
-    console.warn('获取我的卡片配置失败', err);
+    await CoolapkTauriAPI.specialFollowUser(uid, !previous);
+    showToast(!previous ? '已特别关注' : '已取消特别关注');
+    profileActionOpen.value = false;
+  } catch (err: any) {
+    profile.value.isSpecialFollow = previous;
+    alert(err?.message || '特别关注操作失败');
+  } finally {
+    relationshipActionLoading.value = false;
+  }
+}
+
+async function removeFollower() {
+  const uid = effectiveUid.value;
+  if (!uid || relationshipActionLoading.value) return;
+  const confirmed = await requestConfirmation({ title: '移除粉丝', message: '确定移除该用户的粉丝关系吗？', confirmText: '移除', danger: true });
+  if (!confirmed) return;
+  relationshipActionLoading.value = true;
+  try {
+    await CoolapkTauriAPI.cancelFollower(uid);
+    profile.value.isFans = 0;
+    profileActionOpen.value = false;
+    showToast('已移除粉丝');
+  } catch (err: any) {
+    alert(err?.message || '移除粉丝失败');
+  } finally {
+    relationshipActionLoading.value = false;
+  }
+}
+
+function openRemarkDialog() {
+  const remarks = Array.isArray(profile.value?.userRemarkList) ? profile.value.userRemarkList : [];
+  remarkName.value = String(profile.value?.remarkName || remarks[0]?.name || remarks[0]?.remark || '');
+  profileActionOpen.value = false;
+  remarkDialogOpen.value = true;
+}
+
+async function saveRemark() {
+  const uid = effectiveUid.value;
+  if (!uid || remarkSaving.value) return;
+  remarkSaving.value = true;
+  try {
+    await CoolapkTauriAPI.updateUserRemark(uid, remarkName.value.trim());
+    profile.value.remarkName = remarkName.value.trim();
+    remarkDialogOpen.value = false;
+    showToast('备注已保存');
+  } catch (err: any) {
+    alert(err?.message || '备注保存失败');
+  } finally {
+    remarkSaving.value = false;
+  }
+}
+
+async function copyUserInfo() {
+  const uid = effectiveUid.value;
+  if (!uid) return;
+  const text = `${profile.value?.username || '酷友'} ${uid}\nhttps://www.coolapk.com/u/${uid}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('用户信息已复制');
+  } catch {
+    alert(text);
+  }
+  profileActionOpen.value = false;
+}
+
+async function shareUserPage() {
+  const uid = effectiveUid.value;
+  if (!uid) return;
+  const link = `https://www.coolapk.com/u/${uid}`;
+  if (navigator.share) {
+    await navigator.share({ title: profile.value?.username || '酷安用户', text: `${profile.value?.username || '酷安用户'} 的酷安主页`, url: link }).catch(() => undefined);
+  } else {
+    await copyUserInfo();
+  }
+  profileActionOpen.value = false;
+}
+
+function reportUser() {
+  const uid = effectiveUid.value;
+  if (!uid) return;
+  profileActionOpen.value = false;
+  void CoolapkTauriAPI.openUrl(`https://m.coolapk.com/mp/do?c=user&m=report&id=${encodeURIComponent(uid)}`);
+}
+
+function openEquipment() {
+  const uid = effectiveUid.value;
+  if (uid) {
+    void CoolapkTauriAPI.openUrl(`https://m.coolapk.com/myDevice/${encodeURIComponent(uid)}`);
+  }
+}
+
+function openGoodsStore() {
+  if (tabs.value.some((tab) => tab.key === 'goods_store')) activeTab.value = 'goods_store';
+}
+
+async function copyUid() {
+  const uid = profile.value?.uid;
+  if (!uid) return;
+  try {
+    await navigator.clipboard.writeText(String(uid));
+    showToast(`UID ${uid} 已复制`);
+  } catch {
+    alert(String(uid));
+  }
+}
+
+async function copyAvatarUrl() {
+  const url = getAvatarBigUrl(profile.value);
+  if (!url) return;
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast('头像链接已复制');
+  } catch {
+    alert(url);
+  }
+}
+
+function openAvatarInBrowser() {
+  const url = getAvatarBigUrl(profile.value);
+  if (url) void CoolapkTauriAPI.openUrl(url);
+}
+
+async function copyShareLink() {
+  const uid = effectiveUid.value;
+  if (!uid) return;
+  const link = `https://www.coolapk.com/u/${uid}`;
+  try {
+    await navigator.clipboard.writeText(link);
+    showToast('主页链接已复制');
+  } catch {
+    alert(link);
   }
 }
 
@@ -787,22 +1293,30 @@ watch(effectiveUid, (newUid) => {
   isBlacklisted.value = false;
   isIgnored.value = false;
   if (newUid) {
-    fetchUserProfile();
-    fetchFollowingUsers();
-    fetchFollowNodes();
-    fetchLoadConfig();
-    fetchTabFeeds();
+    resetTabStates();
+    void fetchUserProfile();
+    void fetchTabFeeds(true);
   }
 }, { immediate: true });
 
 watch(activeTab, () => {
-  fetchTabFeeds();
+  const state = getTabState(activeTab.value);
+  if (activeTab.value !== 'home' && !state.loaded) void fetchTabFeeds(true);
+  void nextTick(() => {
+    const activeButton = tabScrollContainer.value?.querySelector('.app-tab-item.active') as HTMLElement | null;
+    activeButton?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  });
+});
+
+watch(activeRatingFilter, () => {
+  if (activeTab.value === 'rating') void fetchTabFeeds(true);
 });
 </script>
 
 <style scoped>
 .user-page-wrapper {
   width: 100%;
+  /* 用户页是沉浸式主页，铺满右侧主容器，不使用动态/列表页的窄栏宽度。 */
   max-width: var(--feed-max-width);
   height: 100%;
   overflow-y: auto;
@@ -825,6 +1339,8 @@ watch(activeTab, () => {
   gap: var(--space-3);
   margin: var(--space-4);
 }
+
+.profile-retry-button { margin-top: 16px; padding: 9px 24px; border: 0; border-radius: 18px; color: #fff; background: var(--primary); cursor: pointer; }
 
 /* App 原生沉浸式 Header 整体卡片 */
 .app-style-user-card {
@@ -1076,11 +1592,11 @@ watch(activeTab, () => {
   font-size: 11px;
   font-weight: 800;
   font-style: italic;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: #ffffff;
   padding: 2px 8px;
   border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.35);
 }
 
 .app-verify-tag {
@@ -1122,6 +1638,18 @@ watch(activeTab, () => {
   align-items: baseline;
   gap: 5px;
 }
+
+.stat-cell-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.stat-cell-button:hover .num,
+.stat-cell-button:hover .label { color: #a7f3d0; }
 
 .stat-cell .num {
   font-size: 17px;
@@ -1214,9 +1742,21 @@ watch(activeTab, () => {
   border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
-/* 他的装备 Card 毛玻璃入口条 */
+/* 他的装备 / 商品店铺 Card 毛玻璃入口条 */
+.equipment-entries-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
 .equipment-entry-bar-glass {
   display: flex;
+  flex: 1 1 200px;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   background: rgba(255, 255, 255, 0.15);
@@ -1225,7 +1765,6 @@ watch(activeTab, () => {
   border: 1px solid rgba(255, 255, 255, 0.22);
   padding: 9px 14px;
   border-radius: 12px;
-  margin-top: 2px;
   cursor: pointer;
   color: #ffffff;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
@@ -1242,17 +1781,20 @@ watch(activeTab, () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .equipment-icon {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.9);
+  flex-shrink: 0;
 }
 
 .equipment-title {
   font-size: 13px;
   font-weight: 600;
   color: #ffffff;
+  white-space: nowrap;
 }
 
 .equipment-right {
@@ -1261,6 +1803,8 @@ watch(activeTab, () => {
   gap: 6px;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.95);
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* App 风格全系 Tab 栏 */
@@ -1275,10 +1819,20 @@ watch(activeTab, () => {
   gap: 20px;
   overflow-x: auto;
   white-space: nowrap;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
+
+.tab-scroll-container::-webkit-scrollbar { height: 4px; }
+.tab-scroll-container::-webkit-scrollbar-track { background: transparent; }
+.tab-scroll-container::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; }
+.tab-scroll-container::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.tab-scroll-container:hover { scrollbar-color: rgba(16, 185, 129, .55) transparent; }
+.tab-scroll-container:hover::-webkit-scrollbar-thumb { background: rgba(16, 185, 129, .55); }
 
 .app-tab-item {
   position: relative;
+  flex: 0 0 auto;
   height: 48px;
   background: transparent;
   border: none;
@@ -1317,6 +1871,38 @@ watch(activeTab, () => {
 .tab-content-container {
   margin-top: 8px;
 }
+
+.tab-content-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  padding: 0 4px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.tab-retry-button {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 6px 14px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.tab-error-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 28px 16px;
+  color: var(--danger, #d9534f);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+.tab-error-state p { margin: 0; }
 
 .home-aggregated-view {
   display: flex;
@@ -1660,7 +2246,12 @@ watch(activeTab, () => {
 .feed-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 0;
+}
+
+.feed-list :deep(.feed-card),
+.feed-list :deep(.user-entity-card) {
+  margin-bottom: 8px;
 }
 
 .loading-wrapper,
@@ -1679,5 +2270,528 @@ watch(activeTab, () => {
 .custom-scrollbar-hidden {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* 1. 用户操作 ActionSheet 酷安卡片风 */
+.user-action-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-sheet-user-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--background-secondary, rgba(0, 0, 0, 0.04));
+}
+
+.action-sheet-user-card .user-info-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.action-sheet-user-card .name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-sheet-user-card .user-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.action-sheet-user-card .user-subtext {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.action-menu-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.action-menu-card-danger {
+  border-color: rgba(239, 68, 68, 0.15);
+}
+
+.action-menu-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  border: none;
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.05));
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  transition: background-color 0.15s ease;
+}
+
+.action-menu-tile:last-child {
+  border-bottom: none;
+}
+
+.action-menu-tile:hover {
+  background: var(--surface-hover, var(--background-secondary, rgba(0, 0, 0, 0.04)));
+}
+
+.tile-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tile-icon {
+  font-size: 15px;
+  width: 18px;
+  text-align: center;
+  color: var(--text-secondary);
+  transition: color 0.15s ease;
+}
+
+.icon-star {
+  color: #f59e0b;
+}
+
+.tile-title {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.tile-danger .tile-icon,
+.tile-danger .tile-title {
+  color: #ef4444;
+}
+
+.tile-arrow {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.action-menu-tile:hover .tile-arrow {
+  transform: translateX(2px);
+  opacity: 0.9;
+}
+
+/* 2. 设置备注名称弹窗 */
+.remark-dialog-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.remark-user-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+
+.remark-user-preview .original-title {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.remark-user-preview .original-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.remark-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.remark-input-box {
+  display: flex;
+  align-items: center;
+  background: var(--background-secondary);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 0 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.remark-input-box:focus-within {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.input-prefix-icon {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-right: 8px;
+}
+
+.remark-native-input {
+  flex: 1;
+  height: 42px;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.input-clear-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+}
+
+.input-clear-btn:hover {
+  color: var(--text-secondary);
+}
+
+.char-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-left: 6px;
+}
+
+.dialog-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-cancel {
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-cancel:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.btn-submit-primary {
+  height: 36px;
+  padding: 0 20px;
+  border-radius: 18px;
+  border: none;
+  background: #10b981;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.btn-submit-primary:hover:not(:disabled) {
+  background: #059669;
+}
+
+.btn-submit-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 3. 详细资料档案弹窗 */
+.coolapk-profile-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sheet-hero-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--background-secondary);
+}
+
+.sheet-avatar {
+  border: 2px solid var(--surface);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.sheet-hero-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hero-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.hero-bio {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.profile-section-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.section-icon {
+  color: #10b981;
+  font-size: 12px;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.profile-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+  border: 1px solid var(--border-light);
+  transition: all 0.2s ease;
+}
+
+.profile-grid-item[title] {
+  cursor: pointer;
+}
+
+.profile-grid-item[title]:hover {
+  background: var(--surface-hover);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.grid-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.grid-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.grid-value-interactive {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.font-mono {
+  font-family: monospace;
+}
+
+.copy-icon {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  transition: color 0.2s ease;
+}
+
+.profile-grid-item:hover .copy-icon {
+  color: #10b981;
+}
+
+.profile-grid-item-full {
+  grid-column: span 2;
+}
+
+.highlight-green {
+  color: #10b981;
+}
+
+/* 4. 二维码弹窗 */
+.coolapk-qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.qr-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.qr-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.qr-username {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.qr-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.qr-image-frame {
+  width: 220px;
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.qr-image-frame :deep(.user-qr-image) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.qr-footer-actions {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.btn-copy-link {
+  height: 38px;
+  padding: 0 20px;
+  border-radius: 19px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-copy-link:hover {
+  background: var(--surface-hover);
+  border-color: #10b981;
+  color: #10b981;
+}
+
+/* 5. 头像原图预览 Lightbox */
+.avatar-preview-lightbox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.avatar-img-container {
+  width: 100%;
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-secondary);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.avatar-img-container :deep(.avatar-preview-image) {
+  width: 260px;
+  height: 260px;
+  max-width: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  border: 3px solid var(--surface);
+}
+
+.avatar-preview-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  width: 100%;
+}
+
+.btn-preview-action {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-preview-action:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: var(--border-dark);
 }
 </style>

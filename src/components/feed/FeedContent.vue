@@ -2,13 +2,14 @@
   <div class="feed-content-wrapper">
     <h3 v-if="shouldShowTitle" class="feed-title">{{ title }}</h3>
     <div
-      :class="['feed-body', { 'is-collapsed': isLongText && !isExpanded }]"
-      :style="isLongText && !isExpanded ? { WebkitLineClamp: collapseLines } : undefined"
+      ref="bodyRef"
+      :class="['feed-body', { 'is-collapsed': shouldCollapse }]"
+      :style="shouldCollapse ? { WebkitLineClamp: collapseLines } : undefined"
       v-html="formattedMessage"
       @click="onBodyClick"
     ></div>
     <button
-      v-if="isLongText && (!isExpanded || expanding || expandError)"
+      v-if="shouldShowExpandButton"
       class="expand-btn"
       :disabled="expanding"
       @click.stop="handleExpand"
@@ -19,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import { useSettingsStore } from '../../stores/settings';
@@ -36,13 +37,43 @@ const props = defineProps<{
 
 const settingsStore = useSettingsStore();
 
+const bodyRef = ref<HTMLElement | null>(null);
 const isExpanded = ref(false);
 const expanding = ref(false);
 const expandError = ref(false);
+const isOverflowing = ref(false);
 const fullMessage = ref('');
 
 const currentMessage = computed(() => fullMessage.value || props.message || '');
 const needsRemoteFullText = computed(() => hasFeedMoreSuffix(props.message || ''));
+const collapseLines = computed(() => settingsStore.settings.collapseLines || 0);
+
+function checkOverflow() {
+  if (needsRemoteFullText.value) {
+    isOverflowing.value = true;
+    return;
+  }
+  if (!bodyRef.value || collapseLines.value <= 0) {
+    isOverflowing.value = false;
+    return;
+  }
+  const el = bodyRef.value;
+  // 只有在元素真实内容高度大于可视高度（发生了 CSS line-clamp 截断）时才判定为需要展开
+  isOverflowing.value = el.scrollHeight > el.clientHeight + 4;
+}
+
+const shouldCollapse = computed(() => {
+  if (isExpanded.value) return false;
+  if (collapseLines.value <= 0) return false;
+  return true;
+});
+
+const shouldShowExpandButton = computed(() => {
+  if (expanding.value || expandError.value) return true;
+  if (isExpanded.value) return false;
+  if (collapseLines.value <= 0) return false;
+  return needsRemoteFullText.value || isOverflowing.value;
+});
 
 function onBodyClick(e: Event) {
   const anchor = (e.target as HTMLElement).closest('a');
@@ -74,8 +105,6 @@ async function handleExpand() {
   }
 }
 
-const collapseLines = computed(() => settingsStore.settings.collapseLines || 0);
-
 // 过滤无实质意义的 Coolapk 默认通用标题（如 "fishVD的动态" 或 "xxx的动态"）
 const shouldShowTitle = computed(() => {
   if (!props.title) return false;
@@ -85,19 +114,34 @@ const shouldShowTitle = computed(() => {
   return true;
 });
 
-const isLongText = computed(() => {
-  if (!currentMessage.value) return false;
-  if (needsRemoteFullText.value) return true;
-  const lines = collapseLines.value;
-  if (lines <= 0) return false;
-  return currentMessage.value.length > 400
-    || currentMessage.value.split('\n').length > lines;
-});
-
 const formattedMessage = computed(() => {
   if (!currentMessage.value) return '';
   // 统一渲染：先安全化（去标签/防注入/换行），再渲染酷安表情
   return renderCoolapkRichText(stripFeedMoreSuffix(currentMessage.value));
+});
+
+let resizeObserver: ResizeObserver | null = null;
+
+onMounted(() => {
+  nextTick(() => {
+    checkOverflow();
+    if (bodyRef.value && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        checkOverflow();
+      });
+      resizeObserver.observe(bodyRef.value);
+    }
+  });
+});
+
+onUnmounted(() => {
+  resizeObserver?.disconnect();
+});
+
+watch([formattedMessage, collapseLines], () => {
+  nextTick(() => {
+    checkOverflow();
+  });
 });
 
 watch(
@@ -108,6 +152,10 @@ watch(
     fullMessage.value = '';
     expandError.value = false;
     isExpanded.value = Boolean(props.forceExpanded);
+
+    nextTick(() => {
+      checkOverflow();
+    });
 
     if (!feedId || !hasFeedMoreSuffix(sourceMessage)) return;
     // 列表接口出现“查看更多”时立即在后台排队加载全文。
@@ -183,7 +231,7 @@ watch(
 
 .feed-body.is-collapsed {
   display: -webkit-box;
-  -webkit-line-clamp: 6;
+  -webkit-line-clamp: 12;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }

@@ -151,27 +151,11 @@ function handleError(event: Event) {
 
 .app-image-container.fit-contain {
   background-color: transparent;
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.app-image-container img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
 }
 
 .app-image-container.fit-contain img {
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
 }
 

@@ -4,10 +4,23 @@ export type FeedLayout = 'single' | 'double';
 export type ImageQuality = 'standard' | 'hd' | 'raw';
 export type AccentColor = 'green' | 'blue' | 'violet' | 'orange';
 export type CommentSort = 'hot' | 'latest';
-export type HomeTabKey = 'index_v8' | 'digest' | 'hot' | 'latest' | 'cool_picture' | 'secondhand' | 'pictures' | 'dyh';
+export type HomeTabKey = string;
 export type ExternalLinkMode = 'internal' | 'system';
 export type TimeDisplayMode = 'relative' | 'absolute';
 export type UpdateChannel = 'stable' | 'beta';
+
+/** 官方 ConfigPage 实体模型（对齐 com.coolapk.market.model.ConfigPage） */
+export interface ConfigPageTab {
+  id?: number | string;
+  title: string;
+  page_name?: string;
+  url: string;
+  logo?: string;
+  subTitle?: string;
+  page_fixed?: number;
+  page_visibility?: number;
+  order?: number;
+}
 
 export interface NavVisibilitySettings {
   home: boolean;

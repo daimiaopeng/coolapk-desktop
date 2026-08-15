@@ -17,7 +17,7 @@ const SETTINGS_FILE = 'settings.json';
 const DEFAULT_ZOOM = 100;
 const MIN_ZOOM = 50;
 const MAX_ZOOM = 200;
-export const DEFAULT_HOME_TAB_ORDER: HomeTabKey[] = ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'];
+export const DEFAULT_HOME_TAB_ORDER: string[] = [];
 
 function clampZoom(zoom: number) {
   const safeZoom = Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM;
@@ -58,7 +58,7 @@ const defaultDeviceFingerprint: DeviceFingerprintSettings = {
   build: 'AQ3A.250226.002',
   appVersion: '16.2.0',
   appCode: '2604201',
-  sdkInt: '36',
+  sdkInt: '35',
   locale: 'zh-CN',
   darkMode: '0',
 };

@@ -70,6 +70,11 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_tab_config');
   }
 
+  // 1.1.2 云端同步首页 Tab 配置（POST /v6/account/updateConfig）
+  static async updateHomeTabConfig(configJson: string) {
+    return await invokeNative('update_home_tab_config', { configJson });
+  }
+
   // 1.2 搜索候选词（输入联想）
   static async getSearchSuggestions(query: string) {
     return await invokeNative('get_search_suggestions', { query });
@@ -226,6 +231,8 @@ export class CoolapkTauriAPI {
 
   // 9. 酷友空间
   static async getUserSpace(uid: string) {
+    // 用户页首屏不能沿用普通列表的 3 次重试策略，否则 space/profile
+    // 失败时会连续等待很久，用户看不到页面级重试状态。
     return await invokeNative('get_user_space', { uid });
   }
 
@@ -233,8 +240,30 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_user_profile', { uid });
   }
 
+  static async getUserQrImage(uid: string) {
+    return await invokeNative('get_user_qr_image', { uid }, { retry: true, kind: 'default' });
+  }
+
   static async getUserFeeds(uid: string, page: number = 1, feedType: string = 'feed') {
     return await invokeNative('get_user_feeds', { uid, page, feedType });
+  }
+
+  static async getUserTabData(
+    uid: string,
+    tab: string,
+    page: number = 1,
+    firstItem: string = '',
+    lastItem: string = '',
+    ratingTarget: string = 'all'
+  ) {
+    return await invokeNative('get_user_tab_data', {
+      uid,
+      tab,
+      page,
+      firstItem,
+      lastItem,
+      ratingTarget,
+    });
   }
 
   static async getTopicDetail(tag: string) {
@@ -293,6 +322,18 @@ export class CoolapkTauriAPI {
 
   static async unfollowUser(uid: string) {
     return await invokeNative('unfollow_user', { uid });
+  }
+
+  static async specialFollowUser(uid: string, special: boolean) {
+    return await invokeNative('special_follow_user', { uid, special });
+  }
+
+  static async cancelFollower(uid: string) {
+    return await invokeNative('cancel_follower', { uid });
+  }
+
+  static async updateUserRemark(uid: string, name: string) {
+    return await invokeNative('update_user_remark', { uid, name });
   }
 
   // 右侧栏：热门话题

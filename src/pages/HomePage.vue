@@ -2,13 +2,17 @@
   <div class="home-page-layout">
     <div class="main-feed-column">
       <div class="feed-toolbar-row">
-        <FeedTabs v-model:active-key="activeTab" :dynamic-tabs="orderedDynamicTabs" />
+        <FeedTabs
+          v-model:active-key="activeTab"
+          :tabs="orderedDynamicTabs"
+          @tab-order-updated="handleTabOrderUpdated"
+        />
         <FeedLayoutToggle v-model="feedLayout" />
       </div>
 
       <div class="feed-scroll-container custom-scrollbar" @scroll="handleScroll">
-        <!-- 1. 头条 Tab (`digest`) 专属：今日酷安日历 & 金刚位入口 & 关照关注栏 -->
-        <div v-if="activeTab === 'digest'" class="headline-header-section">
+        <!-- 1. 头条 Tab 专属：今日酷安日历 & 金刚位入口 & 关照关注栏 -->
+        <div v-if="isHeadlineTab" class="headline-header-section">
           <!-- 今日酷安日历与要闻栏 -->
           <div class="today-coolapk-card">
             <div class="calendar-badge">
@@ -49,8 +53,8 @@
           </div>
         </div>
 
-        <!-- 2. 热榜 Tab (`hot`) 专属：周榜/月榜 + 热门搜索词 + 排序名次 -->
-        <div v-if="activeTab === 'hot'" class="hot-header-section">
+        <!-- 2. 热榜 Tab 专属：周榜/月榜 + 热门搜索词 + 排序名次 -->
+        <div v-if="isHotTab" class="hot-header-section">
           <!-- 5 大榜单金刚组 -->
           <div class="hot-ranks-row">
             <button
@@ -78,24 +82,24 @@
           </div>
         </div>
 
-        <!-- 3. 快讯 Tab (`latest`) 专属：酷安快讯 Banner -->
-        <div v-if="activeTab === 'latest'" class="express-banner">
+        <!-- 3. 快讯 Tab 专属：酷安快讯 Banner -->
+        <div v-if="isNewsTab" class="express-banner">
           <div class="express-banner-content">
             <div class="banner-title"><i class="fas fa-bolt"></i> 酷安快讯</div>
             <div class="banner-sub">每日科技新鲜事 · 7x24小时不间断更新</div>
           </div>
         </div>
 
-        <!-- 看看号 Tab (`dyh`) 专属：看看号卡片网格 -->
-        <div v-if="activeTab === 'dyh' && loading && feeds.length === 0" class="skeleton-padding">
+        <!-- 看看号 Tab 专属：看看号卡片网格 -->
+        <div v-if="isDyhTab && loading && feeds.length === 0" class="skeleton-padding">
           <FeedSkeleton :count="4" />
         </div>
 
-        <div v-else-if="activeTab === 'dyh' && feeds.length === 0 && !loading" class="empty-padding">
+        <div v-else-if="isDyhTab && feeds.length === 0 && !loading" class="empty-padding">
           <EmptyState title="暂无看看号" />
         </div>
 
-        <div v-if="activeTab === 'dyh' && !loading" class="dyh-tab-grid">
+        <div v-if="isDyhTab && !loading" class="dyh-tab-grid">
           <div
             v-for="item in feeds"
             :key="item.id"
@@ -118,25 +122,25 @@
         </div>
 
         <!-- 动态列表与 Loading/Error/Empty 状态 -->
-        <div v-if="activeTab !== 'dyh' && loading && feeds.length === 0" class="skeleton-padding">
+        <div v-if="!isDyhTab && loading && feeds.length === 0" class="skeleton-padding">
           <FeedSkeleton :count="4" />
         </div>
 
-        <div v-else-if="activeTab !== 'dyh' && error && feeds.length === 0" class="error-padding">
+        <div v-else-if="!isDyhTab && error && feeds.length === 0" class="error-padding">
           <ErrorState title="加载动态失败" :message="error" @retry="loadFeeds(true)" />
         </div>
 
-        <div v-else-if="activeTab !== 'dyh' && feeds.length === 0" class="empty-padding">
+        <div v-else-if="!isDyhTab && feeds.length === 0" class="empty-padding">
           <EmptyState title="暂无动态内容" />
         </div>
 
-        <div v-else-if="activeTab !== 'dyh'" :class="['feed-list-padding', { 'is-double-column': isDoubleColumn }]">
+        <div v-else-if="!isDyhTab" :class="['feed-list-padding', { 'is-double-column': isDoubleColumn }]">
           <template v-if="isDoubleColumn">
             <FeedCard
               v-for="entry in feedEntries"
               :key="entry.item.id || entry.index"
               :feed="entry.item"
-              :rank-index="activeTab === 'hot' ? entry.index + 1 : undefined"
+              :rank-index="isHotTab ? entry.index + 1 : undefined"
               :class="{ 'feed-card-focused': entry.index === navIndex }"
               :ref="(el) => setCardRef(el, entry.index)"
               @deleted="handleFeedDeleted"
@@ -147,7 +151,7 @@
             v-for="(item, idx) in feeds"
             :key="item.id || idx"
             :feed="item"
-            :rank-index="activeTab === 'hot' ? idx + 1 : undefined"
+            :rank-index="isHotTab ? idx + 1 : undefined"
             :class="{ 'feed-card-focused': idx === navIndex }"
             :ref="(el) => setCardRef(el, idx)"
             @deleted="handleFeedDeleted"
@@ -180,7 +184,7 @@ import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
 import { shouldHideFeed } from '../utils/feedFilter';
 import { DEFAULT_HOME_TAB_ORDER } from '../stores/settings';
-import type { FeedLayout } from '../types/settings';
+import type { FeedLayout, ConfigPageTab } from '../types/settings';
 
 const settingsStore = useSettingsStore();
 
@@ -188,46 +192,73 @@ const feedLayout = computed<FeedLayout>({
   get: () => settingsStore.settings.feedLayout,
   set: (value) => { settingsStore.settings.feedLayout = value; },
 });
-const isDoubleColumn = computed(() => feedLayout.value === 'double' && activeTab.value !== 'dyh');
 const feedEntries = computed(() => feeds.value.map((item, index) => ({ item, index })));
 
 const route = useRoute();
 const router = useRouter();
-const activeTab = ref(settingsStore.settings.defaultHomeTab);
+const activeTab = ref(settingsStore.settings.defaultHomeTab || '');
 const page = ref(1);
 const feeds = ref<any[]>([]);
 const loading = ref(false);
 const loadingMore = ref(false);
 const noMore = ref(false);
 const error = ref('');
-const dynamicTabs = ref<{ key: string; label: string }[]>([]);
-const fallbackHomeTabs = [
-  { key: 'index_v8', label: '推荐' },
-  { key: 'digest', label: '头条' },
-  { key: 'hot', label: '热榜' },
-  { key: 'latest', label: '快讯' },
-  { key: 'cool_picture', label: '酷图' },
-  { key: 'secondhand', label: '二手' },
-];
-const orderedDynamicTabs = computed(() => {
-  const source = dynamicTabs.value.length ? dynamicTabs.value : fallbackHomeTabs;
-  const order = settingsStore.settings.homeTabOrder || DEFAULT_HOME_TAB_ORDER;
-  return [...source].sort((a, b) => {
-    const aIndex = order.indexOf(a.key as any);
-    const bIndex = order.indexOf(b.key as any);
+
+// 动态服务端下发的 Tab 列表（完全对齐 APK ConfigPage 结构）
+const serverTabs = ref<ConfigPageTab[]>([]);
+
+const orderedDynamicTabs = computed<ConfigPageTab[]>(() => {
+  const source = serverTabs.value;
+  if (!source.length) return [];
+  const order = settingsStore.settings.homeTabOrder || [];
+  if (!order.length) return source;
+  
+  const visibleSource = source.filter(tab => {
+    const key = tab.page_name || tab.url || String(tab.id || tab.title);
+    return !order.includes(`__hidden__${key}`);
+  });
+
+  return [...visibleSource].sort((a, b) => {
+    const aKey = a.page_name || a.url || String(a.id || a.title);
+    const bKey = b.page_name || b.url || String(b.id || b.title);
+    const aIndex = order.indexOf(aKey);
+    const bIndex = order.indexOf(bKey);
     return (aIndex < 0 ? order.length : aIndex) - (bIndex < 0 ? order.length : bIndex);
   });
 });
 
-const knownTabMap: Record<string, string> = {
-  '关注': 'index_v8',
-  '推荐': 'index_v8',
-  '头条': 'digest',
-  '热榜': 'hot',
-  '快讯': 'latest',
-  '酷图': 'cool_picture',
-  '二手': 'secondhand',
-};
+const currentActiveTabObj = computed<ConfigPageTab | undefined>(() => {
+  return orderedDynamicTabs.value.find(
+    t => (t.page_name || t.url || String(t.id || t.title)) === activeTab.value
+  );
+});
+
+// 动态判断当前 Tab 呈现形态（根据服务端 page_name 或 url 路由）
+const isHeadlineTab = computed(() => {
+  const t = currentActiveTabObj.value;
+  if (!t) return activeTab.value === 'digest' || activeTab.value === 'V9_HOME_TAB_HEADLINE' || activeTab.value === '/main/headline';
+  return t.page_name === 'V9_HOME_TAB_HEADLINE' || t.url === '/main/headline' || t.title === '头条';
+});
+
+const isHotTab = computed(() => {
+  const t = currentActiveTabObj.value;
+  if (!t) return activeTab.value === 'hot' || activeTab.value === 'V9_HOME_TAB_RANKING';
+  return t.page_name === 'V9_HOME_TAB_RANKING' || t.url.includes('RANKING') || t.title === '热榜';
+});
+
+const isNewsTab = computed(() => {
+  const t = currentActiveTabObj.value;
+  if (!t) return activeTab.value === 'latest' || activeTab.value === 'V11_HOME_TAB_NEWS';
+  return t.page_name === 'V11_HOME_TAB_NEWS' || t.url.includes('NEWS') || t.title === '快讯';
+});
+
+const isDyhTab = computed(() => {
+  const t = currentActiveTabObj.value;
+  if (!t) return activeTab.value === 'dyh';
+  return t.page_name === 'dyh' || t.url === '/user/dyhSubscribe' || t.title === '看看号';
+});
+
+const isDoubleColumn = computed(() => feedLayout.value === 'double' && !isDyhTab.value);
 
 // 实时日期计算（对应截图4 “今日酷安”日历块）
 const now = new Date();
@@ -266,36 +297,8 @@ const hotRanks: { key: HotRankType; label: string; icon: string; color: string }
 
 function syncTabFromRoute() {
   const path = route.path;
-  switch (path) {
-    case '/':
-      activeTab.value = settingsStore.settings.defaultHomeTab;
-      break;
-    case '/discover':
-      activeTab.value = 'digest';
-      break;
-    case '/apps':
-      activeTab.value = 'secondhand';
-      break;
-    case '/games':
-      activeTab.value = 'hot';
-      break;
-    case '/topics':
-      activeTab.value = 'digest';
-      break;
-    case '/favorites':
-      activeTab.value = 'cool_picture';
-      break;
-    case '/history':
-      activeTab.value = 'latest';
-      break;
-    case '/following':
-      activeTab.value = 'index_v8';
-      break;
-    default:
-      if (!['hot', 'latest', 'digest', 'cool_picture', 'secondhand', 'pictures', 'dyh'].includes(activeTab.value)) {
-        activeTab.value = 'index_v8';
-      }
-      break;
+  if (path === '/' && settingsStore.settings.defaultHomeTab) {
+    activeTab.value = settingsStore.settings.defaultHomeTab;
   }
 }
 
@@ -303,48 +306,48 @@ const prefetchBuffer = ref<any[]>([]);
 const prefetchPage = ref(2);
 const isPrefetching = ref(false);
 
+/** 动态从 GET /v6/main/init 获取全量 Tab 配置（完全对齐 APK dt8.m45234 / Card 2） */
 async function fetchTabConfig() {
   try {
     const res: any = await CoolapkTauriAPI.getTabConfig();
     const data = res?.data || [];
+    // 官方 Card 2 首页配置实体（entityId: 6390 / entityTemplate: configCard / title: 首页）
     const configCard = data.find(
-      (item: any) => item.entityTemplate === 'configCard' && (item.title || '').includes('TAB配置')
+      (item: any) => item.entityId === '6390' || (item.entityTemplate === 'configCard' && (item.title === '首页' || (item.title || '').includes('TAB配置')))
     );
+
     if (configCard && configCard.entities && Array.isArray(configCard.entities)) {
-      const tabs = configCard.entities
-        .filter((e: any) => e.title)
-        .map((e: any) => {
-          const label = e.title;
-          const mappedKey = knownTabMap[label] || deriveTabKey(e.url);
-          return { key: mappedKey, label };
-        });
-      if (tabs.length > 0) {
-        dynamicTabs.value = tabs;
+      serverTabs.value = configCard.entities;
+      
+      // 官方下发的默认选中 Tab（例如 V9_HOME_TAB_HEADLINE）
+      const defaultSelected = configCard.extraDataArr?.selectedHomeTab;
+      if (!activeTab.value && defaultSelected) {
+        activeTab.value = defaultSelected;
+      } else if (!activeTab.value && serverTabs.value.length > 0) {
+        const first = serverTabs.value[0];
+        activeTab.value = first.page_name || first.url || String(first.id || first.title);
       }
     }
   } catch (err) {
-    console.warn('获取 Tab 配置失败，使用默认配置', err);
+    console.warn('获取 Tab 配置失败', err);
   }
 }
 
-function deriveTabKey(url: string): string {
-  if (!url) return '';
-  const clean = url.replace(/\?.*$/, '').replace(/\/$/, '');
-  const segments = clean.split('/').filter(Boolean);
-  return segments[segments.length - 1] || clean;
-}
+/** 动态依据 Tab 的 url / page_name 请求数据流 */
+async function fetchTabApi(tabKey: string, p: number) {
+  const matchedTab = orderedDynamicTabs.value.find(
+    t => (t.page_name || t.url || String(t.id || t.title)) === tabKey
+  );
 
-async function fetchTabApi(tab: string, p: number) {
-  switch (tab) {
-    case 'hot': return await CoolapkTauriAPI.getRankFeeds(activeHotRank.value, p);
-    case 'latest': return await CoolapkTauriAPI.getLatestFeeds(p);
-    case 'digest': return await CoolapkTauriAPI.getDigestFeeds(p);
-    case 'cool_picture': return await CoolapkTauriAPI.getCoolPictureRank(p);
-    case 'secondhand': return await CoolapkTauriAPI.getSecondHandFeeds(p);
-    case 'pictures': return await CoolapkTauriAPI.getPictureList('', p);
-    case 'dyh': return await CoolapkTauriAPI.getDyhList(p);
-    default: return await CoolapkTauriAPI.getIndexV8Feeds(p);
+  const targetUrl = matchedTab ? (matchedTab.url || matchedTab.page_name || '') : tabKey;
+
+  // 1. 如果匹配到具体 URL，调用通用板块/页面数据流
+  if (targetUrl) {
+    return await CoolapkTauriAPI.getBoardFeeds(targetUrl, p);
   }
+
+  // 2. 默认保底请求
+  return await CoolapkTauriAPI.getHeadlineFeeds(p);
 }
 
 async function prefetchNextPage() {
@@ -458,6 +461,10 @@ function selectHotRank(rankType: HotRankType) {
   activeHotRank.value = rankType;
 }
 
+function handleTabOrderUpdated() {
+  serverTabs.value = [...serverTabs.value];
+}
+
 function handleBulletinClick(item: any) {
   if (item.id) {
     // 引导点击
@@ -469,7 +476,7 @@ watch(activeTab, () => {
 });
 
 watch(activeHotRank, () => {
-  if (activeTab.value === 'hot') loadFeeds(true);
+  if (isHotTab.value) loadFeeds(true);
 });
 
 const navIndex = ref(-1);

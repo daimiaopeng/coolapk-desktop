@@ -973,13 +973,13 @@ function handleUserClick() {
 
 .popover-level {
   font-size: 10px;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: #ffffff;
   padding: 1px 6px;
   border-radius: var(--radius-pill);
   font-weight: 800;
   font-style: italic;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.35);
 }
 
 .exp-row {

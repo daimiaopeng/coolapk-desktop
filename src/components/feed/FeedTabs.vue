@@ -1,68 +1,93 @@
 <template>
-  <div class="feed-tabs custom-scrollbar">
+  <div class="feed-tabs-wrapper">
+    <div class="feed-tabs custom-scrollbar" ref="tabsContainer" @wheel.passive="handleWheel">
+      <button
+        v-for="tab in tabs"
+        :key="getTabKey(tab)"
+        :class="['tab-item', { 'is-active': activeKey === getTabKey(tab) }]"
+        @click="$emit('update:activeKey', getTabKey(tab))"
+      >
+        <span class="tab-label">{{ tab.title }}</span>
+        <span v-if="activeKey === getTabKey(tab)" class="coolapk-tab-indicator"></span>
+      </button>
+    </div>
+
+    <!-- 官方右侧 ☰ 频道管理按钮 -->
     <button
-      v-for="tab in tabs"
-      :key="tab.key"
-      :class="['tab-item', { 'is-active': activeKey === tab.key }]"
-      @click="$emit('update:activeKey', tab.key)"
+      class="tab-manage-btn"
+      title="频道管理与排序"
+      @click="showTabManager = true"
     >
-      <span class="tab-label">{{ tab.label }}</span>
-      <span v-if="activeKey === tab.key" class="coolapk-tab-indicator"></span>
+      <i class="fas fa-bars"></i>
     </button>
+
+    <!-- 频道管理弹窗 (九宫格/磁贴网格) -->
+    <TabManagerModal
+      :visible="showTabManager"
+      :tabs="tabs"
+      :active-key="activeKey"
+      @close="showTabManager = false"
+      @select-tab="$emit('update:activeKey', $event)"
+      @updated="$emit('tabOrderUpdated')"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref } from 'vue';
+import type { ConfigPageTab } from '../../types/settings';
+import TabManagerModal from './TabManagerModal.vue';
 
 const props = defineProps<{
   activeKey: string;
-  dynamicTabs?: { key: string; label: string }[];
+  tabs: ConfigPageTab[];
 }>();
 
 defineEmits<{
   (e: 'update:activeKey', key: string): void;
+  (e: 'tabOrderUpdated'): void;
 }>();
 
-const defaultTabs = [
-  { key: 'index_v8', label: '推荐' },
-  { key: 'digest', label: '头条' },
-  { key: 'hot', label: '热榜' },
-  { key: 'latest', label: '快讯' },
-  { key: 'cool_picture', label: '酷图' },
-  { key: 'secondhand', label: '二手' },
-];
+const showTabManager = ref(false);
+const tabsContainer = ref<HTMLElement | null>(null);
 
-const extraTabs = [
-  { key: 'pictures', label: '酷图' },
-  { key: 'dyh', label: '看看号' },
-];
+function getTabKey(tab: ConfigPageTab): string {
+  return tab.page_name || tab.url || String(tab.id || tab.title);
+}
 
-const tabs = computed(() => {
-  const base =
-    props.dynamicTabs && props.dynamicTabs.length > 0 ? props.dynamicTabs : defaultTabs;
-  const merged = [...base];
-  const seenKeys = new Set(merged.map((t) => t.key));
-  const seenLabels = new Set(merged.map((t) => t.label));
-  for (const t of extraTabs) {
-    if (!seenKeys.has(t.key) && !seenLabels.has(t.label)) merged.push(t);
+function handleWheel(e: WheelEvent) {
+  if (tabsContainer.value && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    tabsContainer.value.scrollLeft += e.deltaY;
   }
-  return merged;
-});
+}
 </script>
 
 <style scoped>
-.feed-tabs {
+.feed-tabs-wrapper {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 0 18px;
   background-color: var(--surface);
   border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
   height: 48px;
-  overflow-x: auto;
+  position: relative;
   flex-shrink: 0;
+  width: 100%;
+}
+
+.feed-tabs {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  height: 100%;
+  overflow-x: auto;
+  flex: 1;
   user-select: none;
+  scrollbar-width: none;
+}
+
+.feed-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab-item {
@@ -74,7 +99,7 @@ const tabs = computed(() => {
   font-size: 15px;
   font-weight: 500;
   color: var(--text-secondary);
-  transition: all var(--duration-fast) var(--ease-default);
+  transition: all var(--duration-fast, 0.15s) var(--ease-default, ease);
   white-space: nowrap;
   background: transparent;
   cursor: pointer;
@@ -95,15 +120,35 @@ const tabs = computed(() => {
 /* 酷安 APP 标志性绿色下划弧线/胶囊滑块指示器 */
 .coolapk-tab-indicator {
   position: absolute;
-  bottom: 4px;
+  bottom: 2px;
   left: 50%;
   transform: translateX(-50%);
-  width: 20px;
-  height: 4px;
+  width: 22px;
+  height: 3.5px;
   background: linear-gradient(90deg, #10b981 0%, #059669 100%);
   border-radius: 4px;
   box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
   animation: tabSlideIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tab-manage-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 100%;
+  background: linear-gradient(to right, transparent, var(--surface) 25%);
+  border: none;
+  color: var(--text-secondary);
+  font-size: 15px;
+  cursor: pointer;
+  padding-right: 12px;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.tab-manage-btn:hover {
+  color: var(--primary, #10b981);
 }
 
 @keyframes tabSlideIn {
@@ -112,7 +157,7 @@ const tabs = computed(() => {
     opacity: 0;
   }
   to {
-    width: 20px;
+    width: 22px;
     opacity: 1;
   }
 }

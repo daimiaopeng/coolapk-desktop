@@ -26,8 +26,8 @@ export function getImageUrlByQuality(url: string, targetQuality?: ImageQualityMo
     }
   }
 
-  // 先清洗 URL，剥离现有的 .m.jpg 或 .s.jpg 后缀及 query 参数
-  const baseUrl = url.replace(/(\.m|\.s)\.jpg$/i, '').split('?')[0];
+  // 先清洗 URL，剥离现有的 .xs.jpg、.m.jpg、.s.jpg、.b.jpg、.t.jpg 后缀及 query 参数
+  const baseUrl = url.replace(/(\.xs|\.s|\.m|\.b|\.t)\.jpg$/i, '').split('?')[0];
 
   if (quality === 'raw') {
     return baseUrl; // 原图

@@ -1886,11 +1886,27 @@ impl CoolapkClient {
     }
 
     pub async fn get_board_feeds(&self, board_tag: &str, page: u32) -> Result<Value, String> {
+        let tag = board_tag.trim();
+        if tag == "/main/headline" || tag == "headline" || tag == "V9_HOME_TAB_HEADLINE" {
+            return self.get_headline_feeds(page).await;
+        }
+        if tag == "/main/indexV8" || tag == "index_v8" {
+            return self.get_index_v8_feeds(page).await;
+        }
+
+        let url_param = if tag.starts_with("/page?url=") {
+            tag.to_string()
+        } else if tag.starts_with('/') || tag.starts_with('#') {
+            tag.to_string()
+        } else {
+            format!("/page?url={tag}")
+        };
+
         let raw = self
             .api_get(
                 "/v6/page/dataList",
                 &[
-                    ("url", format!("/page?url={board_tag}")),
+                    ("url", url_param),
                     ("page", page.to_string()),
                 ],
             )
@@ -2323,6 +2339,21 @@ impl CoolapkClient {
         )
     }
 
+    /// APK UserQRCodeFragment 使用 `/user/qrImage?uid=...`，这是图片响应而不是 JSON。
+    /// 复用带设备指纹和 Cookie 的图片加载器，返回前端可直接展示的 data URL。
+    pub async fn get_user_qr_image(&self, uid: &str) -> Result<Value, String> {
+        if uid.trim().is_empty() || !uid.chars().all(|ch| ch.is_ascii_digit()) {
+            return Err("用户 UID 格式无效".to_string());
+        }
+        let image = self
+            .get_image_data_url(&format!(
+                "https://api.coolapk.com/v6/user/qrImage?uid={}",
+                uid.trim()
+            ))
+            .await?;
+        Ok(json!({ "code": 200, "data": image }))
+    }
+
     pub async fn get_user_follow_nodes(&self, uid: &str) -> Result<Value, String> {
         let raw = self
             .api_get("/v6/user/customNodeList", &[("uid", uid.to_string())])
@@ -2355,6 +2386,197 @@ impl CoolapkClient {
             )
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 用户空间的服务端驱动 Tab 数据。
+    ///
+    /// 用户页并不是所有 Tab 都返回普通 Feed；APK 会根据 Tab 选择不同的
+    /// endpoint，且 `/page/dataList` 返回的 Entity 还可能包含未知模板。因此
+    /// 这里保留服务端 Entity 原文，不复用会过滤 card/banner 的 feed 清洗器。
+    pub async fn get_user_tab_data(
+        &self,
+        uid: &str,
+        tab: &str,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+        rating_target: &str,
+    ) -> Result<Value, String> {
+        let page_string = page.to_string();
+        let mut query: Vec<(&str, String)> = vec![
+            ("uid", uid.to_string()),
+            ("page", page_string.clone()),
+        ];
+        if !first_item.is_empty() {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if !last_item.is_empty() {
+            query.push(("lastItem", last_item.to_string()));
+        }
+
+        let raw = match tab {
+            "feed" => {
+                query.extend([
+                    ("showAnonymous", "0".to_string()),
+                    ("isIncludeTop", "1".to_string()),
+                    ("showDoing", "1".to_string()),
+                ]);
+                self.api_get("/v6/user/feedList", &query).await?
+            }
+            "reply" => self.api_get("/v6/user/replyList", &query).await?,
+            "collection" => self.api_get("/v6/collection/list", &query).await?,
+            "goods_store" => self.api_get("/v6/goods/goodsStoreItemList", &query).await?,
+            "goods_rank" => self.api_get("/v6/goodsList/list", &query).await?,
+            "developer_apps" => self.api_get("/v6/apk/developerAppList", &query).await?,
+            "apk_follow" => self.api_get("/v6/user/apkFollowList", &query).await?,
+            "article" => self.api_get("/v6/user/htmlFeedList", &query).await?,
+            "qa" => self.api_get("/v6/user/questionAndAnswerList", &query).await?,
+            "album" => self.api_get("/v6/user/albumList", &query).await?,
+            "discovery" => self.api_get("/v6/user/discoveryList", &query).await?,
+            "coolpic" => self
+                .get_user_page_data(
+                    uid,
+                    "#/feed/userCoolPictureFeedList?fragmentTemplate=flex",
+                    page,
+                    first_item,
+                    last_item,
+                    "酷图",
+                    "",
+                )
+                .await?,
+            "rating" => self
+                .get_user_page_data(
+                    uid,
+                    &format!(
+                        "#/feed/nodeRatingList?uid={}&targetType={}&parseRatingToFeed=1",
+                        uid, rating_target
+                    ),
+                    page,
+                    first_item,
+                    last_item,
+                    "评分",
+                    "",
+                )
+                .await?,
+            "goods" => self
+                .get_user_page_data(
+                    uid,
+                    "#/goods/goodsFeedList?type=default&fragmentTemplate=flex",
+                    page,
+                    first_item,
+                    last_item,
+                    "好物",
+                    "",
+                )
+                .await?,
+            "ershou" => self
+                .get_user_page_data(
+                    uid,
+                    "#/feed/userErshouList?fragmentTemplate=flex&ershouStatus=userAll",
+                    page,
+                    first_item,
+                    last_item,
+                    "二手",
+                    "",
+                )
+                .await?,
+            "recycle" => self
+                .get_user_page_data(
+                    uid,
+                    "#/feed/userDeleteFeedList",
+                    page,
+                    first_item,
+                    last_item,
+                    "回收站",
+                    "",
+                )
+                .await?,
+            "blacklist" => self.get_black_list(page).await?,
+            _ => return Err(format!("不支持的用户页 Tab: {tab}")),
+        };
+
+        if raw.get("code").and_then(Value::as_i64) == Some(200) {
+            return Ok(raw);
+        }
+        Ok(json!({ "code": 200, "data": Self::extract_entity_rows(&raw) }))
+    }
+
+    /// `/page/dataList` 用户页白名单分发器。调用方只能传入已确认的固定路径，
+    /// 不接受任意 URL，避免把带设备指纹和 Cookie 的请求变成开放代理。
+    async fn get_user_page_data(
+        &self,
+        uid: &str,
+        page_url: &str,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+        title: &str,
+        sub_title: &str,
+    ) -> Result<Value, String> {
+        if !Self::is_allowed_user_page_url(page_url) {
+            return Err("不受信任的用户页 page/dataList 路径".to_string());
+        }
+
+        let page_url_with_uid = if page_url.contains("uid=") {
+            page_url.to_string()
+        } else {
+            format!("{}&uid={}", page_url, uid)
+        };
+        let mut query = vec![
+            ("url", page_url_with_uid),
+            ("title", title.to_string()),
+            ("subTitle", sub_title.to_string()),
+            ("page", page.to_string()),
+            ("pageContext", "user_space".to_string()),
+        ];
+        if !first_item.is_empty() {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if !last_item.is_empty() {
+            query.push(("lastItem", last_item.to_string()));
+        }
+        self.api_get("/v6/page/dataList", &query).await
+    }
+
+    fn is_allowed_user_page_url(page_url: &str) -> bool {
+        if page_url == "#/feed/userCoolPictureFeedList?fragmentTemplate=flex"
+            || page_url == "#/goods/goodsFeedList?type=default&fragmentTemplate=flex"
+            || page_url == "#/feed/userErshouList?fragmentTemplate=flex&ershouStatus=userAll"
+            || page_url == "#/feed/userDeleteFeedList"
+        {
+            return true;
+        }
+        let rating_prefix = "#/feed/nodeRatingList?uid=";
+        let Some(remainder) = page_url.strip_prefix(rating_prefix) else {
+            return false;
+        };
+        let parts: Vec<&str> = remainder.split('&').collect();
+        parts.len() == 3
+            && !parts[0].is_empty()
+            && matches!(parts[1], "targetType=all" | "targetType=apk" | "targetType=product")
+            && parts[2] == "parseRatingToFeed=1"
+    }
+
+    /// 保留 server-driven Entity 的原始字段，仅展开常见的 entities 包装。
+    fn extract_entity_rows(json_data: &Value) -> Vec<Value> {
+        let Some(data) = json_data.get("data") else {
+            return Vec::new();
+        };
+        if let Some(items) = data.as_array() {
+            let mut result = Vec::new();
+            for item in items {
+                if let Some(entities) = item.get("entities").and_then(Value::as_array) {
+                    result.extend(entities.iter().cloned());
+                } else {
+                    result.push(item.clone());
+                }
+            }
+            return result;
+        }
+        if let Some(items) = data.get("entities").and_then(Value::as_array) {
+            return items.clone();
+        }
+        Vec::new()
     }
 
     /// 收藏列表（需登录）
@@ -3434,6 +3656,38 @@ impl CoolapkClient {
         )
     }
 
+    pub async fn special_follow_user(&self, uid: &str, special: bool) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_post(
+                "/v6/user/specialFollowUser",
+                &[
+                    ("uid", uid.to_string()),
+                    ("special", if special { "1" } else { "0" }.to_string()),
+                ],
+                &[],
+            )
+            .await?,
+        )
+    }
+
+    pub async fn cancel_follower(&self, uid: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_post("/v6/user/cancelFollower", &[("uid", uid.to_string())], &[])
+                .await?,
+        )
+    }
+
+    pub async fn update_user_remark(&self, uid: &str, name: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_post(
+                "/v6/user/updateRemark",
+                &[],
+                &[("uid", uid.to_string()), ("name", name.to_string())],
+            )
+            .await?,
+        )
+    }
+
     pub async fn get_following_feeds(&self, page: u32) -> Result<Value, String> {
         // 1. 优先尝试 page/dataList 关注流接口（全量关注 Feed）
         if let Ok(raw) = self
@@ -3483,7 +3737,75 @@ impl CoolapkClient {
             .await?;
 
         let list = raw.get("data").cloned().unwrap_or(Value::Array(Vec::new()));
-        Ok(json!({ "code": 200, "data": list }))
+        let mut clean_list = Vec::new();
+        if let Some(arr) = list.as_array() {
+            let self_uid = uid.trim().to_string();
+            for item in arr {
+                let user_info = item.get("fUserInfo").or_else(|| item.get("userInfo"));
+                let real_uid = user_info
+                    .and_then(|info| info.get("uid"))
+                    .and_then(|v| value_to_string_opt(v))
+                    .or_else(|| item.get("fuid").and_then(|v| value_to_string_opt(v)))
+                    .unwrap_or_default();
+
+                if real_uid.is_empty() || real_uid == self_uid {
+                    continue;
+                }
+
+                let username = user_info
+                    .and_then(|info| info.get("username").or_else(|| info.get("displayUserName")))
+                    .and_then(|v| v.as_str())
+                    .or_else(|| item.get("fusername").and_then(|v| v.as_str()))
+                    .unwrap_or("酷友");
+
+                let avatar = user_info
+                    .and_then(|info| info.get("userAvatar").or_else(|| info.get("avatar")))
+                    .and_then(|v| v.as_str())
+                    .or_else(|| item.get("fUserAvatar").and_then(|v| v.as_str()))
+                    .unwrap_or("");
+
+                let bio = user_info
+                    .and_then(|info| info.get("bio").or_else(|| info.get("signature")))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                let is_follow = user_info
+                    .and_then(|info| info.get("isFollow"))
+                    .or_else(|| item.get("isFollow"))
+                    .cloned()
+                    .unwrap_or(json!(1));
+
+                let is_special_follow = user_info
+                    .and_then(|info| info.get("isSpecialFollow"))
+                    .or_else(|| item.get("isSpecialFollow"))
+                    .cloned()
+                    .unwrap_or(json!(0));
+
+                let level = user_info
+                    .and_then(|info| info.get("level"))
+                    .or_else(|| item.get("level"))
+                    .cloned()
+                    .unwrap_or(json!(0));
+
+                let mut new_item = item.clone();
+                if let Some(obj) = new_item.as_object_mut() {
+                    obj.insert("uid".to_string(), json!(real_uid));
+                    obj.insert("fuid".to_string(), json!(real_uid));
+                    obj.insert("username".to_string(), json!(username));
+                    obj.insert("fusername".to_string(), json!(username));
+                    obj.insert("userAvatar".to_string(), json!(avatar));
+                    obj.insert("fUserAvatar".to_string(), json!(avatar));
+                    obj.insert("bio".to_string(), json!(bio));
+                    obj.insert("signature".to_string(), json!(bio));
+                    obj.insert("isFollow".to_string(), is_follow);
+                    obj.insert("isSpecialFollow".to_string(), is_special_follow);
+                    obj.insert("level".to_string(), level);
+                }
+                clean_list.push(new_item);
+            }
+        }
+
+        Ok(json!({ "code": 200, "data": clean_list }))
     }
 
     /// 获取粉丝列表。
@@ -3511,6 +3833,7 @@ impl CoolapkClient {
                 let real_uid = user_info
                     .and_then(|info| info.get("uid"))
                     .and_then(|v| value_to_string_opt(v))
+                    .or_else(|| item.get("uid").and_then(|v| value_to_string_opt(v)))
                     .unwrap_or_default();
 
                 // 剔除占位数据：真实 uid 为空 或 等于请求者自己
@@ -3520,13 +3843,38 @@ impl CoolapkClient {
 
                 // 用 userInfo 重写顶层字段，前端可直接读取
                 let username = user_info
-                    .and_then(|info| info.get("username"))
+                    .and_then(|info| info.get("username").or_else(|| info.get("displayUserName")))
                     .and_then(|v| v.as_str())
+                    .or_else(|| item.get("username").and_then(|v| v.as_str()))
                     .unwrap_or("酷友");
                 let avatar = user_info
-                    .and_then(|info| info.get("userAvatar"))
+                    .and_then(|info| info.get("userAvatar").or_else(|| info.get("avatar")))
+                    .and_then(|v| v.as_str())
+                    .or_else(|| item.get("userAvatar").and_then(|v| v.as_str()))
+                    .unwrap_or("");
+
+                let bio = user_info
+                    .and_then(|info| info.get("bio").or_else(|| info.get("signature")))
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
+
+                let is_follow = user_info
+                    .and_then(|info| info.get("isFollow"))
+                    .or_else(|| item.get("isFollow"))
+                    .cloned()
+                    .unwrap_or(json!(0));
+
+                let is_special_follow = user_info
+                    .and_then(|info| info.get("isSpecialFollow"))
+                    .or_else(|| item.get("isSpecialFollow"))
+                    .cloned()
+                    .unwrap_or(json!(0));
+
+                let level = user_info
+                    .and_then(|info| info.get("level"))
+                    .or_else(|| item.get("level"))
+                    .cloned()
+                    .unwrap_or(json!(0));
 
                 let mut new_item = item.clone();
                 if let Some(obj) = new_item.as_object_mut() {
@@ -3536,6 +3884,11 @@ impl CoolapkClient {
                     obj.insert("fusername".to_string(), json!(username));
                     obj.insert("userAvatar".to_string(), json!(avatar));
                     obj.insert("fUserAvatar".to_string(), json!(avatar));
+                    obj.insert("bio".to_string(), json!(bio));
+                    obj.insert("signature".to_string(), json!(bio));
+                    obj.insert("isFollow".to_string(), is_follow);
+                    obj.insert("isSpecialFollow".to_string(), is_special_follow);
+                    obj.insert("level".to_string(), level);
                 }
                 clean_list.push(new_item);
             }
@@ -3816,6 +4169,35 @@ impl CoolapkClient {
     /// 数据来源: GET /v6/main/init
     pub async fn get_tab_config(&self) -> Result<Value, String> {
         wrap_api_data(self.api_get("/v6/main/init", &[]).await?)
+    }
+
+    /// 更新/同步用户自定义首页频道顺序与显隐状态到酷安云端账号
+    /// 数据来源: POST /v6/account/updateConfig
+    pub async fn update_home_tab_config(&self, home_tab_config_json: &str) -> Result<Value, String> {
+        let is_logged_in = self
+            .user_cookie
+            .read()
+            .map(|c| c.as_ref().map(|s| !s.is_empty()).unwrap_or(false))
+            .unwrap_or(false);
+
+        if !is_logged_in {
+            return Ok(json!({ "code": 200, "message": "未登录，已保存至本地" }));
+        }
+
+        match self
+            .api_post(
+                "/v6/account/updateConfig",
+                &[],
+                &[("home_tab_config", home_tab_config_json.to_string())],
+            )
+            .await
+        {
+            Ok(raw) => Ok(json!({ "code": 200, "data": raw })),
+            Err(err) => {
+                eprintln!("[update_home_tab_config] 云端配置同步提示: {err}");
+                Ok(json!({ "code": 200, "warning": err }))
+            }
+        }
     }
 
     /// 搜索候选词（输入联想）

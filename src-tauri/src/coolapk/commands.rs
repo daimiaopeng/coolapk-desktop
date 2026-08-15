@@ -21,6 +21,14 @@ pub async fn get_tab_config(state: State<'_, AppState>) -> Result<Value, String>
 }
 
 #[tauri::command]
+pub async fn update_home_tab_config(
+    state: State<'_, AppState>,
+    config_json: String,
+) -> Result<Value, String> {
+    state.client.update_home_tab_config(&config_json).await
+}
+
+#[tauri::command]
 pub async fn get_search_suggestions(
     state: State<'_, AppState>,
     query: String,
@@ -423,6 +431,11 @@ pub async fn get_user_profile(state: State<'_, AppState>, uid: String) -> Result
 }
 
 #[tauri::command]
+pub async fn get_user_qr_image(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
+    state.client.get_user_qr_image(&uid).await
+}
+
+#[tauri::command]
 pub async fn get_user_follow_nodes(
     state: State<'_, AppState>,
     uid: String,
@@ -438,6 +451,29 @@ pub async fn get_user_feeds(
     feed_type: String,
 ) -> Result<Value, String> {
     state.client.get_user_feeds(&uid, page, &feed_type).await
+}
+
+#[tauri::command]
+pub async fn get_user_tab_data(
+    state: State<'_, AppState>,
+    uid: String,
+    tab: String,
+    page: u32,
+    first_item: String,
+    last_item: String,
+    rating_target: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_user_tab_data(
+            &uid,
+            &tab,
+            page,
+            &first_item,
+            &last_item,
+            &rating_target,
+        )
+        .await
 }
 
 #[tauri::command]
@@ -685,6 +721,29 @@ pub async fn follow_user(state: State<'_, AppState>, uid: String) -> Result<Valu
 #[tauri::command]
 pub async fn unfollow_user(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
     state.client.unfollow_user(&uid).await
+}
+
+#[tauri::command]
+pub async fn special_follow_user(
+    state: State<'_, AppState>,
+    uid: String,
+    special: bool,
+) -> Result<Value, String> {
+    state.client.special_follow_user(&uid, special).await
+}
+
+#[tauri::command]
+pub async fn cancel_follower(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
+    state.client.cancel_follower(&uid).await
+}
+
+#[tauri::command]
+pub async fn update_user_remark(
+    state: State<'_, AppState>,
+    uid: String,
+    name: String,
+) -> Result<Value, String> {
+    state.client.update_user_remark(&uid, &name).await
 }
 
 #[tauri::command]
