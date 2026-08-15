@@ -117,7 +117,7 @@ interface HomeRow {
 
 function formatDisplayTitle(rawTitle: string, kind: HomeRow['kind'], isSelf: boolean): string {
   const trimmed = rawTitle.trim();
-  if (kind === 'generic' || kind === 'feed' || trimmed.endsWith('的动态') || trimmed.includes('热门动态')) {
+  if (kind === 'generic' || trimmed.endsWith('的动态') || trimmed.includes('热门动态')) {
     return isSelf ? '热门动态' : (trimmed.includes('TA') ? trimmed : '热门动态');
   }
   if (kind === 'user') {

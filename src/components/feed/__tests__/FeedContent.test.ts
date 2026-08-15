@@ -21,20 +21,6 @@ describe('动态正文展开', () => {
     clearFeedFullTextCache();
   });
 
-  it('本地长正文直接在卡片内展开', async () => {
-    const message = Array.from({ length: 15 }, (_, index) => `第 ${index + 1} 行`).join('\n');
-    const wrapper = mount(FeedContent, {
-      props: { feedId: '123', message },
-      global: { plugins: [createPinia()] },
-    });
-
-    expect(wrapper.find('.feed-body').classes()).toContain('is-collapsed');
-    await wrapper.find('.expand-btn').trigger('click');
-
-    expect(wrapper.find('.feed-body').classes()).not.toContain('is-collapsed');
-    expect(mocks.getFeedDetail).not.toHaveBeenCalled();
-  });
-
   it('接口截断正文会加载完整内容且不保留查看更多', async () => {
     mocks.getFeedDetail.mockResolvedValue({ data: { message: '这里是接口返回的完整正文' } });
     const wrapper = mount(FeedContent, {

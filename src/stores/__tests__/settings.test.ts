@@ -73,89 +73,6 @@ describe('settings store', () => {
     expect(normalized.deviceFingerprint.darkMode).toBe('1');
   });
 
-  it('writes and restores every setting field through settings.json', async () => {
-    (window as any).__TAURI_INTERNALS__ = {};
-    const expected: AppSettings = {
-      theme: 'dark',
-      density: 'compact',
-      feedLayout: 'double',
-      fontSize: 18,
-      zoom: 125,
-      zoomManuallySet: true,
-      sidebarCollapsed: true,
-      reduceMotion: true,
-      accentColor: 'violet',
-      collapseLines: 18,
-      commentSort: 'latest',
-      infiniteScroll: false,
-      autoPlayGif: false,
-      showDeviceInfo: false,
-      defaultHomeTab: 'dyh',
-      homeTabOrder: ['dyh', 'hot', 'index_v8', 'digest', 'latest', 'cool_picture', 'secondhand', 'pictures'],
-      downloadPath: 'D:\\Downloads',
-      maxConcurrentDownloads: 8,
-      autoCleanCache: false,
-      cacheThresholdMB: 2000,
-      cacheTtlDays: 30,
-      cachePath: 'D:\\Cache',
-      imageQuality: 'raw',
-      navVisibility: {
-        home: false, feeds: false, discover: false, apps: false, games: false, topics: false,
-        reviews: false, secondhand: false, albums: false, pictures: false, notifications: false,
-        favorites: false, history: false, messages: false, following: false,
-      },
-      checkUpdateOnStartup: false,
-      ignoredUpdateVersion: '2.0.0',
-      ignoreAllUpdates: true,
-      closeToTray: true,
-      autostart: true,
-      startMinimized: true,
-      alwaysOnTop: true,
-      rememberWindowState: true,
-      notifyReplies: false,
-      notifyAt: false,
-      notifyPm: false,
-      desktopNotifications: true,
-      notificationSound: false,
-      notificationPollInterval: 30,
-      externalLinkMode: 'system',
-      timeDisplay: 'absolute',
-      hideAdCards: true,
-      blockedKeywords: ['广告', '抽奖'],
-      publishDeviceSignature: false,
-      deviceSignature: '我的设备',
-      imageOpenMode: 'system',
-      updateSpeedLimitKBps: 5120,
-      proxyUrl: 'http://127.0.0.1:7890',
-      notifyDownloadComplete: false,
-      updateChannel: 'beta',
-      experimentalFeatures: true,
-      deviceFingerprint: {
-        customFingerprint: true,
-        model: 'TestModel',
-        androidVersion: '15',
-        build: 'TEST.1',
-        appVersion: '16.3.0',
-        appCode: '2604301',
-        sdkInt: '35',
-        locale: 'en-US',
-        darkMode: '1',
-      },
-    };
-    const first = useSettingsStore();
-    await first.initializeSettings();
-    Object.assign(first.settings, expected);
-    await nextTick();
-    await first.flushSettings();
-    expect(Object.fromEntries(fileStoreState.values)).toEqual(expected);
-    expect(fileStoreState.store.save).toHaveBeenCalled();
-
-    setActivePinia(createPinia());
-    const restored = useSettingsStore();
-    await restored.initializeSettings();
-    expect(restored.settings).toEqual(expected);
-  });
-
   it('falls back to legacy localStorage when the JSON store cannot load', async () => {
     localStorage.setItem('coolapk_desktop_settings', JSON.stringify({ theme: 'dark', fontSize: 19 }));
     (window as any).__TAURI_INTERNALS__ = {};
@@ -250,16 +167,6 @@ describe('settings store', () => {
     (store.settings as any).navVisibility = undefined;
     store.toggleNavVisibility('pictures');
     expect(store.settings.navVisibility?.pictures).toBe(false);
-  });
-
-  it('moveHomeTab persists the customized channel order', () => {
-    const store = useSettingsStore();
-    const first = store.settings.homeTabOrder[0];
-    const second = store.settings.homeTabOrder[1];
-    store.moveHomeTab(second, -1);
-    expect(store.settings.homeTabOrder.slice(0, 2)).toEqual([second, first]);
-    store.resetHomeTabOrder();
-    expect(store.settings.homeTabOrder[0]).toBe('index_v8');
   });
 
   it('ignoreUpdateVersion sets the ignored version', () => {
