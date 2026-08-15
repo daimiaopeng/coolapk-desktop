@@ -70,6 +70,30 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_tab_config');
   }
 
+  static async getDiscoveryConfig() {
+    return await invokeNative('get_discovery_config', {}, { retry: true, kind: 'feed' });
+  }
+
+  static async getDiscoveryPageData(options: {
+    url: string;
+    title?: string;
+    subTitle?: string;
+    page?: number;
+    firstItem?: string;
+    lastItem?: string;
+    pageContext?: string;
+  }) {
+    return await invokeNative('get_discovery_page_data', {
+      url: options.url,
+      title: options.title || '',
+      subTitle: options.subTitle || '',
+      page: options.page || 1,
+      firstItem: options.firstItem || '',
+      lastItem: options.lastItem || '',
+      pageContext: options.pageContext || '',
+    }, { retry: true, kind: 'feed' });
+  }
+
   // 1.2 搜索候选词（输入联想）
   static async getSearchSuggestions(query: string) {
     return await invokeNative('get_search_suggestions', { query });

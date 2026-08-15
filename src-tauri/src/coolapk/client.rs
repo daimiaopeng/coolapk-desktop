@@ -3818,6 +3818,48 @@ impl CoolapkClient {
         wrap_api_data(self.api_get("/v6/main/init", &[]).await?)
     }
 
+    /// 获取发现频道的服务端配置。
+    /// 数据来源: GET /v6/main/init，前端从 entity id=20131 的卡片中解析 ConfigPage。
+    pub async fn get_discovery_config(&self) -> Result<Value, String> {
+        wrap_api_data(self.api_get("/v6/main/init", &[]).await?)
+    }
+
+    /// APK 动态频道统一列表接口。
+    /// 数据来源: GET /v6/page/dataList
+    pub async fn get_discovery_page_data(
+        &self,
+        url: &str,
+        title: &str,
+        sub_title: &str,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+        page_context: &str,
+    ) -> Result<Value, String> {
+        if !is_safe_discovery_page_url(url) {
+            return Err("发现页地址不受信任，已拒绝请求".to_string());
+        }
+
+        let mut query = vec![("url", url.to_string()), ("page", page.max(1).to_string())];
+        if !title.trim().is_empty() {
+            query.push(("title", title.to_string()));
+        }
+        if !sub_title.trim().is_empty() {
+            query.push(("subTitle", sub_title.to_string()));
+        }
+        if !first_item.trim().is_empty() {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.to_string()));
+        }
+        if !page_context.trim().is_empty() {
+            query.push(("pageContext", page_context.to_string()));
+        }
+
+        wrap_api_data(self.api_get("/v6/page/dataList", &query).await?)
+    }
+
     /// 搜索候选词（输入联想）
     /// 数据来源: GET /v6/search/suggestSearchWordsNew
     pub async fn get_search_suggestions(&self, query: &str) -> Result<Value, String> {
@@ -4371,6 +4413,42 @@ fn wrap_api_data(response: Value) -> Result<Value, String> {
 
     let data = response.get("data").cloned().unwrap_or(response);
     Ok(json!({ "code": 200, "data": data }))
+}
+
+fn is_safe_discovery_page_url(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed.len() > 2048 {
+        return false;
+    }
+    if trimmed.chars().any(|ch| ch.is_control()) {
+        return false;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    !lower.starts_with("http://")
+        && !lower.starts_with("https://")
+        && !lower.starts_with("javascript:")
+        && !lower.starts_with("file:")
+        && !lower.starts_with("data:")
+}
+
+#[cfg(test)]
+mod discovery_url_tests {
+    use super::is_safe_discovery_page_url;
+
+    #[test]
+    fn accepts_server_page_routes() {
+        assert!(is_safe_discovery_page_url("V11_FIND_COOLPIC"));
+        assert!(is_safe_discovery_page_url("#/feed/digestList?page=1"));
+        assert!(is_safe_discovery_page_url("/page?url=/product/feedList"));
+    }
+
+    #[test]
+    fn rejects_external_and_script_urls() {
+        assert!(!is_safe_discovery_page_url("https://example.com"));
+        assert!(!is_safe_discovery_page_url("javascript:alert(1)"));
+        assert!(!is_safe_discovery_page_url("file:///C:/secret"));
+        assert!(!is_safe_discovery_page_url("bad\nroute"));
+    }
 }
 
 async fn response_json(response: reqwest::Response) -> Result<Value, String> {
