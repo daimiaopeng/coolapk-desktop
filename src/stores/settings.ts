@@ -177,8 +177,10 @@ export function normalizeSettings(value: unknown): AppSettings {
   if (isOneOf(source.commentSort, ['hot', 'latest'])) result.commentSort = source.commentSort;
   if (isOneOf(source.defaultHomeTab, ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'])) result.defaultHomeTab = source.defaultHomeTab;
   if (Array.isArray(source.homeTabOrder)) {
-    const valid = source.homeTabOrder.filter((item): item is HomeTabKey => isOneOf(item, DEFAULT_HOME_TAB_ORDER));
-    result.homeTabOrder = [...new Set([...valid, ...DEFAULT_HOME_TAB_ORDER])];
+    const valid = source.homeTabOrder.filter((item): item is HomeTabKey => typeof item === 'string' && item.trim().length > 0);
+    result.homeTabOrder = DEFAULT_HOME_TAB_ORDER.length
+      ? [...new Set([...valid.filter((item) => isOneOf(item, DEFAULT_HOME_TAB_ORDER)), ...DEFAULT_HOME_TAB_ORDER])]
+      : [...new Set(valid)];
   }
   if (isOneOf(source.imageQuality, ['standard', 'hd', 'raw'])) result.imageQuality = source.imageQuality;
   if (isOneOf(source.externalLinkMode, ['internal', 'system'])) result.externalLinkMode = source.externalLinkMode;
