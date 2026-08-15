@@ -44,9 +44,9 @@
         </div>
       </div>
 
-      <!-- 简介公约文案 -->
-      <div v-if="topicDetail.description || topicDetail.intro" class="topic-description">
-        {{ topicDetail.description || topicDetail.intro }}
+      <!-- 简介文案 -->
+      <div v-if="cleanedDescription" class="topic-description">
+        {{ cleanedDescription }}
       </div>
     </div>
 
@@ -118,7 +118,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
@@ -130,8 +130,16 @@ import EmptyState from '../components/common/EmptyState.vue';
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+function decodeTopicTag(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 // 固定当前缓存页面的话题参数，返回时恢复原页面实例。
-const tag = ref((route.params.tag as string) || '薅羊毛小分队');
+const tag = ref(decodeTopicTag((route.params.tag as string) || ''));
 
 const topicDetail = ref<any>(null);
 const headerLoading = ref(false);
@@ -176,23 +184,29 @@ const topicLogo = computed(() => {
 });
 
 const followerCount = computed(() => {
-  if (!topicDetail.value) return 531000;
-  return topicDetail.value.follower_num || topicDetail.value.follownum || topicDetail.value.follow_num || 531000;
+  if (!topicDetail.value) return 0;
+  return topicDetail.value.follower_num || topicDetail.value.follownum || topicDetail.value.follow_num || 0;
 });
 
 const commentCount = computed(() => {
-  if (!topicDetail.value) return 3157000;
-  return topicDetail.value.commentnum || topicDetail.value.discuss_num || topicDetail.value.replynum || 3157000;
+  if (!topicDetail.value) return 0;
+  return topicDetail.value.commentnum || topicDetail.value.discuss_num || topicDetail.value.replynum || 0;
 });
 
 const viewCount = computed(() => {
-  if (!topicDetail.value) return 3177000;
-  return topicDetail.value.view_num || topicDetail.value.hot_num || topicDetail.value.click || 3177000;
+  if (!topicDetail.value) return 0;
+  return topicDetail.value.view_num || topicDetail.value.hot_num || topicDetail.value.click || 0;
+});
+
+const cleanedDescription = computed(() => {
+  const desc = String(topicDetail.value?.description || topicDetail.value?.intro || '').trim();
+  if (desc.includes('禁发红包') || desc.includes('必封') || desc.includes('人头车')) return '';
+  return desc;
 });
 
 function formatNumber(num: number | string) {
   const n = Number(num);
-  if (isNaN(n)) return '0';
+  if (isNaN(n) || n <= 0) return '0';
   if (n >= 10000) return (n / 10000).toFixed(1) + '万';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
   return n.toString();
@@ -211,20 +225,21 @@ async function fetchTopicHeader() {
       topicDetail.value = res.data;
       isFollowed.value = readFollowedState(res.data);
     } else {
-      // 提供无缝兜底
       topicDetail.value = {
-        description: '禁发红包、人头车、淘宝客、刷钻、刷会员、抽奖、套现、交易、换卡、拼团、互点、流量卡等内容，欢迎举报，必封。',
-        follownum: 531000,
-        commentnum: 3157000,
-        view_num: 3177000
+        title: tag.value,
+        description: '',
+        follownum: 0,
+        commentnum: 0,
+        view_num: 0,
       };
     }
   } catch (err) {
     topicDetail.value = {
-      description: '禁发红包、人头车、淘宝客、刷钻、刷会员、抽奖、套现、交易、换卡、拼团、互点、流量卡等内容，欢迎举报，必封。',
-      follownum: 531000,
-      commentnum: 3157000,
-      view_num: 3177000
+      title: tag.value,
+      description: '',
+      follownum: 0,
+      commentnum: 0,
+      view_num: 0,
     };
   } finally {
     headerLoading.value = false;
@@ -318,6 +333,18 @@ onMounted(() => {
     fetchTopicHeader(),
     fetchFeeds(false)
   ]);
+});
+
+watch(() => route.params.tag, (newTag) => {
+  if (newTag) {
+    tag.value = decodeTopicTag(String(newTag));
+    page.value = 1;
+    noMore.value = false;
+    topicFeeds.value = [];
+    topicDetail.value = null;
+    void fetchTopicHeader();
+    void fetchFeeds(false);
+  }
 });
 </script>
 

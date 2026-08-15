@@ -29,6 +29,36 @@ pub async fn update_home_tab_config(
 }
 
 #[tauri::command]
+pub async fn get_discovery_config(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_discovery_config().await
+}
+
+#[tauri::command]
+pub async fn get_discovery_page_data(
+    state: State<'_, AppState>,
+    url: String,
+    title: String,
+    sub_title: String,
+    page: u32,
+    first_item: String,
+    last_item: String,
+    page_context: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_discovery_page_data(
+            &url,
+            &title,
+            &sub_title,
+            page,
+            &first_item,
+            &last_item,
+            &page_context,
+        )
+        .await
+}
+
+#[tauri::command]
 pub async fn get_search_suggestions(
     state: State<'_, AppState>,
     query: String,
