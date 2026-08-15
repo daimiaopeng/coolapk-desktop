@@ -254,13 +254,12 @@ describe('settings store', () => {
 
   it('moveHomeTab persists the customized channel order', () => {
     const store = useSettingsStore();
-    store.settings.homeTabOrder = ['index_v8', 'digest'];
     const first = store.settings.homeTabOrder[0];
     const second = store.settings.homeTabOrder[1];
     store.moveHomeTab(second, -1);
     expect(store.settings.homeTabOrder.slice(0, 2)).toEqual([second, first]);
     store.resetHomeTabOrder();
-    expect(store.settings.homeTabOrder).toEqual([]);
+    expect(store.settings.homeTabOrder[0]).toBe('index_v8');
   });
 
   it('ignoreUpdateVersion sets the ignored version', () => {

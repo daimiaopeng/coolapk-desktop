@@ -47,10 +47,6 @@ const fullMessage = ref('');
 const currentMessage = computed(() => fullMessage.value || props.message || '');
 const needsRemoteFullText = computed(() => hasFeedMoreSuffix(props.message || ''));
 const collapseLines = computed(() => settingsStore.settings.collapseLines || 0);
-const hasEnoughTextLines = computed(() => {
-  if (collapseLines.value <= 0) return false;
-  return currentMessage.value.split(/\r?\n/).length > collapseLines.value;
-});
 
 function checkOverflow() {
   if (needsRemoteFullText.value) {
@@ -62,12 +58,8 @@ function checkOverflow() {
     return;
   }
   const el = bodyRef.value;
-  // jsdom 没有真实布局，scrollHeight/clientHeight 都可能为 0；换行数
-  // 同时也是真实内容是否超过折叠行数的稳定下限，长行仍交给布局高度判断。
-  const lineCount = currentMessage.value.split(/\r?\n/).length;
-  const hasEnoughLines = lineCount > collapseLines.value;
   // 只有在元素真实内容高度大于可视高度（发生了 CSS line-clamp 截断）时才判定为需要展开
-  isOverflowing.value = hasEnoughLines || el.scrollHeight > el.clientHeight + 4;
+  isOverflowing.value = el.scrollHeight > el.clientHeight + 4;
 }
 
 const shouldCollapse = computed(() => {
@@ -80,7 +72,7 @@ const shouldShowExpandButton = computed(() => {
   if (expanding.value || expandError.value) return true;
   if (isExpanded.value) return false;
   if (collapseLines.value <= 0) return false;
-  return needsRemoteFullText.value || hasEnoughTextLines.value || isOverflowing.value;
+  return needsRemoteFullText.value || isOverflowing.value;
 });
 
 function onBodyClick(e: Event) {
