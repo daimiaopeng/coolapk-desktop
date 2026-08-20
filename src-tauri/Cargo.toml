@@ -1,6 +1,6 @@
 [package]
 name = "coolapk_desktop"
-version = "1.8.1"
+version = "1.8.2"
 description = "基于 Tauri 2、Vue 3 和 Rust 的非官方酷安桌面客户端"
 authors = ["daimiaopeng"]
 edition = "2024"
