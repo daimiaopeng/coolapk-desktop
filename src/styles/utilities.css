@@ -80,6 +80,16 @@ img.coolapk-emoji,
   box-shadow: 0 6px 20px rgba(240, 68, 68, 0.35);
 }
 
+.app-toast.is-warning {
+  background: var(--warning, #d98b00);
+  box-shadow: 0 6px 20px rgba(217, 139, 0, 0.35);
+}
+
+.app-toast.is-info {
+  background: var(--info, #3478db);
+  box-shadow: 0 6px 20px rgba(52, 120, 219, 0.35);
+}
+
 @keyframes appToastIn {
   from {
     opacity: 0;
@@ -90,4 +100,3 @@ img.coolapk-emoji,
     transform: translate(-50%, 0);
   }
 }
-
