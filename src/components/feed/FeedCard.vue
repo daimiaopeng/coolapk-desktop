@@ -96,6 +96,7 @@
       :replynum="feed.replynum"
       :favnum="favnum"
       :sharenum="feed.sharenum"
+      :favorited="isFav"
       :user-action="feed.userAction"
       @open-comment="toggleComments"
       @toggle-fav="toggleFav"
@@ -143,6 +144,16 @@
         </div>
       </div>
     </AppDialog>
+
+    <FeedCollectionPickerDialog
+      :is-open="collectionPickerOpen"
+      :collections="collectionOptions"
+      :selected-ids="collectionInitialSelectedIds"
+      :loading="collectionPickerLoading"
+      :submitting="collectionPickerSubmitting"
+      @close="closeCollectionPicker"
+      @confirm="confirmCollectionSelection"
+    />
   </article>
 </template>
 
@@ -154,6 +165,7 @@ import FeedHeader from './FeedHeader.vue';
 import FeedContent from './FeedContent.vue';
 import FeedImageGrid from './FeedImageGrid.vue';
 import FeedActionBar from './FeedActionBar.vue';
+import FeedCollectionPickerDialog from './FeedCollectionPickerDialog.vue';
 import FeedCommentSection from './FeedCommentSection.vue';
 import ForwardDialog from '../overlays/ForwardDialog.vue';
 import LoadingState from '../common/LoadingState.vue';
@@ -177,6 +189,7 @@ const props = defineProps<{
   rankIndex?: number;
   detailMode?: boolean;
   autoOpenComments?: boolean;
+  cloudFavorite?: boolean;
 }>();
 
 const feedImages = computed<string[]>(() => {
@@ -195,6 +208,7 @@ const feedImages = computed<string[]>(() => {
 
 const emit = defineEmits<{
   (e: 'deleted', id: string | number): void;
+  (e: 'favorite-changed', payload: { id: string | number; favorited: boolean }): void;
 }>();
 
 const authStore = useAuthStore();
@@ -429,8 +443,18 @@ function removeComment(id: string | number) {
   comments.value = comments.value.filter((c: any) => String(c.id) !== String(id));
 }
 
-const isFav = ref(props.feed.userAction?.favorite === 1);
+const isFav = ref(
+  props.cloudFavorite === true ||
+  props.feed.userAction?.collect === 1 ||
+  props.feed.userAction?.favorite === 1
+);
 const favnum = ref(props.feed.favnum || 0);
+const favoritePending = ref(false);
+const collectionPickerOpen = ref(false);
+const collectionPickerLoading = ref(false);
+const collectionPickerSubmitting = ref(false);
+const collectionOptions = ref<any[]>([]);
+const collectionInitialSelectedIds = ref<string[]>([]);
 
 const showComments = ref(false);
 const comments = ref<any[]>([]);
@@ -443,20 +467,105 @@ async function toggleFav() {
     authStore.openLoginModal();
     return;
   }
+  if (favoritePending.value) return;
+
   const id = String(props.feed.id);
   const target = !isFav.value;
-  isFav.value = target;
-  favnum.value = Math.max(0, favnum.value + (target ? 1 : -1));
+  const feedType = String((props.feed as any).entityType || (props.feed as any).feedType || 'feed');
+  const trace = String((props.feed as any).trace || (props.feed as any).extra_key || '');
+
+  if (target) {
+    await openCollectionPicker(id);
+    return;
+  }
+
+  favoritePending.value = true;
   try {
-    if (target) {
-      await CoolapkTauriAPI.favoriteFeed(id);
-    } else {
-      await CoolapkTauriAPI.unfavoriteFeed(id);
-    }
+    await CoolapkTauriAPI.setFeedCloudFavorite(id, target, feedType, trace);
+    isFav.value = target;
+    favnum.value = Math.max(0, favnum.value + (target ? 1 : -1));
+    showToast(target ? '已收藏到云端' : '已取消云端收藏', 'success');
+    emit('favorite-changed', { id: props.feed.id, favorited: target });
   } catch (err) {
-    isFav.value = !target;
-    favnum.value = Math.max(0, favnum.value + (target ? -1 : 1));
-    console.warn('Failed to toggle favorite', err);
+    showToast(getErrorMessage(err, target ? '收藏失败' : '取消收藏失败'), 'error');
+  } finally {
+    favoritePending.value = false;
+  }
+}
+
+function collectionId(collection: any): string {
+  return String(collection?.id ?? collection?.collectionId ?? collection?.entityId ?? '');
+}
+
+function isCollectionSelected(collection: any): boolean {
+  const value = collection?.isBeCollected ?? collection?.is_be_collected;
+  return value === true || value === 1 || value === '1' || value === 'true';
+}
+
+async function openCollectionPicker(feedId: string) {
+  if (collectionPickerOpen.value || collectionPickerLoading.value) return;
+  favoritePending.value = true;
+  collectionPickerLoading.value = true;
+  try {
+    const options = await CoolapkTauriAPI.getFeedCollectionOptions(feedId);
+    const validOptions = options.filter((item: any) => collectionId(item));
+    if (validOptions.length === 0) {
+      throw new Error('酷安未返回可用收藏夹，请先在酷安创建收藏夹');
+    }
+    collectionOptions.value = validOptions;
+    collectionInitialSelectedIds.value = validOptions
+      .filter(isCollectionSelected)
+      .map(collectionId);
+    collectionPickerOpen.value = true;
+  } catch (err) {
+    showToast(getErrorMessage(err, '加载收藏夹失败'), 'error');
+  } finally {
+    collectionPickerLoading.value = false;
+    favoritePending.value = false;
+  }
+}
+
+function closeCollectionPicker() {
+  if (collectionPickerSubmitting.value) return;
+  collectionPickerOpen.value = false;
+  collectionOptions.value = [];
+  collectionInitialSelectedIds.value = [];
+}
+
+async function confirmCollectionSelection(selectedIds: string[]) {
+  if (collectionPickerSubmitting.value) return;
+  const ids = Array.from(new Set(selectedIds.filter(Boolean)));
+  if (ids.length === 0) {
+    showToast('请至少选择一个收藏夹', 'error');
+    return;
+  }
+
+  const previousIds = new Set(collectionInitialSelectedIds.value);
+  const cancelIds = collectionInitialSelectedIds.value.filter((id) => !ids.includes(id));
+  const feedType = String((props.feed as any).entityType || (props.feed as any).feedType || 'feed');
+  const trace = String((props.feed as any).trace || (props.feed as any).extra_key || '');
+  collectionPickerSubmitting.value = true;
+  favoritePending.value = true;
+  try {
+    await CoolapkTauriAPI.updateFeedCloudCollections(
+      String(props.feed.id),
+      ids.join(','),
+      cancelIds.join(','),
+      feedType,
+      trace,
+    );
+    isFav.value = true;
+    if (previousIds.size === 0) {
+      favnum.value = Math.max(0, favnum.value + 1);
+    }
+    showToast('已收藏到云端', 'success');
+    collectionPickerOpen.value = false;
+    emit('favorite-changed', { id: props.feed.id, favorited: true });
+  } catch (err) {
+    showToast(getErrorMessage(err, '收藏失败'), 'error');
+  } finally {
+    collectionPickerSubmitting.value = false;
+    favoritePending.value = false;
   }
 }
 

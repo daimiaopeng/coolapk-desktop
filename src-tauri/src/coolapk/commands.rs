@@ -183,8 +183,47 @@ pub async fn get_favorite_list(
     state: State<'_, AppState>,
     fav_type: String,
     page: u32,
+    first_item: Option<String>,
+    last_item: Option<String>,
 ) -> Result<Value, String> {
-    state.client.get_favorite_list(&fav_type, page).await
+    state
+        .client
+        .get_favorite_list(
+            &fav_type,
+            page,
+            first_item.as_deref().unwrap_or(""),
+            last_item.as_deref().unwrap_or(""),
+        )
+        .await
+}
+
+#[tauri::command]
+pub async fn get_feed_collection_status(
+    state: State<'_, AppState>,
+    feed_id: String,
+) -> Result<Value, String> {
+    state.client.get_feed_collection_status(&feed_id).await
+}
+
+#[tauri::command]
+pub async fn update_collection_item(
+    state: State<'_, AppState>,
+    collection_ids: String,
+    cancel_ids: String,
+    target_id: String,
+    feed_type: String,
+    trace: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .update_collection_item(
+            &collection_ids,
+            &cancel_ids,
+            &target_id,
+            &feed_type,
+            &trace,
+        )
+        .await
 }
 
 #[tauri::command]

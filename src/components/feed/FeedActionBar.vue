@@ -37,9 +37,11 @@ const props = defineProps<{
   replynum?: number;
   favnum?: number;
   sharenum?: number;
+  favorited?: boolean;
   userAction?: {
     like?: number;
     favorite?: number;
+    collect?: number;
   };
 }>();
 
@@ -52,7 +54,7 @@ const emit = defineEmits<{
 const isLiked = ref(props.userAction?.like === 1);
 const likeCount = ref(props.likenum || 0);
 
-const isFav = ref(props.userAction?.favorite === 1);
+const isFav = ref(props.favorited ?? (props.userAction?.collect === 1 || props.userAction?.favorite === 1));
 
 const replyCount = ref(props.replynum || 0);
 const shareCount = ref(props.sharenum || 0);
@@ -77,10 +79,14 @@ watch(
 );
 
 watch(
-  () => [props.userAction?.like, props.userAction?.favorite] as const,
-  ([like, favorite]) => {
+  () => [props.favorited, props.userAction?.like, props.userAction?.favorite, props.userAction?.collect] as const,
+  ([favorited, like, favorite, collect]) => {
     if (like !== undefined) isLiked.value = like === 1;
-    if (favorite !== undefined) isFav.value = favorite === 1;
+    if (favorited !== undefined) {
+      isFav.value = favorited;
+    } else if (favorite !== undefined || collect !== undefined) {
+      isFav.value = collect === 1 || favorite === 1;
+    }
   }
 );
 
@@ -113,7 +119,6 @@ async function toggleLike() {
 }
 
 function toggleFav() {
-  isFav.value = !isFav.value;
   emit('toggle-fav');
 }
 

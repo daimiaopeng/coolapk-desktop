@@ -110,7 +110,14 @@
           </div>
 
           <div v-else class="feed-list">
-            <FeedCard v-for="item in collectionItems" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
+            <FeedCard
+              v-for="item in collectionItems"
+              :key="item.id"
+              :feed="item"
+              cloud-favorite
+              @deleted="handleFeedDeleted"
+              @favorite-changed="handleFavoriteChanged"
+            />
             <div class="pagination-footer">
               <LoadingState v-if="collectionItemsLoadingMore" text="加载更多中..." />
               <div v-else-if="collectionItemsNoMore" class="no-more">没有更多内容了</div>
@@ -171,7 +178,14 @@
           </div>
 
           <div v-else class="feed-list">
-            <FeedCard v-for="item in cloudFeeds" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
+            <FeedCard
+              v-for="item in cloudFeeds"
+              :key="item.id"
+              :feed="item"
+              cloud-favorite
+              @deleted="handleFeedDeleted"
+              @favorite-changed="handleFavoriteChanged"
+            />
             <div class="pagination-footer">
               <LoadingState v-if="loadingMore" text="加载更多收藏中..." />
               <div v-else-if="noMore" class="no-more">没有更多收藏了</div>
@@ -206,6 +220,8 @@ const loadingMore = ref(false);
 const cloudError = ref('');
 const page = ref(1);
 const noMore = ref(false);
+const firstItem = ref('');
+const lastItem = ref('');
 
 const collections = ref<any[]>([]);
 const collectionsLoading = ref(false);
@@ -225,6 +241,13 @@ const collectionFollowed = ref(false);
 
 function handleFeedDeleted(id: string | number) {
   const filter = (list: any[]) => list.filter((f: any) => String(f.id) !== String(id));
+  cloudFeeds.value = filter(cloudFeeds.value);
+  collectionItems.value = filter(collectionItems.value);
+}
+
+function handleFavoriteChanged(payload: { id: string | number; favorited: boolean }) {
+  if (payload.favorited) return;
+  const filter = (list: any[]) => list.filter((f: any) => String(f.id) !== String(payload.id));
   cloudFeeds.value = filter(cloudFeeds.value);
   collectionItems.value = filter(collectionItems.value);
 }
@@ -456,6 +479,8 @@ async function fetchCloudFavorites(isRefresh = false) {
   if (isRefresh) {
     page.value = 1;
     noMore.value = false;
+    firstItem.value = '';
+    lastItem.value = '';
     cloudFeeds.value = [];
     loading.value = true;
   } else {
@@ -465,7 +490,7 @@ async function fetchCloudFavorites(isRefresh = false) {
   cloudError.value = '';
 
   try {
-    const res = await CoolapkTauriAPI.getFavoriteList('feed', page.value);
+    const res = await CoolapkTauriAPI.getFavoriteList('feed', page.value, firstItem.value, lastItem.value);
     const newFeeds = (res && res.data && Array.isArray(res.data)) ? res.data : [];
     if (newFeeds.length === 0) {
       noMore.value = true;
@@ -476,6 +501,8 @@ async function fetchCloudFavorites(isRefresh = false) {
         const existingIds = new Set(cloudFeeds.value.map(i => i.id));
         cloudFeeds.value.push(...newFeeds.filter((i: any) => !existingIds.has(i.id)));
       }
+      firstItem.value = String(cloudFeeds.value[0]?.id || '');
+      lastItem.value = String(cloudFeeds.value[cloudFeeds.value.length - 1]?.id || '');
       page.value++;
     }
   } catch (err: any) {

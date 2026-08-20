@@ -36,6 +36,21 @@ fn test_clean_feed_keeps_edit_metadata() {
 }
 
 #[test]
+fn test_clean_feed_preserves_cloud_collection_state() {
+    let raw = json!({
+        "id": 123,
+        "uid": 456,
+        "username": "测试用户",
+        "message": "测试正文",
+        "userAction": {"collect": 1, "like": 0}
+    });
+
+    let cleaned = CoolapkClient::clean_single_feed(&raw, 0).expect("动态应能正常清洗");
+    assert_eq!(cleaned["userAction"]["collect"], 1);
+    assert_eq!(cleaned["userAction"]["like"], 0);
+}
+
+#[test]
 fn test_user_page_data_url_allowlist() {
     assert!(CoolapkClient::is_allowed_user_page_url(
         "#/feed/userCoolPictureFeedList?fragmentTemplate=flex"

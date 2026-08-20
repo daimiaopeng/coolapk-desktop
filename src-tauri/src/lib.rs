@@ -9,7 +9,8 @@ use coolapk::commands::{
     follow_user, get_album_detail, get_album_list, get_album_replies, get_apk_discoverers,
     get_apk_feeds, get_apk_gift_list, get_apk_qr, get_apk_recommend_list, get_apk_url,
     get_app_detail, get_app_list, get_black_list, get_board_feeds, get_cache_info,
-    get_collection_detail, get_collection_item_list, get_collection_list, get_cool_picture_rank,
+    get_collection_detail, get_collection_item_list, get_collection_list,
+    get_feed_collection_status, get_cool_picture_rank,
     get_device_feed_list, get_device_info, get_digest_feeds, get_download_version_list,
     get_discovery_config, get_discovery_page_data,
     get_dyh_detail, get_dyh_feeds, get_dyh_list, get_editor_choice_feeds, get_fans_user_list,
@@ -33,6 +34,7 @@ use coolapk::commands::{
     search_apks_by_developer, search_apks_by_tag, search_feed_topics, search_feeds, search_games,
     search_tags, search_users, send_private_image, send_private_message, send_sms_vcode,
     unfavorite_apk, unfavorite_feed, unfollow_collection, unfollow_dyh, unfollow_tag,
+    update_collection_item,
     unfollow_user, unlike_collection, unlike_feed, unlike_reply, update_device_profile, upload_image,
 };
 use std::sync::Mutex;
@@ -548,6 +550,8 @@ pub fn run() {
             get_favorite_list,
             get_headline_feeds,
             get_collection_detail,
+            get_feed_collection_status,
+            update_collection_item,
             follow_collection,
             unfollow_collection,
             like_collection,

@@ -9,6 +9,7 @@ export interface FeedItem {
   userAction?: {
     like?: number;
     favorite?: number;
+    collect?: number;
   };
   uid?: string | number;
   username?: string;

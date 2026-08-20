@@ -375,8 +375,113 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_hot_topics');
   }
 
-  static async getFavoriteList(favType: string = 'feed', page: number = 1) {
-    return await invokeNative('get_favorite_list', { favType, page });
+  static async getFavoriteList(
+    favType: string = 'feed',
+    page: number = 1,
+    firstItem: string = '',
+    lastItem: string = '',
+  ) {
+    return await invokeNative('get_favorite_list', { favType, page, firstItem, lastItem });
+  }
+
+  static async getFeedCollectionStatus(feedId: string) {
+    return await invokeNative('get_feed_collection_status', { feedId });
+  }
+
+  static async getFeedCollectionOptions(feedId: string) {
+    const status = await this.getFeedCollectionStatus(feedId);
+    const collectionData = status?.data;
+    return Array.isArray(collectionData)
+      ? collectionData
+      : [collectionData?.entities, collectionData?.list, collectionData?.rows, collectionData?.data]
+        .find(Array.isArray) || [];
+  }
+
+  static async updateCollectionItem(
+    targetId: string,
+    collectionIds: string,
+    cancelIds: string,
+    feedType: string = 'feed',
+    trace: string = '',
+  ) {
+    return await invokeNative('update_collection_item', {
+      targetId,
+      collectionIds,
+      cancelIds,
+      feedType,
+      trace,
+    });
+  }
+
+  static async updateFeedCloudCollections(
+    feedId: string,
+    collectionIds: string,
+    cancelIds: string,
+    feedType: string = 'feed',
+    trace: string = '',
+  ) {
+    return await this.updateCollectionItem(feedId, collectionIds, cancelIds, feedType, trace);
+  }
+
+  /**
+   * 使用酷安官方收藏单接口切换动态收藏状态。
+   * 不落本地；只有 addItem 明确返回成功后，调用方才应更新界面状态。
+   */
+  static async setFeedCloudFavorite(
+    feedId: string,
+    favorited: boolean,
+    feedType: string = 'feed',
+    trace: string = '',
+  ) {
+    const collections = await this.getFeedCollectionOptions(feedId);
+    const asId = (item: any) => item?.id ?? item?.collectionId ?? item?.entityId;
+    const isOne = (value: any) => value === true || value === 1 || value === '1' || value === 'true';
+    const hasId = (item: any) => {
+      const id = asId(item);
+      return id !== undefined && id !== null && String(id).length > 0;
+    };
+    const defaultCollection = collections.find((item: any) =>
+      isOne(
+        item?.defaultCollected ??
+        item?.default_collected ??
+        item?.isDefault ??
+        item?.is_default ??
+        item?.isDefaultCollection
+      )
+    ) || collections.find((item: any) => {
+      const title = String(item?.title ?? item?.name ?? '');
+      return hasId(item) && (title.includes('默认') || title.toLowerCase().includes('default'));
+    }) || collections.find(hasId);
+    const collectedIds = collections
+      .filter((item: any) => isOne(item?.isBeCollected ?? item?.is_be_collected))
+      .map(asId)
+      .filter((id: any): id is string | number => id !== undefined && id !== null && String(id).length > 0)
+      .map((id: string | number) => String(id));
+
+    if (favorited) {
+      const collectionId = asId(defaultCollection);
+      if (collectionId === undefined || collectionId === null || String(collectionId).length === 0) {
+        throw new Error('未找到酷安默认收藏单，收藏失败');
+      }
+      return await this.updateFeedCloudCollections(
+        feedId,
+        String(collectionId),
+        '',
+        feedType || 'feed',
+        trace,
+      );
+    }
+
+    const cancelIds = collectedIds.length > 0
+      ? collectedIds.join(',')
+      : (() => {
+          const collectionId = asId(defaultCollection);
+          return collectionId === undefined || collectionId === null ? '' : String(collectionId);
+        })();
+    if (!cancelIds) {
+      throw new Error('未找到动态所在的收藏单，取消收藏失败');
+    }
+    return await this.updateFeedCloudCollections(feedId, '', cancelIds, feedType || 'feed', trace);
   }
 
   static async getCollectionList(uid: string, page: number = 1) {
@@ -488,11 +593,11 @@ export class CoolapkTauriAPI {
   }
 
   static async favoriteFeed(feedId: string) {
-    return await invokeNative('favorite_feed', { feedId });
+    return await this.setFeedCloudFavorite(feedId, true);
   }
 
   static async unfavoriteFeed(feedId: string) {
-    return await invokeNative('unfavorite_feed', { feedId });
+    return await this.setFeedCloudFavorite(feedId, false);
   }
 
   static async favoriteApk(packageName: string) {

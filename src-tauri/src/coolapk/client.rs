@@ -1029,6 +1029,19 @@ impl CoolapkClient {
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
+        let trace = obj
+            .get("trace")
+            .or_else(|| obj.get("extra_key"))
+            .or_else(|| obj.get("extraKey"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let user_action = obj
+            .get("userAction")
+            .or_else(|| obj.get("user_action"))
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+
         Some(json!({
             "id": feed_id,
             "username": raw_username,
@@ -1049,6 +1062,9 @@ impl CoolapkClient {
             "isModified": is_modified,
             "changeCount": change_count,
             "lastChangeTime": last_change_time,
+            "userAction": user_action,
+            "entityType": if entity_type.is_empty() { "feed" } else { entity_type },
+            "trace": trace,
             "targetType": target_type,
             "uid": raw_uid,
             "dateline": get_u64_by_keys(obj, &["dateline", "create_time", "lastupdate", "createTime"])
@@ -2574,14 +2590,64 @@ impl CoolapkClient {
 
     /// 收藏列表（需登录）
     /// 数据来源: GET /v6/favorite/list，type 支持 feed/apk/album
-    pub async fn get_favorite_list(&self, fav_type: &str, page: u32) -> Result<Value, String> {
+    pub async fn get_favorite_list(
+        &self,
+        fav_type: &str,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+    ) -> Result<Value, String> {
+        let mut query = vec![("type", fav_type.to_string()), ("page", page.to_string())];
+        if !first_item.is_empty() {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if !last_item.is_empty() {
+            query.push(("lastItem", last_item.to_string()));
+        }
         let raw = self
-            .api_get(
-                "/v6/favorite/list",
-                &[("type", fav_type.to_string()), ("page", page.to_string())],
-            )
+            .api_get("/v6/favorite/list", &query)
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 查询动态所在的收藏单，供云端收藏/取消收藏使用。
+    /// 数据来源: GET /v6/collection/list?uid=&id={feedId}&type=feed&showDefault=1
+    pub async fn get_feed_collection_status(&self, feed_id: &str) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/collection/list",
+                &[
+                    ("uid", String::new()),
+                    ("id", feed_id.to_string()),
+                    ("type", "feed".to_string()),
+                    ("showDefault", "1".to_string()),
+                    ("page", "1".to_string()),
+                    ("firstItem", String::new()),
+                    ("lastItem", String::new()),
+                ],
+            )
+            .await?;
+        wrap_api_data(raw)
+    }
+
+    /// 把动态加入或移出收藏单。
+    /// 数据来源: POST /v6/collection/addItem
+    pub async fn update_collection_item(
+        &self,
+        collection_ids: &str,
+        cancel_ids: &str,
+        target_id: &str,
+        feed_type: &str,
+        trace: &str,
+    ) -> Result<Value, String> {
+        let form = [
+            ("id", collection_ids.to_string()),
+            ("cancelId", cancel_ids.to_string()),
+            ("targetId", target_id.to_string()),
+            ("type", feed_type.to_string()),
+            ("trace", trace.to_string()),
+        ];
+        wrap_api_data(self.api_post("/v6/collection/addItem", &[], &form).await?)
     }
 
     /// 收藏单（收藏夹）列表
@@ -2642,10 +2708,13 @@ impl CoolapkClient {
     ) -> Result<Value, String> {
         let raw = self
             .api_get(
-                "/v6/collection/itemList",
+                "/v6/collection/itemlist",
                 &[
                     ("id", collection_id.to_string()),
                     ("page", page.to_string()),
+                    ("firstItem", String::new()),
+                    ("lastItem", String::new()),
+                    ("listType", "allFeedType".to_string()),
                 ],
             )
             .await?;
