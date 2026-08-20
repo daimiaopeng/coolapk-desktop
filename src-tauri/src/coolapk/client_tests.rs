@@ -83,9 +83,8 @@ fn test_device_code_is_random() {
     let a = generate_random_device_code();
     let b = generate_random_device_code();
     assert_ne!(a, b, "两次生成的设备码不应相同");
-    assert!(a.len() >= 100, "设备码应有足够长度");
-    assert!(!a.is_empty());
-    // 设备码应是合法的 header 值
+    assert!(a.len() >= 60, "设备码应有足够长度");
+    assert!(is_valid_device_code(&a), "生成的设备码必须符合官方规范格式");
     assert!(
         HeaderValue::from_str(&a).is_ok(),
         "设备码必须是合法 HTTP header 值"
@@ -617,4 +616,37 @@ async fn verify_fans_user_list_fixed() {
         }
         Err(e) => println!("[fixed fansList] ERROR: {}", e),
     }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_live_oss_and_reply() {
+    let client = CoolapkClient::new();
+    client.persist_cookie_to(std::path::PathBuf::from(r"C:\Users\daimi\AppData\Roaming\com.coolapk.desktop\session_cookie.txt"));
+
+    // Set a valid structured device code
+    let valid_dev = ";t00LjQwODAzMjEuMVFLVTsgTzZDS1IzMTExMzIgO2ltb2FpWDsgO2ltb2FpWCA7IDsgOyA7IDRkM2MyYjFhNmY1ZTRrN2M".to_string();
+    if let Ok(mut auth) = client.auth.write() {
+        auth.set_device_code(valid_dev.clone());
+    }
+    if let Ok(mut guard) = client.device_code.write() {
+        *guard = valid_dev.clone();
+    }
+
+    println!("Current UID: {:?}", client.current_uid());
+    println!("Testing device code: {}", valid_dev);
+
+    let fake_png: Vec<u8> = vec![
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+        0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
+        0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78,
+        0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+        0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+
+    println!("\n=== TESTING UPLOAD IMAGE (REAL CALL) ===");
+    let upload_res = client
+        .upload_image(&fake_png, "test_dot.png", "image/png", "feed", None)
+        .await;
+    println!("upload_res = {:?}", upload_res);
 }

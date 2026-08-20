@@ -16,25 +16,147 @@
       </div>
     </div>
 
-    <!-- 评论发表输入框 -->
-    <div class="comment-input-box">
-      <input
+    <!-- 评论发表输入框组件 -->
+    <div class="comment-composer-box">
+      <!-- 针对楼层的回复目标提示栏 -->
+      <div v-if="replyTargetUser" class="comment-reply-target-bar">
+        <span class="reply-target-text">
+          <i class="fa-solid fa-reply"></i>
+          回复 <span class="reply-target-name">@{{ replyTargetUser }}</span>
+        </span>
+        <button
+          type="button"
+          class="reply-target-clear-btn"
+          title="取消回复"
+          aria-label="取消回复"
+          @click="clearReplyTarget"
+        >
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- 多行评论富文本输入框 (原生直接显示彩色酷安表情) -->
+      <div
         ref="inputRef"
-        v-model="inputMsg"
-        type="text"
-        class="comment-input"
-        :placeholder="replyTargetUser ? `回复 @${replyTargetUser}:` : '撰写你的精彩评论...'"
-        @keydown.enter="handleSend"
-      >
-      <Button
-        variant="primary"
-        size="sm"
-        icon="fa-solid fa-paper-plane"
-        :loading="sending"
-        @click="handleSend"
-      >
-        评论
-      </Button>
+        class="comment-textarea comment-rich-editor custom-scrollbar"
+        contenteditable="true"
+        role="textbox"
+        tabindex="0"
+        :data-placeholder="replyTargetUser ? `回复 @${replyTargetUser}...` : '撰写你的精彩评论... (支持直接粘贴截图)'"
+        @input="handleEditorInput"
+        @paste="handlePaste"
+        @keydown="handleKeydown"
+      ></div>
+
+      <!-- 已选图片预览列表 -->
+      <div v-if="images.length > 0" class="comment-media-preview">
+        <div v-for="(img, i) in images" :key="i" class="comment-media-thumb">
+          <img :src="img.preview" alt="评论配图" />
+          <button
+            type="button"
+            class="comment-media-remove-btn"
+            title="移除图片"
+            :disabled="sending"
+            @click="removeImage(i)"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div v-if="uploadingImages" class="comment-uploading-tip">
+          <i class="fa-solid fa-circle-notch fa-spin"></i>
+          <span>正在上传配图 {{ uploadedCount }}/{{ images.length }}...</span>
+        </div>
+      </div>
+
+      <!-- 隐藏的文件选择器 -->
+      <input
+        ref="imageInputRef"
+        type="file"
+        accept="image/*"
+        multiple
+        style="display: none"
+        @change="handleImageSelected"
+      />
+
+      <!-- 工具栏与表情面板 -->
+      <div class="comment-composer-toolbar">
+        <div class="composer-tools-left">
+          <!-- 表情按钮 -->
+          <div ref="emojiContainerRef" class="emoji-picker-container">
+            <button
+              type="button"
+              class="composer-tool-btn"
+              :class="{ 'is-active': showEmojiPicker }"
+              title="插入表情"
+              aria-label="插入表情"
+              @click.stop="toggleEmojiPicker"
+            >
+              <i class="fa-regular fa-face-smile"></i>
+              <span>表情</span>
+            </button>
+
+            <!-- 酷安表情浮层 -->
+            <div
+              v-if="showEmojiPicker"
+              class="emoji-picker-popover custom-scrollbar"
+              @click.stop
+            >
+              <div class="emoji-picker-header">
+                <span>酷安表情</span>
+                <button
+                  type="button"
+                  class="emoji-picker-close"
+                  title="关闭表情面板"
+                  @click="showEmojiPicker = false"
+                >
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+              <div class="emoji-grid">
+                <button
+                  v-for="(filename, name) in EMOJI_MAP"
+                  :key="name"
+                  type="button"
+                  class="emoji-item-btn"
+                  :title="String(name)"
+                  @click="insertEmoji(String(name))"
+                >
+                  <img :src="`${EMOJI_BASE}${filename}`" :alt="String(name)" loading="lazy" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 图片按钮 -->
+          <button
+            type="button"
+            class="composer-tool-btn"
+            title="添加图片 (最多9张，支持直接Ctrl+V粘贴截图)"
+            aria-label="添加图片"
+            :disabled="sending"
+            @click="triggerImageSelect"
+          >
+            <i class="fa-regular fa-image"></i>
+            <span>图片</span>
+          </button>
+        </div>
+
+        <div class="composer-tools-right">
+          <span v-if="inputMsg.length > 0" class="comment-word-count">
+            {{ inputMsg.length }} / 1000
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
+            icon="fa-solid fa-paper-plane"
+            :loading="sending"
+            :disabled="(!inputMsg.trim() && images.length === 0) || sending"
+            @click="handleSend"
+          >
+            {{ replyTargetUser ? '回复' : '评论' }}
+          </Button>
+        </div>
+      </div>
     </div>
 
     <!-- 评论加载中 -->
@@ -73,7 +195,7 @@
           :src="c.userAvatar || c.avatar || c.userInfo?.userAvatar"
           :size="32"
           alt="头像"
-          @click="setReplyTarget(c.username || c.userInfo?.username)"
+          @click="setReplyTarget(c.username || c.userInfo?.username, c.id)"
         />
 
         <!-- 一级评论主体 -->
@@ -82,7 +204,7 @@
           <div class="comment-meta">
             <span
               class="comment-username"
-              @click="setReplyTarget(c.username || c.userInfo?.username)"
+              @click="setReplyTarget(c.username || c.userInfo?.username, c.id)"
             >
               {{ c.username || c.userInfo?.username || '酷友' }}
             </span>
@@ -124,7 +246,7 @@
           <!-- 一级评论正文 -->
           <div
             class="comment-text"
-            v-html="formatRichText(c.message || c.replyRowsText || '')"
+            v-html="formatCommentText(c.message || c.replyRowsText || '')"
             @click="handleCommentTextClick($event, c)"
           ></div>
 
@@ -149,7 +271,7 @@
             <button
               type="button"
               class="comment-reply-btn"
-              @click.stop="setReplyTarget(c.username || c.userInfo?.username)"
+              @click.stop="setReplyTarget(c.username || c.userInfo?.username, c.id)"
             >
               <i class="fa-regular fa-comment"></i>
               回复
@@ -177,7 +299,7 @@
               :data-context-comment-id="sub.id"
               :data-comment-username="sub.username || sub.fromUserName || '酷友'"
               :data-comment-text="sub.message || ''"
-              @click="setReplyTarget(sub.username || sub.fromUserName)"
+              @click="setReplyTarget(sub.username || sub.fromUserName, sub.id || c.id)"
             >
               <!-- 子回复头像 -->
               <AppAvatar
@@ -225,7 +347,7 @@
                   </span>
                 </div>
                 <!-- 子回复正文 -->
-                <div class="sub-reply-text" v-html="formatRichText(sub.message || '')" @click="handleAnchorClick"></div>
+                <div class="sub-reply-text" v-html="formatCommentText(sub.message || '')" @click="handleAnchorClick"></div>
                 <FeedImageGrid
                   v-if="getCommentImages(sub).length"
                   class="comment-image-grid sub-comment-images"
@@ -283,16 +405,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import AppAvatar from '../common/AppAvatar.vue';
 import Button from '../ui/Button.vue';
 import FeedImageGrid from './FeedImageGrid.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
+import { useSettingsStore } from '../../stores/settings';
+import { EMOJI_MAP, EMOJI_BASE } from '../../utils/coolapkEmoji';
+import { clearCommentDraft, loadCommentDraft, saveCommentDraft } from '../../utils/commentDrafts';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import { showToast } from '../../utils/toast';
 import { requestConfirmation } from '../../utils/confirm';
 import { getErrorMessage } from '../../utils/errors';
+import { renderCoolapkRichText } from '../../utils/richText';
+import { verifyWithCaptcha, extractCaptchaParamsFromResponse } from '../../utils/neteaseCaptcha';
 import {
   COMMENT_SORT_OPTIONS,
   DEFAULT_COMMENT_SORT_MODE,
@@ -307,16 +434,32 @@ import {
   type CommentSortMode,
 } from '../../utils/commentList';
 
-const props = defineProps<{
-  feedId?: string | number;
-  feedUid?: string | number;
-  feedUsername?: string;
-  comments: any[];
-  loading?: boolean;
-  error?: string;
-  normalizeImg: (url: string, type: 'avatar' | 'feed') => string;
-  formatRichText: (text: string) => string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    feedId?: string | number;
+    feedUid?: string | number;
+    feedUsername?: string;
+    comments: any[];
+    loading?: boolean;
+    error?: string;
+    normalizeImg?: (url: string, type: 'avatar' | 'feed') => string;
+    formatRichText?: (text: string) => string;
+  }>(),
+  {
+    feedId: '',
+    feedUid: '',
+    feedUsername: '',
+    loading: false,
+    error: '',
+    normalizeImg: (url: string) => url,
+    formatRichText: (text: string) => renderCoolapkRichText(text),
+  }
+);
+
+function formatCommentText(text: string): string {
+  if (!text) return '';
+  return props.formatRichText ? props.formatRichText(text) : renderCoolapkRichText(text);
+}
 
 const emit = defineEmits<{
   (e: 'send-comment', text: string): void;
@@ -325,13 +468,115 @@ const emit = defineEmits<{
 }>();
 
 const authStore = useAuthStore();
+const settingsStore = useSettingsStore();
+
 const inputMsg = ref('');
 const sending = ref(false);
-const inputRef = ref<HTMLInputElement | null>(null);
+const inputRef = ref<HTMLDivElement | null>(null);
 const replyTargetUser = ref('');
+const replyTargetId = ref('');
 const commentSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
 const commentSortOptions = COMMENT_SORT_OPTIONS;
 const absoluteTimeIds = ref<Set<string>>(new Set());
+
+// 评论配图与酷安表情输入
+const MAX_IMAGES = 9;
+const images = ref<{ file: File; preview: string }[]>([]);
+const uploadingImages = ref(false);
+const uploadedCount = ref(0);
+const imageInputRef = ref<HTMLInputElement | null>(null);
+const showEmojiPicker = ref(false);
+const emojiContainerRef = ref<HTMLElement | null>(null);
+let restoringDraft = false;
+
+function createEmojiImg(name: string, filename?: string): HTMLImageElement {
+  const img = document.createElement('img');
+  img.className = 'coolapk-emoji';
+  img.src = `${EMOJI_BASE}${filename || EMOJI_MAP[name] || 'coolapk_emotion_1_hahaha.png'}`;
+  img.alt = `[${name}]`;
+  img.title = name;
+  img.setAttribute('data-emoji', `[${name}]`);
+  img.setAttribute('contenteditable', 'false');
+  return img;
+}
+
+function parseTextToEditorNodes(text: string): Node[] {
+  if (!text) return [];
+  const container = document.createElement('div');
+  const rendered = text.replace(/\[([^\]\r\n]{1,20})\]/g, (match, name: string) => {
+    const filename = EMOJI_MAP[name];
+    if (!filename) return match;
+    return `<img class="coolapk-emoji" src="${EMOJI_BASE}${filename}" alt="${match}" title="${name}" data-emoji="${match}" contenteditable="false" />`;
+  });
+  container.innerHTML = rendered.replace(/\n/g, '<br>');
+  return Array.from(container.childNodes);
+}
+
+function getEditorText(el: HTMLElement | null): string {
+  if (!el) return '';
+  let result = '';
+  const traverse = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      result += node.textContent || '';
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node as HTMLElement;
+      if (element.tagName === 'IMG' && element.getAttribute('data-emoji')) {
+        result += element.getAttribute('data-emoji');
+      } else if (element.tagName === 'BR') {
+        result += '\n';
+      } else {
+        node.childNodes.forEach(traverse);
+        if (element.tagName === 'DIV' || element.tagName === 'P') {
+          if (node.nextSibling) result += '\n';
+        }
+      }
+    }
+  };
+  el.childNodes.forEach(traverse);
+  return result;
+}
+
+function syncMsgToEditor(text: string) {
+  const el = inputRef.value;
+  if (!el) return;
+  el.innerHTML = '';
+  const nodes = parseTextToEditorNodes(text);
+  nodes.forEach((n) => el.appendChild(n));
+}
+
+function handleEditorInput() {
+  const el = inputRef.value;
+  if (!el) return;
+  inputMsg.value = getEditorText(el);
+}
+
+function currentDraftAccount(): string {
+  return String(authStore.user?.uid || 'guest');
+}
+
+async function restoreDraft() {
+  if (!props.feedId) return;
+  restoringDraft = true;
+  try {
+    const draft = await loadCommentDraft(currentDraftAccount(), props.feedId, replyTargetId.value || undefined);
+    if (draft) {
+      inputMsg.value = draft;
+      syncMsgToEditor(draft);
+    }
+  } finally {
+    restoringDraft = false;
+  }
+}
+
+watch([() => props.feedId, replyTargetId, () => authStore.user?.uid], () => {
+  void restoreDraft();
+});
+
+watch(inputMsg, (val) => {
+  if (!restoringDraft && props.feedId) {
+    void saveCommentDraft(currentDraftAccount(), props.feedId, replyTargetId.value || undefined, val);
+  }
+});
 
 function isAbsoluteTimeVisible(item: any): boolean {
   return absoluteTimeIds.value.has(itemKey(item));
@@ -568,9 +813,9 @@ async function toggleLike(item: any) {
 
   try {
     if (next.liked) {
-      await CoolapkTauriAPI.likeFeed(String(id));
+      await CoolapkTauriAPI.likeReply(String(id));
     } else {
-      await CoolapkTauriAPI.unlikeFeed(String(id));
+      await CoolapkTauriAPI.unlikeReply(String(id));
     }
   } catch (error) {
     likeStates.value = { ...likeStates.value, [key]: previous };
@@ -616,23 +861,212 @@ function getVisibleSubReplies(floor: any) {
   return floor.replyRows.slice(0, 2);
 }
 
-function setReplyTarget(username?: string) {
+function toggleEmojiPicker() {
+  showEmojiPicker.value = !showEmojiPicker.value;
+}
+
+function insertEmoji(name: string) {
+  const filename = EMOJI_MAP[name];
+  const el = inputRef.value;
+  const emojiCode = `[${name}]`;
+  if (!el) {
+    inputMsg.value += emojiCode;
+    return;
+  }
+
+  el.focus();
+  const sel = window.getSelection();
+  const img = createEmojiImg(name, filename);
+
+  if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(img);
+
+    const newRange = document.createRange();
+    newRange.setStartAfter(img);
+    newRange.setEndAfter(img);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
+  } else {
+    el.appendChild(img);
+  }
+
+  inputMsg.value = getEditorText(el);
+}
+
+function triggerImageSelect() {
+  if (images.value.length >= MAX_IMAGES) {
+    showToast(`最多只能添加 ${MAX_IMAGES} 张配图`, 'warning');
+    return;
+  }
+  imageInputRef.value?.click();
+}
+
+function appendImageFiles(files: File[]) {
+  if (!files.length) return;
+  const remain = MAX_IMAGES - images.value.length;
+  if (remain <= 0) {
+    showToast(`最多只能添加 ${MAX_IMAGES} 张配图`, 'warning');
+    return;
+  }
+  if (files.length > remain) {
+    showToast(`最多只能添加 ${MAX_IMAGES} 张配图，已截取前 ${remain} 张`, 'warning');
+  }
+  files.slice(0, remain).forEach((file) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      images.value.push({ file, preview: String(reader.result) });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function handleImageSelected(e: Event) {
+  const target = e.target as HTMLInputElement;
+  const files = target.files ? Array.from(target.files) : [];
+  target.value = '';
+  if (files.length === 0) return;
+  appendImageFiles(files);
+}
+
+function handlePaste(e: ClipboardEvent) {
+  const clipboardData = e.clipboardData;
+  if (!clipboardData) return;
+
+  const imageFiles: File[] = [];
+  if (clipboardData.items) {
+    for (let i = 0; i < clipboardData.items.length; i++) {
+      const item = clipboardData.items[i];
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+  }
+
+  if (imageFiles.length > 0) {
+    e.preventDefault();
+    appendImageFiles(imageFiles);
+    return;
+  }
+
+  const text = clipboardData.getData('text/plain');
+  if (text) {
+    e.preventDefault();
+    const el = inputRef.value;
+    if (!el) return;
+    const nodes = parseTextToEditorNodes(text);
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const frag = document.createDocumentFragment();
+      let lastNode: Node | null = null;
+      nodes.forEach((n) => {
+        lastNode = n;
+        frag.appendChild(n);
+      });
+      range.insertNode(frag);
+      if (lastNode) {
+        const newRange = document.createRange();
+        newRange.setStartAfter(lastNode);
+        newRange.setEndAfter(lastNode);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      }
+    } else {
+      nodes.forEach((n) => el.appendChild(n));
+    }
+    inputMsg.value = getEditorText(el);
+  }
+}
+
+function removeImage(index: number) {
+  if (sending.value) return;
+  images.value.splice(index, 1);
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    handleSend();
+  }
+}
+
+function resolveUploadedUrl(data: any): string {
+  let url = '';
+  if (typeof data === 'string') {
+    url = data;
+  } else if (data && typeof data === 'object') {
+    url = data.url || data.pic || data.path || data.filename || '';
+  }
+  if (!url) throw new Error('上传图片失败：服务端未返回图片地址');
+  if (url.startsWith('//')) url = `https:${url}`;
+  else if (url.startsWith('/')) url = `https://image.coolapk.com${url}`;
+  return url;
+}
+
+function buildFinalMessage(text: string): string {
+  const base = text.trim();
+  if (
+    settingsStore.settings.publishDeviceSignature &&
+    settingsStore.settings.deviceSignature &&
+    base.length > 0
+  ) {
+    return `${base}\n来自 ${settingsStore.settings.deviceSignature.trim()}`;
+  }
+  return base;
+}
+
+function setReplyTarget(username?: string, replyId?: string | number) {
   if (!username) return;
   replyTargetUser.value = username;
-  if (!inputMsg.value.startsWith(`回复 @${username}:`)) {
-    inputMsg.value = `回复 @${username}: `;
+  replyTargetId.value = replyId ? String(replyId) : '';
+  nextTick(() => {
+    inputRef.value?.focus();
+  });
+}
+
+function clearReplyTarget() {
+  replyTargetUser.value = '';
+  replyTargetId.value = '';
+}
+
+function handleClickOutside(event: MouseEvent) {
+  if (showEmojiPicker.value && emojiContainerRef.value && !emojiContainerRef.value.contains(event.target as Node)) {
+    showEmojiPicker.value = false;
   }
-  inputRef.value?.focus();
 }
 
 function handleContextReplyComment(event: Event) {
-  const detail = (event as CustomEvent<{ feedId?: string | number; username?: string }>).detail;
+  const detail = (event as CustomEvent<{ feedId?: string | number; username?: string; commentId?: string | number }>).detail;
   if (String(detail?.feedId || '') !== String(props.feedId || '')) return;
-  setReplyTarget(detail?.username || '酷友');
+  setReplyTarget(detail?.username || '酷友', detail?.commentId);
 }
 
-onMounted(() => window.addEventListener('coolapk-context-reply-comment', handleContextReplyComment));
-onUnmounted(() => window.removeEventListener('coolapk-context-reply-comment', handleContextReplyComment));
+onMounted(() => {
+  window.addEventListener('click', handleClickOutside);
+  window.addEventListener('coolapk-context-reply-comment', handleContextReplyComment);
+  if (inputRef.value) {
+    Object.defineProperty(inputRef.value, 'value', {
+      get() {
+        return inputMsg.value;
+      },
+      set(val: string) {
+        inputMsg.value = String(val ?? '');
+        syncMsgToEditor(String(val ?? ''));
+      },
+      configurable: true,
+    });
+  }
+  void restoreDraft();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('click', handleClickOutside);
+  window.removeEventListener('coolapk-context-reply-comment', handleContextReplyComment);
+});
 
 function handleCommentTextClick(e: MouseEvent, c: any) {
   // 点中了评论内的链接则交给统一链接处理，否则视为点击评论（设置为回复对象）
@@ -640,7 +1074,7 @@ function handleCommentTextClick(e: MouseEvent, c: any) {
     handleAnchorClick(e);
     return;
   }
-  setReplyTarget(c.username || c.userInfo?.username);
+  setReplyTarget(c.username || c.userInfo?.username, c.id);
 }
 
 /**
@@ -723,12 +1157,119 @@ const nestedComments = computed(() => {
 
 const sortedComments = computed(() => sortComments(nestedComments.value, commentSortMode.value));
 
-function handleSend() {
-  const val = inputMsg.value.trim();
-  if (!val) return;
-  emit('send-comment', val);
-  inputMsg.value = '';
-  replyTargetUser.value = '';
+async function handleSend() {
+  const rawMsg = inputMsg.value.trim();
+  if (!rawMsg && images.value.length === 0) return;
+  if (sending.value) return;
+
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+
+  const currentFeedId = props.feedId;
+  if (!currentFeedId) {
+    emit('send-comment', rawMsg);
+    inputMsg.value = '';
+    images.value = [];
+    clearReplyTarget();
+    return;
+  }
+
+  sending.value = true;
+  uploadingImages.value = images.value.length > 0;
+  uploadedCount.value = 0;
+
+  try {
+    let pic = '';
+    if (images.value.length > 0) {
+      const urls: string[] = [];
+      for (const img of images.value) {
+        const bytes = new Uint8Array(await img.file.arrayBuffer());
+        const contentType = img.file.type || 'image/jpeg';
+        const res = await CoolapkTauriAPI.uploadImage(bytes, img.file.name, contentType, 'feed');
+        urls.push(resolveUploadedUrl(res?.data));
+        uploadedCount.value += 1;
+      }
+      pic = urls.join(',');
+    }
+
+    const finalMessage = buildFinalMessage(rawMsg);
+    const targetRid = replyTargetId.value || undefined;
+
+    const executeReply = async (postToken?: string) => {
+      if (postToken) {
+        return await CoolapkTauriAPI.replyFeed(
+          String(currentFeedId),
+          finalMessage,
+          targetRid,
+          pic || undefined,
+          postToken
+        );
+      }
+      return await CoolapkTauriAPI.replyFeed(
+        String(currentFeedId),
+        finalMessage,
+        targetRid,
+        pic || undefined
+      );
+    };
+
+    let res: any;
+    try {
+      res = await executeReply();
+    } catch (err: any) {
+      const captchaParams = extractCaptchaParamsFromResponse(err);
+      if (captchaParams?.captchaId) {
+        showToast('正在调起安全滑块验证...', 'info');
+        const token = await verifyWithCaptcha(captchaParams.captchaId);
+        res = await executeReply(token);
+      } else {
+        const errMsg = String(err?.message || err || '');
+        if (errMsg.includes('网络环境可能异常') || errMsg.includes('err_request_need_upgrade_new_version')) {
+          showToast('酷安服务端风控拦截（需官方手机环境），发表失败', 'error');
+          return;
+        }
+        throw err;
+      }
+    }
+
+    if (res && res.code !== 200) {
+      const captchaParams = extractCaptchaParamsFromResponse(res);
+      if (captchaParams?.captchaId) {
+        showToast('正在调起安全滑块验证...', 'info');
+        const token = await verifyWithCaptcha(captchaParams.captchaId);
+        res = await executeReply(token);
+      } else if (
+        String(res.message || res.messageStatus || '').includes('网络环境可能异常') ||
+        String(res.message || res.messageStatus || '').includes('err_request_need_upgrade_new_version')
+      ) {
+        showToast('酷安服务端风控拦截（需官方手机环境），发表失败', 'error');
+        return;
+      }
+    }
+
+    if (res && res.code === 200) {
+      await clearCommentDraft(currentDraftAccount(), currentFeedId, targetRid);
+      inputMsg.value = '';
+      if (inputRef.value) {
+        inputRef.value.innerHTML = '';
+      }
+      images.value = [];
+      clearReplyTarget();
+      showEmojiPicker.value = false;
+      showToast('评论发表成功');
+      emit('send-comment', rawMsg);
+      emit('retry-comments');
+    } else {
+      showToast(res?.message || '评论发表失败', 'error');
+    }
+  } catch (err: any) {
+    showToast(getErrorMessage(err, '发表评论异常'), 'error');
+  } finally {
+    uploadingImages.value = false;
+    sending.value = false;
+  }
 }
 </script>
 
@@ -793,28 +1334,271 @@ function handleSend() {
   font-weight: 600;
 }
 
-/* 输入框 */
-.comment-input-box {
+/* 输入框与评论发布工具栏 */
+.comment-composer-box {
   display: flex;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.comment-input {
-  flex: 1;
-  border-radius: var(--radius-control);
-  border: 1px solid var(--border);
-  padding: 8px 14px;
-  font-size: 0.85rem;
-  outline: none;
+  flex-direction: column;
   background: var(--surface);
-  color: var(--text-primary);
-  transition: all var(--duration-fast);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card, 12px);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
 }
 
-.comment-input:focus {
+.comment-composer-box:focus-within {
   border-color: var(--brand-primary);
   box-shadow: 0 0 0 2px var(--brand-soft);
+}
+
+.comment-reply-target-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 3px 8px;
+  background: var(--brand-soft);
+  color: var(--brand-primary);
+  border-radius: var(--radius-xs, 4px);
+  font-size: 0.78rem;
+  margin-bottom: 6px;
+}
+
+.comment-reply-target-bar .reply-target-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.comment-reply-target-bar .reply-target-name {
+  font-weight: 600;
+}
+
+.reply-target-clear-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  transition: color var(--duration-fast);
+}
+
+.reply-target-clear-btn:hover {
+  color: var(--danger, #f04444);
+}
+
+.comment-textarea {
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: vertical;
+  min-height: 52px;
+  max-height: 160px;
+  background: transparent;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.comment-textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* 媒体缩略图预览 */
+.comment-media-preview {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+.comment-media-thumb {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  background: var(--background);
+}
+
+.comment-media-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.comment-media-remove-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  border: none;
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--duration-fast);
+}
+
+.comment-media-remove-btn:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.85);
+}
+
+.comment-media-remove-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.comment-uploading-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  align-self: center;
+}
+
+/* 工具栏 */
+.comment-composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-light);
+  position: relative;
+}
+
+.composer-tools-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.composer-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-control, 6px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color var(--duration-fast), background var(--duration-fast);
+}
+
+.composer-tool-btn:hover,
+.composer-tool-btn.is-active {
+  color: var(--brand-primary);
+  background: var(--brand-soft);
+}
+
+.composer-tool-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.emoji-picker-container {
+  position: relative;
+}
+
+.emoji-picker-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 120;
+  width: 320px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card, 12px);
+  box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.15));
+  padding: 10px;
+}
+
+.emoji-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.emoji-picker-close {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  transition: color var(--duration-fast);
+}
+
+.emoji-picker-close:hover {
+  color: var(--text-primary);
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+
+.emoji-item-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-xs, 4px);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--duration-fast), transform var(--duration-fast);
+}
+
+.emoji-item-btn:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.05));
+  transform: scale(1.15);
+}
+
+.emoji-item-btn img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.composer-tools-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.comment-word-count {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
 }
 
 /* 加载与空提示 */
@@ -1198,5 +1982,48 @@ function handleSend() {
 
 .icon-arrow {
   font-size: 0.7em;
+}
+
+:deep(.coolapk-emoji),
+.comment-text :deep(.coolapk-emoji),
+.sub-reply-text :deep(.coolapk-emoji) {
+  width: 22px !important;
+  height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  display: inline-block !important;
+  vertical-align: -4px !important;
+  margin: 0 2px !important;
+  object-fit: contain !important;
+}
+
+.comment-rich-editor {
+  min-height: 52px;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  cursor: text;
+  box-sizing: border-box;
+}
+
+.comment-rich-editor:empty:before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.comment-rich-editor :deep(.coolapk-emoji),
+.comment-rich-editor img.coolapk-emoji {
+  width: 22px !important;
+  height: 22px !important;
+  vertical-align: -4px !important;
+  margin: 0 2px !important;
+  display: inline-block !important;
+  user-select: all !important;
+  cursor: default;
 }
 </style>

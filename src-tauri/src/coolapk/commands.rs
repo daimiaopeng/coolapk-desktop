@@ -731,15 +731,33 @@ pub async fn unlike_feed(state: State<'_, AppState>, feed_id: String) -> Result<
 }
 
 #[tauri::command]
+pub async fn like_reply(state: State<'_, AppState>, reply_id: String) -> Result<Value, String> {
+    state.client.like_reply(&reply_id).await
+}
+
+#[tauri::command]
+pub async fn unlike_reply(state: State<'_, AppState>, reply_id: String) -> Result<Value, String> {
+    state.client.unlike_reply(&reply_id).await
+}
+
+#[tauri::command]
 pub async fn reply_feed(
     state: State<'_, AppState>,
     feed_id: String,
     message: String,
     rid: Option<String>,
+    pic: Option<String>,
+    post_token: Option<String>,
 ) -> Result<Value, String> {
     state
         .client
-        .reply_feed(&feed_id, &message, rid.as_deref())
+        .reply_feed(
+            &feed_id,
+            &message,
+            rid.as_deref(),
+            pic.as_deref(),
+            post_token.as_deref(),
+        )
         .await
 }
 
@@ -804,8 +822,12 @@ pub async fn create_feed(
     state: State<'_, AppState>,
     message: String,
     pic: Option<String>,
+    post_token: Option<String>,
 ) -> Result<Value, String> {
-    state.client.create_feed(&message, pic.as_deref()).await
+    state
+        .client
+        .create_feed(&message, pic.as_deref(), post_token.as_deref())
+        .await
 }
 
 #[tauri::command]

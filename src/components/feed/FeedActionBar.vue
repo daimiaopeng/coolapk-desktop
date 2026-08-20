@@ -26,6 +26,8 @@
 import { ref, watch } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
+import { showToast } from '../../utils/toast';
+import { getErrorMessage } from '../../utils/errors';
 
 const authStore = useAuthStore();
 
@@ -87,18 +89,26 @@ async function toggleLike() {
     authStore.openLoginModal();
     return;
   }
+  const prevLiked = isLiked.value;
+  const prevCount = likeCount.value;
+  const nextLiked = !prevLiked;
+  isLiked.value = nextLiked;
+  likeCount.value = Math.max(0, prevCount + (nextLiked ? 1 : -1));
   try {
-    if (isLiked.value) {
-      isLiked.value = false;
-      likeCount.value = Math.max(0, likeCount.value - 1);
-      await CoolapkTauriAPI.unlikeFeed(String(props.feedId));
-    } else {
-      isLiked.value = true;
-      likeCount.value += 1;
+    if (nextLiked) {
       await CoolapkTauriAPI.likeFeed(String(props.feedId));
+    } else {
+      await CoolapkTauriAPI.unlikeFeed(String(props.feedId));
     }
-  } catch (err) {
-    console.error('Failed to toggle like', err);
+  } catch (err: any) {
+    isLiked.value = prevLiked;
+    likeCount.value = prevCount;
+    const msg = getErrorMessage(err, '点赞操作失败');
+    if (msg.includes('网络') || msg.includes('err_')) {
+      showToast('酷安服务端风控拦截（需官方手机环境），点赞失败', 'error');
+    } else {
+      showToast(msg, 'error');
+    }
   }
 }
 

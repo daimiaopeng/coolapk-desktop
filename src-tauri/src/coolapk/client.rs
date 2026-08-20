@@ -252,12 +252,9 @@ impl CoolapkClient {
         })
     }
 
-    /// 账号绑定的固定设备码：账号首次登录时的设备码会被服务端绑定。
-    /// - 账号已有 deviceCode 记录：沿用记录值
-    /// - 无记录：默认使用 SDK 官方 DEFAULT_DEVICE_CODE（Python SDK 登录的账号
-    ///   都绑定该码，实测发动态/评论等写操作可用），并持久化到该账号。
-    ///   注意：不能用随机码（实测随机码 + 已绑定账号的 Cookie 会被服务端
-    ///   以"网络环境异常"拒绝写操作）。
+    /// 账号绑定的固定设备码：按官方规范算法生成并绑定到当前账号。
+    /// - 账号已有且格式有效的 deviceCode：沿用记录值
+    /// - 无记录或历史旧格式：自动迁移生成符合官方规范的标准设备码并持久化。
     fn account_device_code(&self, uid: &str) -> String {
         let mut accounts = self.load_accounts();
         if let Some(pos) = accounts
@@ -267,30 +264,30 @@ impl CoolapkClient {
             if let Some(code) = accounts[pos]
                 .get("deviceCode")
                 .and_then(|v| v.as_str())
-                .filter(|c| !c.is_empty())
+                .filter(|c| is_valid_device_code(c))
             {
                 return code.to_string();
             }
-            let code = SDK_DEFAULT_DEVICE_CODE.to_string();
+            let code = generate_device_code_for_id(uid);
             if let Some(obj) = accounts[pos].as_object_mut() {
                 obj.insert("deviceCode".to_string(), json!(code.clone()));
             }
             self.save_accounts(&accounts);
             return code;
         }
-        let code = SDK_DEFAULT_DEVICE_CODE.to_string();
+        let code = generate_device_code_for_id(uid);
         accounts.push(json!({ "uid": uid, "cookie": "", "deviceCode": code.clone() }));
         self.save_accounts(&accounts);
         code
     }
 
-    /// 游客设备码：每台电脑首次生成随机后固定（持久化在账户库 root）
+    /// 游客设备码：首次生成符合官方规范的标准设备码后固定持久化
     fn guest_device_code(&self) -> String {
         let mut root = self.load_accounts_root();
         if let Some(code) = root
             .get("guestDeviceCode")
             .and_then(|v| v.as_str())
-            .filter(|c| !c.is_empty())
+            .filter(|c| is_valid_device_code(c))
         {
             return code.to_string();
         }
@@ -756,11 +753,7 @@ impl CoolapkClient {
         }
         let token = self.get_token()?;
         let url = format!("{api_origin}{path}");
-        let requested_with = if method == Method::POST {
-            "com.coolapk.market"
-        } else {
-            "XMLHttpRequest"
-        };
+        let requested_with = "XMLHttpRequest";
         let mut request = self.apply_device_profile(
             self.client
                 .request(method, url)
@@ -3308,48 +3301,70 @@ impl CoolapkClient {
         }])
         .to_string();
 
-        // 发动态配图用 image/feed，私信图片用 message/message
+        // 发动态/评论配图用 image/feed，私信图片用 message/message
         let upload_bucket = if dir == "feed" { "image" } else { dir }.to_string();
+        let feed_type = if dir == "feed" { "feed" } else { "" }.to_string();
 
-        let prepare_form = reqwest::multipart::Form::new()
-            .text("uploadBucket", upload_bucket)
-            .text("uploadDir", dir.to_string())
-            .text("is_anonymous", "0")
-            .text("uploadFileList", file_list)
-            .text("toUid", target_uid);
+        let prepare_params = [
+            ("uploadBucket", upload_bucket),
+            ("uploadDir", dir.to_string()),
+            ("is_anonymous", "0".to_string()),
+            ("uploadFileList", file_list),
+            ("toUid", target_uid),
+            ("feed_type", feed_type),
+        ];
 
-        let mut prepare_request = self.apply_device_profile(
-            self.client
-                .request(
-                    reqwest::Method::POST,
-                    "https://api.coolapk.com/v6/upload/ossUploadPrepare",
-                )
-                .header("X-Requested-With", "XMLHttpRequest")
-                .multipart(prepare_form),
-        )?;
-        if let Ok(token) = self.get_token() {
-            prepare_request = prepare_request.header("X-App-Token", token);
-        }
-        if let Ok(guard) = self.user_cookie.read() {
-            if let Some(cookie) = guard.as_ref() {
-                if let Ok(header_val) = reqwest::header::HeaderValue::from_str(cookie) {
-                    prepare_request = prepare_request.header(COOKIE, header_val);
-                }
+        let prepare_json = self
+            .api_post("/v6/upload/ossUploadPrepare", &[], &prepare_params)
+            .await?;
+
+        if let Some(msg) = prepare_json
+            .get("message")
+            .or_else(|| prepare_json.get("error"))
+            .and_then(Value::as_str)
+        {
+            if !msg.is_empty()
+                && (prepare_json.get("data").is_none()
+                    || prepare_json.get("data") == Some(&Value::Null))
+            {
+                return Err(format!("上传凭证获取失败（{msg}）"));
             }
         }
-        let prepare_res = prepare_request.send().await.map_err(|e| e.to_string())?;
-        let prepare_json = response_json(prepare_res).await?;
 
-        let file_info = prepare_json
+        let data = prepare_json
             .get("data")
-            .and_then(|d| d.get("fileInfo"))
+            .filter(|d| !d.is_null())
+            .ok_or_else(|| {
+                let msg = prepare_json
+                    .get("message")
+                    .or_else(|| prepare_json.get("error"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("服务端未返回凭证数据");
+                format!("上传凭证获取失败（{msg}）")
+            })?;
+
+        let file_info = data
+            .get("fileInfo")
             .and_then(|f| f.as_array())
             .and_then(|arr| arr.first())
-            .ok_or_else(|| "上传凭证获取失败（fileInfo 缺失）".to_string())?;
-        let prepare_info = prepare_json
-            .get("data")
-            .and_then(|d| d.get("uploadPrepareInfo"))
-            .ok_or_else(|| "上传凭证获取失败（uploadPrepareInfo 缺失）".to_string())?;
+            .ok_or_else(|| {
+                let msg = prepare_json
+                    .get("message")
+                    .or_else(|| prepare_json.get("error"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("fileInfo 缺失");
+                format!("上传凭证获取失败（{msg}）")
+            })?;
+        let prepare_info = data
+            .get("uploadPrepareInfo")
+            .ok_or_else(|| {
+                let msg = prepare_json
+                    .get("message")
+                    .or_else(|| prepare_json.get("error"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("uploadPrepareInfo 缺失");
+                format!("上传凭证获取失败（{msg}）")
+            })?;
 
         let upload_file_name = file_info
             .get("uploadFileName")
@@ -3589,10 +3604,15 @@ impl CoolapkClient {
         )
     }
 
-    /// 点赞/取消点赞通用实现：酷安 v6 API 点赞必须使用 GET（POST 返回"请求方式错误"），
-    /// 且未登录时返回 status=401，这里显式转成错误以便前端回滚乐观更新。
+    /// 点赞/取消点赞通用实现（对应官方 APK kb1.java）
     async fn like_action(&self, path: &str, id: &str) -> Result<Value, String> {
-        let res = self.api_get(path, &[("id", id.to_string())]).await?;
+        let res = self
+            .api_post(
+                path,
+                &[("id", id.to_string()), ("detail", "0".to_string())],
+                &[("trace", "".to_string())],
+            )
+            .await?;
         if let Some(status) = res.get("status").and_then(|v| v.as_i64()) {
             if status == 401 || status == 403 {
                 let msg = res
@@ -3623,23 +3643,49 @@ impl CoolapkClient {
         self.like_action("/v6/feed/unlike", feed_id).await
     }
 
-    /// 发表评论；rid 非空时表示回复楼中楼（某条评论）
-    /// 注意：酷安 v6 写接口统一使用 GET（POST 返回"请求方式错误"）
+    /// 点赞评论（对应 APK /v6/feed/likeReply）
+    pub async fn like_reply(&self, reply_id: &str) -> Result<Value, String> {
+        self.like_action("/v6/feed/likeReply", reply_id).await
+    }
+
+    /// 取消点赞评论（对应 APK /v6/feed/unLikeReply）
+    pub async fn unlike_reply(&self, reply_id: &str) -> Result<Value, String> {
+        self.like_action("/v6/feed/unLikeReply", reply_id).await
+    }
+
+    /// 发表评论；rid 非空时表示回复楼中楼（某条评论），pic 非空时表示评论图片，post_token 为网易易盾滑块验证 Token
+    /// 对应官方 APK kb1.java:496 (@POST("feed/reply") @Query("id") @Query("type") @Body FormBody) 与 ExtraPostFieldInterceptor.java
     pub async fn reply_feed(
         &self,
         feed_id: &str,
         message: &str,
         rid: Option<&str>,
+        pic: Option<&str>,
+        post_token: Option<&str>,
     ) -> Result<Value, String> {
-        let mut query: Vec<(&str, String)> = vec![
+        let query = [
             ("id", feed_id.to_string()),
             ("type", "feed".to_string()),
+        ];
+        let mut form = vec![
             ("message", message.to_string()),
         ];
         if let Some(rid) = rid {
-            query.push(("rid", rid.to_string()));
+            if !rid.is_empty() {
+                form.push(("rid", rid.to_string()));
+            }
         }
-        wrap_api_data(self.api_get("/v6/feed/reply", &query).await?)
+        if let Some(pic) = pic {
+            if !pic.is_empty() {
+                form.push(("pic", pic.to_string()));
+            }
+        }
+        if let Some(token) = post_token {
+            if !token.is_empty() {
+                form.push(("_v2_post_token", token.to_string()));
+            }
+        }
+        wrap_api_data(self.api_post("/v6/feed/reply", &query, &form).await?)
     }
 
     pub async fn follow_user(&self, uid: &str) -> Result<Value, String> {
@@ -3898,8 +3944,13 @@ impl CoolapkClient {
     }
 
     /// 发布动态（需登录）
-    /// 官方客户端要求 POST multipart：message / type=feed / is_html_article=0 / pic
-    pub async fn create_feed(&self, message: &str, pic: Option<&str>) -> Result<Value, String> {
+    /// 官方客户端要求 POST multipart：message / type=feed / is_html_article=0 / pic / _v2_post_token
+    pub async fn create_feed(
+        &self,
+        message: &str,
+        pic: Option<&str>,
+        post_token: Option<&str>,
+    ) -> Result<Value, String> {
         let token = self.get_token()?;
         let mut form = reqwest::multipart::Form::new()
             .text("message", message.to_string())
@@ -3908,6 +3959,11 @@ impl CoolapkClient {
         if let Some(pic) = pic {
             if !pic.is_empty() {
                 form = form.text("pic", pic.to_string());
+            }
+        }
+        if let Some(token) = post_token {
+            if !token.is_empty() {
+                form = form.text("_v2_post_token", token.to_string());
             }
         }
 
@@ -4619,17 +4675,40 @@ impl CoolapkClient {
     }
 }
 
-/// SDK 官方默认设备码（Python SDK 全程使用，对应 Redmi K50 电竞版）。
-/// 已登录账号默认绑定该设备码（实测该码 + SDK 登录的 Cookie 写操作可用），
-/// 账号首次登录时持久化到账户库，之后固定。
-const SDK_DEFAULT_DEVICE_CODE: &str = "AZmV2N4UzN0UmZ3kDOzEzYgsjMwAjL2IjMwUjMuE0MRFEI7MkMxITM4AjMyAyOp1GZlJFI7kWbvFWaYByOgsDI7AyOzYGO3okVq1GWOlEez8WYLlkWKVWbllzX3pUTjFTcjx2aPVFR";
+/// 检查设备码是否符合官方结构（Base64 逆序解码后包含设备信息字段分号分隔符）
+fn is_valid_device_code(code: &str) -> bool {
+    if code.is_empty() {
+        return false;
+    }
+    let mut rev: String = code.chars().rev().collect();
+    let pad = (4 - (rev.len() % 4)) % 4;
+    rev.push_str(&"=".repeat(pad));
+    if let Ok(bytes) = BASE64.decode(rev.as_bytes()) {
+        if let Ok(s) = std::str::from_utf8(&bytes) {
+            return s.contains("; ");
+        }
+    }
+    false
+}
 
-/// 生成随机设备码（仿官方格式：约 220 字符的 base64 风格字符串）。
-/// 用途：未登录（游客态）时使用，每台电脑首次启动生成一次并持久化，之后固定。
-/// 注意：设备码与账号绑定，登录后写操作（发动态/点赞/评论）校验其一致性，
-/// 已登录账号不能使用随机码（会被服务端判定为"网络环境异常"）。
-fn generate_random_device_code() -> String {
+/// 按照官方客户端 C11918.java:248 规则生成标准设备码：
+/// byte[] bytes = (android_id + "; ; ; ; " + manufacturer + "; " + brand + "; " + model + "; " + build_display + "; " + oaid).getBytes(Charsets.UTF_8);
+/// String strReplace = new Regex("\\r\\n|\\r|\\n|=").replace(new StringBuilder(strEncodeToString).reverse().toString(), "");
+fn generate_device_code_for_id(id: &str) -> String {
     use md5::{Digest, Md5};
+    let mut hasher = Md5::new();
+    hasher.update(id.as_bytes());
+    let digest = hasher.finalize();
+    let android_id = format!("{:016x}", u64::from_le_bytes(digest[..8].try_into().unwrap_or_default()));
+    let raw = format!("{android_id}; ; ; ; Xiaomi; Xiaomi; 23113RKC6C; UKQ1.230804.001; ");
+    let b64 = BASE64.encode(raw.as_bytes());
+    let mut rev: String = b64.chars().rev().collect();
+    rev.retain(|c| c != '=' && c != '\r' && c != '\n');
+    rev
+}
+
+/// 生成随机设备码（官方标准逆序 Base64 格式）
+fn generate_random_device_code() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -4641,22 +4720,8 @@ fn generate_random_device_code() -> String {
         .fetch_add(1, Ordering::Relaxed)
         .wrapping_mul(0x9E3779B97F4A7C15);
     seed ^= std::process::id() as u64;
-    seed ^= (&seed as *const u64) as u64;
 
-    let mut out = String::with_capacity(224);
-    let mut state = seed;
-    while out.len() < 220 {
-        let mut hasher = Md5::new();
-        hasher.update(state.to_le_bytes());
-        hasher.update(out.as_bytes());
-        let digest = hasher.finalize();
-        out.push_str(&BASE64.encode(digest));
-        state = u64::from_le_bytes([
-            digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
-        ]);
-    }
-    out.truncate(220);
-    out
+    generate_device_code_for_id(&seed.to_string())
 }
 
 fn value_to_string(value: &Value) -> String {
@@ -4771,6 +4836,10 @@ fn wrap_api_data(response: Value) -> Result<Value, String> {
             .get("messageStatus")
             .and_then(Value::as_str)
             .unwrap_or("");
+
+        if msg_status == "err_request_captcha_v2" || response.get("messageExtra").is_some() {
+            return Err(serde_json::to_string(&response).unwrap_or_else(|_| message.to_string()));
+        }
 
         // 酷安成功信封：code 为 200/0/1 且 status 为 0/1（status=1004/500 等均属失败，
         // 例如"网络环境异常"会以 HTTP 200 + status=1004/500 的形式返回）

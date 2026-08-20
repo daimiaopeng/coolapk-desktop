@@ -24,7 +24,7 @@ use coolapk::commands::{
     update_home_tab_config,
     get_topic_detail, get_topic_detail_v7, get_topic_feeds, get_topic_hub_data, get_update_list,
     get_user_cookie, get_user_feeds, get_user_follow_nodes, get_user_profile, get_user_rating_list,
-    get_user_qr_image, get_user_space, get_user_tab_data, get_vote_comments, install_update, like_collection, like_feed, list_accounts,
+    get_user_qr_image, get_user_space, get_user_tab_data, get_vote_comments, install_update, like_collection, like_feed, like_reply, list_accounts,
     list_chat_history, list_messages, login_as, login_by_account, login_by_mobile,
     open_cache_directory, open_login_webview, open_url, persist_current_account, quit_app,
     read_message, remove_account, remove_from_black_list, remove_from_ignore_list, reply_feed,
@@ -33,7 +33,7 @@ use coolapk::commands::{
     search_apks_by_developer, search_apks_by_tag, search_feed_topics, search_feeds, search_games,
     search_tags, search_users, send_private_image, send_private_message, send_sms_vcode,
     unfavorite_apk, unfavorite_feed, unfollow_collection, unfollow_dyh, unfollow_tag,
-    unfollow_user, unlike_collection, unlike_feed, update_device_profile, upload_image,
+    unfollow_user, unlike_collection, unlike_feed, unlike_reply, update_device_profile, upload_image,
 };
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -492,6 +492,8 @@ pub fn run() {
             send_private_message,
             like_feed,
             unlike_feed,
+            like_reply,
+            unlike_reply,
             reply_feed,
             follow_user,
             unfollow_user,

@@ -334,9 +334,19 @@ export class CoolapkTauriAPI {
     return await invokeNative('unlike_feed', { feedId });
   }
 
-  static async replyFeed(feedId: string, message: string, rid?: string) {
+  static async likeReply(replyId: string) {
+    return await invokeNative('like_reply', { replyId });
+  }
+
+  static async unlikeReply(replyId: string) {
+    return await invokeNative('unlike_reply', { replyId });
+  }
+
+  static async replyFeed(feedId: string, message: string, rid?: string, pic?: string, postToken?: string) {
     const args: any = { feedId, message };
     if (rid) args.rid = rid;
+    if (pic) args.pic = pic;
+    if (postToken) args.postToken = postToken;
     return await invokeNative('reply_feed', args);
   }
 
@@ -552,9 +562,10 @@ export class CoolapkTauriAPI {
   }
 
   // 10. 离线/在线发布动态
-  static async createFeed(message: string, pic?: string) {
+  static async createFeed(message: string, pic?: string, postToken?: string) {
     const args: any = { message };
     if (pic) args.pic = pic;
+    if (postToken) args.postToken = postToken;
     return await invokeNative('create_feed', args);
   }
 

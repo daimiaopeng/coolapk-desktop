@@ -123,6 +123,7 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkEmoji, EMOJI_MAP, EMOJI_BASE } from '../../utils/coolapkEmoji';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { clearPublishDraft, loadPublishDraft, savePublishDraft } from '../../utils/publishDrafts';
+import { verifyWithCaptcha, extractCaptchaParamsFromResponse } from '../../utils/neteaseCaptcha';
 import AppDialog from '../common/AppDialog.vue';
 import AppButton from '../common/AppButton.vue';
 
@@ -320,7 +321,46 @@ async function handlePublish() {
       }
       pic = urls.join(',');
     }
-    const res = await CoolapkTauriAPI.createFeed(buildFinalMessage(), pic || undefined);
+
+    const executeCreate = async (postToken?: string) => {
+      if (postToken) {
+        return await CoolapkTauriAPI.createFeed(buildFinalMessage(), pic || undefined, postToken);
+      }
+      return await CoolapkTauriAPI.createFeed(buildFinalMessage(), pic || undefined);
+    };
+
+    let res: any;
+    try {
+      res = await executeCreate();
+    } catch (err: any) {
+      const captchaParams = extractCaptchaParamsFromResponse(err);
+      if (captchaParams?.captchaId) {
+        const token = await verifyWithCaptcha(captchaParams.captchaId);
+        res = await executeCreate(token);
+      } else {
+        const errMsg = String(err?.message || err || '');
+        if (errMsg.includes('网络环境可能异常') || errMsg.includes('err_request_need_upgrade_new_version')) {
+          errorMessage.value = '酷安服务端风控拦截（需官方手机环境），发布失败';
+          return;
+        }
+        throw err;
+      }
+    }
+
+    if (res && res.code !== 200) {
+      const captchaParams = extractCaptchaParamsFromResponse(res);
+      if (captchaParams?.captchaId) {
+        const token = await verifyWithCaptcha(captchaParams.captchaId);
+        res = await executeCreate(token);
+      } else if (
+        String(res.message || res.messageStatus || '').includes('网络环境可能异常') ||
+        String(res.message || res.messageStatus || '').includes('err_request_need_upgrade_new_version')
+      ) {
+        errorMessage.value = '酷安服务端风控拦截（需官方手机环境），发布失败';
+        return;
+      }
+    }
+
     if (res && res.code === 200) {
       await clearPublishDraft(currentDraftAccount());
       message.value = '';

@@ -203,9 +203,9 @@ async function toggleSubLike(reply: any) {
   subLikeCountMap.value.set(reply.id, Math.max(0, count + (next ? 1 : -1)));
   try {
     if (next) {
-      await CoolapkTauriAPI.likeFeed(String(reply.id));
+      await CoolapkTauriAPI.likeReply(String(reply.id));
     } else {
-      await CoolapkTauriAPI.unlikeFeed(String(reply.id));
+      await CoolapkTauriAPI.unlikeReply(String(reply.id));
     }
     reply.userAction = { ...(reply.userAction || {}), like: next ? 1 : 0 };
   } catch (err) {
@@ -250,9 +250,9 @@ async function toggleLike() {
   likeCount.value = Math.max(0, likeCount.value + (next ? 1 : -1));
   try {
     if (next) {
-      await CoolapkTauriAPI.likeFeed(String(props.comment.id));
+      await CoolapkTauriAPI.likeReply(String(props.comment.id));
     } else {
-      await CoolapkTauriAPI.unlikeFeed(String(props.comment.id));
+      await CoolapkTauriAPI.unlikeReply(String(props.comment.id));
     }
     if (props.comment.userAction) {
       props.comment.userAction.like = next ? 1 : 0;
