@@ -48,7 +48,7 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import { useSettingsStore } from '../stores/settings';
-import { shouldHideFeed } from '../utils/feedFilter';
+import { hasFeedRenderableContent, shouldHideFeed } from '../utils/feedFilter';
 
 const settingsStore = useSettingsStore();
 
@@ -92,7 +92,7 @@ async function loadFeeds(isRefresh: boolean = false) {
   try {
     const res: any = await fetchTabApi(activeTab.value, page.value);
     const validItems = res && res.data && Array.isArray(res.data)
-      ? res.data.filter((item: any) => item.id && (item.message || item.title || item.pic) && !shouldHideFeed(item, settingsStore.settings))
+      ? res.data.filter((item: any) => hasFeedRenderableContent(item) && !shouldHideFeed(item, settingsStore.settings))
       : [];
 
     if (validItems.length < 3) {

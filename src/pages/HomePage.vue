@@ -10,7 +10,7 @@
         <FeedLayoutToggle v-model="feedLayout" />
       </div>
 
-      <div class="feed-scroll-container custom-scrollbar" @scroll="handleScroll">
+      <div ref="feedScrollContainer" class="feed-scroll-container custom-scrollbar" @scroll="handleScroll">
         <!-- 1. 头条 Tab 专属：今日酷安日历 & 金刚位入口 & 关照关注栏 -->
         <div v-if="isHeadlineTab" class="headline-header-section">
           <!-- 今日酷安日历与要闻栏 -->
@@ -182,7 +182,7 @@ import ErrorState from '../components/common/ErrorState.vue';
 import AppImage from '../components/common/AppImage.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
-import { shouldHideFeed } from '../utils/feedFilter';
+import { hasFeedRenderableContent, shouldHideFeed } from '../utils/feedFilter';
 import { DEFAULT_HOME_TAB_ORDER } from '../stores/settings';
 import type { FeedLayout, ConfigPageTab } from '../types/settings';
 
@@ -199,6 +199,7 @@ const router = useRouter();
 const activeTab = ref(settingsStore.settings.defaultHomeTab || '');
 const page = ref(1);
 const feeds = ref<any[]>([]);
+const feedScrollContainer = ref<HTMLElement | null>(null);
 const loading = ref(false);
 const loadingMore = ref(false);
 const noMore = ref(false);
@@ -357,7 +358,7 @@ async function prefetchNextPage() {
     const nextP = page.value;
     const res: any = await fetchTabApi(activeTab.value, nextP);
     if (res && res.data && Array.isArray(res.data)) {
-      const validItems = res.data.filter((item: any) => item.id && (item.message || item.title || item.pic) && !shouldHideFeed(item, settingsStore.settings));
+      const validItems = res.data.filter((item: any) => hasFeedRenderableContent(item) && !shouldHideFeed(item, settingsStore.settings));
       if (validItems.length > 0) {
         prefetchBuffer.value = validItems;
         prefetchPage.value = nextP + 1;
@@ -395,7 +396,7 @@ async function loadFeeds(isRefresh: boolean = false) {
     } else {
       const res: any = await fetchTabApi(activeTab.value, page.value);
       if (res && res.data && Array.isArray(res.data)) {
-        validItems = res.data.filter((item: any) => item.id && (item.message || item.title || item.pic) && !shouldHideFeed(item, settingsStore.settings));
+        validItems = res.data.filter((item: any) => hasFeedRenderableContent(item) && !shouldHideFeed(item, settingsStore.settings));
       }
       page.value++;
     }
@@ -445,6 +446,12 @@ function handleScroll(e: Event) {
   }
 }
 
+function resetFeedScroll() {
+  if (!feedScrollContainer.value) return;
+  feedScrollContainer.value.scrollTop = 0;
+  feedScrollContainer.value.scrollLeft = 0;
+}
+
 function quickSearch(kw: string) {
   router.push({ path: '/search', query: { q: kw } });
 }
@@ -472,6 +479,7 @@ function handleBulletinClick(item: any) {
 }
 
 watch(activeTab, () => {
+  resetFeedScroll();
   loadFeeds(true);
 });
 

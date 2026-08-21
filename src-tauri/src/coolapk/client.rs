@@ -175,6 +175,33 @@ fn get_str_by_keys(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> Optio
     None
 }
 
+fn first_value_by_keys<'a>(obj: &'a serde_json::Map<String, Value>, keys: &[&str]) -> Option<&'a Value> {
+    keys.iter().find_map(|key| obj.get(*key))
+}
+
+fn has_non_empty_json_value(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(_) | Value::Number(_) => true,
+        Value::String(value) => !value.trim().is_empty(),
+        Value::Array(values) => values.iter().any(has_non_empty_json_value),
+        Value::Object(values) => values.values().any(has_non_empty_json_value),
+    }
+}
+
+fn has_any_non_empty_field(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> bool {
+    first_value_by_keys(obj, keys).map_or(false, has_non_empty_json_value)
+}
+
+fn copy_first_field(cleaned: &mut Value, obj: &serde_json::Map<String, Value>, output_key: &str, keys: &[&str]) {
+    let Some(value) = first_value_by_keys(obj, keys) else {
+        return;
+    };
+    if let Some(cleaned_obj) = cleaned.as_object_mut() {
+        cleaned_obj.insert(output_key.to_string(), value.clone());
+    }
+}
+
 impl CoolapkClient {
     /// 设备码策略：
     /// - 未登录（游客态）：每台电脑首次启动随机生成一次并持久化，之后固定
@@ -915,8 +942,52 @@ impl CoolapkClient {
             .get("pic")
             .and_then(|v| v.as_str())
             .map_or(false, |p| !p.is_empty());
+        let has_video = has_any_non_empty_field(
+            obj,
+            &[
+                "videoUrl",
+                "video_url",
+                "videoURL",
+                "videoSrc",
+                "video_src",
+                "videoPic",
+                "video_pic",
+                "videoCover",
+                "video_cover",
+                "videoThumbnail",
+                "video_thumbnail",
+                "videoDuration",
+                "video_duration",
+                "mediaUrl",
+                "media_url",
+                "mediaURL",
+                "mediaPic",
+                "media_pic",
+                "mediaInfo",
+                "media_info",
+                "mediaType",
+                "media_type",
+                "video",
+                "videoInfo",
+                "video_info",
+                "media",
+            ],
+        );
+        let has_relation = has_any_non_empty_field(
+            obj,
+            &[
+                "targetRow",
+                "target_row",
+                "relationRows",
+                "relation_rows",
+                "extraRows",
+                "extra_rows",
+                "productRows",
+                "product_rows",
+            ],
+        );
 
-        if message.is_empty() && title.is_empty() && !has_pics && !single_pic {
+        if message.is_empty() && title.is_empty() && !has_pics && !single_pic && !has_video && !has_relation {
             return None;
         }
 
@@ -1023,8 +1094,7 @@ impl CoolapkClient {
         let user_level =
             get_str_by_keys(obj, &["userLevel", "level", "user_level"]).unwrap_or_default();
 
-        let target_type = obj
-            .get("target_row")
+        let target_type = first_value_by_keys(obj, &["targetRow", "target_row"])
             .and_then(|v| v.get("title"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
@@ -1042,7 +1112,7 @@ impl CoolapkClient {
             .cloned()
             .unwrap_or_else(|| json!({}));
 
-        Some(json!({
+        let mut cleaned = json!({
             "id": feed_id,
             "username": raw_username,
             "userAvatar": avatar,
@@ -1068,7 +1138,27 @@ impl CoolapkClient {
             "targetType": target_type,
             "uid": raw_uid,
             "dateline": get_u64_by_keys(obj, &["dateline", "create_time", "lastupdate", "createTime"])
-        }))
+        });
+
+        // 列表接口会把关联标的和视频字段放在这些扩展字段中，必须在归一化时保留下来。
+        copy_first_field(&mut cleaned, obj, "targetRow", &["targetRow", "target_row"]);
+        copy_first_field(&mut cleaned, obj, "relationRows", &["relationRows", "relation_rows"]);
+        copy_first_field(&mut cleaned, obj, "extraRows", &["extraRows", "extra_rows"]);
+        copy_first_field(&mut cleaned, obj, "productRows", &["productRows", "product_rows"]);
+        copy_first_field(&mut cleaned, obj, "videoUrl", &["videoUrl", "video_url", "videoURL", "videoSrc", "video_src"]);
+        copy_first_field(&mut cleaned, obj, "videoPic", &["videoPic", "video_pic", "videoCover", "video_cover", "videoThumbnail", "video_thumbnail"]);
+        copy_first_field(&mut cleaned, obj, "videoDuration", &["videoDuration", "video_duration"]);
+        copy_first_field(&mut cleaned, obj, "mediaUrl", &["mediaUrl", "media_url", "mediaURL"]);
+        copy_first_field(&mut cleaned, obj, "mediaPic", &["mediaPic", "media_pic"]);
+        copy_first_field(&mut cleaned, obj, "mediaInfo", &["mediaInfo", "media_info"]);
+        copy_first_field(&mut cleaned, obj, "mediaType", &["mediaType", "media_type"]);
+        copy_first_field(&mut cleaned, obj, "feedType", &["feedType", "feed_type"]);
+        copy_first_field(&mut cleaned, obj, "feedTypeName", &["feedTypeName", "feed_type_name"]);
+        copy_first_field(&mut cleaned, obj, "video", &["video"]);
+        copy_first_field(&mut cleaned, obj, "videoInfo", &["videoInfo", "video_info"]);
+        copy_first_field(&mut cleaned, obj, "media", &["media"]);
+
+        Some(cleaned)
     }
 
     fn extract_cleaned_list(json_data: &Value) -> Vec<Value> {

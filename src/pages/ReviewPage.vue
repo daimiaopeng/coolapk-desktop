@@ -119,6 +119,7 @@ import FeedCard from '../components/feed/FeedCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+import { hasFeedRenderableContent } from '../utils/feedFilter';
 
 const reviewTabs = [
   { key: 'review', label: '数码测评', icon: 'fas fa-flask', boardTag: '#/board/数码测评' },
@@ -158,7 +159,7 @@ function extractList(res: any): any[] {
 }
 
 function isValidFeed(item: any): boolean {
-  return !!(item && item.id && (item.message || item.title || item.pic || item.username));
+  return hasFeedRenderableContent(item);
 }
 
 async function loadFeeds(isRefresh: boolean = false) {

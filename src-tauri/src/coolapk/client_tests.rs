@@ -51,6 +51,61 @@ fn test_clean_feed_preserves_cloud_collection_state() {
 }
 
 #[test]
+fn test_clean_feed_preserves_relation_and_video_fields() {
+    let raw = json!({
+        "id": 123,
+        "uid": 456,
+        "username": "测试用户",
+        "target_row": {"id": 2967, "title": "黑神话：钟馗", "entityType": "game"},
+        "relation_rows": [{"id": 2967, "title": "黑神话：钟馗"}],
+        "extraRows": [{"id": 789, "title": "关联扩展卡片"}],
+        "productRows": [{"id": 999, "title": "关联产品"}],
+        "video_url": "https://example.com/video.mp4",
+        "video_pic": "https://example.com/video.jpg",
+        "video_duration": 900,
+        "media_url": "https://video.example.com/media.mp4",
+        "media_pic": "https://video.example.com/media.jpg",
+        "media_info": "{\"mediaType\":\"video\",\"duration\":952183}",
+        "media_type": "2",
+        "feedType": "video",
+        "feedTypeName": "视频"
+    });
+
+    let cleaned = CoolapkClient::clean_single_feed(&raw, 0).expect("带视频和关联标的的动态应能正常清洗");
+    assert_eq!(cleaned["targetRow"]["id"], 2967);
+    assert_eq!(cleaned["relationRows"][0]["title"], "黑神话：钟馗");
+    assert_eq!(cleaned["extraRows"][0]["title"], "关联扩展卡片");
+    assert_eq!(cleaned["productRows"][0]["title"], "关联产品");
+    assert_eq!(cleaned["videoUrl"], "https://example.com/video.mp4");
+    assert_eq!(cleaned["videoPic"], "https://example.com/video.jpg");
+    assert_eq!(cleaned["videoDuration"], 900);
+    assert_eq!(cleaned["mediaUrl"], "https://video.example.com/media.mp4");
+    assert_eq!(cleaned["mediaPic"], "https://video.example.com/media.jpg");
+    assert_eq!(cleaned["mediaInfo"], "{\"mediaType\":\"video\",\"duration\":952183}");
+    assert_eq!(cleaned["mediaType"], "2");
+    assert_eq!(cleaned["feedType"], "video");
+}
+
+#[test]
+fn test_clean_feed_keeps_video_or_relation_only_items() {
+    let video_only = json!({
+        "id": 123,
+        "uid": 456,
+        "username": "视频用户",
+        "videoUrl": "https://example.com/video.mp4"
+    });
+    let relation_only = json!({
+        "id": 124,
+        "uid": 456,
+        "username": "关联用户",
+        "relationRows": [{"id": 2967, "title": "黑神话：钟馗"}]
+    });
+
+    assert!(CoolapkClient::clean_single_feed(&video_only, 0).is_some());
+    assert!(CoolapkClient::clean_single_feed(&relation_only, 1).is_some());
+}
+
+#[test]
 fn test_user_page_data_url_allowlist() {
     assert!(CoolapkClient::is_allowed_user_page_url(
         "#/feed/userCoolPictureFeedList?fragmentTemplate=flex"

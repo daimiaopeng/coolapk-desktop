@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAdFeed, matchesBlockedKeywords, shouldHideFeed } from '../feedFilter';
+import { hasFeedRenderableContent, isAdFeed, matchesBlockedKeywords, shouldHideFeed } from '../feedFilter';
 
 describe('isAdFeed', () => {
   it('识别 feedType 为 ad 的动态', () => {
@@ -60,5 +60,19 @@ describe('shouldHideFeed', () => {
 
   it('普通动态不隐藏', () => {
     expect(shouldHideFeed({ message: '今天写代码' }, settings)).toBe(false);
+  });
+});
+
+describe('hasFeedRenderableContent', () => {
+  it('保留只有视频内容的动态', () => {
+    expect(hasFeedRenderableContent({ id: 1, videoUrl: 'https://cdn.example.com/video.mp4' })).toBe(true);
+  });
+
+  it('保留只有多关联标的的动态', () => {
+    expect(hasFeedRenderableContent({ id: 2, relationRows: [{ id: 20, title: '黑神话：悟空' }] })).toBe(true);
+  });
+
+  it('过滤没有任何可渲染内容的空对象', () => {
+    expect(hasFeedRenderableContent({ id: 3 })).toBe(false);
   });
 });

@@ -17,11 +17,11 @@
         </span>
       </div>
       <div class="meta-row">
-        <span v-if="recommendSource" :class="['source-tag', { clickable: entityType === 'product' || entityType === 'dyh' }]" @click.stop="handleSourceClick">
-          <i class="fas fa-compass source-icon" v-if="entityType === 'dyh' || entityType === 'product'"></i>
-          {{ recommendSource }}
+        <span v-if="showDeviceInfo && device" class="device-badge" :title="device">
+          <i class="fas fa-mobile-alt device-icon"></i>
+          <span>{{ device }}</span>
         </span>
-        <span class="meta-dot" v-if="recommendSource">•</span>
+        <span class="meta-dot" v-if="showDeviceInfo && device">•</span>
         <span class="dateline">{{ formatDateline(dateline) }}</span>
         <template v-if="isEdited">
           <span class="meta-dot">•</span>
@@ -30,11 +30,6 @@
             已编辑
           </button>
         </template>
-        <span class="meta-dot" v-if="showDeviceInfo && device">•</span>
-        <span v-if="showDeviceInfo && device" class="device-badge" :title="device">
-          <i class="fas fa-mobile-alt device-icon"></i>
-          <span>{{ device }}</span>
-        </span>
       </div>
     </div>
 
@@ -164,18 +159,6 @@ function formatDateline(time?: number | string): string {
   color: var(--brand-primary);
 }
 
-.user-level {
-  font-size: 11px;
-  font-weight: 800;
-  padding: 1px 7px;
-  border-radius: 8px;
-  color: #ffffff;
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-  line-height: 1.2;
-  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25);
-  font-style: italic;
-}
-
 .verify-badge {
   display: inline-flex;
   align-items: center;
@@ -191,6 +174,18 @@ function formatDateline(time?: number | string): string {
 
 .verify-icon {
   font-size: 11px;
+}
+
+.user-level {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  line-height: 1.2;
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.25);
+  font-style: italic;
 }
 
 .meta-row {

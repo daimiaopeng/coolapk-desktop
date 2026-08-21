@@ -207,3 +207,48 @@ describe('动态卡片编辑记录', () => {
     expect(wrapper.find('.stub-comments').text()).toBe('hot-1,normal-1');
   });
 });
+
+describe('动态关联和视频内容', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setActivePinia(createPinia());
+  });
+
+  it('渲染多种关联标的并保留视频卡片入口', () => {
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: {
+          id: 'relation-feed',
+          uid: '456',
+          username: '测试用户',
+          message: '视频动态正文',
+          videoUrl: 'https://cdn.example.com/video.mp4',
+          relationRows: [{ id: 1, title: '黑神话：悟空', entityType: 'game' }],
+          extraRows: [{ id: 2, title: '小米 13 Pro', entityType: 'product' }],
+          productRows: [{ id: 3, title: '蓝牙耳机', entityType: 'goods' }],
+        },
+      },
+      global: {
+        stubs: {
+          FeedHeader: true,
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedVideoCard: {
+            props: ['feed'],
+            template: '<div v-if="feed.videoUrl" class="stub-video-card">视频</div>',
+          },
+          FeedActionBar: true,
+          FeedCommentSection: true,
+          ForwardDialog: true,
+          LoadingState: true,
+          AppDialog: true,
+          FeedCollectionPickerDialog: true,
+          AppImage: true,
+        },
+      },
+    });
+
+    expect(wrapper.findAll('.feed-target-chip')).toHaveLength(3);
+    expect(wrapper.find('.stub-video-card').exists()).toBe(true);
+  });
+});

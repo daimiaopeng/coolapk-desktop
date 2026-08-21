@@ -39,6 +39,8 @@
       :force-expanded="detailMode"
     />
 
+    <FeedVideoCard :feed="feed" />
+
     <FeedImageGrid :images="feedImages" />
 
     <!-- 1. 被回复/转发的原动态 -->
@@ -63,28 +65,28 @@
     </div>
 
     <!-- 2. 关联的标的卡片（如机型“华为Pura70 Pro+”、应用、话题） -->
-    <div v-else-if="isTargetObject && targetRow" class="feed-target-wrapper">
+    <div v-if="targetObjectRows.length" class="feed-target-wrapper">
       <div
+        v-for="(target, index) in targetObjectRows"
+        :key="getTargetKey(target, index)"
         class="feed-target-chip"
-        @click.stop="openTarget"
-        :title="targetRow.title || targetRow.name"
+        @click.stop="openTarget(target)"
+        :title="getTargetTitle(target)"
       >
-        <div class="target-chip-media" v-if="targetRow.logo || targetRow.pic">
+        <div class="target-chip-media" v-if="getTargetImage(target)">
           <AppImage
-            :src="targetRow.logo || targetRow.pic"
-            :alt="targetRow.title"
+            :src="getTargetImage(target)"
+            :alt="getTargetTitle(target)"
             image-class="target-chip-logo"
             fit="contain"
           />
         </div>
         <div v-else class="target-chip-icon">
-          <i :class="targetIconClass"></i>
+          <i :class="targetIconClass(target)"></i>
         </div>
         <div class="target-chip-text">
-          <span class="target-chip-title">{{ targetRow.title || targetRow.name }}</span>
-          <span v-if="targetRow.subTitle || targetRow.subtitle" class="target-chip-subtitle">
-            {{ targetRow.subTitle || targetRow.subtitle }}
-          </span>
+          <span class="target-chip-title">{{ getTargetTitle(target) || '关联内容' }}</span>
+          <span v-if="getTargetSubtitle(target)" class="target-chip-subtitle">{{ getTargetSubtitle(target) }}</span>
         </div>
         <i class="fas fa-chevron-right target-chip-arrow"></i>
       </div>
@@ -164,6 +166,7 @@ import type { FeedItem } from '../../types/feed';
 import FeedHeader from './FeedHeader.vue';
 import FeedContent from './FeedContent.vue';
 import FeedImageGrid from './FeedImageGrid.vue';
+import FeedVideoCard from './FeedVideoCard.vue';
 import FeedActionBar from './FeedActionBar.vue';
 import FeedCollectionPickerDialog from './FeedCollectionPickerDialog.vue';
 import FeedCommentSection from './FeedCommentSection.vue';
@@ -179,7 +182,15 @@ import { useSettingsStore } from '../../stores/settings';
 import { showToast } from '../../utils/toast';
 import { requestConfirmation } from '../../utils/confirm';
 import { getErrorMessage } from '../../utils/errors';
-import { normalizeCoolapkNativeRoute } from '../../utils/coolapkRoute';
+import { normalizeCoolapkNativeRoute, normalizeCoolapkRoute } from '../../utils/coolapkRoute';
+import {
+  getFeedRelationImage,
+  getFeedRelationKey,
+  getFeedRelationRows,
+  getFeedRelationSubtitle,
+  getFeedRelationTitle,
+  getFeedRelationType,
+} from '../../utils/feedRelations';
 
 const settingsStore = useSettingsStore();
 const router = useRouter();
@@ -228,8 +239,9 @@ const isEdited = computed(() => {
   return changeCount > 0 || lastChangeTime > 0;
 });
 
-const targetRow = computed<any>(() =>
+const baseTargetRow = computed<any>(() =>
   props.feed.targetRow ||
+  (props.feed as any).target_row ||
   (props.feed as any).targetFeed ||
   (props.feed as any).replyFeed ||
   (props.feed as any).feedInfo ||
@@ -237,21 +249,36 @@ const targetRow = computed<any>(() =>
   null
 );
 
-const isTargetFeed = computed(() => {
-  const target = targetRow.value;
-  if (!target) return false;
-  const type = String(target.entityType || target.type || '').toLowerCase();
-  if (type === 'feed' || type === 'feed_reply' || type === 'feedreply' || type === 'article') return true;
-  if (Boolean((props.feed as any).replyFeed || (props.feed as any).feedInfo || (props.feed as any).feed)) return true;
-  return Boolean((target.username || target.userName || target.userInfo?.username) && (target.message || target.content) && !target.title);
+const targetRows = computed<any[]>(() => {
+  const candidates = [baseTargetRow.value, ...getFeedRelationRows(props.feed)].filter((row) => row && typeof row === 'object' && !Array.isArray(row));
+  const seen = new Set<string>();
+  return candidates.filter((row, index) => {
+    const key = getFeedRelationKey(row, index);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 });
 
-const isTargetObject = computed(() => {
-  if (isTargetFeed.value) return false;
-  const target = targetRow.value;
+const targetRow = computed<any>(() => targetRows.value[0] || null);
+
+function isTargetFeedRow(target: any): boolean {
   if (!target) return false;
-  return Boolean(target.title || target.name || target.subTitle || target.logo || target.pic || target.id);
+  const type = String(target.entityType || target.entity_type || target.type || '').toLowerCase();
+  if (type === 'feed' || type === 'feed_reply' || type === 'feedreply' || type === 'article') return true;
+  return Boolean((target.username || target.userName || target.userInfo?.username) && (target.message || target.message_raw_output || target.content || target.text));
+}
+
+const isTargetFeed = computed(() => {
+  const target = targetRow.value;
+  return isTargetFeedRow(target);
 });
+
+const targetObjectRows = computed<any[]>(() => targetRows.value.filter((target) => {
+  if (isTargetFeedRow(target)) return false;
+  const type = getFeedRelationType(target);
+  return Boolean(getFeedRelationTitle(target) || getFeedRelationImage(target) || target.id || target.entityId || target.url || type);
+}));
 
 const quotedAuthor = computed(() => {
   const t = targetRow.value;
@@ -282,38 +309,58 @@ const quotedImages = computed<string[]>(() => {
     .filter((u): u is string => Boolean(u && u.length > 5));
 });
 
-const targetIconClass = computed(() => {
-  const target = targetRow.value;
+function targetIconClass(target: any): string {
   if (!target) return 'fas fa-tag';
-  const type = String(target.entityType || target.type || '').toLowerCase();
-  const title = String(target.title || target.name || '').toLowerCase();
+  const type = getFeedRelationType(target);
+  const title = getFeedRelationTitle(target).toLowerCase();
   if (type.includes('product') || type.includes('device') || title.includes('pro') || title.includes('ultra') || title.includes('phone') || title.includes('mate') || title.includes('pura')) return 'fas fa-mobile-screen';
   if (type.includes('apk') || type.includes('app')) return 'fas fa-cubes';
   if (type.includes('topic') || type.includes('node') || type.includes('tag') || title.includes('os') || title.includes('ui')) return 'fas fa-hashtag';
   if (type.includes('goods') || type.includes('mall')) return 'fas fa-bag-shopping';
   return 'fas fa-tag';
-});
+}
 
-function openTarget() {
-  const target = targetRow.value;
+function getTargetTitle(target: any): string {
+  return getFeedRelationTitle(target);
+}
+
+function getTargetSubtitle(target: any): string {
+  return getFeedRelationSubtitle(target);
+}
+
+function getTargetImage(target: any): string {
+  return getFeedRelationImage(target);
+}
+
+function getTargetKey(target: any, index: number): string {
+  return getFeedRelationKey(target, index);
+}
+
+function openTarget(target: any) {
   if (!target) return;
-  if (typeof target.url === 'string' && target.url) {
-    if (target.url.startsWith('/')) {
-      void router.push(normalizeCoolapkNativeRoute(target.url) || target.url);
-    } else {
-      void CoolapkTauriAPI.openUrl(target.url);
-    }
+  const targetUrl = target.url || target.targetUrl || target.target_url || target.webUrl || target.web_url;
+  if (typeof targetUrl === 'string' && targetUrl) {
+    const normalizedRoute = normalizeCoolapkRoute(targetUrl);
+    if (normalizedRoute) void router.push(normalizedRoute);
+    else if (targetUrl.startsWith('/')) void router.push(normalizeCoolapkNativeRoute(targetUrl) || targetUrl);
+    else void CoolapkTauriAPI.openUrl(targetUrl);
     return;
   }
-  const type = String(target.entityType || target.type || '').toLowerCase();
-  const id = target.id || target.entityId || target.target_id;
+  const type = getFeedRelationType(target);
+  const id = target.id || target.entityId || target.entity_id || target.targetId || target.target_id;
+  const packageName = target.packageName || target.package_name || target.apkName || target.apkname;
+  if (packageName && (type.includes('apk') || type.includes('app') || type.includes('game'))) {
+    const appRoute = normalizeCoolapkNativeRoute(`/apk/${String(packageName)}`);
+    if (appRoute) void router.push(appRoute);
+    return;
+  }
   if (id) {
     if (type.includes('apk') || type.includes('app')) {
       const appRoute = normalizeCoolapkNativeRoute(`/apk/${String(id)}`);
       if (appRoute) void router.push(appRoute);
-    } else if (type.includes('topic') || type.includes('node')) {
+    } else if (type.includes('topic') || type.includes('node') || type.includes('tag')) {
       void router.push(`/topic/${id}`);
-    } else if (type.includes('product')) {
+    } else if (type.includes('product') || type.includes('device')) {
       void router.push(`/product/${id}`);
     }
   }
@@ -644,7 +691,7 @@ watch(
 function handleCardClick(e: MouseEvent) {
   if (props.detailMode) return;
   const target = e.target as HTMLElement;
-  if (target.closest('a') || target.closest('button') || target.closest('.grid-item') || target.closest('.inline-comment-wrapper')) {
+  if (target.closest('a') || target.closest('button') || target.closest('.grid-item') || target.closest('.feed-video-card') || target.closest('.inline-comment-wrapper')) {
     return;
   }
 
@@ -766,7 +813,10 @@ function formatRichText(text: string) {
 
 /* 标的卡片（如机型“华为Pura70 Pro+”、产品、话题、应用等）精致胶囊 */
 .feed-target-wrapper {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   margin: 6px 0 8px 0;
 }

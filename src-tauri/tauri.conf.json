@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' ws://127.0.0.1:17520 http://127.0.0.1:17520 http://127.0.0.1:8080 https://api.coolapk.com https://api2.coolapk.com https://api.github.com; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'"
+      "csp": "default-src 'self'; connect-src 'self' ws://127.0.0.1:17520 http://127.0.0.1:17520 http://127.0.0.1:8080 https://api.coolapk.com https://api2.coolapk.com https://api.github.com; img-src 'self' data: https:; media-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'"
     }
   },
   "bundle": {
