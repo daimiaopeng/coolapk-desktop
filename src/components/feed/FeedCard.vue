@@ -182,7 +182,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { showToast } from '../../utils/toast';
 import { requestConfirmation } from '../../utils/confirm';
 import { getErrorMessage } from '../../utils/errors';
-import { normalizeCoolapkNativeRoute, normalizeCoolapkRoute } from '../../utils/coolapkRoute';
+import { normalizeCoolapkNativeRoute, normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../../utils/coolapkRoute';
 import {
   getFeedRelationImage,
   getFeedRelationKey,
@@ -340,6 +340,18 @@ function openTarget(target: any) {
   if (!target) return;
   const targetUrl = target.url || target.targetUrl || target.target_url || target.webUrl || target.web_url;
   if (typeof targetUrl === 'string' && targetUrl) {
+    const pageRoute = normalizeCoolapkPageRoute(targetUrl);
+    if (pageRoute) {
+      const pageUrl = new URL(pageRoute, 'https://www.coolapk.com');
+      void router.push({
+        path: '/page',
+        query: {
+          url: pageUrl.searchParams.get('url') || '',
+          title: getTargetTitle(target),
+        },
+      });
+      return;
+    }
     const normalizedRoute = normalizeCoolapkRoute(targetUrl);
     if (normalizedRoute) void router.push(normalizedRoute);
     else if (targetUrl.startsWith('/')) void router.push(normalizeCoolapkNativeRoute(targetUrl) || targetUrl);

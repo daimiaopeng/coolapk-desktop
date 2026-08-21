@@ -22,6 +22,7 @@ import AlbumPage from '../pages/AlbumPage.vue';
 import AlbumsPage from '../pages/AlbumsPage.vue';
 import PicturesPage from '../pages/PicturesPage.vue';
 import HeadlinePage from '../pages/HeadlinePage.vue';
+import PageDataListPage from '../pages/PageDataListPage.vue';
 import ReviewPage from '../pages/ReviewPage.vue';
 import SecondHandPage from '../pages/SecondHandPage.vue';
 import ExternalPage from '../pages/ExternalPage.vue';
@@ -69,6 +70,7 @@ const routes = [
   { path: '/albums', name: 'Albums', component: AlbumsPage },
   { path: '/pictures', name: 'Pictures', component: PicturesPage },
   { path: '/headline', name: 'Headline', component: HeadlinePage },
+  { path: '/page', name: 'PageDataList', component: PageDataListPage },
   {
     path: '/settings',
     component: SettingsLayout,

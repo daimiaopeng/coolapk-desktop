@@ -85,6 +85,23 @@ function normalizeCoolapkWriterRoute(href: string): string | null {
   return `/product/${encodeURIComponent(targetId)}?tab=rating&mode=writer`;
 }
 
+/** 将酷安服务端动态列表页转换为桌面端的通用列表路由。 */
+export function normalizeCoolapkPageRoute(href: string): string | null {
+  const path = extractCoolapkPath(href);
+  if (!path) return null;
+
+  const match = path.match(/^\/page\?url=(.+)$/i);
+  if (!match) return null;
+
+  let pageUrl = match[1];
+  try {
+    pageUrl = decodeURIComponent(pageUrl);
+  } catch {
+    // 保留原始值，避免异常编码阻断服务端页面加载。
+  }
+  return `/page?url=${encodeURIComponent(pageUrl)}`;
+}
+
 function normalizeCoolapkUserRoute(href: string): string | null {
   const match = href.match(/^\/(?:u|user)\/([^/?#]+)(?:\?([^#]*))?$/i);
   if (!match) return null;
@@ -118,6 +135,7 @@ export function normalizeCoolapkRoute(href: string): string | null {
   const routeRules = [
     normalizeCoolapkRatingRoute,
     normalizeCoolapkWriterRoute,
+    normalizeCoolapkPageRoute,
     normalizeCoolapkNativeRoute,
     normalizeCoolapkUserRoute,
     normalizeCoolapkTopicRoute,

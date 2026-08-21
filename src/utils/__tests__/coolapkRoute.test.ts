@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeCoolapkAppRoute, normalizeCoolapkRoute } from '../coolapkRoute';
+import { normalizeCoolapkAppRoute, normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../coolapkRoute';
 
 describe('酷安应用路由', () => {
   it('将应用详情查询链接转换为桌面端路由', () => {
@@ -19,6 +19,11 @@ describe('酷安应用路由', () => {
 });
 
 describe('酷安站内路由', () => {
+  it('将服务端动态列表页转换为桌面端列表路由', () => {
+    expect(normalizeCoolapkPageRoute('/page?url=V8_JINRI_NEWPHONE666')).toBe('/page?url=V8_JINRI_NEWPHONE666');
+    expect(normalizeCoolapkRoute('/page?url=%2Fproduct%2FfeedList')).toBe('/page?url=%2Fproduct%2FfeedList');
+  });
+
   it('统一解析普通、hash 和完整 URL 形式的评价页面', () => {
     const query = 'uid=123&targetType=product&parseRatingToFeed=1';
     expect(normalizeCoolapkRoute(`/feed/nodeRatingList?${query}`)).toBe('/user/123?tab=rating&ratingTarget=digital');

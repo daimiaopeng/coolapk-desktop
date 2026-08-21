@@ -17,12 +17,11 @@
         </span>
       </div>
       <div class="meta-row">
+        <span class="dateline">{{ formatDateline(dateline) }}</span>
         <span v-if="showDeviceInfo && device" class="device-badge" :title="device">
           <i class="fas fa-mobile-alt device-icon"></i>
           <span>{{ device }}</span>
         </span>
-        <span class="meta-dot" v-if="showDeviceInfo && device">•</span>
-        <span class="dateline">{{ formatDateline(dateline) }}</span>
         <template v-if="isEdited">
           <span class="meta-dot">•</span>
           <button class="edited-badge" type="button" title="查看编辑记录" @click.stop="emit('edit-history')">

@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import FeedHeader from '../FeedHeader.vue';
 
 describe('动态头部信息布局', () => {
-  it('保留认证角标，移除来源角标并将机型气泡放到来源角标位置', () => {
+  it('按 APK 顺序展示认证、发布时间和机型', () => {
     setActivePinia(createPinia());
     const wrapper = mount(FeedHeader, {
       props: {
@@ -24,7 +24,9 @@ describe('动态头部信息布局', () => {
 
     expect(wrapper.find('.verify-badge').text()).toContain('酷安认证: 资讯达人');
     expect(wrapper.find('.meta-row .source-tag').exists()).toBe(false);
+    expect(wrapper.find('.meta-row .dateline').text()).toBe('1 天前');
     expect(wrapper.find('.meta-row .device-badge').text()).toContain('OPPO Find X7 Ultra');
     expect(wrapper.find('.user-row .device-badge').exists()).toBe(false);
+    expect(wrapper.find('.meta-row').element.firstElementChild?.classList.contains('dateline')).toBe(true);
   });
 });
