@@ -334,6 +334,14 @@ pub fn run() {
                     .persist_cookie_to(dir.join("session_cookie.txt"));
             }
 
+            // 启动时在后台异步清理上次更新遗留的临时安装包
+            std::thread::spawn(|| {
+                let update_dir = std::env::temp_dir().join("coolapk-desktop-update");
+                if update_dir.exists() {
+                    let _ = std::fs::remove_dir_all(&update_dir);
+                }
+            });
+
             // 系统托盘图标：常驻后台、快捷恢复窗口与退出
             if let Some(icon) = app.default_window_icon().cloned() {
                 use tauri::menu::{Menu, MenuItem};

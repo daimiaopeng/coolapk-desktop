@@ -1917,34 +1917,12 @@ pub fn install_update(installer_path: String) -> Result<(), String> {
             .args(["/S", "/UPDATE", "/R"])
             .spawn()
             .map_err(|e| e.to_string())?;
-        schedule_update_package_cleanup(&canonical);
     }
     #[cfg(not(target_os = "windows"))]
     {
         let _ = canonical;
     }
     Ok(())
-}
-
-/// 安装程序启动后由独立 PowerShell 进程等待文件解锁并删除安装包。
-/// 当前应用随后会退出，因此不能依赖本进程异步清理；路径已经过更新目录校验，
-/// PowerShell 单引号字面量也会转义，避免把路径内容当作命令执行。
-#[cfg(target_os = "windows")]
-fn schedule_update_package_cleanup(path: &std::path::Path) {
-    let escaped_path = path.to_string_lossy().replace('\'', "''");
-    let script = format!(
-        "$p='{escaped_path}'; for($i=0; $i -lt 120; $i++) {{ if(-not (Test-Path -LiteralPath $p)) {{ break }}; try {{ Remove-Item -LiteralPath $p -Force -ErrorAction Stop; break }} catch {{ Start-Sleep -Seconds 1 }} }}"
-    );
-    let _ = std::process::Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-WindowStyle",
-            "Hidden",
-            "-Command",
-            &script,
-        ])
-        .spawn();
 }
 
 /// 退出整个应用（用于更新前关闭窗口）
