@@ -93,20 +93,33 @@ function handleSourceClick() {
 
 function formatDateline(time?: number | string): string {
   if (!time) return '刚刚';
-  if (typeof time === 'string') return time;
+  const timestamp = normalizeTimestamp(time);
+  if (timestamp === null) return String(time);
   if (settingsStore.settings.timeDisplay === 'absolute') {
-    const d = new Date(time * 1000);
+    const d = new Date(timestamp * 1000);
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
   const now = Math.floor(Date.now() / 1000);
-  const diff = now - time;
+  const diff = now - timestamp;
   if (diff < 60) return '刚刚';
   if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
   if (diff < 2592000) return `${Math.floor(diff / 86400)} 天前`;
-  const date = new Date(time * 1000);
+  const date = new Date(timestamp * 1000);
   return `${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+/**
+ * 酷安不同栏目返回的时间单位不完全一致：普通动态通常是秒，
+ * 头条最新动态可能返回 10 位以上的字符串时间戳（十分之一秒）。
+ */
+function normalizeTimestamp(value: number | string): number | null {
+  const timestamp = typeof value === 'number' ? value : Number(value.trim());
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
+  if (timestamp >= 1_000_000_000_000) return timestamp / 1000;
+  if (timestamp >= 10_000_000_000) return timestamp / 10;
+  return timestamp;
 }
 </script>
 
