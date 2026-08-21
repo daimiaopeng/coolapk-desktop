@@ -2010,9 +2010,10 @@ async function handleSend() {
   box-sizing: border-box;
 }
 
-.comment-rich-editor:empty:before {
+.comment-rich-editor:empty:before,
+.comment-rich-editor:empty::before {
   content: attr(data-placeholder);
-  color: var(--text-muted);
+  color: var(--text-tertiary, #969ba3) !important;
   pointer-events: none;
 }
 
