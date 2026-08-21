@@ -350,6 +350,15 @@ export class CoolapkTauriAPI {
     return await invokeNative('reply_feed', args);
   }
 
+  // 应用评价区评论；不要与动态评论 replyFeed 混用。
+  static async getApkComments(appId: string, listType: string = 'dateline_desc', page: number = 1) {
+    return await invokeNative('get_apk_comments', { appId, listType, page }, { retry: true, kind: 'comment' });
+  }
+
+  static async commentApk(appId: string, message: string) {
+    return await invokeNative('comment_apk', { appId, message });
+  }
+
   static async followUser(uid: string) {
     return await invokeNative('follow_user', { uid });
   }

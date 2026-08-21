@@ -38,13 +38,31 @@
       </div>
     </AppDialog>
 
+    <AppDialog :is-open="Boolean(downloadNotice)" title="正在下载更新" :width="460" @close="downloadNotice = null">
+      <div v-if="downloadNotice" class="startup-update">
+        <p class="startup-update-version">酷安桌面版 {{ downloadNotice.version }}</p>
+        <p v-if="downloadNotice.releaseNotes" class="startup-update-notes">
+          <span class="startup-update-notes-label">更新日志：</span>{{ downloadNotice.releaseNotes }}
+        </p>
+        <p class="startup-update-notes">已发现新版本，更新包正在后台下载。下载完成后会再次提示是否立即安装。</p>
+        <p v-if="downloading" class="startup-update-notes">
+          当前进度：{{ downloading.percent }}%（{{ formatBytes(downloading.downloaded) }} / {{ formatBytes(downloading.total) }}）
+        </p>
+        <div class="startup-update-actions">
+          <button class="startup-update-later" @click="downloadNotice = null">知道了</button>
+        </div>
+      </div>
+    </AppDialog>
+
     <AppDialog :is-open="Boolean(readyInfo)" title="更新包已下载" :width="460" @close="readyInfo = null">
       <div v-if="readyInfo" class="startup-update">
         <p class="startup-update-version">酷安桌面版 {{ readyInfo.version }} 更新包已下载完成</p>
         <p class="startup-update-notes">是否立即更新？更新将关闭当前窗口，全自动完成安装后重新打开软件。</p>
         <div class="startup-update-actions">
           <button class="startup-update-later" @click="readyInfo = null">稍后再说</button>
-          <button class="startup-update-button" @click="installNow">立即更新</button>
+          <button class="startup-update-button" :disabled="installingUpdate" @click="installNow">
+            {{ installingUpdate ? '正在启动安装…' : '立即更新' }}
+          </button>
         </div>
       </div>
     </AppDialog>
@@ -88,17 +106,21 @@ import { clearResourceCache } from './utils/resourceCache';
 const PENDING_UPDATE_KEY = 'coolapk_pending_update';
 
 type ReadyInfo = { version: string; path: string };
+type DownloadNotice = { version: string; releaseNotes?: string };
 
 type DownloadProgress = { downloaded: number; total: number; percent: number };
 
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 const updateInfo = ref<UpdateInfo | null>(null);
+const downloadNotice = ref<DownloadNotice | null>(null);
 const readyInfo = ref<ReadyInfo | null>(null);
 const downloading = ref<DownloadProgress | null>(null);
 const downloadError = ref<string | null>(null);
+const installingUpdate = ref(false);
 const isWindows = navigator.userAgent.includes('Windows');
 let unregisterHotkeys: (() => void) | null = null;
+let updateDownloadInFlight = false;
 
 function formatBytes(bytes: number) {
   if (!bytes) return '0 MB';
@@ -131,24 +153,37 @@ async function checkForUpdate(manual = false) {
 
 async function startBackgroundDownload(info: UpdateInfo) {
   const url = info.installerUrl;
-  if (!url) return;
+  // 自动检查、手动检查和按钮点击可能在同一时间触发；同一应用只允许一个下载任务，
+  // 否则多个任务会同时写同一个安装包并让进度事件互相覆盖。
+  if (!url || updateDownloadInFlight || downloading.value || readyInfo.value) return;
+  updateDownloadInFlight = true;
   updateInfo.value = null;
+  downloadError.value = null;
+  downloadNotice.value = {
+    version: info.latestVersion || '新版本',
+    releaseNotes: info.releaseNotes || '',
+  };
   downloading.value = { downloaded: 0, total: 0, percent: 0 };
-  const unlisten = await listen<{ downloaded: number; total: number }>('update-download-progress', (event) => {
-    const { downloaded, total } = event.payload;
-    downloading.value = {
-      downloaded,
-      total,
-      percent: total ? Math.round((downloaded / total) * 100) : 0,
-    };
-  });
+  let unlisten: (() => void) | null = null;
+  let lastDownloaded = 0;
   try {
+    unlisten = await listen<{ downloaded: number; total: number }>('update-download-progress', (event) => {
+      const { downloaded, total } = event.payload;
+      // 丢弃异常的倒退事件，避免进度条因旧任务或事件乱序反复跳动。
+      if (downloaded < lastDownloaded) return;
+      lastDownloaded = downloaded;
+      downloading.value = {
+        downloaded,
+        total,
+        percent: total ? Math.min(100, Math.round((downloaded / total) * 100)) : 0,
+      };
+    });
     const path = await CoolapkTauriAPI.downloadUpdate(url, {
       speedLimitKbps: settingsStore.settings.updateSpeedLimitKBps,
       proxyUrl: settingsStore.settings.proxyUrl,
     });
-    await unlisten();
     downloading.value = null;
+    downloadNotice.value = null;
     readyInfo.value = { version: info.latestVersion || '', path };
     localStorage.setItem(PENDING_UPDATE_KEY, JSON.stringify(readyInfo.value));
     if (settingsStore.settings.desktopNotifications && settingsStore.settings.notifyDownloadComplete) {
@@ -161,28 +196,34 @@ async function startBackgroundDownload(info: UpdateInfo) {
       );
     }
   } catch (err) {
-    await unlisten();
     downloading.value = null;
+    downloadNotice.value = null;
     downloadError.value = `更新包下载失败，请检查网络连接后重试。(${String(err)})`;
+  } finally {
+    if (unlisten) await unlisten();
+    updateDownloadInFlight = false;
   }
 }
 
 function installNow() {
   const info = readyInfo.value;
-  if (!info) return;
+  if (!info || installingUpdate.value) return;
   // 安装前再次校验：本地已不低于该版本时放弃安装旧包（防降级）
   if (info.version && !isNewerVersion(info.version)) {
     localStorage.removeItem(PENDING_UPDATE_KEY);
     readyInfo.value = null;
     return;
   }
-  localStorage.removeItem(PENDING_UPDATE_KEY);
-  readyInfo.value = null;
+  installingUpdate.value = true;
   void (async () => {
     try {
       await CoolapkTauriAPI.installUpdate(info.path);
+      // 只有安装程序成功启动后才清理待安装记录；启动失败时保留弹窗和路径，允许重试。
+      localStorage.removeItem(PENDING_UPDATE_KEY);
+      readyInfo.value = null;
       await CoolapkTauriAPI.quitApp();
     } catch (err) {
+      installingUpdate.value = false;
       downloadError.value = `启动安装程序失败：${String(err)}`;
     }
   })();

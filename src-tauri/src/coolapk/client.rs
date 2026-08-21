@@ -3142,6 +3142,27 @@ impl CoolapkClient {
         )
     }
 
+    /// 应用评论列表（应用评价，不是动态讨论）
+    /// 数据来源: GET /v6/apk/commentList?id={id}&listType={list_type}&page={page}
+    pub async fn get_apk_comments(
+        &self,
+        app_id: &str,
+        list_type: &str,
+        page: u32,
+    ) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get(
+                "/v6/apk/commentList",
+                &[
+                    ("id", app_id.to_string()),
+                    ("listType", list_type.to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await?,
+        )
+    }
+
     pub async fn get_notification_count(&self) -> Result<Value, String> {
         wrap_api_data(self.api_get("/v6/notification/checkCount", &[]).await?)
     }
@@ -3755,6 +3776,19 @@ impl CoolapkClient {
             }
         }
         wrap_api_data(self.api_post("/v6/feed/reply", &query, &form).await?)
+    }
+
+    /// 发表评论到应用评价区；此接口与动态评论 /v6/feed/reply 的语义不同。
+    /// 对应公开 V6 接口资料中的 POST /v6/apk/comment?id={id}，正文使用 message 表单字段。
+    pub async fn comment_apk(&self, app_id: &str, message: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_post(
+                "/v6/apk/comment",
+                &[("id", app_id.to_string())],
+                &[("message", message.to_string())],
+            )
+            .await?,
+        )
     }
 
     pub async fn follow_user(&self, uid: &str) -> Result<Value, String> {

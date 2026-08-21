@@ -261,6 +261,33 @@
         </div>
       </template>
 
+      <!-- Tab: 应用评论；使用 /v6/apk/commentList 与 /v6/apk/comment，区别于动态讨论接口 -->
+      <template v-if="activeDetailTab === 'comments'">
+        <div v-if="commentsLoading && apkComments.length === 0" class="loading-wrapper">
+          <LoadingState text="正在加载应用评论..." />
+        </div>
+
+        <div v-else-if="commentsError && apkComments.length === 0" class="error-wrapper">
+          <ErrorState title="加载应用评论失败" :message="commentsError" @retry="loadApkComments(true)" />
+        </div>
+
+        <div v-else class="app-comments-panel">
+          <FeedCommentSection
+            :feed-id="''"
+            :feed-uid="String(appInfo?.creatoruid || '')"
+            :comments="apkComments"
+            :loading="false"
+            @send-comment="sendAppComment"
+          />
+
+          <div class="pagination-footer">
+            <LoadingState v-if="commentsLoading" text="加载更多评论..." />
+            <button v-else-if="commentsError" class="retry-inline" @click="loadApkComments(false)">加载失败，点击重试</button>
+            <div v-else-if="commentsNoMore && apkComments.length > 0" class="no-more">没有更多评论了</div>
+          </div>
+        </div>
+      </template>
+
       <!-- Tab: 讨论 -->
       <template v-if="activeDetailTab === 'discussions'">
         <div v-if="discussionsLoading && discussionFeeds.length === 0" class="loading-wrapper">
@@ -298,11 +325,14 @@ import AppButton from '../components/common/AppButton.vue';
 import AppImage from '../components/common/AppImage.vue';
 import AppDialog from '../components/common/AppDialog.vue';
 import FeedCard from '../components/feed/FeedCard.vue';
+import FeedCommentSection from '../components/feed/FeedCommentSection.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
+import { getErrorMessage } from '../utils/errors';
+import { showToast } from '../utils/toast';
 
 const route = useRoute();
 const router = useRouter();
@@ -329,10 +359,17 @@ const detailTabs = [
   { key: 'versions', label: '版本历史' },
   { key: 'discoverers', label: '发现者' },
   { key: 'discussions', label: '讨论' },
+  { key: 'comments', label: '评论' },
   { key: 'gifts', label: '礼包' },
 ];
 
 const discussionFeeds = ref<any[]>([]);
+const apkComments = ref<any[]>([]);
+const commentsPage = ref(1);
+const commentsLoading = ref(false);
+const commentsNoMore = ref(false);
+const commentsError = ref('');
+const commentSubmitting = ref(false);
 
 function handleFeedDeleted(id: string | number) {
   discussionFeeds.value = discussionFeeds.value.filter((f: any) => String(f.id) !== String(id));
@@ -455,6 +492,56 @@ async function loadDiscussions(reset: boolean = false) {
   }
 }
 
+async function loadApkComments(reset: boolean = false) {
+  if (!packageName.value || commentsLoading.value) return;
+  if (!reset && commentsNoMore.value) return;
+
+  if (reset) {
+    commentsPage.value = 1;
+    commentsNoMore.value = false;
+    apkComments.value = [];
+    commentsError.value = '';
+  }
+
+  commentsLoading.value = true;
+  try {
+    const res = await CoolapkTauriAPI.getApkComments(packageName.value, 'dateline_desc', commentsPage.value);
+    const data = res?.data || [];
+    const items = Array.isArray(data) ? data : [];
+    if (items.length === 0) {
+      commentsNoMore.value = true;
+    } else {
+      apkComments.value.push(...items);
+      commentsPage.value += 1;
+    }
+  } catch (err: any) {
+    commentsError.value = getErrorMessage(err, '应用评论加载失败');
+  } finally {
+    commentsLoading.value = false;
+  }
+}
+
+async function sendAppComment(message: string) {
+  if (!authStore.isLoggedIn) {
+    authStore.openLoginModal();
+    return;
+  }
+  if (!packageName.value || commentSubmitting.value) return;
+
+  commentSubmitting.value = true;
+  try {
+    // 应用评论写接口要求应用数字 ID；详情接口同时返回 packageName 与 id，不能把包名直接当 id 提交。
+    const appId = String(appInfo.value?.id || appInfo.value?.aid || appInfo.value?.entityId || packageName.value);
+    await CoolapkTauriAPI.commentApk(appId, message.trim());
+    await loadApkComments(true);
+    showToast('应用评论发表成功');
+  } catch (err: any) {
+    showToast(getErrorMessage(err, '应用评论发表失败'), 'error');
+  } finally {
+    commentSubmitting.value = false;
+  }
+}
+
 async function loadVersions() {
   if (!packageName.value || versionsLoading.value) return;
   versionsLoading.value = true;
@@ -566,6 +653,8 @@ function selectDetailTab(key: string) {
     loadDiscoverers(true);
   } else if (key === 'gifts' && giftsList.value.length === 0) {
     loadGifts(true);
+  } else if (key === 'comments' && apkComments.value.length === 0) {
+    loadApkComments(true);
   }
 }
 
@@ -584,6 +673,10 @@ function handlePageScroll(e: Event) {
     } else if (activeDetailTab.value === 'gifts') {
       if (!giftsLoading.value && !giftsNoMore.value) {
         loadGifts(false);
+      }
+    } else if (activeDetailTab.value === 'comments') {
+      if (!commentsLoading.value && !commentsNoMore.value) {
+        loadApkComments(false);
       }
     }
   }

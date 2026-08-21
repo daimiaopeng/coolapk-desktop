@@ -577,6 +577,19 @@ pub async fn get_app_detail(
 }
 
 #[tauri::command]
+pub async fn get_apk_comments(
+    state: State<'_, AppState>,
+    app_id: String,
+    list_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_apk_comments(&app_id, &list_type, page)
+        .await
+}
+
+#[tauri::command]
 pub async fn get_notification_count(state: State<'_, AppState>) -> Result<Value, String> {
     state.client.get_notification_count().await
 }
@@ -798,6 +811,15 @@ pub async fn reply_feed(
             post_token.as_deref(),
         )
         .await
+}
+
+#[tauri::command]
+pub async fn comment_apk(
+    state: State<'_, AppState>,
+    app_id: String,
+    message: String,
+) -> Result<Value, String> {
+    state.client.comment_apk(&app_id, &message).await
 }
 
 #[tauri::command]
@@ -1491,7 +1513,23 @@ pub async fn download_update(
     if safe_name.is_empty() || !(safe_name.ends_with(".exe") || safe_name.ends_with(".msi")) {
         return Err("更新包文件名不合法".to_string());
     }
-    let path = dir.join(safe_name);
+    // 每次下载使用独立文件名，避免旧任务或另一个应用实例仍持有同名安装包时互相锁定。
+    let extension = if safe_name.to_ascii_lowercase().ends_with(".msi") {
+        "msi"
+    } else {
+        "exe"
+    };
+    let stem = safe_name
+        .get(..safe_name.len().saturating_sub(extension.len() + 1))
+        .filter(|value| !value.is_empty())
+        .unwrap_or("coolapk-desktop-update");
+    let nonce = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let unique_name = format!("{stem}-{}-{nonce}.{extension}", std::process::id());
+    let path = dir.join(unique_name);
+    let partial_path = path.with_extension(format!("{extension}.part"));
 
     let mut builder = reqwest::Client::builder().user_agent("coolapk-desktop-updater");
     if let Some(proxy) = proxy_url.filter(|p| !p.trim().is_empty()) {
@@ -1508,7 +1546,7 @@ pub async fn download_update(
     if total > UPDATE_MAX_BYTES {
         return Err("更新包体积异常（超过 500MB），已拒绝下载".to_string());
     }
-    let mut file = tokio::fs::File::create(&path)
+    let mut file = tokio::fs::File::create(&partial_path)
         .await
         .map_err(|e| e.to_string())?;
     let mut downloaded: u64 = 0;
@@ -1519,7 +1557,8 @@ pub async fn download_update(
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
         downloaded += chunk.len() as u64;
         if downloaded > UPDATE_MAX_BYTES {
-            let _ = tokio::fs::remove_file(&path).await;
+            drop(file);
+            let _ = tokio::fs::remove_file(&partial_path).await;
             return Err("更新包体积异常（超过 500MB），已中止下载".to_string());
         }
         file.write_all(&chunk).await.map_err(|e| e.to_string())?;
@@ -1544,11 +1583,17 @@ pub async fn download_update(
         }
     }
     file.flush().await.map_err(|e| e.to_string())?;
+    file.sync_all().await.map_err(|e| e.to_string())?;
+    // Windows 下启动安装程序前必须释放下载文件句柄，否则 CreateProcess 可能返回 os error 32。
+    drop(file);
     // 服务端声明了文件大小时校验完整性，避免保存半成品安装包
     if total > 0 && downloaded != total {
-        let _ = tokio::fs::remove_file(&path).await;
+        let _ = tokio::fs::remove_file(&partial_path).await;
         return Err(format!("下载中断：已下载 {downloaded}/{total} 字节"));
     }
+    tokio::fs::rename(&partial_path, &path)
+        .await
+        .map_err(|e| format!("保存更新包失败：{e}"))?;
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -1817,12 +1862,34 @@ pub fn install_update(installer_path: String) -> Result<(), String> {
             .args(["/S", "/UPDATE", "/R"])
             .spawn()
             .map_err(|e| e.to_string())?;
+        schedule_update_package_cleanup(&canonical);
     }
     #[cfg(not(target_os = "windows"))]
     {
         let _ = canonical;
     }
     Ok(())
+}
+
+/// 安装程序启动后由独立 PowerShell 进程等待文件解锁并删除安装包。
+/// 当前应用随后会退出，因此不能依赖本进程异步清理；路径已经过更新目录校验，
+/// PowerShell 单引号字面量也会转义，避免把路径内容当作命令执行。
+#[cfg(target_os = "windows")]
+fn schedule_update_package_cleanup(path: &std::path::Path) {
+    let escaped_path = path.to_string_lossy().replace('\'', "''");
+    let script = format!(
+        "$p='{escaped_path}'; for($i=0; $i -lt 120; $i++) {{ if(-not (Test-Path -LiteralPath $p)) {{ break }}; try {{ Remove-Item -LiteralPath $p -Force -ErrorAction Stop; break }} catch {{ Start-Sleep -Seconds 1 }} }}"
+    );
+    let _ = std::process::Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            &script,
+        ])
+        .spawn();
 }
 
 /// 退出整个应用（用于更新前关闭窗口）
