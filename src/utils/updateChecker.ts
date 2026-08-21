@@ -12,18 +12,60 @@ export type UpdateInfo = {
   installerUrl?: string;
 };
 
-function versionParts(version: string) {
-  return version.replace(/^v/i, '').split('.').map((part) => Number.parseInt(part, 10) || 0);
+export function isNewerVersion(latest: string, current = APP_VERSION) {
+  const latestVersion = parseVersion(latest);
+  const currentVersion = parseVersion(current);
+  return Boolean(latestVersion && currentVersion && compareVersions(latestVersion, currentVersion) > 0);
 }
 
-export function isNewerVersion(latest: string, current = APP_VERSION) {
-  const latestParts = versionParts(latest);
-  const currentParts = versionParts(current);
-  for (let index = 0; index < Math.max(latestParts.length, currentParts.length); index += 1) {
-    const difference = (latestParts[index] || 0) - (currentParts[index] || 0);
-    if (difference !== 0) return difference > 0;
+type ParsedVersion = {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: string[];
+};
+
+function parseVersion(value: unknown): ParsedVersion | null {
+  if (typeof value !== 'string') return null;
+  const match = value.trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/i);
+  if (!match) return null;
+  const parts = [match[1], match[2], match[3]].map(Number);
+  if (parts.some((part) => !Number.isSafeInteger(part))) return null;
+  return {
+    major: parts[0],
+    minor: parts[1],
+    patch: parts[2],
+    prerelease: match[4] ? match[4].split('.') : [],
+  };
+}
+
+function compareVersions(left: ParsedVersion, right: ParsedVersion): number {
+  for (const key of ['major', 'minor', 'patch'] as const) {
+    if (left[key] !== right[key]) return left[key] > right[key] ? 1 : -1;
   }
-  return false;
+  if (left.prerelease.length === 0 && right.prerelease.length > 0) return 1;
+  if (left.prerelease.length > 0 && right.prerelease.length === 0) return -1;
+  for (let index = 0; index < Math.max(left.prerelease.length, right.prerelease.length); index += 1) {
+    const leftPart = left.prerelease[index];
+    const rightPart = right.prerelease[index];
+    if (leftPart === undefined) return -1;
+    if (rightPart === undefined) return 1;
+    if (leftPart === rightPart) continue;
+    const leftNumber = /^\d+$/.test(leftPart) ? Number(leftPart) : null;
+    const rightNumber = /^\d+$/.test(rightPart) ? Number(rightPart) : null;
+    if (leftNumber !== null && rightNumber !== null) return leftNumber > rightNumber ? 1 : -1;
+    if (leftNumber !== null) return -1;
+    if (rightNumber !== null) return 1;
+    return leftPart > rightPart ? 1 : -1;
+  }
+  return 0;
+}
+
+export function normalizeVersion(value: string): string | null {
+  const parsed = parseVersion(value);
+  if (!parsed) return null;
+  const suffix = parsed.prerelease.length ? `-${parsed.prerelease.join('.')}` : '';
+  return `${parsed.major}.${parsed.minor}.${parsed.patch}${suffix}`;
 }
 
 async function pickRelease(channel: UpdateChannel): Promise<any> {
@@ -44,7 +86,7 @@ async function pickRelease(channel: UpdateChannel): Promise<any> {
 export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Promise<UpdateInfo> {
   const release = await pickRelease(channel);
   const tagName = release.tag_name || '';
-  const hasNew = Boolean(tagName) && isNewerVersion(tagName);
+  const hasNew = Boolean(normalizeVersion(tagName)) && isNewerVersion(tagName);
 
   // 挑选 Windows 安装包（NSIS setup.exe），智能匹配系统架构 (x64 / arm64)，且版本号匹配
   let installerUrl: string | undefined;
@@ -52,11 +94,18 @@ export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Pro
   const candidates = assets.filter(
     (asset) => asset.name && /[-_]setup\.exe$/i.test(asset.name) && asset.browser_download_url
   );
-  const tagVersion = tagName.replace(/^v/i, '');
+  const tagVersion = normalizeVersion(tagName);
+  const versionedCandidates = candidates.filter((asset) => Boolean(asset.name && versionFromAssetName(asset.name)));
   const versionMatched = candidates.filter(
-    (asset) => asset.name && versionFromAssetName(asset.name) === tagVersion
+    (asset) => Boolean(asset.name && tagVersion && versionFromAssetName(asset.name) === tagVersion)
   );
-  const validCandidates = versionMatched.length > 0 ? versionMatched : candidates;
+  // 如果资源名明确带版本号但与 release 不一致，禁止误下载旧安装包；
+  // 只有资源名完全不含版本号时才允许兼容旧发布格式。
+  const validCandidates = versionMatched.length > 0
+    ? versionMatched
+    : versionedCandidates.length > 0
+      ? []
+      : candidates;
 
   if (validCandidates.length > 0) {
     const isArm64 = typeof navigator !== 'undefined' && /arm64|aarch64/i.test(navigator.userAgent || '');
@@ -84,6 +133,6 @@ export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Pro
 }
 
 function versionFromAssetName(name: string) {
-  const match = name.match(/[-_](\d+\.\d+\.\d+)(?:[-_]|$)/);
-  return match ? match[1] : undefined;
+  const match = name.match(/(?:^|[-_])v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?=[-_]|$)/i);
+  return match ? normalizeVersion(match[1]) : undefined;
 }

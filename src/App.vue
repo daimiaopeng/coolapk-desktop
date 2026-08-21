@@ -97,7 +97,7 @@ import AppContextMenu from './components/common/AppContextMenu.vue';
 import AppDialog from './components/common/AppDialog.vue';
 import { useAuthStore } from './stores/auth';
 import { useSettingsStore } from './stores/settings';
-import { checkLatestRelease, isNewerVersion, type UpdateInfo } from './utils/updateChecker';
+import { checkLatestRelease, isNewerVersion, normalizeVersion, type UpdateInfo } from './utils/updateChecker';
 import { desktopNotify } from './utils/desktopNotify';
 import { registerGlobalHotkeys } from './utils/hotkeys';
 import { CoolapkTauriAPI } from './api/coolapk';
@@ -131,9 +131,36 @@ function formatBytes(bytes: number) {
 async function checkForUpdate(manual = false) {
   try {
     const result = await checkLatestRelease(settingsStore.settings.updateChannel);
+    const latestVersion = normalizeVersion(result.latestVersion || '') || '';
+    const ignoredVersion = normalizeVersion(settingsStore.settings.ignoredUpdateVersion) || '';
+
+    // 如果待安装包不是远端最新版本，且新版本有可用安装包，则切换到新版本。
+    // 忽略更新、没有安装包或手动检查失败时保留原待安装包，避免用户已下载的更新无故丢失。
+    const shouldReplacePending =
+      !manual &&
+      Boolean(readyInfo.value) &&
+      result.hasNew &&
+      Boolean(result.installerUrl) &&
+      isWindows &&
+      Boolean(latestVersion) &&
+      isNewerVersion(latestVersion, readyInfo.value?.version || '') &&
+      !settingsStore.settings.ignoreAllUpdates &&
+      latestVersion !== ignoredVersion;
+    if (shouldReplacePending) {
+      localStorage.removeItem(PENDING_UPDATE_KEY);
+      readyInfo.value = null;
+      try {
+        await CoolapkTauriAPI.cleanupUpdatePackages();
+      } catch (cleanupError) {
+        console.warn('切换最新更新包时清理旧包失败:', cleanupError);
+      }
+    }
+    // 当前待安装包已经是最新可用包时，不重复下载，也不弹出重复提示。
+    if (!manual && readyInfo.value) return;
+
     if (result.hasNew && !manual) {
       if (settingsStore.settings.ignoreAllUpdates) return;
-      if (result.latestVersion && result.latestVersion === settingsStore.settings.ignoredUpdateVersion) return;
+      if (latestVersion && latestVersion === ignoredVersion) return;
       // 自动检查：有可用安装包时静默后台下载，完成后弹窗询问是否立即更新
       if (result.installerUrl && isWindows) {
         void startBackgroundDownload(result);
@@ -182,9 +209,15 @@ async function startBackgroundDownload(info: UpdateInfo) {
       speedLimitKbps: settingsStore.settings.updateSpeedLimitKBps,
       proxyUrl: settingsStore.settings.proxyUrl,
     });
+    const downloadedVersion = normalizeVersion(info.latestVersion || '') || info.latestVersion || '';
+    try {
+      await CoolapkTauriAPI.cleanupUpdatePackages(path);
+    } catch (cleanupError) {
+      console.warn('清理旧更新包失败，不影响当前安装包使用:', cleanupError);
+    }
     downloading.value = null;
     downloadNotice.value = null;
-    readyInfo.value = { version: info.latestVersion || '', path };
+    readyInfo.value = { version: downloadedVersion, path };
     localStorage.setItem(PENDING_UPDATE_KEY, JSON.stringify(readyInfo.value));
     if (settingsStore.settings.desktopNotifications && settingsStore.settings.notifyDownloadComplete) {
       void desktopNotify(
@@ -212,15 +245,15 @@ function installNow() {
   if (info.version && !isNewerVersion(info.version)) {
     localStorage.removeItem(PENDING_UPDATE_KEY);
     readyInfo.value = null;
+    void CoolapkTauriAPI.cleanupUpdatePackages().catch(() => undefined);
     return;
   }
   installingUpdate.value = true;
   void (async () => {
     try {
       await CoolapkTauriAPI.installUpdate(info.path);
-      // 只有安装程序成功启动后才清理待安装记录；启动失败时保留弹窗和路径，允许重试。
-      localStorage.removeItem(PENDING_UPDATE_KEY);
-      readyInfo.value = null;
+      // 保留待安装记录到下次启动：安装程序可能启动后失败或被取消，
+      // 下次启动可校验版本和文件是否仍存在，再决定重试或重新下载。
       await CoolapkTauriAPI.quitApp();
     } catch (err) {
       installingUpdate.value = false;
@@ -246,32 +279,64 @@ function openUpdate() {
   updateInfo.value = null;
 }
 
+async function restorePendingUpdate(): Promise<boolean> {
+  const clearInvalidPending = async () => {
+    localStorage.removeItem(PENDING_UPDATE_KEY);
+    readyInfo.value = null;
+    try {
+      await CoolapkTauriAPI.cleanupUpdatePackages();
+    } catch (cleanupError) {
+      console.warn('清理失效更新包失败:', cleanupError);
+    }
+  };
+
+  try {
+    const pendingRaw = localStorage.getItem(PENDING_UPDATE_KEY);
+    if (!pendingRaw) {
+      await CoolapkTauriAPI.cleanupUpdatePackages();
+      return false;
+    }
+    const pending = JSON.parse(pendingRaw) as Partial<ReadyInfo>;
+    const version = normalizeVersion(String(pending?.version || ''));
+    const path = typeof pending?.path === 'string' ? pending.path.trim() : '';
+    if (!version || !path || !isNewerVersion(version)) {
+      await clearInvalidPending();
+      return false;
+    }
+
+    const available = await CoolapkTauriAPI.isUpdatePackageAvailable(path);
+    if (!available) {
+      await clearInvalidPending();
+      return false;
+    }
+
+    readyInfo.value = { version, path };
+    try {
+      await CoolapkTauriAPI.cleanupUpdatePackages(path);
+    } catch (cleanupError) {
+      console.warn('清理旧更新包失败，不影响待安装包使用:', cleanupError);
+    }
+    return true;
+  } catch (error) {
+    console.warn('恢复待安装更新失败:', error);
+    await clearInvalidPending();
+    return false;
+  }
+}
+
 onMounted(() => {
   authStore.initAuth();
   window.addEventListener('resize', settingsStore.refreshAutoZoom);
   unregisterHotkeys = registerGlobalHotkeys();
 
-  // 上次已下载但未安装的更新包：启动时再次询问（仅当更新包版本确实高于当前版本，
-  // 防止本地已更新到更高版本后仍提示安装旧包导致降级）
-  try {
-    const pendingRaw = localStorage.getItem(PENDING_UPDATE_KEY);
-    if (pendingRaw) {
-      const pending = JSON.parse(pendingRaw);
-      if (pending && pending.version && pending.path && isNewerVersion(pending.version)) {
-        readyInfo.value = pending;
-      } else {
-        localStorage.removeItem(PENDING_UPDATE_KEY);
-      }
-    }
-  } catch {
-    localStorage.removeItem(PENDING_UPDATE_KEY);
-  }
-
   // 本地调试（vite dev）跳过自动更新检查，避免误弹更新提示或静默下载安装包；
   // 设置页的"立即检查更新"手动触发不受影响
-  if (!import.meta.env.DEV && settingsStore.settings.checkUpdateOnStartup && !readyInfo.value) {
-    void checkForUpdate();
-  }
+  void (async () => {
+    await restorePendingUpdate();
+    if (!import.meta.env.DEV && settingsStore.settings.checkUpdateOnStartup) {
+      void checkForUpdate();
+    }
+  })();
   window.addEventListener('check-for-update', () => void checkForUpdate(true));
 
   // 启动时先清理过期图片，再按总占用阈值决定是否清理全部缓存。
@@ -284,7 +349,9 @@ onMounted(() => {
         );
         const info = await CoolapkTauriAPI.getCacheInfo(settingsStore.settings.cachePath);
         const threshold = (settingsStore.settings.cacheThresholdMB || 500) * 1024 * 1024;
-        if (Number(info?.bytes) > threshold) {
+        // 更新安装包有独立的待安装生命周期，不应因为安装包体积触发普通缓存清理。
+        const ordinaryCacheBytes = Math.max(0, Number(info?.bytes || 0) - Number(info?.updateBytes || 0));
+        if (ordinaryCacheBytes > threshold) {
           await clearResourceCache();
           await CoolapkTauriAPI.clearAppCache(settingsStore.settings.cachePath);
         }

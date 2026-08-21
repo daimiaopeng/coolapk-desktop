@@ -1798,8 +1798,83 @@ fn cache_locations(
         .app_data_dir()
         .map_err(|e| e.to_string())?
         .join("EBWebView");
-    let update = std::env::temp_dir().join("coolapk-desktop-update");
+    let update = update_cache_dir();
     Ok((image, webview, update))
+}
+
+fn update_cache_dir() -> PathBuf {
+    std::env::temp_dir().join("coolapk-desktop-update")
+}
+
+fn is_update_package_extension(path: &std::path::Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str(),
+        "exe" | "msi"
+    )
+}
+
+/// 启动时校验待安装包是否仍存在且位于应用更新目录内。
+#[tauri::command]
+pub fn is_update_package_available(installer_path: String) -> Result<bool, String> {
+    let expected_dir = update_cache_dir();
+    let expected_dir = match expected_dir.canonicalize() {
+        Ok(path) => path,
+        Err(_) => return Ok(false),
+    };
+    let canonical = match std::fs::canonicalize(installer_path) {
+        Ok(path) => path,
+        Err(_) => return Ok(false),
+    };
+    if !canonical.starts_with(&expected_dir) || !is_update_package_extension(&canonical) {
+        return Ok(false);
+    }
+    let metadata = match std::fs::metadata(canonical) {
+        Ok(metadata) => metadata,
+        Err(_) => return Ok(false),
+    };
+    Ok(metadata.is_file() && metadata.len() > 0)
+}
+
+/// 清理没有被待安装记录引用的旧安装包和未完成下载文件。
+/// 更新包不属于普通图片/WebView缓存，不能由 clear_app_cache 直接删除。
+#[tauri::command]
+pub fn cleanup_update_packages(keep_path: Option<String>) -> Result<(), String> {
+    let update_dir = update_cache_dir();
+    if !update_dir.exists() {
+        return Ok(());
+    }
+    let canonical_keep = keep_path.and_then(|path| {
+        let canonical = std::fs::canonicalize(path).ok()?;
+        let expected_dir = update_dir.canonicalize().ok()?;
+        if canonical.starts_with(expected_dir) && is_update_package_extension(&canonical) {
+            Some(canonical)
+        } else {
+            None
+        }
+    });
+    for entry in std::fs::read_dir(&update_dir)
+        .map_err(|error| format!("读取更新目录失败：{error}"))?
+        .flatten()
+    {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let is_download_artifact = is_update_package_extension(&path)
+            || path
+                .extension()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.eq_ignore_ascii_case("part"));
+        let canonical_path = path.canonicalize().unwrap_or_else(|_| path.clone());
+        if is_download_artifact && canonical_keep.as_ref() != Some(&canonical_path) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+    Ok(())
 }
 
 fn clear_dir_contents(dir: &std::path::Path) {
@@ -1841,11 +1916,12 @@ pub fn clear_app_cache(
     app: tauri::AppHandle,
     cache_dir: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let (image, webview, update) = cache_locations(&app, cache_dir.as_deref())?;
+    let (image, webview, _update) = cache_locations(&app, cache_dir.as_deref())?;
     let _ = std::fs::remove_dir_all(&image);
     let _ = std::fs::create_dir_all(&image);
     clear_dir_contents(&webview);
-    let _ = std::fs::remove_dir_all(&update);
+    // 更新包由独立的待安装流程管理，清理普通缓存时必须保留，
+    // 否则用户下载后暂不安装，重启或手动清理缓存就会丢失安装包。
     get_cache_info(app, cache_dir)
 }
 
@@ -1897,7 +1973,7 @@ pub fn install_update(installer_path: String) -> Result<(), String> {
     // 防止前端被注入时借助该命令执行任意文件。
     let canonical = std::fs::canonicalize(&installer_path)
         .map_err(|_| "更新安装包不存在，可能已被清理，请重新下载".to_string())?;
-    let expected_dir = std::env::temp_dir().join("coolapk-desktop-update");
+    let expected_dir = update_cache_dir();
     let expected_dir = expected_dir.canonicalize().unwrap_or(expected_dir);
     if !canonical.starts_with(&expected_dir) {
         return Err("拒绝安装不在更新目录内的文件".to_string());

@@ -865,6 +865,14 @@ export class CoolapkTauriAPI {
     await invoke('install_update', { installerPath });
   }
 
+  static async isUpdatePackageAvailable(installerPath: string) {
+    return await invoke<boolean>('is_update_package_available', { installerPath });
+  }
+
+  static async cleanupUpdatePackages(keepPath?: string) {
+    await invoke('cleanup_update_packages', { keepPath: keepPath || null });
+  }
+
   static async quitApp() {
     await invoke('quit_app');
   }
