@@ -363,7 +363,7 @@ watch(
   position: sticky;
   top: 0;
   z-index: 10;
-  background-color: rgba(var(--surface-rgb), 0.85);
+  background-color: var(--surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   padding: var(--space-4) var(--space-5) 0;
