@@ -30,7 +30,7 @@
 
 ## 界面预览
 
-![界面预览 1](docs/screenshots/1.png)
+![界面预览 1](docs/screenshots/首页.png)
 
 ![界面预览 2](docs/screenshots/2.png)
 
