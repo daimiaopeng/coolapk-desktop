@@ -98,6 +98,7 @@ import { getNotificationActor } from '../utils/notificationItem';
 import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
 import { openFeedDetail } from '../utils/feedNavigation';
+import { getNotificationFeedId, getNotificationFeedTarget, getNotificationTargetRoute } from '../utils/notificationNavigation';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
@@ -227,18 +228,11 @@ function getTarget(item: any): string {
 }
 
 function getOriginalFeed(item: any): any {
-  const candidates = [item?.feedInfo, item?.targetRow, item?.targetFeed];
-  return candidates.find((feed) => feed && typeof feed === 'object') || null;
+  return getNotificationFeedTarget(item);
 }
 
 function getOriginalFeedId(item: any): string {
-  const original = getOriginalFeed(item);
-  const direct = original?.id || original?.feedId || item?.feedId || item?.targetId || item?.target_id;
-  if (direct) return String(direct).replace(/^feed:/, '');
-  const source = [item?.url, item?.targetUrl, item?.note, item?.message, item?.targetTitle]
-    .filter(Boolean)
-    .join(' ');
-  return source.match(/\/feed\/(\d+)/)?.[1] || '';
+  return getNotificationFeedId(item);
 }
 
 function getOriginalFeedSummary(item: any): string {
@@ -258,6 +252,20 @@ function openOriginalFeed(item: any) {
   if (!id) return;
   markCurrentNotificationViewed();
   openFeedDetail(router, id, item);
+}
+
+function openNotificationTarget(item: any): boolean {
+  const feedId = getNotificationFeedId(item);
+  if (feedId) {
+    markCurrentNotificationViewed();
+    openFeedDetail(router, feedId, item);
+    return true;
+  }
+  const targetRoute = getNotificationTargetRoute(item);
+  if (!targetRoute) return false;
+  markCurrentNotificationViewed();
+  void router.push(targetRoute);
+  return true;
 }
 
 function formatTime(dateline: any): string {
@@ -297,16 +305,23 @@ function renderSafeHtml(text: string): string {
 // 通知内链接点击：动态链接携带通知上下文进入完整动态页，其余走统一处理。
 function handleNotifyClick(e: Event, item: any) {
   const anchor = (e.target as HTMLElement).closest('a');
-  if (!anchor?.href) {
-    openOriginalFeed(item);
+  const href = anchor?.getAttribute('href') || '';
+  if (!anchor?.href || !href || href === '#' || href.startsWith('javascript:')) {
+    openNotificationTarget(item);
     return;
   }
-  const href = anchor.getAttribute('href') || '';
   const feedMatch = href.match(/^\/feed\/(\d+)/);
   if (feedMatch?.[1]) {
     e.preventDefault();
     markCurrentNotificationViewed();
     openFeedDetail(router, feedMatch[1], item);
+    return;
+  }
+  const targetRoute = getNotificationTargetRoute({ targetUrl: href });
+  if (targetRoute) {
+    e.preventDefault();
+    markCurrentNotificationViewed();
+    void router.push(targetRoute);
     return;
   }
   handleAnchorClick(e);

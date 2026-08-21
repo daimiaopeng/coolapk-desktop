@@ -179,6 +179,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { showToast } from '../../utils/toast';
 import { requestConfirmation } from '../../utils/confirm';
 import { getErrorMessage } from '../../utils/errors';
+import { normalizeCoolapkNativeRoute } from '../../utils/coolapkRoute';
 
 const settingsStore = useSettingsStore();
 const router = useRouter();
@@ -298,7 +299,7 @@ function openTarget() {
   if (!target) return;
   if (typeof target.url === 'string' && target.url) {
     if (target.url.startsWith('/')) {
-      void router.push(target.url);
+      void router.push(normalizeCoolapkNativeRoute(target.url) || target.url);
     } else {
       void CoolapkTauriAPI.openUrl(target.url);
     }
@@ -308,7 +309,8 @@ function openTarget() {
   const id = target.id || target.entityId || target.target_id;
   if (id) {
     if (type.includes('apk') || type.includes('app')) {
-      void router.push(`/apk/${id}`);
+      const appRoute = normalizeCoolapkNativeRoute(`/apk/${String(id)}`);
+      if (appRoute) void router.push(appRoute);
     } else if (type.includes('topic') || type.includes('node')) {
       void router.push(`/topic/${id}`);
     } else if (type.includes('product')) {

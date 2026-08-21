@@ -689,21 +689,28 @@ function resetTabStates() {
   homeState.loaded = true;
 }
 
-function selectInitialTab(spaceData: any) {
-  const selectedTab = String(spaceData?.selectedTab || '');
-  const preferredTab = selectedTab === 'home' || selectedTab === 'feed'
-    ? selectedTab
-    : (isSelfUser.value || isFlag(spaceData?.isFollow) ? 'feed' : 'home');
-  if (tabs.value.some(tab => tab.key === preferredTab)) activeTab.value = preferredTab;
-  else if (tabs.value.length > 0) activeTab.value = tabs.value[0].key;
-}
-
 const activeRatingFilter = ref('all');
 const ratingFilters = [
   { key: 'all', label: '全部' },
   { key: 'app', label: '只看应用' },
   { key: 'digital', label: '只看数码' }
 ];
+
+function selectInitialTab(spaceData: any) {
+  const selectedTab = String(spaceData?.selectedTab || '');
+  const preferredTab = selectedTab === 'home' || selectedTab === 'feed'
+    ? selectedTab
+    : (isSelfUser.value || isFlag(spaceData?.isFollow) ? 'feed' : 'home');
+  const requestedRatingFilter = String(route.query.ratingTarget || '');
+  activeRatingFilter.value = ratingFilters.some(filter => filter.key === requestedRatingFilter) ? requestedRatingFilter : 'all';
+  const requestedTab = String(route.query.tab || '');
+  if (tabs.value.some(tab => tab.key === requestedTab)) {
+    activeTab.value = requestedTab;
+    return;
+  }
+  if (tabs.value.some(tab => tab.key === preferredTab)) activeTab.value = preferredTab;
+  else if (tabs.value.length > 0) activeTab.value = tabs.value[0].key;
+}
 
 const getFollowCount = (p: any) => p?.follow ?? p?.followNum ?? p?.follow_num ?? 0;
 const getFansCount = (p: any) => p?.fans ?? p?.fansNum ?? p?.fans_num ?? 0;
@@ -1311,6 +1318,16 @@ watch(activeTab, () => {
 watch(activeRatingFilter, () => {
   if (activeTab.value === 'rating') void fetchTabFeeds(true);
 });
+
+watch(
+  () => [route.query.tab, route.query.ratingTarget],
+  () => {
+    const requestedRatingFilter = String(route.query.ratingTarget || '');
+    activeRatingFilter.value = ratingFilters.some(filter => filter.key === requestedRatingFilter) ? requestedRatingFilter : 'all';
+    const requestedTab = String(route.query.tab || '');
+    if (tabs.value.some(tab => tab.key === requestedTab)) activeTab.value = requestedTab;
+  }
+);
 </script>
 
 <style scoped>

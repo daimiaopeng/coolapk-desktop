@@ -238,6 +238,7 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import { desktopNotify } from '../../utils/desktopNotify';
 import { hasNotificationCountIncreased, type NotificationCategory } from '../../utils/notificationCount';
 import { getNotificationActor } from '../../utils/notificationItem';
+import { getNotificationFeedId, getNotificationTargetRoute } from '../../utils/notificationNavigation';
 import { syncWindowsNotificationIcons } from '../../utils/taskbarNotificationDot';
 import { openFeedDetail } from '../../utils/feedNavigation';
 import {
@@ -362,21 +363,6 @@ function getNotificationItemTime(item: any): number {
   return Number.isFinite(value) ? value : 0;
 }
 
-function getNotificationFeedId(item: any): string {
-  const direct = item?.feedInfo?.id
-    || item?.targetRow?.id
-    || item?.targetFeed?.id
-    || item?.feedId
-    || item?.targetId
-    || item?.target_id
-    || item?.id;
-  if (direct) return String(direct).replace(/^feed:/, '');
-  const source = [item?.url, item?.targetUrl, item?.note, item?.message]
-    .filter(Boolean)
-    .join(' ');
-  return source.match(/\/feed\/(\d+)/)?.[1] || '';
-}
-
 function stripNotificationHtml(value: unknown): string {
   return String(value || '').replace(/<[^>]+>/g, '').trim();
 }
@@ -468,6 +454,11 @@ function openNotificationPreview(preview: NotificationPreview) {
   const feedId = getNotificationFeedId(preview.item);
   if (feedId) {
     openFeedDetail(router, feedId, preview.item);
+    return;
+  }
+  const targetRoute = getNotificationTargetRoute(preview.item);
+  if (targetRoute) {
+    void router.push(targetRoute);
     return;
   }
   void router.push({ path: '/notifications', query: { tab: preview.apiType } });

@@ -3,7 +3,7 @@
  *
  * 通用规则（不针对具体标签写特例）：
  *  - 仅 <a> 与 <br> 保留语义，其余标签一律视为透明容器，递归保留其文本与合法链接；
- *  - <a> 仅当 href 为 http(s)、协议相对(//) 或站内路径(/) 时保留，其余按纯文本处理；
+ *  - <a> 仅当 href 为 http(s)、协议相对(//)、站内路径(/) 或站内 hash 路径(#/) 时保留，其余按纯文本处理；
  *  - script/style/iframe 等危险内容直接丢弃；
  *  - 换行统一转为 <br/>。
  */
@@ -26,7 +26,7 @@ export function sanitizeCoolapkHtml(text: string): string {
 
     if (tag === 'a') {
       const href = el.getAttribute('href') || '';
-      if (SAFE_LINK_RE.test(href) || href.startsWith('/')) {
+      if (SAFE_LINK_RE.test(href) || href.startsWith('/') || href.startsWith('#/')) {
         const a = doc.createElement('a');
         a.setAttribute('href', href);
         a.setAttribute('rel', 'noopener noreferrer');

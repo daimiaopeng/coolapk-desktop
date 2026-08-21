@@ -1,6 +1,7 @@
 import { router } from '../router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
+import { normalizeCoolapkRoute } from './coolapkRoute';
 import { openFeedDetail } from './feedNavigation';
 
 /**
@@ -31,13 +32,15 @@ export function handleAnchorClick(e: Event, feedId?: string | number) {
     return;
   }
 
+  const normalizedRoute = normalizeCoolapkRoute(href);
+  if (normalizedRoute && router.resolve(normalizedRoute).matched.length) {
+    void router.push(normalizedRoute);
+    return;
+  }
+
   if (href.startsWith('/')) {
-    const target = href.startsWith('/u/')
-      ? `/user/${href.slice(3)}`
-      : href.startsWith('/t/')
-        ? `/topic/${href.slice(3).split('?')[0]}`
-        : href;
-    if (router.resolve(target).matched.length) {
+    const target = !/^\/feed\//i.test(href) ? href : '';
+    if (target && router.resolve(target).matched.length) {
       router.push(target);
       return;
     }

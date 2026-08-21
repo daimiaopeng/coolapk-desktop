@@ -16,6 +16,12 @@ describe('sanitizeCoolapkHtml', () => {
     expect(html).not.toContain('feed-forward-pic');
   });
 
+  it('保留酷安站内 hash 路径，交由路由层校验具体目标', () => {
+    const html = sanitizeCoolapkHtml('<a href="#/feed/nodeRatingList?uid=123&targetType=product&parseRatingToFeed=1">点击点评</a>');
+    expect(html).toContain('href="#/feed/nodeRatingList?uid=123&amp;targetType=product&amp;parseRatingToFeed=1"');
+    expect(html).toContain('点击点评');
+  });
+
   it('剥离除 a/br 外的所有标签，仅保留文本', () => {
     const html = sanitizeCoolapkHtml('<div><span>内容</span><b>加粗</b></div>');
     expect(html).toBe('内容加粗');
