@@ -88,7 +88,7 @@ const defaultSettings: AppSettings = {
   infiniteScroll: true,
   autoPlayGif: true,
   showDeviceInfo: true,
-  defaultHomeTab: 'index_v8',
+  defaultHomeTab: 'digest',
   homeTabOrder: [...DEFAULT_HOME_TAB_ORDER],
   downloadPath: '',
   maxConcurrentDownloads: 3,

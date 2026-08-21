@@ -11,45 +11,40 @@
       </div>
 
       <div ref="feedScrollContainer" class="feed-scroll-container custom-scrollbar" @scroll="handleScroll">
-        <!-- 1. 头条 Tab 专属：今日酷安日历 & 金刚位入口 & 关照关注栏 -->
+        <!-- 1. 头条 Tab 专属：服务端要闻与动态子栏目 -->
         <div v-if="isHeadlineTab" class="headline-header-section">
-          <!-- 今日酷安日历与要闻栏 -->
-          <div class="today-coolapk-card">
-            <div class="calendar-badge">
-              <span class="cal-top">今日酷安</span>
-              <span class="cal-day">{{ todayDay }}</span>
-              <span class="cal-meta">{{ todayYearMonth }} {{ todayWeek }}</span>
-            </div>
-            <div class="headline-bulletins">
-              <div v-for="(b, idx) in topBulletins" :key="idx" class="bulletin-item" @click="handleBulletinClick(b)">
-                <span class="bulletin-dot"></span>
-                <span class="bulletin-text">{{ b.text }}</span>
-              </div>
-            </div>
+          <!-- APK ConfigPage.rawEntities 动态下发的头条子栏目 -->
+          <div v-if="headlineSubChannels.length" class="quick-icons-grid">
+            <button
+              v-for="channel in headlineSubChannels"
+              :key="channel.key"
+              type="button"
+              :class="['icon-btn-item', { selected: selectedHeadlineSubChannelUrl === channel.url }]"
+              @click="openHeadlineSubChannel(channel)"
+            >
+              <span class="icon-circle">
+                <AppImage
+                  v-if="channel.logo && !failedHeadlineSubChannelLogos.has(channel.key)"
+                  :src="channel.logo"
+                  fit="contain"
+                  image-class="headline-sub-channel-logo"
+                  @error="markHeadlineSubChannelLogoFailed(channel.key)"
+                />
+                <i v-else :class="channel.icon"></i>
+              </span>
+              <span>{{ channel.title }}</span>
+            </button>
           </div>
-
-          <!-- 5 大快捷金刚图标 -->
-          <div class="quick-icons-grid">
-            <div class="icon-btn-item" @click="quickFilter('值得看')">
-              <div class="icon-circle icon-blue"><i class="fas fa-check-circle"></i></div>
-              <span>值得看</span>
-            </div>
-            <div class="icon-btn-item" @click="quickFilter('热闻')">
-              <div class="icon-circle icon-yellow"><i class="fas fa-newspaper"></i></div>
-              <span>热闻</span>
-            </div>
-            <div class="icon-btn-item" @click="quickFilter('活动')">
-              <div class="icon-circle icon-red"><i class="fas fa-gift"></i></div>
-              <span>活动</span>
-            </div>
-            <div class="icon-btn-item" @click="quickFilter('AI')">
-              <div class="icon-circle icon-cyan"><i class="fas fa-robot"></i></div>
-              <span>AI</span>
-            </div>
-            <div class="icon-btn-item" @click="quickFilter('摄影')">
-              <div class="icon-circle icon-teal"><i class="fas fa-camera"></i></div>
-              <span>人像摄影</span>
-            </div>
+          <div v-if="headlineNestedSubChannels.length" class="headline-nested-tabs" role="tablist" aria-label="头条子栏目">
+            <button
+              v-for="channel in headlineNestedSubChannels"
+              :key="channel.key"
+              type="button"
+              :class="['headline-nested-tab', { active: selectedHeadlineNestedSubChannelUrl === channel.url }]"
+              @click="openHeadlineNestedSubChannel(channel)"
+            >
+              {{ channel.title }}
+            </button>
           </div>
         </div>
 
@@ -130,6 +125,54 @@
           <ErrorState title="加载动态失败" :message="error" @retry="loadFeeds(true)" />
         </div>
 
+        <div
+          v-else-if="!isDyhTab && selectedHeadlineSubChannelUrl && headlineUserItems.length"
+          class="headline-ranking-list"
+          :style="{ '--headline-ranking-rows': headlineRankingRows }"
+        >
+          <article
+            v-for="(item, index) in headlineUserItems"
+            :key="item.uid || item.entityId || item.id || index"
+            :class="['headline-ranking-card', { 'is-top-three': index < 3, [`rank-${index + 1}`]: index < 3 }]"
+            role="button"
+            tabindex="0"
+            @click="openHeadlineUser(item)"
+            @keydown.enter="openHeadlineUser(item)"
+          >
+            <div class="headline-rank-number">{{ index + 1 }}</div>
+            <AppAvatar
+              :src="item.userAvatar || item.userInfo?.userAvatar || item.avatar"
+              size="lg"
+              class="headline-ranking-avatar"
+            />
+            <div class="headline-ranking-info">
+              <div class="headline-ranking-name-row">
+                <strong>{{ getHeadlineUserName(item) }}</strong>
+                <span v-if="getHeadlineUserVerify(item)" class="headline-ranking-verify">
+                  <i class="fas fa-certificate"></i>{{ getHeadlineUserVerify(item) }}
+                </span>
+              </div>
+              <div class="headline-ranking-tags">
+                <span v-if="item.level" class="headline-ranking-level">Lv.{{ item.level }}</span>
+                <span v-if="index < 3" class="headline-ranking-top-label">{{ index === 0 ? '榜首' : 'TOP ' + (index + 1) }}</span>
+              </div>
+              <div class="headline-ranking-stats">
+                <span><i class="fas fa-users"></i> 粉丝 {{ formatDyhCount(item.fans || item.fansNum) }}</span>
+                <span><i class="fas fa-user-plus"></i> 关注 {{ formatDyhCount(item.follow || item.followNum) }}</span>
+              </div>
+            </div>
+            <i class="fas fa-chevron-right headline-ranking-arrow"></i>
+          </article>
+        </div>
+
+        <div v-else-if="!isDyhTab && selectedHeadlineSubChannelUrl && headlineDiscoveryItems.length" class="headline-discovery-list">
+          <DiscoveryEntityCard
+            v-for="(item, index) in headlineDiscoveryItems"
+            :key="item.entityId || item.id || item.url || index"
+            :entity="item"
+          />
+        </div>
+
         <div v-else-if="!isDyhTab && feeds.length === 0" class="empty-padding">
           <EmptyState title="暂无动态内容" />
         </div>
@@ -169,16 +212,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FeedTabs from '../components/feed/FeedTabs.vue';
 import FeedLayoutToggle from '../components/feed/FeedLayoutToggle.vue';
 import FeedCard from '../components/feed/FeedCard.vue';
+import DiscoveryEntityCard from '../components/discovery/DiscoveryEntityCard.vue';
 import FeedSkeleton from '../components/feed/FeedSkeleton.vue';
 import RightSidebar from '../components/layout/RightSidebar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
+import AppAvatar from '../components/common/AppAvatar.vue';
 import AppImage from '../components/common/AppImage.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
@@ -196,7 +241,8 @@ const feedEntries = computed(() => feeds.value.map((item, index) => ({ item, ind
 
 const route = useRoute();
 const router = useRouter();
-const activeTab = ref(settingsStore.settings.defaultHomeTab || '');
+const activeTab = ref('');
+let isInitializingHome = true;
 const page = ref(1);
 const feeds = ref<any[]>([]);
 const feedScrollContainer = ref<HTMLElement | null>(null);
@@ -204,6 +250,17 @@ const loading = ref(false);
 const loadingMore = ref(false);
 const noMore = ref(false);
 const error = ref('');
+const headlineCursor = reactive({ firstItem: '', lastItem: '' });
+const headlinePageContext = ref('');
+const headlineResolvedUrl = ref('');
+const selectedHeadlineSubChannelUrl = ref('');
+const failedHeadlineSubChannelLogos = reactive(new Set<string>());
+const headlineQuickLinks = ref<any[]>([]);
+const headlineDiscoveryItems = ref<any[]>([]);
+const headlineUserItems = ref<any[]>([]);
+const headlineNestedSubChannels = ref<Array<{ key: string; title: string; url: string }>>([]);
+const selectedHeadlineNestedSubChannelUrl = ref('');
+const headlineRankingRows = computed(() => Math.max(1, Math.ceil(headlineUserItems.value.length / 2)));
 
 // 动态服务端下发的 Tab 列表（完全对齐 APK ConfigPage 结构）
 const serverTabs = ref<ConfigPageTab[]>([]);
@@ -261,25 +318,99 @@ const isDyhTab = computed(() => {
 
 const isDoubleColumn = computed(() => feedLayout.value === 'double' && !isDyhTab.value);
 
-// 实时日期计算（对应截图4 “今日酷安”日历块）
-const now = new Date();
-const todayDay = computed(() => String(now.getDate()).padStart(2, '0'));
-const todayYearMonth = computed(() => `${now.getFullYear()}年${now.getMonth() + 1}月`);
-const weekNames = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-const todayWeek = computed(() => weekNames[now.getDay()]);
-
-// 简报要闻 (优化展示文本，避免显示 'XXX的动态')
-const topBulletins = computed(() => {
-  return feeds.value.slice(0, 3).map((item: any) => {
-    let rawText = item.title || item.message || '最新酷安精彩动态';
-    rawText = rawText.replace(/^[#＃][^#＃]+[#＃]\s*/, '').trim();
-    if (rawText.length > 28) rawText = rawText.slice(0, 28) + '...';
-    return {
-      id: item.id,
-      text: rawText || '酷友最新话题热议中'
-    };
-  });
+const headlineSubChannels = computed(() => {
+  const tab = currentActiveTabObj.value;
+  const configuredEntities = Array.isArray(tab?.entities)
+    ? tab.entities
+    : Array.isArray(tab?.rawEntities)
+      ? tab.rawEntities
+      : Array.isArray(tab?.raw_entities)
+        ? tab.raw_entities
+      : [];
+  const entities = headlineQuickLinks.value.length > 0
+    ? headlineQuickLinks.value
+    : configuredEntities;
+  return entities
+    .map((entity, index) => {
+      const title = String(entity.title || '').trim();
+      const url = String(entity.url || '').trim();
+      if (!title || !url) return null;
+      return {
+        key: String(entity.entityId ?? entity.entity_id ?? entity.id ?? url ?? index),
+        title,
+        url,
+        subTitle: String(entity.subTitle || '').trim(),
+        logo: String(entity.logo || entity.pic || '').trim(),
+        icon: resolveHeadlineSubChannelIcon(entity),
+      };
+    })
+    .filter((channel): channel is {
+      key: string;
+      title: string;
+      url: string;
+      subTitle: string;
+      logo: string;
+      icon: string;
+    } => Boolean(channel));
 });
+
+function updateHeadlineQuickLinks(items: any[]) {
+  const card = items.find((item) =>
+    item?.entityTemplate === 'iconLinkGridCard'
+    || item?.entity_template === 'iconLinkGridCard'
+  );
+  const entities = Array.isArray(card?.entities) ? card.entities : [];
+  if (entities.length > 0) {
+    headlineQuickLinks.value = entities;
+    failedHeadlineSubChannelLogos.clear();
+  }
+}
+
+function resolveHeadlineSubChannelIcon(entity: any): string {
+  const explicitIcon = String(entity.icon || '').trim();
+  if (explicitIcon.startsWith('fa-')) return `fas ${explicitIcon}`;
+  const value = `${entity.title || ''} ${entity.url || ''}`.toLowerCase();
+  if (value.includes('ai') || value.includes('人工智能')) return 'fas fa-robot';
+  if (value.includes('活动') || value.includes('gift')) return 'fas fa-gift';
+  if (value.includes('摄影') || value.includes('picture') || value.includes('photo')) return 'fas fa-camera';
+  if (value.includes('热') || value.includes('hot')) return 'fas fa-newspaper';
+  if (value.includes('值得') || value.includes('recommend')) return 'fas fa-check-circle';
+  return 'fas fa-layer-group';
+}
+
+function markHeadlineSubChannelLogoFailed(key: string) {
+  failedHeadlineSubChannelLogos.add(key);
+}
+
+function updateHeadlineNestedSubChannels(items: any[]) {
+  const card = items.find((item) => {
+    const template = String(item?.entityTemplate || item?.entity_template || '').trim();
+    return (template === 'iconTabLinkGridCard' || template === 'iconLinkGridCard')
+      && Array.isArray(item?.entities)
+      && item.entities.some((entity: any) => String(entity?.url || '').trim());
+  });
+  if (!card || !Array.isArray(card.entities)) return;
+
+  const channels = card.entities
+    .map((entity: any, index: number) => {
+      const title = String(entity?.title || '').trim();
+      const url = String(entity?.url || '').trim();
+      if (!title || !url) return null;
+      return {
+        key: String(entity?.entityId ?? entity?.entity_id ?? entity?.id ?? url ?? index),
+        title,
+        url,
+      };
+    })
+    .filter((channel: { key: string; title: string; url: string } | null): channel is { key: string; title: string; url: string } => Boolean(channel));
+
+  if (channels.length > 0) {
+    headlineNestedSubChannels.value = channels;
+    if (!selectedHeadlineNestedSubChannelUrl.value) {
+      selectedHeadlineNestedSubChannelUrl.value = channels[0].url;
+    }
+  }
+}
 
 // 热门搜索关键词 Chips
 const hotKeywords = ref<string[]>([
@@ -296,11 +427,188 @@ const hotRanks: { key: HotRankType; label: string; icon: string; color: string }
   { key: 'picture', label: '酷图榜', icon: 'fas fa-chart-bar', color: 'bg-red' },
 ];
 
+function getTabKey(tab: ConfigPageTab): string {
+  return tab.page_name || tab.url || String(tab.id || tab.title);
+}
+
+function isHeadlineConfigTab(tab: ConfigPageTab): boolean {
+  return tab.page_name === 'V9_HOME_TAB_HEADLINE' || tab.url === '/main/headline' || tab.title === '头条';
+}
+
+function isHeadlineFeedSubChannel(url: string): boolean {
+  return url.includes('/feed/digestList');
+}
+
+function isHotConfigTab(tab: ConfigPageTab): boolean {
+  return tab.page_name === 'V9_HOME_TAB_RANKING' || tab.url.includes('RANKING') || tab.title === '热榜';
+}
+
+function isNewsConfigTab(tab: ConfigPageTab): boolean {
+  return tab.page_name === 'V11_HOME_TAB_NEWS' || tab.url.includes('NEWS') || tab.title === '快讯';
+}
+
+function resolveInitialTab(): string {
+  const tabs = orderedDynamicTabs.value;
+  const preferred = settingsStore.settings.defaultHomeTab;
+  const exact = tabs.find((tab) => getTabKey(tab) === preferred);
+  if (exact) return getTabKey(exact);
+
+  const semanticTab = preferred === 'hot'
+    ? tabs.find(isHotConfigTab)
+    : preferred === 'latest'
+      ? tabs.find(isNewsConfigTab)
+      : tabs.find(isHeadlineConfigTab);
+  if (semanticTab) return getTabKey(semanticTab);
+
+  return tabs[0] ? getTabKey(tabs[0]) : 'V9_HOME_TAB_HEADLINE';
+}
+
 function syncTabFromRoute() {
-  const path = route.path;
-  if (path === '/' && settingsStore.settings.defaultHomeTab) {
-    activeTab.value = settingsStore.settings.defaultHomeTab;
+  if (route.path === '/') {
+    activeTab.value = resolveInitialTab();
   }
+}
+
+function getFeedEntityId(item: any): string {
+  return String(item?.entityId ?? item?.entity_id ?? item?.id ?? '').trim();
+}
+
+function resetHeadlineCursor(options: { preserveNested?: boolean } = {}) {
+  const preserveNested = options.preserveNested === true;
+  headlineCursor.firstItem = '';
+  headlineCursor.lastItem = '';
+  headlinePageContext.value = '';
+  if (!preserveNested) headlineResolvedUrl.value = '';
+  headlineDiscoveryItems.value = [];
+  headlineUserItems.value = [];
+  if (!preserveNested) {
+    headlineNestedSubChannels.value = [];
+    selectedHeadlineNestedSubChannelUrl.value = '';
+  }
+}
+
+function extractHeadlineUserItems(items: any[]): any[] {
+  const users: any[] = [];
+  const addUser = (item: any) => {
+    const type = String(item?.entityType || item?.entity_type || item?.type || '').toLowerCase();
+    // 动态实体也会带 uid；只有服务端明确标记为 user 的实体才进入排行榜，
+    // 否则“值得看/热闻”等动态栏目会被误渲染成作者排行榜。
+    if (!type.includes('user')) return;
+    const uid = String(item?.uid || item?.userId || item?.user_id || '').trim();
+    if (!item) return;
+    if (!uid && !item.username) return;
+    const sourceUrl = String(item.url || '').trim();
+    const userUrl = /^#?\/u\/(\d+)/i.test(sourceUrl)
+      ? `#/user/${sourceUrl.match(/^#?\/u\/(\d+)/i)?.[1]}`
+      : sourceUrl || (uid ? `#/user/${encodeURIComponent(uid)}` : '');
+    users.push({
+      ...item,
+      uid: uid || item.uid,
+      url: userUrl,
+    });
+  };
+
+  for (const item of items) {
+    addUser(item);
+    if (Array.isArray(item?.entities)) {
+      for (const child of item.entities) addUser(child);
+    }
+  }
+  return users;
+}
+
+function updateHeadlineCursor(items: any[]) {
+  const ids = items.map(getFeedEntityId).filter(Boolean);
+  if (!ids.length) return;
+  if (!headlineCursor.firstItem) headlineCursor.firstItem = ids[0];
+  headlineCursor.lastItem = ids[ids.length - 1];
+  const lastItem = items[items.length - 1];
+  headlinePageContext.value = String(
+    lastItem?.pageContext
+      ?? lastItem?.page_context
+      ?? lastItem?.extraData?.pageContext
+      ?? lastItem?.extra_data?.pageContext
+      ?? ''
+  ).trim();
+}
+
+function normalizeHeadlinePageUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed.startsWith('/page?url=')) return trimmed;
+  const encodedAction = trimmed.slice('/page?url='.length).split('&')[0];
+  try {
+    return decodeURIComponent(encodedAction);
+  } catch {
+    return encodedAction;
+  }
+}
+
+function findDefaultHeadlineSubPage(items: any[]): string {
+  const card = items.find((item) => {
+    const template = String(item?.entityTemplate || item?.entity_template || '');
+    return (template === 'iconTabLinkGridCard' || template === 'iconLinkGridCard')
+      && Array.isArray(item?.entities)
+      && item.entities.some((entity: any) => String(entity?.url || '').trim());
+  });
+  if (!card) return '';
+  const entities = card.entities as any[];
+  const preferred = entities.find((entity) => String(entity?.title || '').trim() === '全部')
+    || entities.find((entity) => String(entity?.url || '').trim());
+  return String(preferred?.url || '').trim();
+}
+
+async function getHeadlineSubChannelData(
+  url: string,
+  title: string,
+  subTitle: string,
+  page: number,
+) {
+  if (headlineResolvedUrl.value) {
+    return await CoolapkTauriAPI.getDiscoveryPageData({
+      url: headlineResolvedUrl.value,
+      title,
+      subTitle,
+      page,
+      firstItem: headlineCursor.firstItem,
+      lastItem: headlineCursor.lastItem,
+      pageContext: headlinePageContext.value,
+    });
+  }
+
+  let currentUrl = normalizeHeadlinePageUrl(url);
+  const visited = new Set<string>();
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!currentUrl || visited.has(currentUrl)) break;
+    visited.add(currentUrl);
+    const response: any = await CoolapkTauriAPI.getDiscoveryPageData({
+      url: currentUrl,
+      title,
+      subTitle,
+      page,
+      firstItem: headlineCursor.firstItem,
+      lastItem: headlineCursor.lastItem,
+      pageContext: headlinePageContext.value,
+    });
+    const items = Array.isArray(response?.data) ? response.data : [];
+    if (page === 1) updateHeadlineNestedSubChannels(items);
+    const nextUrl = page === 1 ? findDefaultHeadlineSubPage(items) : '';
+    if (!nextUrl) {
+      headlineResolvedUrl.value = currentUrl;
+      return response;
+    }
+    currentUrl = normalizeHeadlinePageUrl(nextUrl);
+  }
+
+  headlineResolvedUrl.value = currentUrl;
+  return await CoolapkTauriAPI.getDiscoveryPageData({
+    url: currentUrl,
+    title,
+    subTitle,
+    page,
+    firstItem: headlineCursor.firstItem,
+    lastItem: headlineCursor.lastItem,
+    pageContext: headlinePageContext.value,
+  });
 }
 
 const prefetchBuffer = ref<any[]>([]);
@@ -320,14 +628,6 @@ async function fetchTabConfig() {
     if (configCard && configCard.entities && Array.isArray(configCard.entities)) {
       serverTabs.value = configCard.entities;
       
-      // 官方下发的默认选中 Tab（例如 V9_HOME_TAB_HEADLINE）
-      const defaultSelected = configCard.extraDataArr?.selectedHomeTab;
-      if (!activeTab.value && defaultSelected) {
-        activeTab.value = defaultSelected;
-      } else if (!activeTab.value && serverTabs.value.length > 0) {
-        const first = serverTabs.value[0];
-        activeTab.value = first.page_name || first.url || String(first.id || first.title);
-      }
     }
   } catch (err) {
     console.warn('获取 Tab 配置失败', err);
@@ -339,6 +639,37 @@ async function fetchTabApi(tabKey: string, p: number) {
   const matchedTab = orderedDynamicTabs.value.find(
     t => (t.page_name || t.url || String(t.id || t.title)) === tabKey
   );
+
+  if (matchedTab ? isHeadlineConfigTab(matchedTab) : tabKey === 'digest' || tabKey === 'V9_HOME_TAB_HEADLINE' || tabKey === '/main/headline') {
+    const selectedSubChannel = headlineSubChannels.value.find(
+      channel => channel.url === selectedHeadlineSubChannelUrl.value
+    );
+    if (selectedSubChannel) {
+      const selectedUrl = selectedSubChannel.url.trim();
+      if (selectedUrl.startsWith('/t/')) {
+        const tag = decodeURIComponent(selectedUrl.slice(3).split('?')[0]).trim();
+        if (tag) {
+          return await CoolapkTauriAPI.getTopicFeeds(tag, p);
+        }
+      }
+      // 投票入口直接指向 feed/digestList；APK 返回的是带 vote.options 的动态列表，
+      // 不经过 discovery page 的卡片解析，否则会被误识别成普通排行榜实体。
+      if (isHeadlineFeedSubChannel(selectedUrl)) {
+        return await CoolapkTauriAPI.getBoardFeeds(selectedUrl, p);
+      }
+      return await getHeadlineSubChannelData(
+        selectedUrl,
+        selectedSubChannel.title,
+        selectedSubChannel.subTitle,
+        p,
+      );
+    }
+    return await CoolapkTauriAPI.getIndexV8EntitiesPaged({
+      page: p,
+      firstItem: headlineCursor.firstItem,
+      lastItem: headlineCursor.lastItem,
+    });
+  }
 
   const targetUrl = matchedTab ? (matchedTab.url || matchedTab.page_name || '') : tabKey;
 
@@ -352,7 +683,7 @@ async function fetchTabApi(tabKey: string, p: number) {
 }
 
 async function prefetchNextPage() {
-  if (isPrefetching.value || noMore.value) return;
+  if (isHeadlineTab.value || isPrefetching.value || noMore.value) return;
   isPrefetching.value = true;
   try {
     const nextP = page.value;
@@ -379,6 +710,7 @@ async function loadFeeds(isRefresh: boolean = false) {
     noMore.value = false;
     feeds.value = [];
     prefetchBuffer.value = [];
+    if (isHeadlineTab.value) resetHeadlineCursor({ preserveNested: Boolean(selectedHeadlineNestedSubChannelUrl.value) });
     loading.value = true;
   } else {
     if (noMore.value) return;
@@ -388,20 +720,47 @@ async function loadFeeds(isRefresh: boolean = false) {
 
   try {
     let validItems: any[] = [];
+    let rawItems: any[] = [];
 
-    if (!isRefresh && prefetchBuffer.value.length > 0) {
+    if (!isRefresh && !isHeadlineTab.value && prefetchBuffer.value.length > 0) {
       validItems = prefetchBuffer.value;
       prefetchBuffer.value = [];
       page.value = prefetchPage.value;
     } else {
       const res: any = await fetchTabApi(activeTab.value, page.value);
       if (res && res.data && Array.isArray(res.data)) {
-        validItems = res.data.filter((item: any) => hasFeedRenderableContent(item) && !shouldHideFeed(item, settingsStore.settings));
+        rawItems = res.data;
+        if (isHeadlineTab.value) updateHeadlineQuickLinks(rawItems);
+        validItems = rawItems.filter((item: any) => hasFeedRenderableContent(item) && !shouldHideFeed(item, settingsStore.settings));
+        if (
+          isHeadlineTab.value
+          && selectedHeadlineSubChannelUrl.value
+          && !isHeadlineFeedSubChannel(selectedHeadlineSubChannelUrl.value)
+        ) {
+          const incomingUsers = extractHeadlineUserItems(rawItems);
+          const incomingDiscoveryItems = rawItems.filter((item: any) => {
+            const template = String(item?.entityTemplate || item?.entity_template || '').trim();
+            const entityType = String(item?.entityType || item?.entity_type || '').toLowerCase();
+            return template && template !== 'configCard' && !entityType.includes('user');
+          });
+          if (isRefresh) {
+            headlineUserItems.value = incomingUsers;
+            headlineDiscoveryItems.value = incomingDiscoveryItems;
+          } else {
+            const existingUsers = new Set(headlineUserItems.value.map((item) => String(item.uid || item.entityId || item.id)));
+            headlineUserItems.value.push(...incomingUsers.filter((item) => !existingUsers.has(String(item.uid || item.entityId || item.id))));
+            const existingDiscovery = new Set(headlineDiscoveryItems.value.map((item) => String(item.entityId || item.id || item.url)));
+            headlineDiscoveryItems.value.push(...incomingDiscoveryItems.filter((item) => !existingDiscovery.has(String(item.entityId || item.id || item.url))));
+          }
+        }
       }
       page.value++;
     }
 
-    if (validItems.length < 3) {
+    if (isHeadlineTab.value) {
+      if (rawItems.length === 0) noMore.value = true;
+      else updateHeadlineCursor(validItems);
+    } else if (validItems.length < 3) {
       noMore.value = true;
     }
 
@@ -421,7 +780,7 @@ async function loadFeeds(isRefresh: boolean = false) {
       feeds.value.push(...uniqueNew);
     }
 
-    if (settingsStore.settings.infiniteScroll) {
+    if (settingsStore.settings.infiniteScroll && !isHeadlineTab.value) {
       setTimeout(() => {
         prefetchNextPage();
       }, 200);
@@ -456,10 +815,6 @@ function quickSearch(kw: string) {
   router.push({ path: '/search', query: { q: kw } });
 }
 
-function quickFilter(tag: string) {
-  quickSearch(tag);
-}
-
 function selectHotRank(rankType: HotRankType) {
   if (activeHotRank.value === rankType) {
     void loadFeeds(true);
@@ -472,13 +827,51 @@ function handleTabOrderUpdated() {
   serverTabs.value = [...serverTabs.value];
 }
 
-function handleBulletinClick(item: any) {
-  if (item.id) {
-    // 引导点击
+function openHeadlineSubChannel(channel: { title: string; url: string; subTitle: string }) {
+  const url = channel.url.trim();
+  if (!url) return;
+  if (/^https?:\/\//i.test(url)) {
+    void CoolapkTauriAPI.openUrl(url, settingsStore.settings.externalLinkMode);
+    return;
   }
+  selectedHeadlineSubChannelUrl.value = url;
+  resetHeadlineCursor();
+  void loadFeeds(true);
 }
 
-watch(activeTab, () => {
+function openHeadlineNestedSubChannel(channel: { title: string; url: string }) {
+  const url = channel.url.trim();
+  if (!url) return;
+  selectedHeadlineNestedSubChannelUrl.value = url;
+  headlineResolvedUrl.value = normalizeHeadlinePageUrl(url);
+  headlineCursor.firstItem = '';
+  headlineCursor.lastItem = '';
+  headlinePageContext.value = '';
+  headlineDiscoveryItems.value = [];
+  headlineUserItems.value = [];
+  feeds.value = [];
+  page.value = 1;
+  noMore.value = false;
+  void loadFeeds(true);
+}
+
+function getHeadlineUserName(item: any): string {
+  return String(item?.displayUsername || item?.username || item?.userInfo?.username || '酷友').trim();
+}
+
+function getHeadlineUserVerify(item: any): string {
+  const label = String(item?.verify_label || item?.verify_title || '').trim();
+  return label.replace(/^酷安认证[:：]\s*/, '');
+}
+
+function openHeadlineUser(item: any) {
+  const uid = String(item?.uid || item?.entityId || '').trim();
+  if (uid) void router.push(`/user/${encodeURIComponent(uid)}`);
+}
+
+watch(activeTab, (nextTab, previousTab) => {
+  if (nextTab !== previousTab) selectedHeadlineSubChannelUrl.value = '';
+  if (isInitializingHome) return;
   resetFeedScroll();
   loadFeeds(true);
 });
@@ -527,10 +920,15 @@ function openDyh(dyhId: any) {
   if (dyhId) router.push(`/dyh/${String(dyhId)}`);
 }
 
-onMounted(() => {
-  fetchTabConfig();
+async function initializeHome() {
+  await fetchTabConfig();
   syncTabFromRoute();
-  loadFeeds(true);
+  isInitializingHome = false;
+  await loadFeeds(true);
+}
+
+onMounted(() => {
+  void initializeHome();
   window.addEventListener('feed-nav-next', onNavNext);
   window.addEventListener('feed-nav-prev', onNavPrev);
   window.addEventListener('refresh-feeds', onRefreshFeeds);
@@ -600,124 +998,261 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--surface-hover, rgba(0,0,0,0.01));
+  background: var(--surface, #fff);
   border-bottom: 1px solid var(--border);
 }
 
-.today-coolapk-card {
+.quick-icons-grid {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 12px;
+  padding: 4px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.quick-icons-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.headline-nested-tabs {
   display: flex;
   align-items: center;
-  gap: 14px;
-  background: linear-gradient(135deg, #1d4ed8 0%, #0284c7 100%);
-  border-radius: 12px;
-  padding: 12px 16px;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
-}
-
-.calendar-badge {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  padding: 6px 12px;
-  min-width: 70px;
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.cal-top {
-  font-size: 10px;
-  font-weight: 700;
-  background: #ef4444;
-  color: #fff;
-  padding: 1px 6px;
-  border-radius: 4px;
-  letter-spacing: 0.5px;
-}
-
-.cal-day {
-  font-size: 26px;
-  font-weight: 900;
-  line-height: 1.1;
-  margin: 2px 0;
-}
-
-.cal-meta {
-  font-size: 10px;
-  opacity: 0.9;
-}
-
-.headline-bulletins {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   gap: 4px;
   min-width: 0;
+  overflow-x: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light, rgba(0, 0, 0, .06));
+  scrollbar-width: none;
 }
 
-.bulletin-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
+.headline-nested-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.headline-nested-tab {
+  position: relative;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 14px 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
   font-size: 13px;
-}
-
-.bulletin-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #38bdf8;
-  flex-shrink: 0;
-}
-
-.bulletin-text {
+  cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  opacity: 0.95;
+  transition: color .15s ease, background-color .15s ease;
 }
 
-.quick-icons-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-  padding: 4px 0;
+.headline-nested-tab:hover {
+  color: var(--brand-primary, #10b981);
+  background: var(--brand-soft, rgba(16, 185, 129, .08));
+}
+
+.headline-nested-tab.active {
+  color: var(--brand-primary, #10b981);
+  background: var(--brand-soft, rgba(16, 185, 129, .1));
+  font-weight: 700;
 }
 
 .icon-btn-item {
+  border: 0;
+  background: transparent;
+  font: inherit;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  flex: 0 0 88px;
   cursor: pointer;
   font-size: 12px;
   color: var(--text-primary);
 }
 
 .icon-circle {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  color: #fff;
+  color: var(--text-secondary);
   transition: transform 0.2s ease;
+}
+
+.headline-sub-channel-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
 }
 
 .icon-btn-item:hover .icon-circle {
   transform: translateY(-2px);
 }
 
-.icon-blue { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
-.icon-yellow { background: linear-gradient(135deg, #f59e0b, #d97706); }
-.icon-red { background: linear-gradient(135deg, #ef4444, #b91c1c); }
-.icon-cyan { background: linear-gradient(135deg, #06b6d4, #0891b2); }
-.icon-teal { background: linear-gradient(135deg, #14b8a6, #0d9488); }
+.icon-btn-item.selected {
+  color: var(--primary);
+}
+
+.headline-discovery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.headline-ranking-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--headline-ranking-rows, 10), minmax(92px, auto));
+  grid-auto-flow: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.headline-ranking-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 92px;
+  padding: 14px 16px 14px 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-light, rgba(0, 0, 0, .08));
+  border-radius: 14px;
+  background: var(--surface);
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.headline-ranking-card:hover,
+.headline-ranking-card:focus-visible {
+  border-color: var(--brand-primary, #10b981);
+  box-shadow: 0 7px 20px rgba(16, 185, 129, .12);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.headline-ranking-card.is-top-three {
+  background: linear-gradient(135deg, var(--surface) 0%, rgba(255, 249, 232, .9) 100%);
+}
+
+.headline-ranking-card.rank-2 { background: linear-gradient(135deg, var(--surface) 0%, rgba(243, 247, 251, .95) 100%); }
+.headline-ranking-card.rank-3 { background: linear-gradient(135deg, var(--surface) 0%, rgba(255, 244, 235, .9) 100%); }
+
+.headline-rank-number {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  flex: 0 0 28px;
+  color: var(--text-tertiary);
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-1 .headline-rank-number { color: #e5a400; font-size: 24px; }
+.rank-2 .headline-rank-number { color: #8b98a5; font-size: 22px; }
+.rank-3 .headline-rank-number { color: #c77b4b; font-size: 21px; }
+
+.headline-ranking-avatar {
+  flex: 0 0 auto;
+}
+
+.headline-ranking-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.headline-ranking-name-row,
+.headline-ranking-stats {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.headline-ranking-name-row {
+  gap: 7px;
+}
+
+.headline-ranking-name-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headline-ranking-verify {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  color: #e69a16;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headline-ranking-tags {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.headline-ranking-level,
+.headline-ranking-top-label {
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.headline-ranking-level {
+  background: var(--brand-soft, rgba(16, 185, 129, .1));
+  color: var(--brand-primary, #10b981);
+}
+
+.headline-ranking-top-label {
+  background: rgba(235, 174, 37, .14);
+  color: #b07800;
+}
+
+.headline-ranking-stats {
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.headline-ranking-stats span {
+  white-space: nowrap;
+}
+
+.headline-ranking-stats i {
+  margin-right: 3px;
+  color: var(--text-secondary);
+}
+
+.headline-ranking-arrow {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+@container layout (max-width: 720px) {
+  .headline-ranking-list {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    grid-auto-flow: row;
+  }
+}
 
 /* 2. 热榜 Tab 头部样式 */
 .hot-header-section {

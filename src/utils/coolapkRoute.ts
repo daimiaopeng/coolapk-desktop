@@ -102,6 +102,15 @@ export function normalizeCoolapkPageRoute(href: string): string | null {
   return `/page?url=${encodeURIComponent(pageUrl)}`;
 }
 
+/** 将酷安机型搜索网页入口转换为桌面端原生机型列表页。 */
+function normalizeCoolapkProductSelectorRoute(href: string): string | null {
+  const path = extractCoolapkPath(href);
+  if (!path) return null;
+  const match = path.match(/^\/mp\/productSelector\/configSearch(?:\?([^#]*))?$/i);
+  if (!match) return null;
+  return `/product-selector${match[1] ? `?${match[1]}` : ''}`;
+}
+
 function normalizeCoolapkUserRoute(href: string): string | null {
   const match = href.match(/^\/(?:u|user)\/([^/?#]+)(?:\?([^#]*))?$/i);
   if (!match) return null;
@@ -135,6 +144,7 @@ export function normalizeCoolapkRoute(href: string): string | null {
   const routeRules = [
     normalizeCoolapkRatingRoute,
     normalizeCoolapkWriterRoute,
+    normalizeCoolapkProductSelectorRoute,
     normalizeCoolapkPageRoute,
     normalizeCoolapkNativeRoute,
     normalizeCoolapkUserRoute,

@@ -24,6 +24,11 @@ describe('酷安站内路由', () => {
     expect(normalizeCoolapkRoute('/page?url=%2Fproduct%2FfeedList')).toBe('/page?url=%2Fproduct%2FfeedList');
   });
 
+  it('将酷安机型搜索链接转换为原生机型列表页', () => {
+    expect(normalizeCoolapkRoute('https://m.coolapk.com/mp/productSelector/configSearch?&callFunction=indexSearch'))
+      .toBe('/product-selector?&callFunction=indexSearch');
+  });
+
   it('统一解析普通、hash 和完整 URL 形式的评价页面', () => {
     const query = 'uid=123&targetType=product&parseRatingToFeed=1';
     expect(normalizeCoolapkRoute(`/feed/nodeRatingList?${query}`)).toBe('/user/123?tab=rating&ratingTarget=digital');

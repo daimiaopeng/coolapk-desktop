@@ -1154,6 +1154,8 @@ impl CoolapkClient {
         copy_first_field(&mut cleaned, obj, "mediaType", &["mediaType", "media_type"]);
         copy_first_field(&mut cleaned, obj, "feedType", &["feedType", "feed_type"]);
         copy_first_field(&mut cleaned, obj, "feedTypeName", &["feedTypeName", "feed_type_name"]);
+        // 投票动态的可选项由 vote 对象提供；列表归一化时必须保留，前端才能渲染并提交投票。
+        copy_first_field(&mut cleaned, obj, "vote", &["vote"]);
         copy_first_field(&mut cleaned, obj, "video", &["video"]);
         copy_first_field(&mut cleaned, obj, "videoInfo", &["videoInfo", "video_info"]);
         copy_first_field(&mut cleaned, obj, "media", &["media"]);
@@ -1440,6 +1442,59 @@ impl CoolapkClient {
             .api_get("/v6/main/indexV8", &[("page", page.to_string())])
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// APK 头条分页：GET /v6/main/indexV8 携带首尾动态游标。
+    /// APK 同时传 firstLaunch/installTime/ids；桌面端没有 APK 安装时间和曝光 ID，
+    /// 因此保持参数存在并传 0/空字符串，分页游标使用 firstItem/lastItem。
+    pub async fn get_index_v8_feeds_paged(
+        &self,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+    ) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/main/indexV8",
+                &[
+                    ("page", page.to_string()),
+                    ("firstLaunch", "0".to_string()),
+                    ("installTime", "0".to_string()),
+                    ("firstItem", first_item.to_string()),
+                    ("lastItem", last_item.to_string()),
+                    ("ids", "".to_string()),
+                ],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// APK 首页完整实体分页：保留 indexV8 返回的卡片实体，不能只提取 feed。
+    /// 数据来源: GET /v6/main/indexV8
+    pub async fn get_index_v8_entities_paged(
+        &self,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+    ) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/main/indexV8",
+                &[
+                    ("page", page.to_string()),
+                    ("firstLaunch", "0".to_string()),
+                    ("installTime", "0".to_string()),
+                    ("firstItem", first_item.to_string()),
+                    ("lastItem", last_item.to_string()),
+                    ("ids", "".to_string()),
+                ],
+            )
+            .await?;
+        let response = wrap_api_data(raw)?;
+        Ok(json!({
+            "code": 200,
+            "data": response.get("data").cloned().unwrap_or_else(|| json!([])),
+        }))
     }
 
     // 2. 热榜
@@ -3011,6 +3066,47 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
+    /// 提交用户投票
+    /// 数据来源: POST /v6/vote/createUserVote
+    /// APK 参数: id、select_option[0..n]、anonymous_status
+    pub async fn create_user_vote(
+        &self,
+        feed_id: &str,
+        option_ids: &[String],
+        anonymous_status: bool,
+    ) -> Result<Value, String> {
+        if feed_id.trim().is_empty() {
+            return Err("投票动态 ID 不能为空".to_string());
+        }
+        if option_ids.is_empty() {
+            return Err("至少选择一个投票选项".to_string());
+        }
+
+        let mut owned_fields = vec![
+            ("id".to_string(), feed_id.to_string()),
+            (
+                "anonymous_status".to_string(),
+                if anonymous_status { "1" } else { "0" }.to_string(),
+            ),
+        ];
+        for (index, option_id) in option_ids.iter().enumerate() {
+            let option_id = option_id.trim();
+            if option_id.is_empty() {
+                return Err("投票选项 ID 不能为空".to_string());
+            }
+            owned_fields.push((format!("select_option[{index}]"), option_id.to_string()));
+        }
+
+        let form: Vec<(&str, String)> = owned_fields
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.clone()))
+            .collect();
+        wrap_api_data(
+            self.api_post("/v6/vote/createUserVote", &[], &form)
+                .await?,
+        )
+    }
+
     /// 用户浏览历史
     /// 数据来源: GET /v6/user/hitHistoryList?page={page}
     pub async fn get_hit_history(&self, page: u32) -> Result<Value, String> {
@@ -3126,6 +3222,21 @@ impl CoolapkClient {
             self.api_get(
                 "/v6/account/loadConfig",
                 &[("key", "my_page_card_config".to_string())],
+            )
+            .await?,
+        )
+    }
+
+    /// 加载 APK 首页栏目配置。
+    /// 数据来源: GET /v6/account/loadConfig?key=home_tab_config&reSet=0|1
+    pub async fn get_home_tab_config(&self, reset: bool) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get(
+                "/v6/account/loadConfig",
+                &[
+                    ("key", "home_tab_config".to_string()),
+                    ("reSet", if reset { "1".to_string() } else { "0".to_string() }),
+                ],
             )
             .await?,
         )

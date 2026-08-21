@@ -26,6 +26,7 @@ import PageDataListPage from '../pages/PageDataListPage.vue';
 import ReviewPage from '../pages/ReviewPage.vue';
 import SecondHandPage from '../pages/SecondHandPage.vue';
 import ExternalPage from '../pages/ExternalPage.vue';
+import ProductSelectorPage from '../pages/ProductSelectorPage.vue';
 import SettingsLayout from '../pages/settings/SettingsLayout.vue';
 import AccountSettingsPage from '../pages/settings/AccountSettingsPage.vue';
 import NotificationSettingsPage from '../pages/settings/NotificationSettingsPage.vue';
@@ -55,6 +56,7 @@ const routes = [
   { path: '/reviews', name: 'Reviews', component: ReviewPage },
   { path: '/secondhand', name: 'SecondHand', component: SecondHandPage },
   { path: '/external', name: 'External', component: ExternalPage },
+  { path: '/product-selector', name: 'ProductSelector', component: ProductSelectorPage },
   { path: '/search', name: 'Search', component: SearchPage },
   { path: '/notifications', name: 'Notifications', component: NotificationsPage },
   { path: '/messages', name: 'Messages', component: MessagesPage },

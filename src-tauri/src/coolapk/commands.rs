@@ -16,6 +16,32 @@ pub async fn get_index_v8_feeds(state: State<'_, AppState>, page: u32) -> Result
 }
 
 #[tauri::command]
+pub async fn get_index_v8_feeds_paged(
+    state: State<'_, AppState>,
+    page: u32,
+    first_item: String,
+    last_item: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_index_v8_feeds_paged(page, &first_item, &last_item)
+        .await
+}
+
+#[tauri::command]
+pub async fn get_index_v8_entities_paged(
+    state: State<'_, AppState>,
+    page: u32,
+    first_item: String,
+    last_item: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_index_v8_entities_paged(page, &first_item, &last_item)
+        .await
+}
+
+#[tauri::command]
 pub async fn get_tab_config(state: State<'_, AppState>) -> Result<Value, String> {
     state.client.get_tab_config().await
 }
@@ -378,6 +404,19 @@ pub async fn get_vote_comments(
 }
 
 #[tauri::command]
+pub async fn create_user_vote(
+    state: State<'_, AppState>,
+    feed_id: String,
+    option_ids: Vec<String>,
+    anonymous_status: bool,
+) -> Result<Value, String> {
+    state
+        .client
+        .create_user_vote(&feed_id, &option_ids, anonymous_status)
+        .await
+}
+
+#[tauri::command]
 pub async fn get_hit_history(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.get_hit_history(page).await
 }
@@ -424,6 +463,14 @@ pub async fn get_product_detail_by_name(
 #[tauri::command]
 pub async fn get_load_config(state: State<'_, AppState>) -> Result<Value, String> {
     state.client.get_load_config().await
+}
+
+#[tauri::command]
+pub async fn get_home_tab_config(
+    state: State<'_, AppState>,
+    reset: bool,
+) -> Result<Value, String> {
+    state.client.get_home_tab_config(reset).await
 }
 
 #[tauri::command]

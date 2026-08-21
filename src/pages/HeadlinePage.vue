@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { reactive, ref, onMounted, onUnmounted } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import FeedCard from '../components/feed/FeedCard.vue';
 import FeedSkeleton from '../components/feed/FeedSkeleton.vue';
@@ -65,10 +65,31 @@ const loading = ref(false);
 const loadingMore = ref(false);
 const noMore = ref(false);
 const error = ref('');
+const headlineCursor = reactive({ firstItem: '', lastItem: '' });
+
+function getFeedEntityId(item: any): string {
+  return String(item?.entityId ?? item?.entity_id ?? item?.id ?? '').trim();
+}
+
+function resetHeadlineCursor() {
+  headlineCursor.firstItem = '';
+  headlineCursor.lastItem = '';
+}
+
+function updateHeadlineCursor(items: any[]) {
+  const ids = items.map(getFeedEntityId).filter(Boolean);
+  if (!ids.length) return;
+  if (!headlineCursor.firstItem) headlineCursor.firstItem = ids[0];
+  headlineCursor.lastItem = ids[ids.length - 1];
+}
 
 function fetchTabApi(tab: string, p: number) {
   switch (tab) {
-    case 'headline': return CoolapkTauriAPI.getHeadlineFeeds(p);
+    case 'headline': return CoolapkTauriAPI.getIndexV8FeedsPaged({
+      page: p,
+      firstItem: headlineCursor.firstItem,
+      lastItem: headlineCursor.lastItem,
+    });
     case 'editor': return CoolapkTauriAPI.getEditorChoiceFeeds(p);
     case 'update': return CoolapkTauriAPI.getUpdateList(p);
     default: return CoolapkTauriAPI.getHeadlineFeeds(p);
@@ -82,6 +103,7 @@ async function loadFeeds(isRefresh: boolean = false) {
     page.value = 1;
     noMore.value = false;
     feeds.value = [];
+    if (activeTab.value === 'headline') resetHeadlineCursor();
     loading.value = true;
   } else {
     if (noMore.value) return;
@@ -91,11 +113,15 @@ async function loadFeeds(isRefresh: boolean = false) {
 
   try {
     const res: any = await fetchTabApi(activeTab.value, page.value);
-    const validItems = res && res.data && Array.isArray(res.data)
-      ? res.data.filter((item: any) => hasFeedRenderableContent(item) && !shouldHideFeed(item, settingsStore.settings))
+    const rawItems = res && Array.isArray(res.data) ? res.data : [];
+    const validItems = rawItems.length > 0
+      ? rawItems.filter((item: any) => hasFeedRenderableContent(item) && !shouldHideFeed(item, settingsStore.settings))
       : [];
 
-    if (validItems.length < 3) {
+    if (activeTab.value === 'headline') {
+      if (rawItems.length === 0) noMore.value = true;
+      else updateHeadlineCursor(rawItems);
+    } else if (validItems.length < 3) {
       noMore.value = true;
     }
 

@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { router } from '../router';
 import { getFeedDetailMessage, hasFeedMoreSuffix, parseWebFeedDetail } from '../utils/feedContent';
+import { normalizeCoolapkRoute } from '../utils/coolapkRoute';
 import { requestWithPolicy, type RequestKind } from '../utils/requestCenter';
 
 async function safeFetchOnce(pythonEndpoint: string, tauriCmd: string, tauriArgs: any = {}) {
@@ -63,6 +64,30 @@ export class CoolapkTauriAPI {
   // 1. 首页推荐
   static async getIndexV8Feeds(page: number = 1) {
     return await safeFetch(`/feeds/index_v8?page=${page}`, 'get_index_v8_feeds', { page });
+  }
+
+  static async getIndexV8FeedsPaged(options: {
+    page: number;
+    firstItem?: string;
+    lastItem?: string;
+  }) {
+    return await invokeNative('get_index_v8_feeds_paged', {
+      page: options.page,
+      firstItem: options.firstItem || '',
+      lastItem: options.lastItem || '',
+    }, { retry: true, kind: 'feed' });
+  }
+
+  static async getIndexV8EntitiesPaged(options: {
+    page: number;
+    firstItem?: string;
+    lastItem?: string;
+  }) {
+    return await invokeNative('get_index_v8_entities_paged', {
+      page: options.page,
+      firstItem: options.firstItem || '',
+      lastItem: options.lastItem || '',
+    }, { retry: true, kind: 'feed' });
   }
 
   // 1.1 首页 Tab 配置（关注/热榜/快讯/话题频道 + 热门搜索）
@@ -570,6 +595,18 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_vote_comments', { feedId, page });
   }
 
+  static async createUserVote(
+    feedId: string,
+    optionIds: string[],
+    anonymousStatus: boolean = false,
+  ) {
+    return await invokeNative(
+      'create_user_vote',
+      { feedId, optionIds, anonymousStatus },
+      { kind: 'feed', retry: false },
+    );
+  }
+
   static async getHitHistory(page: number = 1) {
     return await invokeNative('get_hit_history', { page });
   }
@@ -596,6 +633,10 @@ export class CoolapkTauriAPI {
 
   static async getLoadConfig() {
     return await invokeNative('get_load_config');
+  }
+
+  static async getHomeTabConfig(reset = false) {
+    return await invokeNative('get_home_tab_config', { reset });
   }
 
   static async sendPrivateImage(uid: string, messagePic: string) {
@@ -756,10 +797,20 @@ export class CoolapkTauriAPI {
   }
 
   static async openUrl(url: string, mode: 'internal' | 'system' = 'internal') {
-    // 内置模式：不再新建窗口，直接跳转应用内"外部链接"页（由 Rust 抓取 + 安全渲染）
-    if (mode === 'internal' && (url.startsWith('http://') || url.startsWith('https://'))) {
-      router.push({ path: '/external', query: { url } });
-      return;
+    if (mode === 'internal') {
+      // 酷安站内深链优先交给桌面原生页面处理，避免把 feed、话题、用户、应用、产品
+      // 等酷安内容降级成抓取后的纯文本网页。
+      const nativeRoute = normalizeCoolapkRoute(url);
+      if (nativeRoute && router.resolve(nativeRoute).matched.length > 0) {
+        await router.push(nativeRoute);
+        return;
+      }
+
+      // 无对应原生页面的 HTTPS 链接再进入安全渲染的外部页面。
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        await router.push({ path: '/external', query: { url } });
+        return;
+      }
     }
     // 非 http(s)（如 mailto:）与 system 模式交给系统默认程序
     try {

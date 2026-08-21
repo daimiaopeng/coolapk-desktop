@@ -39,6 +39,8 @@
       :force-expanded="detailMode"
     />
 
+    <VoteCard v-if="feed.vote" :feed-id="feed.id" :vote="feed.vote" />
+
     <FeedVideoCard :feed="feed" />
 
     <FeedImageGrid :images="feedImages" />
@@ -165,6 +167,7 @@ import { useRouter } from 'vue-router';
 import type { FeedItem } from '../../types/feed';
 import FeedHeader from './FeedHeader.vue';
 import FeedContent from './FeedContent.vue';
+import VoteCard from './VoteCard.vue';
 import FeedImageGrid from './FeedImageGrid.vue';
 import FeedVideoCard from './FeedVideoCard.vue';
 import FeedActionBar from './FeedActionBar.vue';

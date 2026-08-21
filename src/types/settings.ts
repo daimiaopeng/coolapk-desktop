@@ -17,9 +17,26 @@ export interface ConfigPageTab {
   url: string;
   logo?: string;
   subTitle?: string;
+  /** APK ConfigPage.entities：空 URL 是分组标题，其余实体是可点击子栏目。 */
+  entities?: ConfigPageSubChannel[];
+  rawEntities?: ConfigPageSubChannel[];
+  raw_entities?: ConfigPageSubChannel[];
   page_fixed?: number;
   page_visibility?: number;
   order?: number;
+}
+
+export interface ConfigPageSubChannel {
+  id?: number | string;
+  entityId?: number | string;
+  entity_id?: number | string;
+  title?: string;
+  url?: string;
+  logo?: string;
+  icon?: string;
+  subTitle?: string;
+  page_name?: string;
+  [key: string]: unknown;
 }
 
 export interface NavVisibilitySettings {
