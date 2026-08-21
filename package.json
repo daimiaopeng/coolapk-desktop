@@ -1,7 +1,7 @@
 {
   "name": "coolapk-desktop",
   "private": true,
-  "version": "1.8.2",
+  "version": "1.8.3",
   "description": "基于 Tauri 2、Vue 3 和 Rust 的非官方酷安桌面客户端",
   "author": "daimiaopeng",
   "license": "MIT",
