@@ -50,7 +50,8 @@ export function hasFeedRenderableContent(item: any): boolean {
 
   const pictures = item.pics || item.picArr || item.pic;
   if ((Array.isArray(pictures) && pictures.some((value) => typeof value === 'string' && value.trim())) || (typeof pictures === 'string' && pictures.trim())) return true;
-  if (getFeedVideo(item)?.url) return true;
+  const video = getFeedVideo(item);
+  if (video?.url || video?.requestParams) return true;
 
   return getFeedRelationRows(item).some((row) => Boolean(
     getFeedRelationTitle(row)

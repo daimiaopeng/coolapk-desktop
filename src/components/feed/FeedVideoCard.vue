@@ -4,13 +4,15 @@
       <video
         ref="videoRef"
         class="feed-video"
-        :src="video.url"
+        :key="playableUrl"
+        :src="playableUrl || undefined"
         :poster="video.poster || undefined"
         controls
         preload="metadata"
         playsinline
         @play="hasStarted = true"
         @ended="hasStarted = false"
+        @loadedmetadata="videoError = false"
         @error="handleVideoError"
       ></video>
 
@@ -33,7 +35,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { CoolapkTauriAPI } from '../../api/coolapk';
 import AppImage from '../common/AppImage.vue';
 import { formatFeedVideoDuration, getFeedVideo } from '../../utils/feedMedia';
 
@@ -43,9 +46,42 @@ const hasStarted = ref(false);
 const video = computed(() => getFeedVideo(props.feed));
 const formattedDuration = computed(() => formatFeedVideoDuration(video.value?.duration || ''));
 const videoError = ref(false);
+const resolvedUrl = ref('');
+const resolutionFailed = ref(false);
+const resolving = ref(false);
+const playableUrl = computed(() => {
+  if (!video.value) return '';
+  if (video.value.requestParams && !resolutionFailed.value) return resolvedUrl.value;
+  return video.value.url;
+});
+
+async function resolveVideo() {
+  const requestParams = video.value?.requestParams;
+  if (!requestParams) return;
+
+  resolving.value = true;
+  resolutionFailed.value = false;
+  resolvedUrl.value = '';
+  videoError.value = false;
+  try {
+    const response: any = await CoolapkTauriAPI.resolveVideoUrl(requestParams);
+    const url = response?.data?.urlList?.find((item: unknown) => typeof item === 'string' && item.trim());
+    if (!url) throw new Error('酷安未返回可播放地址');
+    resolvedUrl.value = url;
+  } catch (error) {
+    console.warn('酷安视频地址解析失败：', error);
+    resolutionFailed.value = true;
+  } finally {
+    resolving.value = false;
+  }
+}
+
+watch(() => video.value?.requestParams, () => {
+  void resolveVideo();
+}, { immediate: true });
 
 async function playVideo() {
-  if (!videoRef.value) return;
+  if (!videoRef.value || resolving.value) return;
   videoError.value = false;
   try {
     await videoRef.value.play();
@@ -55,7 +91,7 @@ async function playVideo() {
 }
 
 function handleVideoError() {
-  videoError.value = true;
+  if (!resolving.value) videoError.value = true;
 }
 </script>
 

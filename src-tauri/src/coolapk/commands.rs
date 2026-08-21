@@ -432,6 +432,14 @@ pub async fn get_feed_detail(state: State<'_, AppState>, feed_id: String) -> Res
 }
 
 #[tauri::command]
+pub async fn resolve_video_url(
+    state: State<'_, AppState>,
+    request_params: String,
+) -> Result<Value, String> {
+    state.client.resolve_video_url(&request_params).await
+}
+
+#[tauri::command]
 pub async fn get_reply_detail(
     state: State<'_, AppState>,
     reply_id: String,

@@ -4,6 +4,8 @@ export interface FeedVideoData {
   url: string;
   poster: string;
   duration: string | number;
+  /** APK uses this provider-specific payload before resolving the final URL. */
+  requestParams?: string;
 }
 
 function firstValue(values: unknown[]): string | number {
@@ -40,6 +42,20 @@ function normalizeVideoUrl(value: unknown): string {
   return '';
 }
 
+function selectVideoRequestParams(value: unknown): string {
+  const requestParams = parseMediaInfo(value);
+  if (!requestParams) return '';
+
+  // The APK normally selects the last provider entry for the current player
+  // mode. Keep that ordering so the desktop request matches the APK payload.
+  const selected = Object.values(requestParams).at(-1);
+  if (typeof selected === 'string') return selected.trim();
+  if (selected && typeof selected === 'object' && !Array.isArray(selected)) {
+    return JSON.stringify(selected);
+  }
+  return '';
+}
+
 /** 从动态及其视频对象中提取可播放视频，拒绝无法确认协议的值。 */
 export function getFeedVideo(feed: unknown): FeedVideoData | null {
   if (!feed || typeof feed !== 'object') return null;
@@ -47,6 +63,11 @@ export function getFeedVideo(feed: unknown): FeedVideoData | null {
   const video = [record.video, record.videoInfo, record.video_info, record.media]
     .find((item) => item && typeof item === 'object' && !Array.isArray(item)) as FeedRecord | undefined;
   const mediaInfo = parseMediaInfo(record.mediaInfo ?? record.media_info);
+  const requestParams = selectVideoRequestParams(mediaInfo?.requestParams ?? mediaInfo?.request_params);
+  const localVideoParams = parseMediaInfo(requestParams);
+  const localVideoUrl = localVideoParams?.fromType === 'localVideo'
+    ? normalizeVideoUrl(localVideoParams['0'])
+    : '';
   const directVideoUrl = normalizeVideoUrl(firstValue([
     record.videoUrl,
     record.video_url,
@@ -69,8 +90,9 @@ export function getFeedVideo(feed: unknown): FeedVideoData | null {
     mediaInfo?.mediaUrl,
     mediaInfo?.media_url,
   ]));
-  const url = directVideoUrl || (isVideoMedia ? mediaUrl : '');
-  if (!url) return null;
+  const url = localVideoUrl || directVideoUrl || (isVideoMedia ? mediaUrl : '');
+  if (!url && !requestParams) return null;
+  const playableRequestParams = localVideoUrl ? '' : requestParams;
 
   const directDuration = firstValue([
     record.videoDuration,
@@ -104,6 +126,7 @@ export function getFeedVideo(feed: unknown): FeedVideoData | null {
       mediaInfo?.poster,
     ]) || '').trim(),
     duration,
+    ...(playableRequestParams ? { requestParams: playableRequestParams } : {}),
   };
 }
 

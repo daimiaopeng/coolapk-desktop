@@ -249,6 +249,11 @@ export class CoolapkTauriAPI {
     throw primaryError instanceof Error ? primaryError : new Error(String(primaryError || '动态详情加载失败'));
   }
 
+  // APK fallback: POST /v6/player/getUrl with form field params=<provider payload>.
+  static async resolveVideoUrl(requestParams: string) {
+    return await invokeNative('resolve_video_url', { requestParams }, { retry: true, kind: 'feed' });
+  }
+
   static async getHotReplies(feedId: string, page: number = 1) {
     return await invokeNative('get_hot_replies', { feedId, page }, { retry: true, kind: 'comment' });
   }

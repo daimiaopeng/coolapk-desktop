@@ -2336,6 +2336,27 @@ impl CoolapkClient {
         ))
     }
 
+    /// 按 APK 的回退链路，把 Video.requestParams 交给酷安播放器接口解析。
+    ///
+    /// APK 的 `CoolApkDataProvider` 先尝试本地 videoParser；解析失败时调用
+    /// `POST /v6/player/getUrl`，唯一表单字段为 `params`，值是 provider-specific
+    /// requestParams，而不是整个 Feed、mediaInfo 或 mediaUrl。
+    pub async fn resolve_video_url(&self, request_params: &str) -> Result<Value, String> {
+        let params = request_params.trim();
+        if params.is_empty() {
+            return Err("视频解析参数为空".to_string());
+        }
+
+        let raw = self
+            .api_post(
+                "/v6/player/getUrl",
+                &[],
+                &[("params", params.to_string())],
+            )
+            .await?;
+        wrap_api_data(raw)
+    }
+
     /// 获取单条评论的完整元数据。
     /// 评论列表接口会省略设备型号等字段，详情接口用于后台补齐，不影响列表首屏显示。
     pub async fn get_reply_detail(&self, reply_id: &str) -> Result<Value, String> {
