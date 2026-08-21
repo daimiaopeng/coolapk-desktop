@@ -56,20 +56,44 @@ export function getNotificationFeedId(item: unknown): string {
   const record = asRecord(item);
   if (!record) return '';
 
-  const feedTarget = getNotificationFeedTarget(record);
-  for (const value of [feedTarget?.feedId, feedTarget?.feed_id, feedTarget?.fid, feedTarget?.id, record.feedId, record.feed_id, record.fid]) {
-    const feedId = normalizeFeedId(value);
-    if (feedId) return feedId;
+  const candidates = [record, record.feedInfo, record.targetFeed, record.targetRow]
+    .map(asRecord)
+    .filter((candidate): candidate is NotificationRecord => Boolean(candidate));
+
+  // 通知正文里的原始链接是酷安接口已经确认过的目标，优先使用它，
+  // 避免把评论/通知记录自身的 id 误当成动态 id。
+  for (const candidate of candidates) {
+    for (const value of [candidate.note, candidate.message, candidate.infoHtml, candidate.url, candidate.targetUrl, candidate.target_url, candidate.webUrl, candidate.web_url, candidate.targetTitle]) {
+      const feedId = getFeedIdFromSource(value);
+      if (feedId) return feedId;
+    }
   }
 
-  if (hasExplicitFeedType(record)) {
-    for (const value of [record.targetId, record.target_id, record.id]) {
+  // feedId/fid 字段本身就明确表示所属动态，优先于通用 id。
+  for (const candidate of candidates) {
+    for (const value of [candidate.feedId, candidate.feed_id, candidate.fid]) {
       const feedId = normalizeFeedId(value);
       if (feedId) return feedId;
     }
   }
 
-  for (const value of [record.url, record.targetUrl, record.target_url, record.note, record.message, record.targetTitle]) {
+  // 只有明确标记为 feed 的实体，才允许使用 id/targetId。
+  for (const candidate of candidates) {
+    if (!hasExplicitFeedType(candidate)) continue;
+    for (const value of [candidate.targetId, candidate.target_id, candidate.entityId, candidate.entity_id, candidate.id]) {
+      const feedId = normalizeFeedId(value);
+      if (feedId) return feedId;
+    }
+  }
+
+  // 兼容没有 entityType、但 targetRow 明确带有动态正文的接口返回。
+  const targetRow = asRecord(record.targetRow);
+  if (targetRow && isFeedLikeTarget(targetRow)) {
+    const feedId = normalizeFeedId(targetRow.id);
+    if (feedId) return feedId;
+  }
+
+  for (const value of [record.note, record.message, record.targetTitle]) {
     const feedId = getFeedIdFromSource(value);
     if (feedId) return feedId;
   }

@@ -11,6 +11,20 @@ describe('通知目标导航', () => {
     expect(getNotificationFeedId({ target_type: 'feed', target_id: 789 })).toBe('789');
   });
 
+  it('优先使用通知正文中的原始动态链接，不把评论记录 id 当成动态 id', () => {
+    expect(getNotificationFeedId({
+      id: 111,
+      feedInfo: { id: 222, entityType: 'reply', message: '评论记录' },
+      note: '<a href="/feed/333">查看原动态</a>',
+    })).toBe('333');
+  });
+
+  it('没有动态链接时不会使用未标记类型的 feedInfo 通用 id', () => {
+    expect(getNotificationFeedId({
+      feedInfo: { id: 222, message: '评论记录' },
+    })).toBe('');
+  });
+
   it('将通知中的应用和机型目标转换为对应详情路由', () => {
     expect(getNotificationTargetRoute({ targetRow: { entityType: 'apk', packageName: 'com.example.app' } })).toBe('/app/com.example.app');
     expect(getNotificationTargetRoute({ targetRow: { entityType: 'product', id: 123 } })).toBe('/product/123');
