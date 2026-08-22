@@ -38,6 +38,9 @@ import ProductSelectorPage from '../pages/ProductSelectorPage.vue';
 import GoodsPage from '../pages/GoodsPage.vue';
 import GoodsListDetailPage from '../pages/GoodsListDetailPage.vue';
 import GoodsRankingDetailPage from '../pages/GoodsRankingDetailPage.vue';
+import ProductCategoryPage from '../pages/ProductCategoryPage.vue';
+import MyProductsPage from '../pages/MyProductsPage.vue';
+import ProductComparePage from '../pages/ProductComparePage.vue';
 import SettingsLayout from '../pages/settings/SettingsLayout.vue';
 import AccountSettingsPage from '../pages/settings/AccountSettingsPage.vue';
 import NotificationSettingsPage from '../pages/settings/NotificationSettingsPage.vue';
@@ -83,6 +86,9 @@ const routes = [
   { path: '/goods/ranking', redirect: '/goods?tab=ranking' },
   { path: '/goods/lists/:feedId', name: 'GoodsListDetail', component: GoodsListDetailPage },
   { path: '/goods/ranking/:feedId', name: 'GoodsRankingDetail', component: GoodsRankingDetailPage },
+  { path: '/digital', name: 'Digital', component: ProductCategoryPage },
+  { path: '/my-products', name: 'MyProducts', component: MyProductsPage },
+  { path: '/product-compare', name: 'ProductCompare', component: ProductComparePage },
   { path: '/search', name: 'Search', component: SearchPage },
   { path: '/notifications', name: 'Notifications', component: NotificationsPage },
   { path: '/messages', name: 'Messages', component: MessagesPage },

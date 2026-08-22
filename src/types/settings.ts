@@ -45,11 +45,13 @@ export interface NavVisibilitySettings {
   discover: boolean;
   apps: boolean;
   games: boolean;
+  digital: boolean;
   topics: boolean;
   reviews: boolean;
   secondhand: boolean;
   albums: boolean;
   pictures: boolean;
+  my_products: boolean;
   notifications: boolean;
   favorites: boolean;
   history: boolean;

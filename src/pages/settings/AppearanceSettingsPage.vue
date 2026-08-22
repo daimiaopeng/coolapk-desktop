@@ -185,6 +185,7 @@ const navItems = [
   { key: 'discover', label: '发现中心', icon: 'fas fa-compass' },
   { key: 'apps', label: '应用中心', icon: 'fas fa-cubes' },
   { key: 'games', label: '游戏中心', icon: 'fas fa-gamepad' },
+  { key: 'digital', label: '数码分类', icon: 'fas fa-mobile-alt' },
   { key: 'reviews', label: '评测区', icon: 'fas fa-flask' },
   { key: 'secondhand', label: '二手市场', icon: 'fas fa-store' },
   { key: 'notifications', label: '通知中心', icon: 'far fa-bell' },
@@ -195,6 +196,7 @@ const navItems = [
   { key: 'albums', label: '专辑广场', icon: 'fas fa-layer-group' },
   { key: 'pictures', label: '酷图广场', icon: 'far fa-image' },
   { key: 'goods', label: '好物', icon: 'fas fa-gift' },
+  { key: 'my_products', label: '我的数码', icon: 'fas fa-box-open' },
 ];
 
 function getNavVisible(key: string): boolean {
