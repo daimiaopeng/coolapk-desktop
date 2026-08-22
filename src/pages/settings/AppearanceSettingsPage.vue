@@ -194,6 +194,7 @@ const navItems = [
   { key: 'following', label: '我关注的', icon: 'far fa-user' },
   { key: 'albums', label: '专辑广场', icon: 'fas fa-layer-group' },
   { key: 'pictures', label: '酷图广场', icon: 'far fa-image' },
+  { key: 'goods', label: '好物', icon: 'fas fa-gift' },
 ];
 
 function getNavVisible(key: string): boolean {

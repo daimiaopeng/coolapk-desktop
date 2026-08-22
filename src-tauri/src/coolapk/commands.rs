@@ -2148,6 +2148,184 @@ pub async fn search_apks_by_tag(
     state.client.search_apks_by_tag(&tag, &apk_type, page).await
 }
 
+// === 好物 / 购物生态 ===
+#[tauri::command]
+pub async fn get_goods_search_hot_words(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_goods_search_hot_words().await
+}
+
+#[tauri::command]
+pub async fn search_goods(
+    state: State<'_, AppState>,
+    keyword: String,
+    sort_name: String,
+    sort: String,
+    is_coupon: u32,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .search_goods(&keyword, &sort_name, &sort, is_coupon, page)
+        .await
+}
+
+#[tauri::command]
+pub async fn get_goods_detail(
+    state: State<'_, AppState>,
+    goods_id: String,
+) -> Result<Value, String> {
+    state.client.get_goods_detail(&goods_id).await
+}
+
+#[tauri::command]
+pub async fn get_goods_list_types(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_goods_list_types().await
+}
+
+#[tauri::command]
+pub async fn get_goods_list(
+    state: State<'_, AppState>,
+    uid: String,
+    goods_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_goods_list(&uid, &goods_id, page).await
+}
+
+#[tauri::command]
+pub async fn get_goods_store_items(
+    state: State<'_, AppState>,
+    uid: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_goods_store_items(&uid, page).await
+}
+
+#[tauri::command]
+pub async fn get_product_albums(
+    state: State<'_, AppState>,
+    uid: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_product_albums(&uid, page).await
+}
+
+#[tauri::command]
+pub async fn get_my_goods_feeds(
+    state: State<'_, AppState>,
+    uid: String,
+    goods_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_my_goods_feeds(&uid, &goods_type, page).await
+}
+
+#[tauri::command]
+pub async fn create_goods_list(
+    state: State<'_, AppState>,
+    title: String,
+    message: String,
+    cover: String,
+    top_limit: u32,
+    is_open_vote: u32,
+    list_type: String,
+    target_id: String,
+    target_type: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .create_goods_list(
+            &title,
+            &message,
+            &cover,
+            top_limit,
+            is_open_vote,
+            &list_type,
+            &target_id,
+            &target_type,
+        )
+        .await
+}
+
+#[tauri::command]
+pub async fn edit_goods_list(
+    state: State<'_, AppState>,
+    id: String,
+    title: String,
+    message: String,
+    cover: String,
+    top_limit: u32,
+    is_open_vote: u32,
+    list_type: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .edit_goods_list(&id, &title, &message, &cover, top_limit, is_open_vote, &list_type)
+        .await
+}
+
+#[tauri::command]
+pub async fn add_goods_to_goods_list(
+    state: State<'_, AppState>,
+    feed_id: String,
+    goods_id: String,
+    note: String,
+    pic: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .add_goods_to_goods_list(&feed_id, &goods_id, &note, &pic)
+        .await
+}
+
+#[tauri::command]
+pub async fn delete_goods_list_items(
+    state: State<'_, AppState>,
+    cancel_feed_id: String,
+    goods_id: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .delete_goods_list_items(&cancel_feed_id, &goods_id)
+        .await
+}
+
+#[tauri::command]
+pub async fn edit_goods_list_item(
+    state: State<'_, AppState>,
+    feed_id: String,
+    goods_id: String,
+    note: String,
+    pic: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .edit_goods_list_item(&feed_id, &goods_id, &note, &pic)
+        .await
+}
+
+#[tauri::command]
+pub async fn vote_goods_list_item(
+    state: State<'_, AppState>,
+    id: String,
+    item_id: String,
+    value: i32,
+) -> Result<Value, String> {
+    state.client.vote_goods_list_item(&id, &item_id, value).await
+}
+
+#[tauri::command]
+pub async fn bind_feed_to_goods_list(
+    state: State<'_, AppState>,
+    feed_id: String,
+    goods_list_id: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .bind_feed_to_goods_list(&feed_id, &goods_list_id)
+        .await
+}
+
 #[cfg(test)]
 mod cache_tests {
     use super::{

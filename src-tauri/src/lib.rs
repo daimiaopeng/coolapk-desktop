@@ -2,9 +2,11 @@ pub mod coolapk;
 
 use coolapk::client::CoolapkClient;
 use coolapk::commands::{
-    AppState, add_to_black_list, add_to_ignore_list, check_login_info, check_login_status,
+    AppState, add_to_black_list, add_to_ignore_list, add_goods_to_goods_list,
+    bind_feed_to_goods_list, check_login_info, check_login_status,
     check_update, clean_expired_cache, clear_app_cache, clear_user_cookie, close_login_window,
-    create_feed, create_forward, delete_feed, delete_reply, download_update, export_json_file,
+    create_feed, create_forward, create_goods_list, delete_feed, delete_goods_list_items,
+    delete_reply, download_update, edit_goods_list, edit_goods_list_item, export_json_file,
     favorite_apk, favorite_feed, fetch_external_page, follow_collection, follow_dyh, follow_tag,
     follow_user, get_album_detail, get_album_list, get_album_replies, get_apk_discoverers,
     get_apk_feeds, get_apk_gift_list, get_apk_qr, get_apk_recommend_list, get_apk_url,
@@ -17,10 +19,14 @@ use coolapk::commands::{
     get_dyh_detail, get_dyh_feeds, get_dyh_list, get_editor_choice_feeds, get_fans_user_list,
     get_favorite_list, get_feed_change_history, get_feed_detail, get_feed_forward_list,
     get_feed_like_list, get_feed_replies, get_follow_user_list, get_following_feeds, get_game_list,
-    get_headline_feeds, get_hit_history, get_hot_feeds, get_hot_replies, get_hot_topics,
+    get_goods_detail, get_goods_list, get_goods_list_types, get_goods_search_hot_words,
+    get_goods_store_items, get_headline_feeds, get_hit_history, get_hot_feeds, get_hot_replies,
+    get_hot_topics,
     get_ignore_list, get_image_data_url, get_index_v8_entities_paged, get_index_v8_feeds, get_index_v8_feeds_paged, get_latest_feeds, get_limit_list,
-    get_home_tab_config, get_load_config, get_notification_count, get_notifications, get_picture_list,
-    get_product_detail, get_product_detail_by_name, get_product_feeds, get_question_answers,
+    get_home_tab_config, get_load_config, get_my_goods_feeds, get_notification_count,
+    get_notifications, get_picture_list,
+    get_product_albums, get_product_detail, get_product_detail_by_name, get_product_feeds,
+    get_question_answers,
     get_rank_feeds, get_recent_history, get_reply_detail, get_search_suggestions,
     resolve_video_url,
     get_search_suggestions_app, get_secondhand_feeds, get_sub_replies, get_tab_config,
@@ -35,10 +41,11 @@ use coolapk::commands::{
     cancel_follower, special_follow_user, update_user_remark,
     save_account, save_cookie_securely, save_image, search_albums, search_all, search_apks,
     search_apks_by_developer, search_apks_by_tag, search_feed_topics, search_feeds, search_games,
-    search_tags, search_users, send_private_image, send_private_message, send_sms_vcode,
+    search_goods, search_tags, search_users, send_private_image, send_private_message, send_sms_vcode,
     unfavorite_apk, unfavorite_feed, unfollow_collection, unfollow_dyh, unfollow_tag,
     update_collection_item,
     unfollow_user, unlike_collection, unlike_feed, unlike_reply, update_device_profile, upload_image,
+    vote_goods_list_item,
 };
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -613,6 +620,21 @@ pub fn run() {
             search_albums,
             search_apks_by_developer,
             search_apks_by_tag,
+            get_goods_search_hot_words,
+            search_goods,
+            get_goods_detail,
+            get_goods_list_types,
+            get_goods_list,
+            get_goods_store_items,
+            get_product_albums,
+            get_my_goods_feeds,
+            create_goods_list,
+            edit_goods_list,
+            add_goods_to_goods_list,
+            delete_goods_list_items,
+            edit_goods_list_item,
+            vote_goods_list_item,
+            bind_feed_to_goods_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

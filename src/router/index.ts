@@ -27,6 +27,9 @@ import ReviewPage from '../pages/ReviewPage.vue';
 import SecondHandPage from '../pages/SecondHandPage.vue';
 import ExternalPage from '../pages/ExternalPage.vue';
 import ProductSelectorPage from '../pages/ProductSelectorPage.vue';
+import GoodsPage from '../pages/GoodsPage.vue';
+import GoodsListDetailPage from '../pages/GoodsListDetailPage.vue';
+import GoodsRankingDetailPage from '../pages/GoodsRankingDetailPage.vue';
 import SettingsLayout from '../pages/settings/SettingsLayout.vue';
 import AccountSettingsPage from '../pages/settings/AccountSettingsPage.vue';
 import NotificationSettingsPage from '../pages/settings/NotificationSettingsPage.vue';
@@ -57,6 +60,13 @@ const routes = [
   { path: '/secondhand', name: 'SecondHand', component: SecondHandPage },
   { path: '/external', name: 'External', component: ExternalPage },
   { path: '/product-selector', name: 'ProductSelector', component: ProductSelectorPage },
+  { path: '/goods', name: 'Goods', component: GoodsPage },
+  { path: '/goods/search', redirect: '/goods?tab=search' },
+  { path: '/goods/mine', redirect: '/goods?tab=mine' },
+  { path: '/goods/lists', redirect: '/goods?tab=lists' },
+  { path: '/goods/ranking', redirect: '/goods?tab=ranking' },
+  { path: '/goods/lists/:feedId', name: 'GoodsListDetail', component: GoodsListDetailPage },
+  { path: '/goods/ranking/:feedId', name: 'GoodsRankingDetail', component: GoodsRankingDetailPage },
   { path: '/search', name: 'Search', component: SearchPage },
   { path: '/notifications', name: 'Notifications', component: NotificationsPage },
   { path: '/messages', name: 'Messages', component: MessagesPage },

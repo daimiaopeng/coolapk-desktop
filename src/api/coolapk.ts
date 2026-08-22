@@ -975,4 +975,135 @@ export class CoolapkTauriAPI {
   static async getUserRatingList(uid: string, page: number = 1) {
     return await invokeNative('get_user_rating_list', { uid, page })
   }
+
+  // === 好物 / 购物生态 ===
+  static async getGoodsSearchHotWords() {
+    return await invokeNative('get_goods_search_hot_words', {}, { retry: true, kind: 'feed' });
+  }
+
+  static async searchGoods(options: {
+    keyword: string;
+    sortName?: string;
+    sort?: string;
+    isCoupon?: boolean;
+    page?: number;
+  }) {
+    return await invokeNative('search_goods', {
+      keyword: options.keyword,
+      sortName: options.sortName || 'default',
+      sort: options.sort || 'default',
+      isCoupon: options.isCoupon ? 1 : 0,
+      page: options.page || 1,
+    }, { retry: true, kind: 'feed' });
+  }
+
+  static async getGoodsDetail(goodsId: string) {
+    return await invokeNative('get_goods_detail', { goodsId });
+  }
+
+  static async getGoodsListTypes() {
+    return await invokeNative('get_goods_list_types', {}, { retry: true, kind: 'feed' });
+  }
+
+  static async getGoodsList(options: { uid?: string; goodsId?: string; page?: number }) {
+    return await invokeNative('get_goods_list', {
+      uid: options.uid || '',
+      goodsId: options.goodsId || '',
+      page: options.page || 1,
+    }, { retry: true, kind: 'feed' });
+  }
+
+  static async getGoodsStoreItems(uid: string, page: number = 1) {
+    return await invokeNative('get_goods_store_items', { uid, page }, { retry: true, kind: 'feed' });
+  }
+
+  static async getProductAlbums(uid: string, page: number = 1) {
+    return await invokeNative('get_product_albums', { uid, page }, { retry: true, kind: 'feed' });
+  }
+
+  static async getMyGoodsFeeds(uid: string, goodsType: string = 'all', page: number = 1) {
+    return await invokeNative('get_my_goods_feeds', { uid, goodsType, page }, { retry: true, kind: 'feed' });
+  }
+
+  static async createGoodsList(options: {
+    title: string;
+    message?: string;
+    cover?: string;
+    topLimit?: number;
+    isOpenVote?: boolean;
+    listType?: string;
+    targetId?: string;
+    targetType?: string;
+  }) {
+    return await invokeNative('create_goods_list', {
+      title: options.title,
+      message: options.message || '',
+      cover: options.cover || '',
+      topLimit: options.topLimit || 0,
+      isOpenVote: options.isOpenVote ? 1 : 0,
+      listType: options.listType || 'feed',
+      targetId: options.targetId || '',
+      targetType: options.targetType || '',
+    }, { retry: false });
+  }
+
+  static async editGoodsList(options: {
+    id: string;
+    title: string;
+    message?: string;
+    cover?: string;
+    topLimit?: number;
+    isOpenVote?: boolean;
+    listType?: string;
+  }) {
+    return await invokeNative('edit_goods_list', {
+      id: options.id,
+      title: options.title,
+      message: options.message || '',
+      cover: options.cover || '',
+      topLimit: options.topLimit || 0,
+      isOpenVote: options.isOpenVote ? 1 : 0,
+      listType: options.listType || 'feed',
+    }, { retry: false });
+  }
+
+  static async addGoodsToGoodsList(options: {
+    feedId: string;
+    goodsId: string;
+    note?: string;
+    pic?: string;
+  }) {
+    return await invokeNative('add_goods_to_goods_list', {
+      feedId: options.feedId,
+      goodsId: options.goodsId,
+      note: options.note || '',
+      pic: options.pic || '',
+    }, { retry: false });
+  }
+
+  static async deleteGoodsListItems(cancelFeedId: string, goodsId: string) {
+    return await invokeNative('delete_goods_list_items', { cancelFeedId, goodsId }, { retry: false });
+  }
+
+  static async editGoodsListItem(options: {
+    feedId: string;
+    goodsId: string;
+    note?: string;
+    pic?: string;
+  }) {
+    return await invokeNative('edit_goods_list_item', {
+      feedId: options.feedId,
+      goodsId: options.goodsId,
+      note: options.note || '',
+      pic: options.pic || '',
+    }, { retry: false });
+  }
+
+  static async voteGoodsListItem(id: string, itemId: string, value: number) {
+    return await invokeNative('vote_goods_list_item', { id, itemId, value }, { retry: false });
+  }
+
+  static async bindFeedToGoodsList(feedId: string, goodsListId: string) {
+    return await invokeNative('bind_feed_to_goods_list', { feedId, goodsListId }, { retry: false });
+  }
 }
