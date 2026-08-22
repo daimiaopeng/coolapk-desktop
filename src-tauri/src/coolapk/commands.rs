@@ -119,6 +119,156 @@ pub async fn get_product_feeds(
 }
 
 #[tauri::command]
+pub async fn get_product_config(
+    state: State<'_, AppState>,
+    config_id: String,
+) -> Result<Value, String> {
+    state.client.get_product_config(&config_id).await
+}
+
+#[tauri::command]
+pub async fn add_config_compare(
+    state: State<'_, AppState>,
+    config_id: String,
+) -> Result<Value, String> {
+    state.client.add_config_compare(&config_id).await
+}
+
+#[tauri::command]
+pub async fn remove_config_compare(
+    state: State<'_, AppState>,
+    config_id: String,
+) -> Result<Value, String> {
+    state.client.remove_config_compare(&config_id).await
+}
+
+#[tauri::command]
+pub async fn get_product_brand_list(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_product_brand_list().await
+}
+
+#[tauri::command]
+pub async fn get_product_category_list(state: State<'_, AppState>) -> Result<Value, String> {
+    state.client.get_product_category_list().await
+}
+
+#[tauri::command]
+pub async fn get_product_list(
+    state: State<'_, AppState>,
+    id: String,
+    product_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_product_list(&id, &product_type, page)
+        .await
+}
+
+#[tauri::command]
+pub async fn get_product_media_list(
+    state: State<'_, AppState>,
+    product_id: String,
+    media_type: String,
+    is_recommend: i32,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_product_media_list(&product_id, &media_type, is_recommend, page)
+        .await
+}
+
+#[tauri::command]
+pub async fn change_product_wish_status(
+    state: State<'_, AppState>,
+    product_id: String,
+    status: i32,
+) -> Result<Value, String> {
+    state
+        .client
+        .change_product_wish_status(&product_id, status)
+        .await
+}
+
+#[tauri::command]
+pub async fn get_product_wish_list(
+    state: State<'_, AppState>,
+    product_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_product_wish_list(&product_id, page).await
+}
+
+#[tauri::command]
+pub async fn get_product_buy_list(
+    state: State<'_, AppState>,
+    product_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_product_buy_list(&product_id, page).await
+}
+
+#[tauri::command]
+pub async fn get_my_product_list(
+    state: State<'_, AppState>,
+    uid: String,
+    product_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_my_product_list(&uid, &product_type, page)
+        .await
+}
+
+#[tauri::command]
+pub async fn get_product_rating_chart(
+    state: State<'_, AppState>,
+    product_id: String,
+) -> Result<Value, String> {
+    state.client.get_product_rating_chart(&product_id).await
+}
+
+#[tauri::command]
+pub async fn get_product_rating_list(
+    state: State<'_, AppState>,
+    product_id: String,
+    star: i32,
+    is_owner: i32,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_product_rating_list(&product_id, star, is_owner, page)
+        .await
+}
+
+#[tauri::command]
+pub async fn get_apk_rating_user_list(
+    state: State<'_, AppState>,
+    apk_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_apk_rating_user_list(&apk_id, page).await
+}
+
+#[tauri::command]
+pub async fn change_rating_status(
+    state: State<'_, AppState>,
+    product_id: String,
+    value: i32,
+    uid: String,
+    buy_status: Option<i32>,
+    is_owner: Option<i32>,
+) -> Result<Value, String> {
+    state
+        .client
+        .change_rating_status(&product_id, value, &uid, buy_status, is_owner)
+        .await
+}
+
+#[tauri::command]
 pub async fn get_dyh_detail(state: State<'_, AppState>, dyh_id: String) -> Result<Value, String> {
     state.client.get_dyh_detail(&dyh_id).await
 }

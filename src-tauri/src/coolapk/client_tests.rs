@@ -602,6 +602,67 @@ fn test_extract_history_list_preserves_entities() {
     );
 }
 
+/// 数码品牌/分类实体没有 username/author/dyh_name，
+/// 必须原样保留（此前走 clean_single_feed 会被全部丢弃，导致分类页为空）
+#[test]
+fn test_extract_product_entity_list_preserves_brands() {
+    let raw = json!({
+        "code": 200,
+        "data": [
+            {
+                "id": 1,
+                "title": "Apple",
+                "logo": "http://image.coolapk.com/logo/apple.png",
+                "product_num": 120,
+                "entityType": "brand"
+            },
+            {
+                "entityId": 2,
+                "name": "华为",
+                "pic": "//image.coolapk.com/logo/huawei.png",
+                "series_num": 88,
+                "entityType": "brand"
+            },
+            {
+                "entityType": "header",
+                "title": "热门品牌"
+            }
+        ]
+    });
+
+    let list = CoolapkClient::extract_product_entity_list(&raw);
+    assert_eq!(list.len(), 2, "品牌实体不能被丢弃，卡片/标题占位应被过滤");
+
+    let apple = &list[0];
+    assert_eq!(apple["title"], "Apple");
+    assert_eq!(apple["product_num"], 120);
+
+    let huawei = &list[1];
+    assert_eq!(huawei["name"], "华为");
+    assert_eq!(huawei["series_num"], 88);
+}
+
+#[test]
+fn test_extract_product_entity_list_flattens_nested_entities() {
+    let raw = json!({
+        "code": 200,
+        "data": [
+            {
+                "title": "分类组",
+                "entities": [
+                    { "id": "c1", "title": "手机" },
+                    { "id": "c2", "title": "平板" }
+                ]
+            }
+        ]
+    });
+
+    let list = CoolapkClient::extract_product_entity_list(&raw);
+    assert_eq!(list.len(), 2, "嵌套 entities 应被摊平");
+    assert_eq!(list[0]["id"], "c1");
+    assert_eq!(list[1]["id"], "c2");
+}
+
 /// 模拟 Webview 登录脚本捕获到的真实 Cookie 形态（含中文/换行等脏字符），
 /// 验证 set_user_cookie 的 ASCII 清洗与落盘逻辑不会崩坏
 #[tokio::test]

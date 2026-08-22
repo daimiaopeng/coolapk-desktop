@@ -143,6 +143,74 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_product_feeds', { productId, feedType, page });
   }
 
+  // 1.4.1 产品配置与对比
+  static async getProductConfig(configId: string) {
+    return await invokeNative('get_product_config', { configId });
+  }
+
+  static async addConfigCompare(configId: string) {
+    return await invokeNative('add_config_compare', { configId });
+  }
+
+  static async removeConfigCompare(configId: string) {
+    return await invokeNative('remove_config_compare', { configId });
+  }
+
+  // 1.4.2 数码品牌/分类/系列浏览
+  static async getProductBrandList() {
+    return await invokeNative('get_product_brand_list');
+  }
+
+  static async getProductCategoryList() {
+    return await invokeNative('get_product_category_list');
+  }
+
+  static async getProductList(id: string, productType: string = 'hot', page: number = 1) {
+    return await invokeNative('get_product_list', { id, productType, page });
+  }
+
+  // 1.4.3 产品媒体库
+  static async getProductMediaList(productId: string, mediaType: string = 'image', isRecommend: number = 0, page: number = 1) {
+    return await invokeNative('get_product_media_list', { productId, mediaType, isRecommend, page });
+  }
+
+  // 1.4.4 产品心愿单/已购
+  static async changeProductWishStatus(productId: string, status: number) {
+    return await invokeNative('change_product_wish_status', { productId, status });
+  }
+
+  static async getProductWishList(productId: string, page: number = 1) {
+    return await invokeNative('get_product_wish_list', { productId, page });
+  }
+
+  static async getProductBuyList(productId: string, page: number = 1) {
+    return await invokeNative('get_product_buy_list', { productId, page });
+  }
+
+  static async getMyProductList(uid: string, productType: string = 'wish', page: number = 1) {
+    return await invokeNative('get_my_product_list', { uid, productType, page });
+  }
+
+  // 1.4.5 产品评分趋势与评分列表
+  static async getProductRatingChart(productId: string) {
+    return await invokeNative('get_product_rating_chart', { productId });
+  }
+
+  static async getProductRatingList(productId: string, star: number = 0, isOwner: number = 0, page: number = 1) {
+    return await invokeNative('get_product_rating_list', { productId, star, isOwner, page });
+  }
+
+  static async getApkRatingUserList(apkId: string, page: number = 1) {
+    return await invokeNative('get_apk_rating_user_list', { apkId, page });
+  }
+
+  static async changeRatingStatus(productId: string, value: number, uid: string, buyStatus?: number, isOwner?: number) {
+    const args: any = { productId, value, uid };
+    if (buyStatus !== undefined) args.buyStatus = buyStatus;
+    if (isOwner !== undefined) args.isOwner = isOwner;
+    return await invokeNative('change_rating_status', args);
+  }
+
   // 1.5 看看号（官方号）详情与动态
   static async getDyhDetail(dyhId: string) {
     return await invokeNative('get_dyh_detail', { dyhId });

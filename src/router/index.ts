@@ -27,6 +27,9 @@ import ReviewPage from '../pages/ReviewPage.vue';
 import SecondHandPage from '../pages/SecondHandPage.vue';
 import ExternalPage from '../pages/ExternalPage.vue';
 import ProductSelectorPage from '../pages/ProductSelectorPage.vue';
+import ProductCategoryPage from '../pages/ProductCategoryPage.vue';
+import MyProductsPage from '../pages/MyProductsPage.vue';
+import ProductComparePage from '../pages/ProductComparePage.vue';
 import SettingsLayout from '../pages/settings/SettingsLayout.vue';
 import AccountSettingsPage from '../pages/settings/AccountSettingsPage.vue';
 import NotificationSettingsPage from '../pages/settings/NotificationSettingsPage.vue';
@@ -57,6 +60,9 @@ const routes = [
   { path: '/secondhand', name: 'SecondHand', component: SecondHandPage },
   { path: '/external', name: 'External', component: ExternalPage },
   { path: '/product-selector', name: 'ProductSelector', component: ProductSelectorPage },
+  { path: '/digital', name: 'Digital', component: ProductCategoryPage },
+  { path: '/my-products', name: 'MyProducts', component: MyProductsPage },
+  { path: '/product-compare', name: 'ProductCompare', component: ProductComparePage },
   { path: '/search', name: 'Search', component: SearchPage },
   { path: '/notifications', name: 'Notifications', component: NotificationsPage },
   { path: '/messages', name: 'Messages', component: MessagesPage },

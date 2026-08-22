@@ -115,6 +115,7 @@ const allPrimaryNavs = [
   { key: 'discover', path: '/discover', label: '发现', icon: 'fas fa-compass' },
   { key: 'apps', path: '/apps', label: '应用', icon: 'fas fa-cubes' },
   { key: 'games', path: '/games', label: '游戏', icon: 'fas fa-gamepad' },
+  { key: 'digital', path: '/digital', label: '数码', icon: 'fas fa-mobile-alt' },
   { key: 'reviews', path: '/reviews', label: '评测区', icon: 'fas fa-flask' },
   { key: 'secondhand', path: '/secondhand', label: '二手市场', icon: 'fas fa-store' },
 ];
@@ -127,6 +128,7 @@ const allSecondaryNavs = [
   { key: 'following', path: '/following', label: '我关注的', icon: 'far fa-user' },
   { key: 'albums', path: '/albums', label: '专辑', icon: 'fas fa-layer-group' },
   { key: 'pictures', path: '/pictures', label: '酷图', icon: 'far fa-image' },
+  { key: 'my_products', path: '/my-products', label: '我的数码', icon: 'fas fa-box-open' },
 ];
 
 const primaryNavs = computed(() => {
