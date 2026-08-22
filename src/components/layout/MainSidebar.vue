@@ -55,7 +55,7 @@
 
       <div class="nav-group">
         <router-link
-          v-for="item in goodsNavs"
+          v-for="item in contentNavs"
           :key="item.path"
           :to="item.path"
           class="nav-item"
@@ -145,8 +145,9 @@ const allSecondaryNavs = [
   { key: 'pictures', path: '/pictures', label: '酷图', icon: 'far fa-image' },
 ];
 
-const allGoodsNavs = [
+const allContentNavs = [
   { key: 'goods', path: '/goods', label: '好物', icon: 'fas fa-gift' },
+  { key: 'center', path: '/center', label: '酷安中心', icon: 'fas fa-shapes' },
 ];
 
 const primaryNavs = computed(() => {
@@ -161,10 +162,10 @@ const secondaryNavs = computed(() => {
   return allSecondaryNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
 });
 
-const goodsNavs = computed(() => {
+const contentNavs = computed(() => {
   const vis = settingsStore.settings.navVisibility;
-  if (!vis) return allGoodsNavs;
-  return allGoodsNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
+  if (!vis) return allContentNavs;
+  return allContentNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
 });
 
 function getNavBadge(key: string): number {

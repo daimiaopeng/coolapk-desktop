@@ -156,6 +156,60 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_dyh_feeds', { dyhId, feedType, page });
   }
 
+  // === 动态号管理 ===
+  static async getMyDyhFollowList(page: number = 1) {
+    return await invokeNative('get_dyh_follow_list', { page });
+  }
+
+  static async getMyDyhSubscribeList(page: number = 1) {
+    return await invokeNative('get_dyh_subscribe_list', { page });
+  }
+
+  static async getMyDyhEditorList(page: number = 1) {
+    return await invokeNative('get_dyh_editor_list', { page });
+  }
+
+  // === 酷友圈活动 ===
+  static async getEventList(page: number = 1) {
+    return await invokeNative('get_event_list', { page }, { retry: true, kind: 'feed' });
+  }
+
+  static async getEventDetail(eventId: string) {
+    return await invokeNative('get_event_detail', { eventId });
+  }
+
+  // === 万物清单（productAlbum）===
+  static async getUserProductAlbums(uid: string, page: number = 1) {
+    return await invokeNative('get_user_product_albums', { uid, page });
+  }
+
+  static async getGoodsListItems(uid: string, goodsId: string, page: number = 1) {
+    return await invokeNative('get_goods_list_items', { uid, goodsId, page });
+  }
+
+  static async createProductAlbum(options: {
+    title: string;
+    description?: string;
+    albumType?: number;
+    targetType?: string;
+    targetId?: string;
+    productItems?: any[];
+  }) {
+    return await invokeNative('create_product_album', {
+      title: options.title,
+      description: options.description || '',
+      albumType: options.albumType ?? 0,
+      targetType: options.targetType || '',
+      targetId: options.targetId || '',
+      productItems: JSON.stringify(options.productItems || []),
+    }, { retry: false, kind: 'feed' });
+  }
+
+  // === 节点（版块）===
+  static async getNodeFeeds(nodeType: string, nodeId: string, page: number = 1) {
+    return await invokeNative('get_node_feeds', { nodeType, nodeId, page }, { retry: true, kind: 'feed' });
+  }
+
   // 1.6 应用所属动态（点评/讨论）
   static async getApkFeeds(packageName: string, sortType: string = 'lastupdate_desc', page: number = 1) {
     return await invokeNative('get_apk_feeds', { packageName, sortType, page });

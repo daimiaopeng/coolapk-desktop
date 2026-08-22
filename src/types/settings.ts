@@ -56,6 +56,10 @@ export interface NavVisibilitySettings {
   messages: boolean;
   following: boolean;
   goods: boolean;
+  events: boolean;
+  nodes: boolean;
+  anylist: boolean;
+  mydyh: boolean;
 }
 
 /** 设备信息（请求头指纹）：机型/Android 版本/Build 内嵌于 User-Agent，

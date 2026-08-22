@@ -25,6 +25,14 @@ import HeadlinePage from '../pages/HeadlinePage.vue';
 import PageDataListPage from '../pages/PageDataListPage.vue';
 import ReviewPage from '../pages/ReviewPage.vue';
 import SecondHandPage from '../pages/SecondHandPage.vue';
+import EventsPage from '../pages/EventsPage.vue';
+import EventDetailPage from '../pages/EventDetailPage.vue';
+import NodePage from '../pages/NodePage.vue';
+import AnyListPage from '../pages/AnyListPage.vue';
+import AnyListDetailPage from '../pages/AnyListDetailPage.vue';
+import AnyListCreatePage from '../pages/AnyListCreatePage.vue';
+import MyDyhPage from '../pages/MyDyhPage.vue';
+import CenterPage from '../pages/CenterPage.vue';
 import ExternalPage from '../pages/ExternalPage.vue';
 import ProductSelectorPage from '../pages/ProductSelectorPage.vue';
 import GoodsPage from '../pages/GoodsPage.vue';
@@ -58,6 +66,14 @@ const routes = [
   { path: '/following', name: 'Following', component: FollowingPage },
   { path: '/reviews', name: 'Reviews', component: ReviewPage },
   { path: '/secondhand', name: 'SecondHand', component: SecondHandPage },
+  { path: '/events', name: 'Events', component: EventsPage },
+  { path: '/event/:eventId', name: 'EventDetail', component: EventDetailPage, props: true },
+  { path: '/node/:nodeType/:nodeId', name: 'Node', component: NodePage },
+  { path: '/anylist', name: 'AnyList', component: AnyListPage },
+  { path: '/anylist/create', name: 'AnyListCreate', component: AnyListCreatePage },
+  { path: '/anylist/:listId', name: 'AnyListDetail', component: AnyListDetailPage, props: true },
+  { path: '/my-dyh', name: 'MyDyh', component: MyDyhPage },
+  { path: '/center', name: 'Center', component: CenterPage },
   { path: '/external', name: 'External', component: ExternalPage },
   { path: '/product-selector', name: 'ProductSelector', component: ProductSelectorPage },
   { path: '/goods', name: 'Goods', component: GoodsPage },
