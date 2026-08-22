@@ -54,6 +54,22 @@
       <div class="nav-divider"></div>
 
       <div class="nav-group">
+        <router-link
+          v-for="item in contentNavs"
+          :key="item.path"
+          :to="item.path"
+          class="nav-item"
+          active-class="is-active"
+          :title="item.label"
+        >
+          <i :class="[item.icon, 'nav-icon']"></i>
+          <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
+        </router-link>
+      </div>
+
+      <div class="nav-divider"></div>
+
+      <div class="nav-group">
         <router-link to="/settings" class="nav-item" active-class="is-active" title="设置">
           <i class="fas fa-cog nav-icon"></i>
           <span v-if="!isCollapsed" class="nav-label">设置</span>
@@ -129,6 +145,10 @@ const allSecondaryNavs = [
   { key: 'pictures', path: '/pictures', label: '酷图', icon: 'far fa-image' },
 ];
 
+const allContentNavs = [
+  { key: 'center', path: '/center', label: '酷安中心', icon: 'fas fa-shapes' },
+];
+
 const primaryNavs = computed(() => {
   const vis = settingsStore.settings.navVisibility;
   if (!vis) return allPrimaryNavs;
@@ -139,6 +159,12 @@ const secondaryNavs = computed(() => {
   const vis = settingsStore.settings.navVisibility;
   if (!vis) return allSecondaryNavs;
   return allSecondaryNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
+});
+
+const contentNavs = computed(() => {
+  const vis = settingsStore.settings.navVisibility;
+  if (!vis) return allContentNavs;
+  return allContentNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
 });
 
 function getNavBadge(key: string): number {

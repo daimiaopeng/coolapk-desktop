@@ -43,6 +43,28 @@
           <i :class="cat.icon"></i> {{ cat.title }}
         </button>
       </div>
+
+      <!-- 内容版块入口 -->
+      <div class="section-row">
+        <span class="section-label">内容版块</span>
+        <div class="section-links">
+          <button class="section-link" @click="go('/events')">
+            <i class="fas fa-trophy"></i> 酷友圈活动
+          </button>
+          <button class="section-link" @click="go('/node/topic/%E6%95%B0%E7%A0%81?title=%E6%95%B0%E7%A0%81')">
+            <i class="fas fa-mobile-alt"></i> 数码
+          </button>
+          <button class="section-link" @click="go('/node/topic/%E9%85%B7%E5%9B%BE?title=%E9%85%B7%E5%9B%BE')">
+            <i class="fas fa-image"></i> 酷图
+          </button>
+          <button class="section-link" @click="go('/node/topic/%E9%97%AE%E7%AD%94?title=%E9%97%AE%E7%AD%94')">
+            <i class="fas fa-question-circle"></i> 问答
+          </button>
+          <button class="section-link" @click="go('/node/topic/%E4%BA%8C%E6%89%8B%E4%BA%A4%E6%98%93?title=%E4%BA%8C%E6%89%8B%E4%BA%A4%E6%98%93')">
+            <i class="fas fa-store"></i> 二手交易
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 加载中状态 -->
@@ -79,10 +101,17 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import TopicCard from '../components/topic/TopicCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+
+const router = useRouter();
+
+function go(path: string) {
+  void router.push(path);
+}
 
 interface CategoryItem {
   title: string;
@@ -441,6 +470,51 @@ onMounted(() => {
 .cat-tab.active {
   background-color: var(--brand-soft);
   color: var(--brand-primary);
+  border-color: var(--brand-primary);
+}
+
+.section-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.section-label {
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.section-links {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.section-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.section-link i {
+  color: var(--brand-primary);
+}
+
+.section-link:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
   border-color: var(--brand-primary);
 }
 

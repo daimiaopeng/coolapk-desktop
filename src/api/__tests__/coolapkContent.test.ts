@@ -1,0 +1,72 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { invoke } from '@tauri-apps/api/core';
+import { CoolapkTauriAPI } from '../coolapk';
+
+function okResponse(data: unknown) {
+  return { code: 200, data };
+}
+
+describe('CoolapkTauriAPI 内容新页接口封装', () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+    vi.mocked(invoke).mockResolvedValue(okResponse([]));
+  });
+
+  it('酷友圈活动列表调用 get_event_list', async () => {
+    await CoolapkTauriAPI.getEventList(3);
+    expect(invoke).toHaveBeenCalledWith('get_event_list', { page: 3 });
+  });
+
+  it('酷友圈活动详情调用 get_event_detail', async () => {
+    await CoolapkTauriAPI.getEventDetail('1082');
+    expect(invoke).toHaveBeenCalledWith('get_event_detail', { eventId: '1082' });
+  });
+
+  it('我关注的动态号调用 get_dyh_follow_list', async () => {
+    await CoolapkTauriAPI.getMyDyhFollowList(2);
+    expect(invoke).toHaveBeenCalledWith('get_dyh_follow_list', { page: 2 });
+  });
+
+  it('我订阅的动态号调用 get_dyh_subscribe_list', async () => {
+    await CoolapkTauriAPI.getMyDyhSubscribeList(1);
+    expect(invoke).toHaveBeenCalledWith('get_dyh_subscribe_list', { page: 1 });
+  });
+
+  it('我管理的动态号调用 get_dyh_editor_list', async () => {
+    await CoolapkTauriAPI.getMyDyhEditorList(1);
+    expect(invoke).toHaveBeenCalledWith('get_dyh_editor_list', { page: 1 });
+  });
+
+  it('用户万物清单调用 get_user_product_albums', async () => {
+    await CoolapkTauriAPI.getUserProductAlbums('2014', 1);
+    expect(invoke).toHaveBeenCalledWith('get_user_product_albums', { uid: '2014', page: 1 });
+  });
+
+  it('好物清单条目调用 get_goods_list_items', async () => {
+    await CoolapkTauriAPI.getGoodsListItems('2014', '5', 1);
+    expect(invoke).toHaveBeenCalledWith('get_goods_list_items', { uid: '2014', goodsId: '5', page: 1 });
+  });
+
+  it('创建万物清单把 productItems 序列化后调用 create_product_album', async () => {
+    await CoolapkTauriAPI.createProductAlbum({
+      title: '我的清单',
+      description: '说明',
+      albumType: 0,
+      productItems: [{ item_name: '测试商品' }],
+    });
+    expect(invoke).toHaveBeenCalledWith(
+      'create_product_album',
+      expect.objectContaining({
+        title: '我的清单',
+        description: '说明',
+        albumType: 0,
+        productItems: JSON.stringify([{ item_name: '测试商品' }]),
+      }),
+    );
+  });
+
+  it('节点动态调用 get_node_feeds', async () => {
+    await CoolapkTauriAPI.getNodeFeeds('topic', '数码', 1);
+    expect(invoke).toHaveBeenCalledWith('get_node_feeds', { nodeType: 'topic', nodeId: '数码', page: 1 });
+  });
+});

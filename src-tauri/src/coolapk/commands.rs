@@ -139,6 +139,89 @@ pub async fn get_dyh_feeds(
 }
 
 #[tauri::command]
+pub async fn get_event_list(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+    state.client.get_event_list(page).await
+}
+
+#[tauri::command]
+pub async fn get_event_detail(
+    state: State<'_, AppState>,
+    event_id: String,
+) -> Result<Value, String> {
+    state.client.get_event_detail(&event_id).await
+}
+
+#[tauri::command]
+pub async fn get_dyh_follow_list(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+    state.client.get_dyh_follow_list(page).await
+}
+
+#[tauri::command]
+pub async fn get_dyh_subscribe_list(
+    state: State<'_, AppState>,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_dyh_subscribe_list(page).await
+}
+
+#[tauri::command]
+pub async fn get_dyh_editor_list(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+    state.client.get_dyh_editor_list(page).await
+}
+
+#[tauri::command]
+pub async fn get_user_product_albums(
+    state: State<'_, AppState>,
+    uid: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_user_product_albums(&uid, page).await
+}
+
+#[tauri::command]
+pub async fn get_goods_list_items(
+    state: State<'_, AppState>,
+    uid: String,
+    goods_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_goods_list_items(&uid, &goods_id, page).await
+}
+
+#[tauri::command]
+pub async fn create_product_album(
+    state: State<'_, AppState>,
+    title: String,
+    description: String,
+    album_type: u32,
+    target_type: String,
+    target_id: String,
+    product_items: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .create_product_album(
+            &title,
+            &description,
+            album_type,
+            &target_type,
+            &target_id,
+            &product_items,
+        )
+        .await
+}
+
+#[tauri::command]
+pub async fn get_node_feeds(
+    state: State<'_, AppState>,
+    node_type: String,
+    node_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_node_feeds(&node_type, &node_id, page).await
+}
+
+#[tauri::command]
 pub async fn get_apk_feeds(
     state: State<'_, AppState>,
     package_name: String,

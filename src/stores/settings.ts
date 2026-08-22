@@ -48,6 +48,10 @@ const defaultNavVisibility: NavVisibilitySettings = {
   history: true,
   messages: true,
   following: true,
+  events: true,
+  nodes: true,
+  anylist: true,
+  mydyh: true,
 };
 
 /** 默认设备信息：与 Rust 客户端 CoolapkClient::new() 内置的默认头一致 */
