@@ -2197,6 +2197,16 @@ async fn probe_undocumented_endpoints() {
                 ("page", "1".to_string()),
             ],
         ),
+        (
+            "相关应用",
+            "/v6/apk/search",
+            &[
+                ("q", "com.coolapk.market".to_string()),
+                ("apkType", "0".to_string()),
+                ("searchType", "related".to_string()),
+                ("page", "1".to_string()),
+            ],
+        ),
         // === OAuth ===
         (
             "访问令牌",
