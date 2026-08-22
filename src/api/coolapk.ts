@@ -1008,6 +1008,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_apk_gift_list', { apkId, page })
   }
 
+  static async getApkRelatedApps(packageName: string, page: number = 1) {
+    return await invokeNative('get_apk_related_apps', { packageName, page })
+  }
+
   static async getDownloadVersionList(packageName: string) {
     return await invokeNative('get_download_version_list', { packageName })
   }

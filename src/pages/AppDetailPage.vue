@@ -311,6 +311,117 @@
           </div>
         </div>
       </template>
+
+      <!-- Tab: 权限；权限申请列表来自应用详情接口返回的 permissions 字段 -->
+      <template v-if="activeDetailTab === 'permissions'">
+        <div v-if="permissionEntries.length === 0" class="empty-wrapper">
+          <EmptyState title="暂无权限信息" description="该应用详情未返回权限申请列表" />
+        </div>
+
+        <div v-else class="section-card">
+          <h3 class="section-title"><i class="fas fa-shield-halved icon"></i> 权限申请（{{ permissionEntries.length }}）</h3>
+          <div class="permission-list">
+            <div v-for="(perm, idx) in permissionEntries" :key="idx" class="permission-item">
+              <i class="fas fa-shield-halved permission-icon"></i>
+              <div class="permission-info">
+                <span class="permission-name">{{ permissionName(perm) }}</span>
+                <span v-if="permissionDesc(perm)" class="permission-desc">{{ permissionDesc(perm) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Tab: 相关应用；数据来源 GET /v6/apk/search?searchType=related -->
+      <template v-if="activeDetailTab === 'relatedApps'">
+        <div v-if="relatedAppsLoading && relatedAppsList.length === 0" class="loading-wrapper">
+          <LoadingState text="正在加载相关应用..." />
+        </div>
+
+        <div v-else-if="relatedAppsError && relatedAppsList.length === 0" class="error-wrapper">
+          <ErrorState title="加载相关应用失败" :message="relatedAppsError" @retry="loadRelatedApps(true)" />
+        </div>
+
+        <div v-else-if="relatedAppsList.length === 0" class="empty-wrapper">
+          <EmptyState title="暂无相关应用" description="暂时没有更多相关应用" />
+        </div>
+
+        <div v-else class="related-apps-wrap">
+          <div class="recommend-grid">
+            <div
+              v-for="app in relatedAppsList"
+              :key="app.packageName || app.id || app.title || app.appName"
+              class="recommend-card"
+              @click="goApp(app)"
+            >
+              <AppImage :src="recommendIcon(app)" alt="App Logo" image-class="recommend-icon" />
+              <div class="recommend-info">
+                <span class="recommend-name">{{ recommendName(app) }}</span>
+                <span v-if="recommendMeta(app)" class="recommend-meta">{{ recommendMeta(app) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="pagination-footer">
+            <LoadingState v-if="relatedAppsLoading && relatedAppsPage > 1" text="加载更多中..." />
+            <div v-else-if="relatedAppsNoMore" class="no-more">没有更多相关应用了</div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Tab: 相关专辑；官方客户端经 /v6/album/search 按包名检索收录该应用的应用集 -->
+      <template v-if="activeDetailTab === 'relatedAlbums'">
+        <div v-if="relatedAlbumsLoading && relatedAlbumsList.length === 0" class="loading-wrapper">
+          <LoadingState text="正在加载相关专辑..." />
+        </div>
+
+        <div v-else-if="relatedAlbumsError && relatedAlbumsList.length === 0" class="error-wrapper">
+          <ErrorState title="加载相关专辑失败" :message="relatedAlbumsError" @retry="loadRelatedAlbums(true)" />
+        </div>
+
+        <div v-else-if="relatedAlbumsList.length === 0" class="empty-wrapper">
+          <EmptyState title="暂无相关专辑" description="暂时没有收录该应用的应用集" />
+        </div>
+
+        <div v-else class="related-albums-grid">
+          <div
+            v-for="(item, idx) in relatedAlbumsList"
+            :key="albumIdOf(item) || idx"
+            class="album-card"
+            @click="goAlbum(item)"
+          >
+            <div class="album-cover-wrapper">
+              <AppImage
+                v-if="albumCoverOf(item)"
+                :src="albumCoverOf(item)"
+                class="album-cover"
+                fit="cover"
+                :alt="albumTitleOf(item)"
+              />
+              <div v-else class="album-cover-fallback">
+                <i class="fas fa-layer-group"></i>
+              </div>
+            </div>
+
+            <div class="album-card-info">
+              <span class="album-card-title" :title="albumTitleOf(item)">{{ albumTitleOf(item) }}</span>
+              <div v-if="albumAuthorOf(item)" class="album-card-author">
+                <i class="far fa-user"></i>
+                <span class="album-author-name">{{ albumAuthorOf(item) }}</span>
+              </div>
+              <div class="album-card-meta">
+                <span class="album-count"><i class="fas fa-cubes"></i> {{ formatAlbumCount(albumAppCountOf(item)) }} 应用</span>
+              </div>
+              <p v-if="albumDescOf(item)" class="album-card-desc">{{ albumDescOf(item) }}</p>
+            </div>
+          </div>
+
+          <div class="pagination-footer">
+            <LoadingState v-if="relatedAlbumsLoading && relatedAlbumsPage > 1" text="加载更多中..." />
+            <div v-else-if="relatedAlbumsNoMore" class="no-more">没有更多相关专辑了</div>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -333,6 +444,7 @@ import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
 import { getErrorMessage } from '../utils/errors';
 import { showToast } from '../utils/toast';
+import type { RelatedApp, RelatedAlbum } from '../types/appDetail';
 
 const route = useRoute();
 const router = useRouter();
@@ -361,6 +473,9 @@ const detailTabs = [
   { key: 'discussions', label: '讨论' },
   { key: 'comments', label: '评论' },
   { key: 'gifts', label: '礼包' },
+  { key: 'permissions', label: '权限' },
+  { key: 'relatedApps', label: '相关应用' },
+  { key: 'relatedAlbums', label: '相关专辑' },
 ];
 
 const discussionFeeds = ref<any[]>([]);
@@ -394,6 +509,18 @@ const giftsPage = ref(1);
 const giftsLoading = ref(false);
 const giftsNoMore = ref(false);
 const giftsError = ref('');
+
+const relatedAppsList = ref<RelatedApp[]>([]);
+const relatedAppsPage = ref(1);
+const relatedAppsLoading = ref(false);
+const relatedAppsNoMore = ref(false);
+const relatedAppsError = ref('');
+
+const relatedAlbumsList = ref<RelatedAlbum[]>([]);
+const relatedAlbumsPage = ref(1);
+const relatedAlbumsLoading = ref(false);
+const relatedAlbumsNoMore = ref(false);
+const relatedAlbumsError = ref('');
 
 const recommendList = ref<any[]>([]);
 const recommendLoading = ref(false);
@@ -627,6 +754,76 @@ async function loadGifts(reset: boolean = false) {
   }
 }
 
+async function loadRelatedApps(reset: boolean = false) {
+  if (!packageName.value || relatedAppsLoading.value) return;
+  if (!reset && relatedAppsNoMore.value) return;
+
+  if (reset) {
+    relatedAppsPage.value = 1;
+    relatedAppsNoMore.value = false;
+    relatedAppsList.value = [];
+    relatedAppsError.value = '';
+  }
+
+  relatedAppsLoading.value = true;
+
+  try {
+    const res = await CoolapkTauriAPI.getApkRelatedApps(packageName.value, relatedAppsPage.value);
+    const data = res?.data || [];
+    const items = Array.isArray(data) ? data : [];
+
+    if (items.length === 0) {
+      relatedAppsNoMore.value = true;
+    } else {
+      if (reset) {
+        relatedAppsList.value = items;
+      } else {
+        relatedAppsList.value.push(...items);
+      }
+      relatedAppsPage.value++;
+    }
+  } catch (err: any) {
+    relatedAppsError.value = err?.message || '加载相关应用失败';
+  } finally {
+    relatedAppsLoading.value = false;
+  }
+}
+
+async function loadRelatedAlbums(reset: boolean = false) {
+  if (!packageName.value || relatedAlbumsLoading.value) return;
+  if (!reset && relatedAlbumsNoMore.value) return;
+
+  if (reset) {
+    relatedAlbumsPage.value = 1;
+    relatedAlbumsNoMore.value = false;
+    relatedAlbumsList.value = [];
+    relatedAlbumsError.value = '';
+  }
+
+  relatedAlbumsLoading.value = true;
+
+  try {
+    const res = await CoolapkTauriAPI.searchAlbums(packageName.value, relatedAlbumsPage.value);
+    const data = res?.data || [];
+    const items = Array.isArray(data) ? data : [];
+
+    if (items.length === 0) {
+      relatedAlbumsNoMore.value = true;
+    } else {
+      if (reset) {
+        relatedAlbumsList.value = items;
+      } else {
+        relatedAlbumsList.value.push(...items);
+      }
+      relatedAlbumsPage.value++;
+    }
+  } catch (err: any) {
+    relatedAlbumsError.value = err?.message || '加载相关专辑失败';
+  } finally {
+    relatedAlbumsLoading.value = false;
+  }
+}
+
 async function loadRecommendations() {
   if (recommendLoading.value) return;
   recommendLoading.value = true;
@@ -655,6 +852,10 @@ function selectDetailTab(key: string) {
     loadGifts(true);
   } else if (key === 'comments' && apkComments.value.length === 0) {
     loadApkComments(true);
+  } else if (key === 'relatedApps' && relatedAppsList.value.length === 0) {
+    loadRelatedApps(true);
+  } else if (key === 'relatedAlbums' && relatedAlbumsList.value.length === 0) {
+    loadRelatedAlbums(true);
   }
 }
 
@@ -677,6 +878,14 @@ function handlePageScroll(e: Event) {
     } else if (activeDetailTab.value === 'comments') {
       if (!commentsLoading.value && !commentsNoMore.value) {
         loadApkComments(false);
+      }
+    } else if (activeDetailTab.value === 'relatedApps') {
+      if (!relatedAppsLoading.value && !relatedAppsNoMore.value) {
+        loadRelatedApps(false);
+      }
+    } else if (activeDetailTab.value === 'relatedAlbums') {
+      if (!relatedAlbumsLoading.value && !relatedAlbumsNoMore.value) {
+        loadRelatedAlbums(false);
       }
     }
   }
@@ -882,6 +1091,66 @@ function handleGiftClaim(gift: any) {
   const link = giftLink(gift);
   if (!link) return;
   CoolapkTauriAPI.openUrl(link, 'system');
+}
+
+// === 权限（来自应用详情接口返回的 permissions 字段，官方客户端由系统 PackageManager 本地解析，桌面端直接展示原始列表） ===
+const permissionEntries = computed<any[]>(() => {
+  const raw = appInfo.value?.permissions || appInfo.value?.permissionList || [];
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') return raw.split(',').map((s: string) => s.trim()).filter(Boolean);
+  return [];
+});
+
+function permissionName(perm: any): string {
+  if (typeof perm === 'string') return perm;
+  if (perm && typeof perm === 'object') {
+    return perm.label || perm.name || perm.permissionName || perm.sourceString || perm.title || '';
+  }
+  return '';
+}
+
+function permissionDesc(perm: any): string {
+  if (perm && typeof perm === 'object') {
+    return perm.description || perm.desc || perm.subTitle || '';
+  }
+  return '';
+}
+
+// === 相关专辑辅助 ===
+function albumIdOf(item: any): string {
+  return String(item?.id ?? item?.albumId ?? item?.album_id ?? item?.entityId ?? '');
+}
+
+function albumCoverOf(item: any): string {
+  return item?.pic || item?.cover || item?.logo || item?.icon || '';
+}
+
+function albumTitleOf(item: any): string {
+  return item?.title || item?.name || item?.albumName || '未命名专辑';
+}
+
+function albumAuthorOf(item: any): string {
+  return item?.username || item?.userInfo?.username || '';
+}
+
+function albumAppCountOf(item: any): number {
+  const n = Number(item?.apkCount ?? item?.apk_count ?? item?.apknum ?? 0);
+  return isNaN(n) ? 0 : n;
+}
+
+function albumDescOf(item: any): string {
+  return item?.description || item?.intro || '';
+}
+
+function formatAlbumCount(num: number): string {
+  if (num >= 10000) return (num / 10000).toFixed(1) + '万';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+  return num.toString();
+}
+
+function goAlbum(item: any) {
+  const id = albumIdOf(item);
+  if (id) router.push(`/album/${id}`);
 }
 
 onMounted(() => fetchAppDetail());
@@ -1363,6 +1632,162 @@ onMounted(() => fetchAppDetail());
   background-color: var(--surface-hover);
   color: var(--text-tertiary);
   cursor: not-allowed;
+}
+
+.related-apps-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.permission-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.permission-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-control);
+  background-color: var(--background);
+}
+
+.permission-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--brand-primary);
+}
+
+.permission-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.permission-name {
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.permission-desc {
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
+}
+
+.related-albums-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--space-4);
+  width: 100%;
+}
+
+.album-card {
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-default), transform var(--duration-fast) var(--ease-default);
+}
+
+.album-card:hover {
+  border-color: var(--brand-primary);
+  transform: translateY(-2px);
+}
+
+.album-cover-wrapper {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background-color: var(--background);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.album-cover {
+  width: 100%;
+  height: 100%;
+}
+
+.album-cover-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  color: var(--brand-primary);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.2));
+}
+
+.album-card-info {
+  padding: 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.album-card-title {
+  font-size: var(--font-size-title-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.album-card-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-caption);
+  color: var(--text-secondary);
+}
+
+.album-card-author i {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.album-author-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.album-card-meta {
+  display: flex;
+  align-items: center;
+}
+
+.album-count {
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-medium);
+  color: var(--brand-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.album-card-desc {
+  margin: 0;
+  font-size: var(--font-size-caption);
+  line-height: var(--line-height-caption);
+  color: var(--text-tertiary);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
 }
 
 .pagination-footer {

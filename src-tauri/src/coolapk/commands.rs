@@ -2169,6 +2169,18 @@ pub async fn get_apk_recommend_list(
 }
 
 #[tauri::command]
+pub async fn get_apk_related_apps(
+    state: State<'_, AppState>,
+    package_name: String,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_apk_related_apps(&package_name, page)
+        .await
+}
+
+#[tauri::command]
 pub async fn get_apk_gift_list(
     state: State<'_, AppState>,
     apk_id: Option<String>,

@@ -5108,6 +5108,29 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": apks }))
     }
 
+    /// 相关应用列表
+    /// 数据来源: GET /v6/apk/search?q={包名}&apkType=0&searchType=related&page={page}
+    /// 官方客户端 RelatedAppsFragment 经 /v6/apk/search 的 searchType=related 获取相关应用
+    pub async fn get_apk_related_apps(
+        &self,
+        package_name: &str,
+        page: u32,
+    ) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/apk/search",
+                &[
+                    ("q", package_name.to_string()),
+                    ("apkType", "0".to_string()),
+                    ("searchType", "related".to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await?;
+        let apks = Self::extract_apk_list(&raw, "all");
+        Ok(json!({ "code": 200, "data": apks }))
+    }
+
     /// 应用礼品列表
     /// 数据来源: GET /v6/apk/giftList
     pub async fn get_apk_gift_list(
