@@ -104,14 +104,6 @@ export const BUILTIN_CHANGELOGS: Record<string, string> = {
 • 增加频道排序与本地持久化`,
 };
 
-export const BUILTIN_RELEASE_DATES: Record<string, string> = {
-  '1.9.1': '2026-08-21 19:51',
-  '1.9.0': '2026-08-19 20:30',
-  '1.8.3': '2026-08-15 16:20',
-  '1.8.2': '2026-08-12 14:10',
-  '1.8.1': '2026-08-10 11:00',
-};
-
 export function formatReleaseDate(dateStr?: string): string {
   if (!dateStr) return '';
   if (/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2})?$/.test(dateStr)) return dateStr;
@@ -181,9 +173,7 @@ export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Pro
     ? (release.body ? release.body.trim() : '暂无特别更新说明')
     : getCurrentVersionChangelog(APP_VERSION, release.body);
 
-  const publishedAt = release.published_at
-    ? formatReleaseDate(release.published_at)
-    : (BUILTIN_RELEASE_DATES[normalizeVersion(tagName) || ''] || BUILTIN_RELEASE_DATES[APP_VERSION]);
+  const publishedAt = release.published_at ? formatReleaseDate(release.published_at) : undefined;
 
   return {
     hasNew,

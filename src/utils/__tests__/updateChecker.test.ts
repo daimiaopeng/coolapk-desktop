@@ -102,15 +102,15 @@ describe('updateChecker', () => {
       vi.spyOn(globalThis, 'fetch').mockResolvedValue({
         ok: true,
         json: async () => ({
-          tag_name: 'v1.9.1',
+          tag_name: 'v1.10.0',
           body: '',
         }),
       } as Response);
 
       const info = await checkLatestRelease('stable');
       expect(info.hasNew).toBe(false);
-      expect(info.releaseNotes).toContain('完善版本更新与安装包生命周期管理');
-      expect(info.publishedAt).toBe('2026-08-21 19:51');
+      expect(info.releaseNotes).toBe('暂无当前版本的更新日志。');
+      expect(info.publishedAt).toBeUndefined();
     });
   });
 });
