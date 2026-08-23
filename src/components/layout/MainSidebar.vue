@@ -155,7 +155,7 @@ const allSecondaryNavs = [
   { key: 'favorites', path: '/favorites', label: '收藏', icon: 'far fa-bookmark' },
   { key: 'history', path: '/history', label: '历史', icon: 'far fa-clock' },
   { key: 'messages', path: '/messages', label: '消息', icon: 'far fa-comment-alt' },
-  { key: 'following', path: '/following', label: '我关注的', icon: 'far fa-user' },
+  { key: 'following', path: '/following', label: '我关注的', icon: 'fas fa-user-group' },
 ];
 
 const primaryNavs = computed(() => {

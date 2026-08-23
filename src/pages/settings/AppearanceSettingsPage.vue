@@ -216,7 +216,7 @@ const navItems = [
   { key: 'favorites', label: '收藏', icon: 'far fa-bookmark' },
   { key: 'history', label: '历史', icon: 'far fa-clock' },
   { key: 'messages', label: '消息', icon: 'far fa-comment-alt' },
-  { key: 'following', label: '我关注的', icon: 'far fa-user' },
+  { key: 'following', label: '我关注的', icon: 'fas fa-user-group' },
 ];
 
 const moreNavItems = moreNavs.map(({ key, label, icon }) => ({ key, label, icon }));

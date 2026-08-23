@@ -411,10 +411,10 @@ watch(
   background-color: var(--surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  padding: var(--space-4) 0 0;
+  padding: var(--space-4) var(--space-2) 0;
   border-bottom: 1px solid var(--border);
   /* 与下方 content-wrapper 的左右留白保持一致，固定时不会比通知卡片更宽。 */
-  margin: 0 var(--space-5) var(--space-4);
+  margin: 0 var(--space-3) var(--space-4);
 }
 
 .page-title {
@@ -493,7 +493,8 @@ watch(
 }
 
 .content-wrapper {
-  padding: 0 var(--space-5) var(--space-5);
+  /* 与固定页头使用同一组水平边界，避免页头加宽后与卡片错位。 */
+  padding: 0 var(--space-3) var(--space-5);
   min-height: 200px;
 }
 
