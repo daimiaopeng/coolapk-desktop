@@ -1,5 +1,5 @@
 <template>
-  <article class="rating-card" @click="handleCardClick">
+  <article ref="cardRef" class="rating-card" @click="handleCardClick">
     <!-- 头部用户信息 -->
     <FeedHeader
       :uid="feed.uid || feed.userInfo?.uid"
@@ -89,7 +89,28 @@
         :loading="commentsLoading"
         :normalize-img="(u) => u"
         :format-rich-text="formatRichText"
+        @collapse="handleCollapseComments"
       />
+      <!-- 评论区右下角固定悬浮收起按钮（评论滑动时按钮固定在视口右下角纹丝不动） -->
+      <Teleport to="body">
+        <Transition name="floating-collapse-fade">
+          <div
+            v-if="isCommentsFloatingVisible"
+            class="global-floating-comment-collapse"
+            :style="floatingCollapseStyle"
+            @click.stop="handleCollapseComments"
+          >
+            <button
+              type="button"
+              class="btn-floating-collapse"
+              title="收起评论区"
+            >
+              <i class="fa-solid fa-chevron-up"></i>
+              <span>收起评论</span>
+            </button>
+          </div>
+        </Transition>
+      </Teleport>
     </div>
 
     <FeedCollectionPickerDialog
@@ -105,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
 import FeedHeader from './FeedHeader.vue';
 import FeedImageGrid from './FeedImageGrid.vue';
 import FeedActionBar from './FeedActionBar.vue';
@@ -298,6 +319,76 @@ const targetProduct = computed(() => {
 const formattedMessage = computed(() => {
   if (!props.feed.message) return '';
   return renderCoolapkRichText(props.feed.message);
+});
+
+const cardRef = ref<HTMLElement | null>(null);
+const isCommentsFloatingVisible = ref(false);
+const floatingCollapseStyle = ref<{ bottom: string; right: string }>({ bottom: '32px', right: '32px' });
+
+function updateFloatingCollapse() {
+  if (!showComments.value || !cardRef.value || !comments.value.length) {
+    isCommentsFloatingVisible.value = false;
+    return;
+  }
+  const rect = cardRef.value.getBoundingClientRect();
+  const windowHeight = window.innerHeight;
+  const windowWidth = window.innerWidth;
+
+  const isInViewport = rect.top < windowHeight - 80 && rect.bottom > 120;
+
+  if (isInViewport) {
+    isCommentsFloatingVisible.value = true;
+    const rightOffset = Math.max(28, windowWidth - rect.right + 24);
+    floatingCollapseStyle.value = {
+      bottom: '32px',
+      right: `${rightOffset}px`,
+    };
+  } else {
+    isCommentsFloatingVisible.value = false;
+  }
+}
+
+let scrollListenerAttached = false;
+
+function bindScrollListener() {
+  if (scrollListenerAttached) return;
+  scrollListenerAttached = true;
+  window.addEventListener('scroll', updateFloatingCollapse, true);
+  window.addEventListener('resize', updateFloatingCollapse);
+}
+
+function unbindScrollListener() {
+  if (!scrollListenerAttached) return;
+  scrollListenerAttached = false;
+  window.removeEventListener('scroll', updateFloatingCollapse, true);
+  window.removeEventListener('resize', updateFloatingCollapse);
+}
+
+function handleCollapseComments() {
+  showComments.value = false;
+  isCommentsFloatingVisible.value = false;
+  unbindScrollListener();
+  if (cardRef.value) {
+    cardRef.value.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+watch(
+  showComments,
+  (isOpen) => {
+    if (isOpen) {
+      bindScrollListener();
+      void nextTick(updateFloatingCollapse);
+    } else {
+      isCommentsFloatingVisible.value = false;
+      unbindScrollListener();
+    }
+  },
+  { immediate: true }
+);
+
+onUnmounted(() => {
+  unbindScrollListener();
 });
 
 async function toggleComments() {
@@ -500,12 +591,66 @@ function formatRichText(text: string) {
   display: flex;
   gap: 2px;
   font-size: 10px;
-  color: #f59e0b;
+  color: #fbbf24;
 }
 
 .inline-comment-wrapper {
-  margin-top: var(--space-2);
-  border-top: 1px solid var(--border);
-  padding-top: var(--space-3);
+  position: relative;
+  margin-top: 12px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 4px;
+  cursor: default;
+}
+
+/* 全局固定悬浮收起按钮（Fixed 定位在视口右下角，评论滚动时静止不动） */
+.global-floating-comment-collapse {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+.btn-floating-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 15px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  border-radius: 22px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14), 0 1px 4px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-floating-collapse:hover {
+  background: var(--brand-primary, #10b981);
+  border-color: var(--brand-primary, #10b981);
+  color: #ffffff;
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+}
+
+.btn-floating-collapse:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-floating-collapse i {
+  font-size: 11px;
+}
+
+.floating-collapse-fade-enter-active,
+.floating-collapse-fade-leave-active {
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.floating-collapse-fade-enter-from,
+.floating-collapse-fade-leave-to {
+  opacity: 0;
+  transform: translateY(12px) scale(0.94);
 }
 </style>

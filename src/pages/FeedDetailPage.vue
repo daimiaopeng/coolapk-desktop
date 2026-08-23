@@ -1,13 +1,6 @@
 <template>
   <div class="feed-detail-page custom-scrollbar">
     <div class="feed-detail-shell">
-      <header class="feed-detail-page-header">
-        <div>
-          <h2>原动态</h2>
-          <p>完整正文、图片、操作和评论</p>
-        </div>
-      </header>
-
       <LoadingState v-if="loading && !feedDetail" text="正在加载原动态..." />
       <ErrorState
         v-else-if="error && !feedDetail"
@@ -105,27 +98,20 @@ watch(feedId, (nextFeedId) => {
 }
 
 .feed-detail-shell {
-  width: min(920px, calc(100% - 40px));
-  margin: 0 auto;
-  padding: 24px 0 48px;
-}
-
-.feed-detail-page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.feed-detail-page-header h2 {
-  margin: 0 0 4px;
-  color: var(--text-primary);
-  font-size: var(--font-size-title-lg);
-}
-
-.feed-detail-page-header p {
+  width: 100%;
+  max-width: 100%;
   margin: 0;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-caption);
+  padding: 0 0 32px;
+}
+
+.feed-detail-shell :deep(.feed-card) {
+  width: 100%;
+  max-width: 100%;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  box-shadow: none;
+  margin-bottom: 0;
 }
 </style>

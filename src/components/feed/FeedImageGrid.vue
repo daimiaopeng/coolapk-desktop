@@ -121,12 +121,18 @@ function openViewer(index: number) {
 }
 
 .variant-comment.count-1 {
-  max-width: 260px;
+  max-width: 240px;
 }
 
 .variant-comment.count-1 .grid-item {
-  min-height: 120px;
-  max-height: 360px;
+  min-height: 80px;
+  max-height: 260px !important;
+  overflow: hidden;
+}
+
+.variant-comment .grid-item.has-natural-size {
+  max-height: 260px !important;
+  overflow: hidden;
 }
 
 .count-1 {
@@ -142,7 +148,7 @@ function openViewer(index: number) {
 
 .count-1 .grid-item.has-natural-size:not(.is-long-image) {
   min-height: 0;
-  max-height: none;
+  max-height: 520px;
 }
 
 .count-1 .grid-img {

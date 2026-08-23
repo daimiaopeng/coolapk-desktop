@@ -503,6 +503,7 @@ const emit = defineEmits<{
   (e: 'send-comment', text: string): void;
   (e: 'delete-comment', id: string | number): void;
   (e: 'retry-comments'): void;
+  (e: 'collapse'): void;
 }>();
 
 const authStore = useAuthStore();

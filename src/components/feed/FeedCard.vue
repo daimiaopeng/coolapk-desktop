@@ -1,7 +1,8 @@
 <template>
-    <article
-      :class="['feed-card', { 'is-detail-mode': detailMode, 'has-user-cover': !!userCoverUrl }]"
-      :data-feed-id="feed.id"
+  <article
+    ref="cardRef"
+    :class="['feed-card', { 'is-detail-mode': detailMode, 'has-user-cover': !!userCoverUrl }]"
+    :data-feed-id="feed.id"
       :data-feed-text="feed.message || feed.message_raw_output || ''"
       :data-feed-images="JSON.stringify(feedImages)"
       @click="handleCardClick"
@@ -131,6 +132,26 @@
         @delete-comment="removeComment"
         @retry-comments="openComments(true)"
       />
+      <!-- 评论区右下角固定悬浮收起按钮（评论滑动时按钮固定在视口右下角纹丝不动） -->
+      <Teleport to="body">
+        <Transition name="floating-collapse-fade">
+          <div
+            v-if="isCommentsFloatingVisible"
+            class="global-floating-comment-collapse"
+            :style="floatingCollapseStyle"
+            @click.stop="handleCollapseComments"
+          >
+            <button
+              type="button"
+              class="btn-floating-collapse"
+              title="收起评论区"
+            >
+              <i class="fa-solid fa-chevron-up"></i>
+              <span>收起评论</span>
+            </button>
+          </div>
+        </Transition>
+      </Teleport>
     </div>
 
     <ForwardDialog v-model:show="forwardOpen" :feed="feed" @success="handleForwardSuccess" />
@@ -147,13 +168,21 @@
         <div v-else class="history-list">
           <article v-for="(item, index) in historyList" :key="item.entityId || item.id || item.dateline || index" class="history-item">
             <div class="history-version-row">
-              <span :class="['history-version', { 'is-current': isCurrentHistory(item, index) }]">
-                {{ formatHistoryVersion(item, index) }}
-              </span>
+              <div class="history-version-left">
+                <span :class="['history-version', { 'is-current': isCurrentHistory(item, index) }]">
+                  {{ formatHistoryVersion(item, index) }}
+                </span>
+                <span
+                  v-if="getHistoryDiffBadge(item, index)"
+                  :class="['history-diff-badge', `is-${getHistoryDiffBadge(item, index)?.type}`]"
+                >
+                  {{ getHistoryDiffBadge(item, index)?.text }}
+                </span>
+              </div>
               <time class="history-time">{{ formatHistoryDate(item) }}</time>
             </div>
             <h4 v-if="getHistoryTitle(item)" class="history-title">{{ getHistoryTitle(item) }}</h4>
-            <div class="history-text" v-html="formatHistoryHtml(item)"></div>
+            <div class="history-text diff-content-container" v-html="getHistoryDiffHtml(item, index)"></div>
             <FeedImageGrid :images="getHistoryImages(item)" />
           </article>
         </div>
@@ -173,7 +202,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted, nextTick, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import type { FeedItem } from '../../types/feed';
 import FeedHeader from './FeedHeader.vue';
@@ -191,6 +220,7 @@ import AppImage from '../common/AppImage.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { preloadUserProfile, reactiveUserProfileMap } from '../../utils/userProfilePreloader';
 import { renderCoolapkRichText } from '../../utils/richText';
+import { generateTextDiffHtml, getDiffSummary } from '../../utils/textDiff';
 import { getReplyData, mergeReplies } from '../../utils/commentList';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
@@ -514,6 +544,38 @@ function formatHistoryHtml(item: any): string {
   return renderCoolapkRichText(formatHistoryContent(item));
 }
 
+function getPreviousHistoryItem(index: number): any | null {
+  if (index + 1 < historyList.value.length) {
+    return historyList.value[index + 1];
+  }
+  return null;
+}
+
+function getHistoryDiffHtml(item: any, index: number): string {
+  const prevItem = getPreviousHistoryItem(index);
+  if (!prevItem) {
+    return formatHistoryHtml(item);
+  }
+  const oldText = formatHistoryContent(prevItem);
+  const newText = formatHistoryContent(item);
+  return generateTextDiffHtml(oldText, newText);
+}
+
+function getHistoryDiffBadge(item: any, index: number): { text: string; type: 'diff' | 'same' } | null {
+  const prevItem = getPreviousHistoryItem(index);
+  if (!prevItem) return null;
+  const oldText = formatHistoryContent(prevItem);
+  const newText = formatHistoryContent(item);
+  const summary = getDiffSummary(oldText, newText);
+  if (summary.isSame) {
+    return { text: '文本无改动', type: 'same' };
+  }
+  const parts: string[] = [];
+  if (summary.addedChars > 0) parts.push(`+${summary.addedChars}`);
+  if (summary.deletedChars > 0) parts.push(`-${summary.deletedChars}`);
+  return { text: parts.join(' / '), type: 'diff' };
+}
+
 function getHistoryImages(item: any): string[] {
   if (Array.isArray(item?.picArr)) return item.picArr;
   if (Array.isArray(item?.pics)) return item.pics;
@@ -714,6 +776,51 @@ async function openComments(force = false) {
   }
 }
 
+const cardRef = ref<HTMLElement | null>(null);
+const isCommentsFloatingVisible = ref(false);
+const floatingCollapseStyle = ref<{ bottom: string; right: string }>({ bottom: '32px', right: '32px' });
+
+function updateFloatingCollapse() {
+  if (!showComments.value || props.detailMode || !cardRef.value || !comments.value.length) {
+    isCommentsFloatingVisible.value = false;
+    return;
+  }
+  const rect = cardRef.value.getBoundingClientRect();
+  const windowHeight = window.innerHeight;
+  const windowWidth = window.innerWidth;
+
+  // 只要动态卡片或评论区正在当前视口中展示
+  const isInViewport = rect.top < windowHeight - 80 && rect.bottom > 120;
+
+  if (isInViewport) {
+    isCommentsFloatingVisible.value = true;
+    // 水平对齐到卡片右内侧边缘，垂直固定在视口底部 32px 处（评论滚动时按钮绝对静止）
+    const rightOffset = Math.max(28, windowWidth - rect.right + 24);
+    floatingCollapseStyle.value = {
+      bottom: '32px',
+      right: `${rightOffset}px`,
+    };
+  } else {
+    isCommentsFloatingVisible.value = false;
+  }
+}
+
+let scrollListenerAttached = false;
+
+function bindScrollListener() {
+  if (scrollListenerAttached) return;
+  scrollListenerAttached = true;
+  window.addEventListener('scroll', updateFloatingCollapse, true);
+  window.addEventListener('resize', updateFloatingCollapse);
+}
+
+function unbindScrollListener() {
+  if (!scrollListenerAttached) return;
+  scrollListenerAttached = false;
+  window.removeEventListener('scroll', updateFloatingCollapse, true);
+  window.removeEventListener('resize', updateFloatingCollapse);
+}
+
 async function toggleComments() {
   if (showComments.value) {
     showComments.value = false;
@@ -721,6 +828,33 @@ async function toggleComments() {
   }
   await openComments();
 }
+
+function handleCollapseComments() {
+  showComments.value = false;
+  isCommentsFloatingVisible.value = false;
+  unbindScrollListener();
+  if (!props.detailMode && cardRef.value) {
+    cardRef.value.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+watch(
+  showComments,
+  (isOpen) => {
+    if (isOpen && !props.detailMode) {
+      bindScrollListener();
+      void nextTick(updateFloatingCollapse);
+    } else {
+      isCommentsFloatingVisible.value = false;
+      unbindScrollListener();
+    }
+  },
+  { immediate: true }
+);
+
+onUnmounted(() => {
+  unbindScrollListener();
+});
 
 watch(
   () => props.autoOpenComments,
@@ -1039,10 +1173,63 @@ function formatRichText(text: string) {
 }
 
 .inline-comment-wrapper {
+  position: relative;
   margin-top: 12px;
   border-top: 1px solid var(--border-light);
   padding-top: 4px;
   cursor: default;
+}
+
+/* 全局固定悬浮收起按钮（Fixed 定位在视口右下角，评论滚动时静止不动） */
+.global-floating-comment-collapse {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+.btn-floating-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 15px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  border-radius: 22px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14), 0 1px 4px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-floating-collapse:hover {
+  background: var(--brand-primary, #10b981);
+  border-color: var(--brand-primary, #10b981);
+  color: #ffffff;
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+}
+
+.btn-floating-collapse:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-floating-collapse i {
+  font-size: 11px;
+}
+
+.floating-collapse-fade-enter-active,
+.floating-collapse-fade-leave-active {
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.floating-collapse-fade-enter-from,
+.floating-collapse-fade-leave-to {
+  opacity: 0;
+  transform: translateY(12px) scale(0.94);
 }
 
 .history-dialog {
@@ -1132,16 +1319,68 @@ function formatRichText(text: string) {
   line-height: 1.5;
 }
 
+.history-version-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-diff-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 10px;
+  letter-spacing: 0.2px;
+}
+
+.history-diff-badge.is-diff {
+  background: var(--brand-soft, rgba(16, 185, 129, 0.12));
+  color: var(--brand-primary, #10b981);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.history-diff-badge.is-same {
+  background: var(--background-secondary, rgba(0, 0, 0, 0.05));
+  color: var(--text-tertiary, #999999);
+}
+
 .history-text {
   color: var(--text-primary);
   font-size: var(--font-size-sub);
-  line-height: 1.6;
+  line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .history-text :deep(a) {
   color: var(--brand-primary);
+}
+
+/* Diff 标签高亮样式：新增绿底+删除红底删除线 */
+.history-text :deep(.diff-tag-insert) {
+  background-color: var(--diff-insert-bg, rgba(16, 185, 129, 0.16));
+  color: var(--diff-insert-text, #059669);
+  text-decoration: none;
+  border-bottom: 1.5px solid var(--diff-insert-border, #10b981);
+  padding: 1px 4px;
+  margin: 0 1px;
+  border-radius: 3px;
+  font-weight: 600;
+  display: inline;
+}
+
+.history-text :deep(.diff-tag-delete) {
+  background-color: var(--diff-delete-bg, rgba(239, 68, 68, 0.14));
+  color: var(--diff-delete-text, #dc2626);
+  text-decoration: line-through;
+  opacity: 0.85;
+  padding: 1px 4px;
+  margin: 0 1px;
+  border-radius: 3px;
+  font-weight: normal;
+  display: inline;
 }
 
 .history-status {
