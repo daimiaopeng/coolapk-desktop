@@ -398,7 +398,12 @@ const featureTabs = [
 const allTabs = [...feedTabs, ...featureTabs];
 const FEED_TAB_KEYS = new Set(feedTabs.map((tab) => tab.key));
 
-const activeTab = ref('feed');
+function getRequestedTab(value: unknown): string {
+  const requested = String(value || '');
+  return allTabs.some((tab) => tab.key === requested) ? requested : 'feed';
+}
+
+const activeTab = ref(getRequestedTab(route.query.tab));
 const isFeedTab = computed(() => FEED_TAB_KEYS.has(activeTab.value));
 
 function selectTab(key: string) {
@@ -878,11 +883,32 @@ function resetFeeds() {
   productFeeds.value = [];
 }
 
+function loadActiveTab() {
+  if (isFeedTab.value) {
+    void fetchFeeds(false);
+  } else if (activeTab.value === 'config') {
+    void fetchConfigs();
+  } else if (activeTab.value === 'media') {
+    void fetchMedia();
+  } else if (activeTab.value === 'rating') {
+    void fetchRatingChart();
+    void fetchRatings();
+  }
+}
+
 watch(productId, () => {
   resetFeeds();
   void fetchProductHeader();
-  void fetchFeeds(false);
+  loadActiveTab();
 }, { immediate: true });
+
+watch(
+  () => route.query.tab,
+  (value) => {
+    const requestedTab = getRequestedTab(value);
+    if (requestedTab !== activeTab.value) selectTab(requestedTab);
+  },
+);
 </script>
 
 <style scoped>

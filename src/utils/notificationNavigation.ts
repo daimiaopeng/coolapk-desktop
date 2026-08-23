@@ -104,6 +104,19 @@ function routeFromSource(value: unknown): string | null {
   return normalizeCoolapkRoute(String(value || ''));
 }
 
+function containsRatingIntent(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  return /点评|评分/.test(value.replace(/<[^>]*>/g, ''));
+}
+
+function routeToProductRating(route: string): string {
+  if (!/^\/product\/[^/?#]+(?:\?.*)?$/i.test(route)) return route;
+  const [path, query = ''] = route.split('?', 2);
+  const params = new URLSearchParams(query);
+  params.set('tab', 'rating');
+  return `${path}?${params.toString()}`;
+}
+
 function getNotificationCandidates(item: NotificationRecord): NotificationRecord[] {
   return [item.targetRow, item.targetFeed, item.feedInfo, item]
     .map(asRecord)
@@ -114,10 +127,20 @@ export function getNotificationTargetRoute(item: unknown): string | null {
   const record = asRecord(item);
   if (!record) return null;
 
-  for (const candidate of getNotificationCandidates(record)) {
+  const candidates = getNotificationCandidates(record);
+  const ratingNotification = candidates.some((candidate) => [
+    candidate.note,
+    candidate.message,
+    candidate.message_title,
+    candidate.messageTitle,
+    candidate.infoHtml,
+    candidate.targetTitle,
+  ].some(containsRatingIntent));
+
+  for (const candidate of candidates) {
     for (const value of [candidate.url, candidate.targetUrl, candidate.target_url, candidate.webUrl, candidate.web_url]) {
       const route = routeFromSource(value);
-      if (route) return route;
+      if (route) return ratingNotification ? routeToProductRating(route) : route;
     }
 
     const type = entityType(candidate);
@@ -128,7 +151,8 @@ export function getNotificationTargetRoute(item: unknown): string | null {
 
     const productId = candidate.productId || candidate.product_id || (/(product|device)/.test(type) ? candidate.id || candidate.entityId || candidate.entity_id || candidate.target_id : '');
     if (productId && /(product|device)/.test(type)) {
-      return normalizeCoolapkNativeRoute(`/product/${String(productId)}`);
+      const route = normalizeCoolapkNativeRoute(`/product/${String(productId)}`);
+      return route && ratingNotification ? routeToProductRating(route) : route;
     }
   }
   return null;

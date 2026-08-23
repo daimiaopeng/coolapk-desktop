@@ -40,4 +40,18 @@ describe('通知目标导航', () => {
   it('将产品评价写入通知转换为产品详情页，不当作动态打开', () => {
     expect(getNotificationTargetRoute({ targetUrl: 'https://www.coolapk.com/feed/writer?type=rating&targetType=product&targetId=2967' })).toBe('/product/2967?tab=rating&mode=writer');
   });
+
+  it('将“点击点评”的普通产品通知转换为产品评分 Tab', () => {
+    expect(getNotificationTargetRoute({
+      targetUrl: '/product/2967',
+      note: '邀请你来点评打分：点击点评',
+    })).toBe('/product/2967?tab=rating');
+  });
+
+  it('产品目标没有 URL 时也能根据点评通知进入评分 Tab', () => {
+    expect(getNotificationTargetRoute({
+      targetRow: { entityType: 'product', id: 2967 },
+      message: '邀请你来点评打分',
+    })).toBe('/product/2967?tab=rating');
+  });
 });

@@ -44,6 +44,10 @@ describe('酷安站内路由', () => {
     expect(normalizeCoolapkRoute(`https://www.coolapk.com/#/feed/writer?${query}`)).toBe(expected);
   });
 
+  it('保留产品入口的评分 Tab 参数', () => {
+    expect(normalizeCoolapkRoute('/product/456?tab=rating')).toBe('/product/456?tab=rating');
+  });
+
   it('不会把未知的 feed 页面误判成动态详情', () => {
     expect(normalizeCoolapkRoute('/feed/nodeRatingList?uid=123')).toBeNull();
     expect(normalizeCoolapkRoute('/feed/not-a-feed-id')).toBeNull();

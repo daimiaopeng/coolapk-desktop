@@ -317,7 +317,11 @@ function handleNotifyClick(e: Event, item: any) {
     openFeedDetail(router, feedMatch[1], item);
     return;
   }
-  const targetRoute = getNotificationTargetRoute({ targetUrl: href });
+  const targetRoute = getNotificationTargetRoute({
+    ...item,
+    targetUrl: href,
+    note: `${String(item?.note || '')} ${anchor.textContent || ''}`.trim(),
+  });
   if (targetRoute) {
     e.preventDefault();
     markCurrentNotificationViewed();

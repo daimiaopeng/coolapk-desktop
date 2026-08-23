@@ -30,7 +30,11 @@ export function normalizeCoolapkProductRoute(href: string): string | null {
 
   const productMatch = href.match(/^\/product\/([^/?#]+)(?:[?#].*)?$/i);
   if (!productMatch || /^(detail|list)$/i.test(productMatch[1])) return null;
-  return `/product/${encodeURIComponent(productMatch[1])}`;
+  const queryIndex = href.indexOf('?');
+  const hashIndex = href.indexOf('#');
+  const queryEnd = hashIndex >= 0 && (queryIndex < 0 || hashIndex < queryIndex) ? hashIndex : href.length;
+  const query = queryIndex >= 0 && queryIndex < queryEnd ? href.slice(queryIndex + 1, queryEnd) : '';
+  return `/product/${encodeURIComponent(productMatch[1])}${query ? `?${query}` : ''}`;
 }
 
 /** 统一解析酷安应用和产品的桌面端原生路由。 */
