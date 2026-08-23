@@ -55,6 +55,16 @@ const defaultNavVisibility: NavVisibilitySettings = {
   nodes: true,
   anylist: true,
   mydyh: true,
+  more: true,
+  my_likes: true,
+  followed_nodes: true,
+  followed_topics: true,
+  recent_contacts: true,
+  recycle_bin: true,
+  hidden_replies: true,
+  my_devices: true,
+  my_albums: true,
+  my_votes: true,
 };
 
 /** 默认设备信息：与 Rust 客户端 CoolapkClient::new() 内置的默认头一致 */
@@ -88,6 +98,7 @@ const defaultSettings: AppSettings = {
   zoom: DEFAULT_ZOOM,
   zoomManuallySet: false,
   sidebarCollapsed: false,
+  moreExpanded: false,
   reduceMotion: false,
   accentColor: 'green',
   collapseLines: 12,
@@ -196,6 +207,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.zoom = readNumber(source.zoom, result.zoom, MIN_ZOOM, MAX_ZOOM);
   result.zoomManuallySet = readBoolean(source.zoomManuallySet, result.zoomManuallySet);
   result.sidebarCollapsed = readBoolean(source.sidebarCollapsed, result.sidebarCollapsed);
+  result.moreExpanded = readBoolean(source.moreExpanded, result.moreExpanded);
   result.reduceMotion = readBoolean(source.reduceMotion, result.reduceMotion);
   result.collapseLines = [0, 8, 12, 18].includes(Number(source.collapseLines)) ? Number(source.collapseLines) : result.collapseLines;
   result.infiniteScroll = readBoolean(source.infiniteScroll, result.infiniteScroll);
@@ -526,6 +538,10 @@ export const useSettingsStore = defineStore('settings', () => {
     settings.value.sidebarCollapsed = !settings.value.sidebarCollapsed;
   }
 
+  function toggleMoreExpanded() {
+    settings.value.moreExpanded = !settings.value.moreExpanded;
+  }
+
   function setZoom(zoom: number) {
     settings.value.zoom = clampZoom(zoom);
     settings.value.zoomManuallySet = true;
@@ -582,6 +598,7 @@ export const useSettingsStore = defineStore('settings', () => {
     flushSettings,
     setTheme,
     toggleSidebar,
+    toggleMoreExpanded,
     setZoom,
     refreshAutoZoom,
     setAccent,

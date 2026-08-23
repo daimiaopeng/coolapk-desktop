@@ -69,6 +69,18 @@
             >
               <i class="fas fa-cubes"></i> 应用
             </button>
+            <button
+              :class="['filter-btn', { active: selectedFilter === 'reply' }]"
+              @click="selectedFilter = 'reply'"
+            >
+              <i class="far fa-comment-dots"></i> 赞过回复
+            </button>
+            <button
+              :class="['filter-btn', { active: selectedFilter === 'album' }]"
+              @click="selectedFilter = 'album'"
+            >
+              <i class="fas fa-images"></i> 赞过图集
+            </button>
           </div>
         </div>
 
@@ -182,7 +194,7 @@ import { openFeedDetail } from '../utils/feedNavigation';
 const router = useRouter();
 const authStore = useAuthStore();
 
-const selectedFilter = ref<'all' | 'feed' | 'user' | 'topic' | 'apk'>('all');
+const selectedFilter = ref<'all' | 'feed' | 'user' | 'topic' | 'apk' | 'reply' | 'album'>('all');
 
 const loading = ref(false);
 const loadingMore = ref(false);
@@ -354,6 +366,7 @@ const sidebarItems = computed(() => {
 // 左侧主列表精准筛选算法
 const filteredMainTimelineItems = computed(() => {
   if (selectedFilter.value === 'all') return feeds.value;
+  if (selectedFilter.value === 'reply' || selectedFilter.value === 'album') return feeds.value;
   return feeds.value.filter(item => getItemType(item) === selectedFilter.value);
 });
 
@@ -456,7 +469,8 @@ async function fetchHistory(isRefresh = false) {
   error.value = '';
 
   try {
-    const res = await CoolapkTauriAPI.getHitHistory(page.value);
+    const apiType = ['feed', 'reply', 'album'].includes(selectedFilter.value) ? selectedFilter.value : '';
+    const res = await CoolapkTauriAPI.getHitHistory(page.value, apiType);
     const newFeeds = (res && res.data && Array.isArray(res.data)) ? res.data : [];
     if (newFeeds.length === 0) {
       noMore.value = true;
@@ -526,6 +540,13 @@ function handleScroll(e: Event) {
     }
   }
 }
+
+watch(
+  () => selectedFilter.value,
+  () => {
+    if (authStore.isLoggedIn) void fetchHistory(true);
+  },
+);
 
 watch(
   () => authStore.user?.uid,

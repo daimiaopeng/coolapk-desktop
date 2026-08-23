@@ -2573,10 +2573,25 @@ impl CoolapkClient {
     }
 
     pub async fn get_user_follow_nodes(&self, uid: &str) -> Result<Value, String> {
+        // /v6/user/customNodeList 已被服务端移除，APK 当前统一读取论坛关注列表。
+        self.get_user_forum_follow_list(uid, 1).await
+    }
+
+    /// 用户关注的论坛列表
+    /// 数据来源: GET /v6/user/forumFollowList
+    pub async fn get_user_forum_follow_list(&self, uid: &str, page: u32) -> Result<Value, String> {
         let raw = self
-            .api_get("/v6/user/customNodeList", &[("uid", uid.to_string())])
+            .api_get(
+                "/v6/user/forumFollowList",
+                &[
+                    ("uid", uid.to_string()),
+                    ("page", page.to_string()),
+                    ("firstItem", String::new()),
+                    ("lastItem", String::new()),
+                ],
+            )
             .await?;
-        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+        Ok(json!({ "code": 200, "data": raw.get("data").cloned().unwrap_or(json!([])) }))
     }
 
     pub async fn get_user_feeds(
@@ -2601,6 +2616,18 @@ impl CoolapkClient {
                     ("page", page.to_string()),
                     ("isIncludeTop", "1".to_string()),
                 ],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 用户点赞过的内容
+    /// 数据来源: GET /v6/user/likeList?uid={uid}&page={page}
+    pub async fn get_user_like_list(&self, uid: &str, page: u32) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/user/likeList",
+                &[("uid", uid.to_string()), ("page", page.to_string())],
             )
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
@@ -2650,6 +2677,7 @@ impl CoolapkClient {
             "article" => self.api_get("/v6/user/htmlFeedList", &query).await?,
             "qa" => self.api_get("/v6/user/questionAndAnswerList", &query).await?,
             "album" => self.api_get("/v6/user/albumList", &query).await?,
+            "like" => self.api_get("/v6/user/likeList", &query).await?,
             "discovery" => self.api_get("/v6/user/discoveryList", &query).await?,
             "coolpic" => self
                 .get_user_page_data(
@@ -3060,6 +3088,33 @@ impl CoolapkClient {
         )
     }
 
+    /// 用户关注的话题列表
+    /// 数据来源: GET /v6/page/dataList?url=#/topic/userFollowTagList?&title=我关注的话题
+    pub async fn get_followed_topics(&self, page: u32) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/page/dataList",
+                &[
+                    (
+                        "url",
+                        "#/topic/userFollowTagList?&title=我关注的话题".to_string(),
+                    ),
+                    ("title", "我关注的话题".to_string()),
+                    ("subTitle", String::new()),
+                    ("page", page.to_string()),
+                    ("firstItem", String::new()),
+                    ("lastItem", String::new()),
+                    ("pageContext", String::new()),
+                ],
+            )
+            .await?;
+        Ok(json!({
+            "code": raw.get("code").cloned().unwrap_or(json!(200)),
+            "message": raw.get("message").cloned().unwrap_or(Value::Null),
+            "data": raw.get("data").cloned().unwrap_or(json!([]))
+        }))
+    }
+
     /// 话题设备（数码）动态列表
     /// 数据来源: GET /v6/topic/deviceFeedList?tag={tag}&page={page}&listType=lastupdate_desc
     pub async fn get_device_feed_list(&self, tag: &str, page: u32) -> Result<Value, String> {
@@ -3152,11 +3207,53 @@ impl CoolapkClient {
 
     /// 用户浏览历史
     /// 数据来源: GET /v6/user/hitHistoryList?page={page}
-    pub async fn get_hit_history(&self, page: u32) -> Result<Value, String> {
+    pub async fn get_hit_history(&self, page: u32, history_type: &str) -> Result<Value, String> {
+        let mut query = vec![("page", page.to_string())];
+        if !history_type.is_empty() && history_type != "all" {
+            query.push(("type", history_type.to_string()));
+        }
         let raw = self
-            .api_get("/v6/user/hitHistoryList", &[("page", page.to_string())])
+            .api_get("/v6/user/hitHistoryList", &query)
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_history_list(&raw) }))
+    }
+
+    /// 内容回收站/垃圾动态列表（仅账号具备审核权限时可读）
+    /// 数据来源: GET /v6/feed/spamFeedList?type=feed
+    pub async fn get_spam_feed_list(&self, page: u32) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/feed/spamFeedList",
+                &[
+                    ("type", "feed".to_string()),
+                    ("channel", "feed".to_string()),
+                    ("spamType", "feed".to_string()),
+                    ("subType", "feed".to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    }
+
+    /// 指定动态的隐藏回复
+    /// 数据来源: GET /v6/feed/replyList?feedType=feed_reply&blockStatus=4
+    pub async fn get_hidden_replies(&self, feed_id: &str, page: u32) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/feed/replyList",
+                &[
+                    ("id", feed_id.to_string()),
+                    ("listType", String::new()),
+                    ("page", page.to_string()),
+                    ("discussMode", "0".to_string()),
+                    ("feedType", "feed_reply".to_string()),
+                    ("blockStatus", "4".to_string()),
+                    ("fromFeedAuthor", "0".to_string()),
+                ],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
     /// 用户最近历史（访问过的用户/话题等）
@@ -3462,6 +3559,15 @@ impl CoolapkClient {
     pub async fn list_messages(&self, page: u32) -> Result<Value, String> {
         wrap_api_data(
             self.api_get("/v6/message/list", &[("page", page.to_string())])
+                .await?,
+        )
+    }
+
+    /// 最近联系人
+    /// 数据来源: GET /v6/message/recentChatUser
+    pub async fn get_recent_chat_users(&self, page: u32) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get("/v6/message/recentChatUser", &[("page", page.to_string())])
                 .await?,
         )
     }
@@ -4860,14 +4966,16 @@ impl CoolapkClient {
     }
 
     /// 读取用户相关产品列表（我的数码：想要/已购/拥有）
-    /// 数据来源: GET /v6/product/productList?id={uid}&type={type}
-    pub async fn get_my_product_list(&self, uid: &str, product_type: &str, page: u32) -> Result<Value, String> {
+    /// 数据来源: GET /v6/page/dataList?url=#/product/productList?type={type}
+    pub async fn get_my_product_list(&self, _uid: &str, product_type: &str, page: u32) -> Result<Value, String> {
         let raw = self
             .api_get(
-                "/v6/product/productList",
+                "/v6/page/dataList",
                 &[
-                    ("id", uid.to_string()),
-                    ("type", product_type.to_string()),
+                    (
+                        "url",
+                        format!("#/product/productList?type={product_type}"),
+                    ),
                     ("page", page.to_string()),
                 ],
             )
@@ -5298,6 +5406,78 @@ impl CoolapkClient {
         wrap_api_data(
             self.api_get("/v6/album/detail", &[("id", album_id.to_string())])
                 .await?,
+        )
+    }
+
+    /// 我的专辑列表
+    /// 数据来源: GET /v6/user/albumList
+    pub async fn get_user_album_list(&self, uid: &str, page: u32) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/user/albumList",
+                &[("uid", uid.to_string()), ("page", page.to_string())],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": raw.get("data").cloned().unwrap_or(json!([])) }))
+    }
+
+    /// 创建专辑
+    pub async fn create_album(&self, title: &str, intro: &str, cover: &str) -> Result<Value, String> {
+        let form = vec![
+            ("title", title.to_string()),
+            ("intro", intro.to_string()),
+            ("cover", cover.to_string()),
+        ];
+        wrap_api_data(self.api_post("/v6/album/create", &[], &form).await?)
+    }
+
+    /// 编辑专辑
+    pub async fn edit_album(&self, album_id: &str, title: &str, intro: &str, cover: &str) -> Result<Value, String> {
+        let form = vec![
+            ("title", title.to_string()),
+            ("intro", intro.to_string()),
+            ("cover", cover.to_string()),
+        ];
+        wrap_api_data(
+            self.api_post("/v6/album/edit", &[("id", album_id.to_string())], &form)
+                .await?,
+        )
+    }
+
+    /// 向专辑添加应用
+    pub async fn add_album_apk(
+        &self,
+        album_id: &str,
+        package_name: &str,
+        title: &str,
+        url: &str,
+        note: &str,
+        display_order: i32,
+        logo: &str,
+    ) -> Result<Value, String> {
+        let form = vec![
+            ("packageName", package_name.to_string()),
+            ("title", title.to_string()),
+            ("url", url.to_string()),
+            ("note", note.to_string()),
+            ("displayOrder", display_order.to_string()),
+            ("logo", logo.to_string()),
+        ];
+        wrap_api_data(
+            self.api_post("/v6/album/addApk", &[("id", album_id.to_string())], &form)
+                .await?,
+        )
+    }
+
+    /// 从专辑移除应用
+    pub async fn delete_album_apk(&self, album_id: &str, package_name: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_post(
+                "/v6/album/delApk",
+                &[("id", album_id.to_string())],
+                &[("packageName", package_name.to_string())],
+            )
+            .await?,
         )
     }
 

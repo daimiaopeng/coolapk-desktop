@@ -1,6 +1,6 @@
 <template>
   <div class="feed-tabs-wrapper">
-    <div class="feed-tabs custom-scrollbar" ref="tabsContainer" @wheel.passive="handleWheel">
+    <div :class="['feed-tabs', { 'is-wrap': props.wrap }, 'custom-scrollbar']" ref="tabsContainer" @wheel.passive="handleWheel">
       <button
         v-for="tab in tabs"
         :key="getTabKey(tab)"
@@ -14,6 +14,7 @@
 
     <!-- 官方右侧 ☰ 频道管理按钮 -->
     <button
+      v-if="props.showManage"
       class="tab-manage-btn"
       title="频道管理与排序"
       @click="showTabManager = true"
@@ -38,10 +39,15 @@ import { ref } from 'vue';
 import type { ConfigPageTab } from '../../types/settings';
 import TabManagerModal from './TabManagerModal.vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   activeKey: string;
   tabs: ConfigPageTab[];
-}>();
+  showManage?: boolean;
+  wrap?: boolean;
+}>(), {
+  showManage: true,
+  wrap: false,
+});
 
 defineEmits<{
   (e: 'update:activeKey', key: string): void;
@@ -74,6 +80,11 @@ function handleWheel(e: WheelEvent) {
   width: 100%;
 }
 
+.feed-tabs-wrapper:has(.feed-tabs.is-wrap) {
+  height: auto;
+  min-height: 48px;
+}
+
 .feed-tabs {
   display: flex;
   align-items: center;
@@ -88,6 +99,16 @@ function handleWheel(e: WheelEvent) {
 
 .feed-tabs::-webkit-scrollbar {
   display: none;
+}
+
+.feed-tabs.is-wrap {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 48px;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
 .tab-item {

@@ -636,6 +636,7 @@ const tabs = computed(() => {
   return [
     ...(homeRows.length > 0 ? [{ key: 'home', label: '主页' }] : []),
     { key: 'feed', label: '动态' },
+    { key: 'like', label: '赞过' },
     ...(isSelf || isModerator ? [{ key: 'reply', label: '回复' }] : []),
     ...(isModerator ? [{ key: 'blacklist', label: '黑名单' }] : []),
     { key: 'rating', label: '评分' },

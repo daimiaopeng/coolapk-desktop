@@ -121,6 +121,31 @@
           />
         </div>
       </div>
+
+      <div class="nav-more-settings">
+        <div class="setting-row nav-more-master-row">
+          <div class="row-info">
+            <span class="row-label"><i class="fas fa-ellipsis nav-item-icon"></i> 我的菜单</span>
+            <span class="row-sub">控制侧栏「我的」分组及其子项是否显示</span>
+          </div>
+          <AppSwitch
+            :model-value="getNavVisible('more')"
+            @update:model-value="toggleNav('more')"
+          />
+        </div>
+        <div v-if="getNavVisible('more')" class="nav-grid nav-more-grid">
+          <div v-for="nav in moreNavItems" :key="nav.key" class="nav-toggle-card">
+            <div class="nav-item-meta">
+              <i :class="[nav.icon, 'nav-item-icon']"></i>
+              <span class="nav-item-name">{{ nav.label }}</span>
+            </div>
+            <AppSwitch
+              :model-value="getNavVisible(nav.key)"
+              @update:model-value="toggleNav(nav.key)"
+            />
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="setting-group">
@@ -146,6 +171,7 @@ import { computed } from 'vue';
 import { useSettingsStore } from '../../stores/settings';
 import type { AccentColor, FeedDensity, HomeTabKey } from '../../types/settings';
 import AppSwitch from '../../components/common/AppSwitch.vue';
+import { moreNavs } from '../../config/navigation';
 
 const settingsStore = useSettingsStore();
 
@@ -198,6 +224,8 @@ const navItems = [
   { key: 'goods', label: '好物', icon: 'fas fa-gift' },
   { key: 'my_products', label: '我的数码', icon: 'fas fa-box-open' },
 ];
+
+const moreNavItems = moreNavs.map(({ key, label, icon }) => ({ key, label, icon }));
 
 function getNavVisible(key: string): boolean {
   const vis = settingsStore.settings.navVisibility;

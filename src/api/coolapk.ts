@@ -470,6 +470,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('list_messages', { page });
   }
 
+  static async getRecentChatUsers(page: number = 1) {
+    return await invokeNative('get_recent_chat_users', { page });
+  }
+
   static async listChatHistory(ukey: string, page: number = 1) {
     return await invokeNative('list_chat_history', { ukey, page });
   }
@@ -729,12 +733,24 @@ export class CoolapkTauriAPI {
     );
   }
 
-  static async getHitHistory(page: number = 1) {
-    return await invokeNative('get_hit_history', { page });
+  static async getHitHistory(page: number = 1, type: string = '') {
+    return await invokeNative('get_hit_history', { page, historyType: type });
   }
 
   static async getRecentHistory(page: number = 1) {
     return await invokeNative('get_recent_history', { page });
+  }
+
+  static async getSpamFeedList(page: number = 1) {
+    return await invokeNative('get_spam_feed_list', { page });
+  }
+
+  static async getHiddenReplies(feedId: string, page: number = 1) {
+    return await invokeNative('get_hidden_replies', { feedId, page });
+  }
+
+  static async getFollowedTopics(page: number = 1) {
+    return await invokeNative('get_followed_topics', { page });
   }
 
   static async searchUsers(query: string, page: number = 1) {
@@ -1033,6 +1049,14 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_user_follow_nodes', { uid });
   }
 
+  static async getUserForumFollowList(uid: string, page: number = 1) {
+    return await invokeNative('get_user_forum_follow_list', { uid, page });
+  }
+
+  static async getUserLikeList(uid: string, page: number = 1) {
+    return await invokeNative('get_user_like_list', { uid, page });
+  }
+
   // === 专辑/应用集 ===
   static async getAlbumList(listType: string = 'hot', page: number = 1) {
     return await invokeNative('get_album_list', { listType, page })
@@ -1044,6 +1068,42 @@ export class CoolapkTauriAPI {
 
   static async getAlbumDetail(albumId: string) {
     return await invokeNative('get_album_detail', { albumId })
+  }
+
+  static async getUserAlbumList(uid: string, page: number = 1) {
+    return await invokeNative('get_user_album_list', { uid, page });
+  }
+
+  static async createAlbum(title: string, intro: string, cover: string = '') {
+    return await invokeNative('create_album', { title, intro, cover });
+  }
+
+  static async editAlbum(albumId: string, title: string, intro: string, cover: string = '') {
+    return await invokeNative('edit_album', { albumId, title, intro, cover });
+  }
+
+  static async addAlbumApk(
+    albumId: string,
+    packageName: string,
+    title: string,
+    url: string = '',
+    note: string = '',
+    displayOrder: number = 0,
+    logo: string = '',
+  ) {
+    return await invokeNative('add_album_apk', {
+      albumId,
+      packageName,
+      title,
+      url,
+      note,
+      displayOrder,
+      logo,
+    });
+  }
+
+  static async deleteAlbumApk(albumId: string, packageName: string) {
+    return await invokeNative('delete_album_apk', { albumId, packageName });
   }
 
   static async getAlbumReplies(albumId: string, page: number = 1) {

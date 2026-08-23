@@ -62,6 +62,16 @@ export interface NavVisibilitySettings {
   nodes: boolean;
   anylist: boolean;
   mydyh: boolean;
+  more: boolean;
+  my_likes: boolean;
+  followed_nodes: boolean;
+  followed_topics: boolean;
+  recent_contacts: boolean;
+  recycle_bin: boolean;
+  hidden_replies: boolean;
+  my_devices: boolean;
+  my_albums: boolean;
+  my_votes: boolean;
 }
 
 /** 设备信息（请求头指纹）：机型/Android 版本/Build 内嵌于 User-Agent，
@@ -96,6 +106,7 @@ export interface AppSettings {
   zoom: number;
   zoomManuallySet: boolean;
   sidebarCollapsed: boolean;
+  moreExpanded: boolean;
   reduceMotion: boolean;
   accentColor: AccentColor;
   collapseLines: number;

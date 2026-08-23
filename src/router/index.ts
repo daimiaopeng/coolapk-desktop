@@ -7,6 +7,10 @@ import DiscoverPage from '../pages/DiscoverPage.vue';
 import AppsPage from '../pages/AppsPage.vue';
 import GamesPage from '../pages/GamesPage.vue';
 import FavoritesPage from '../pages/FavoritesPage.vue';
+import MyLikesPage from '../pages/MyLikesPage.vue';
+import MoreDataPage from '../pages/MoreDataPage.vue';
+import MoreWorkspacePage from '../pages/MoreWorkspacePage.vue';
+import MyAlbumsPage from '../pages/MyAlbumsPage.vue';
 import HistoryPage from '../pages/HistoryPage.vue';
 import FollowingPage from '../pages/FollowingPage.vue';
 import UserPage from '../pages/UserPage.vue';
@@ -65,6 +69,16 @@ const routes = [
   { path: '/games', name: 'Games', component: GamesPage },
   { path: '/topics', name: 'Topics', component: TopicsHubPage },
   { path: '/favorites', name: 'Favorites', component: FavoritesPage },
+  { path: '/my-likes', name: 'MyLikes', component: MyLikesPage },
+  { path: '/more', name: 'More', component: MoreWorkspacePage },
+  { path: '/followed-nodes', name: 'FollowedNodes', component: MoreDataPage, meta: { mode: 'nodes' } },
+  { path: '/followed-topics', name: 'FollowedTopics', component: MoreDataPage, meta: { mode: 'topics' } },
+  { path: '/recent-contacts', name: 'RecentContacts', component: MoreDataPage, meta: { mode: 'contacts' } },
+  { path: '/recycle-bin', name: 'RecycleBin', component: MoreDataPage, meta: { mode: 'recycle' } },
+  { path: '/hidden-replies', name: 'HiddenReplies', component: MoreDataPage, meta: { mode: 'hidden' } },
+  { path: '/my-devices', name: 'MyDevices', component: MoreDataPage, meta: { mode: 'devices' } },
+  { path: '/my-albums', name: 'MyAlbums', component: MyAlbumsPage },
+  { path: '/my-votes', name: 'MyVotes', component: MoreDataPage, meta: { mode: 'votes' } },
   { path: '/history', name: 'History', component: HistoryPage },
   { path: '/following', name: 'Following', component: FollowingPage },
   { path: '/reviews', name: 'Reviews', component: ReviewPage },
