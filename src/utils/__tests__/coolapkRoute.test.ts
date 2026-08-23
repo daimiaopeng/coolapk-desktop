@@ -48,6 +48,10 @@ describe('酷安站内路由', () => {
     expect(normalizeCoolapkRoute('/product/456?tab=rating')).toBe('/product/456?tab=rating');
   });
 
+  it('不把系统通知的 /u/0 当成普通用户页', () => {
+    expect(normalizeCoolapkRoute('/u/0')).toBeNull();
+  });
+
   it('不会把未知的 feed 页面误判成动态详情', () => {
     expect(normalizeCoolapkRoute('/feed/nodeRatingList?uid=123')).toBeNull();
     expect(normalizeCoolapkRoute('/feed/not-a-feed-id')).toBeNull();

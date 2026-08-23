@@ -1,7 +1,7 @@
 <template>
   <div class="feed-comment-section">
     <div class="comment-toolbar">
-      <strong class="comment-title">评论 <span>{{ sortedComments.length }}</span></strong>
+      <strong class="comment-title">评论 <span>{{ commentCount }}</span></strong>
       <div class="comment-sort" aria-label="评论排序">
         <button
           v-for="option in commentSortOptions"
@@ -476,6 +476,7 @@ const props = withDefaults(
     feedUid?: string | number;
     feedUsername?: string;
     comments: any[];
+    totalCommentCount?: number | string | null;
     loading?: boolean;
     error?: string;
     normalizeImg?: (url: string, type: 'avatar' | 'feed') => string;
@@ -485,6 +486,7 @@ const props = withDefaults(
     feedId: '',
     feedUid: '',
     feedUsername: '',
+    totalCommentCount: undefined,
     loading: false,
     error: '',
     normalizeImg: (url: string) => url,
@@ -1203,6 +1205,15 @@ const nestedComments = computed(() => {
 });
 
 const sortedComments = computed(() => sortComments(nestedComments.value, commentSortMode.value));
+
+const commentCount = computed(() => {
+  const total = props.totalCommentCount;
+  if (total !== undefined && total !== null && total !== '') {
+    const parsed = Number(total);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  return sortedComments.value.length;
+});
 
 async function handleSend() {
   const rawMsg = inputMsg.value.trim();

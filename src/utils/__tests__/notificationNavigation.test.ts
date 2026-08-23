@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getNotificationFeedId, getNotificationTargetRoute } from '../notificationNavigation';
+import { getNotificationExternalUrl, getNotificationFeedId, getNotificationProductName, getNotificationTargetRoute, resolveNotificationTargetRoute } from '../notificationNavigation';
 
 describe('通知目标导航', () => {
   it('不会把机型目标的 id 当成动态 id', () => {
@@ -53,5 +53,57 @@ describe('通知目标导航', () => {
       targetRow: { entityType: 'product', id: 2967 },
       message: '邀请你来点评打分',
     })).toBe('/product/2967?tab=rating');
+  });
+
+  it('点评邀请优先使用产品目标，不被正文中的用户链接覆盖', () => {
+    expect(getNotificationTargetRoute({
+      targetType: 'product',
+      targetId: 2967,
+      targetUrl: '/u/123456',
+      note: '<a href="/u/123456">点击点评</a>',
+    })).toBe('/product/2967?tab=rating');
+  });
+
+  it('识别酷安原生产品点评目标类型 7，不跳转到通知里的用户页', () => {
+    expect(getNotificationTargetRoute({
+      target_type: '7',
+      target_id: '2967',
+      url: '/u/123456',
+      note: '<a href="/u/123456">点击点评</a>',
+    })).toBe('/product/2967?tab=rating');
+  });
+
+  it('可以从点评邀请正文提取产品名称', () => {
+    expect(getNotificationProductName({
+      note: '亲爱的 Redmi K70 机主，真诚邀请您来点评打分：点击点评',
+    })).toBe('Redmi K70');
+  });
+
+  it('产品目标缺失时通过真实产品详情接口结果进入评分 Tab', async () => {
+    await expect(resolveNotificationTargetRoute(
+      { url: '/u/123456', note: '亲爱的 Redmi K70 机主，邀请您来点评打分：点击点评' },
+      async (name) => ({ data: { id: name === 'Redmi K70' ? 2967 : 0 } }),
+    )).resolves.toBe('/product/2967?tab=rating');
+  });
+
+  it('保留明确的用户评分列表入口', () => {
+    expect(getNotificationTargetRoute({
+      targetUrl: '/feed/nodeRatingList?uid=123&targetType=product&parseRatingToFeed=1',
+      note: '查看用户评分',
+    })).toBe('/user/123?tab=rating&ratingTarget=digital');
+  });
+
+  it('不会把系统安全通知中的任意用户链接误判成用户资料页', () => {
+    expect(getNotificationTargetRoute({
+      targetUrl: '/u/123456',
+      note: '您的账号在陌生设备尝试手机验证码登录，请注意账号安全：点击查看',
+    })).toBeNull();
+  });
+
+  it('将系统安全通知转到官方账号设置页', () => {
+    expect(getNotificationExternalUrl({
+      targetUrl: '/u/123456',
+      note: '您的账号在陌生设备尝试手机验证码登录，请注意账号安全：点击查看',
+    })).toBe('https://account.coolapk.com/account/settings');
   });
 });

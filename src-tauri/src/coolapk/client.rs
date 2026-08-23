@@ -148,6 +148,33 @@ fn reply_target_params(feed_id: &str, rid: Option<&str>) -> (String, String) {
         .unwrap_or_else(|| (feed_id.trim().to_string(), "feed".to_string()))
 }
 
+fn build_product_rating_query(product_id: &str, value: i32) -> Vec<(&'static str, String)> {
+    vec![
+        ("id", product_id.to_string()),
+        ("value", value.to_string()),
+    ]
+}
+
+fn build_product_rating_list_query(
+    product_id: &str,
+    star: i32,
+    is_owner: i32,
+    page: u32,
+) -> Vec<(&'static str, String)> {
+    let mut query = vec![
+        ("url", "/feed/nodeRatingList".to_string()),
+        ("targetType", "7".to_string()),
+        ("targetId", product_id.to_string()),
+        ("ratingType", "all".to_string()),
+        ("isOwner", is_owner.to_string()),
+        ("page", page.max(1).to_string()),
+    ];
+    if star > 0 {
+        query.push(("star", star.to_string()));
+    }
+    query
+}
+
 fn build_create_feed_form(
     message: &str,
     pic: Option<&str>,
@@ -5220,8 +5247,11 @@ impl CoolapkClient {
         )
     }
 
-    /// 产品用户评分列表（NodeRating）
-    /// 数据来源: GET /v6/page/dataList?url=#/product/ratingList&targetType=product&targetId={id}
+    /// 产品用户评分列表（NodeRating）。
+    ///
+    /// 官方客户端复用节点评分列表接口，产品类型使用 NodeRating 的数码产品类型值
+    /// `7`，而不是产品详情页路由名 `product`。后者会被服务端判定为非法访问。
+    /// 数据来源: GET /v6/page/dataList?url=/feed/nodeRatingList&targetType=7&targetId={id}
     pub async fn get_product_rating_list(
         &self,
         product_id: &str,
@@ -5229,17 +5259,7 @@ impl CoolapkClient {
         is_owner: i32,
         page: u32,
     ) -> Result<Value, String> {
-        let mut query: Vec<(&str, String)> = vec![
-            ("url", "#/product/ratingList".to_string()),
-            ("targetType", "product".to_string()),
-            ("targetId", product_id.to_string()),
-            ("ratingType", "all".to_string()),
-            ("isOwner", is_owner.to_string()),
-            ("page", page.to_string()),
-        ];
-        if star > 0 {
-            query.push(("star", star.to_string()));
-        }
+        let query = build_product_rating_list_query(product_id, star, is_owner, page);
         let raw = self.api_get("/v6/page/dataList", &query).await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
@@ -5256,29 +5276,20 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
-    /// 提交/取消产品评分（需登录；value=0 表示取消评分）
-    /// 数据来源: POST /v6/feed/changeRatingStatus
+    /// 提交/取消产品评分（需登录；value=0 表示取消评分）。
+    ///
+    /// 产品评分与动态评分使用不同接口。APK 使用 GET /v6/apk/rating，
+    /// 仅传产品 ID 和评分值；动态评分接口会将产品评分误判为无权限操作。
     pub async fn change_rating_status(
         &self,
         product_id: &str,
         value: i32,
-        uid: &str,
-        buy_status: Option<i32>,
-        is_owner: Option<i32>,
+        _uid: &str,
+        _buy_status: Option<i32>,
+        _is_owner: Option<i32>,
     ) -> Result<Value, String> {
-        let mut form: Vec<(&str, String)> = vec![
-            ("id", product_id.to_string()),
-            ("target_type", "product".to_string()),
-            ("value", value.to_string()),
-            ("uid", uid.to_string()),
-        ];
-        if let Some(buy) = buy_status {
-            form.push(("buyStatus", buy.to_string()));
-        }
-        if let Some(owner) = is_owner {
-            form.push(("isOwner", owner.to_string()));
-        }
-        wrap_api_data(self.api_post("/v6/feed/changeRatingStatus", &[], &form).await?)
+        let query = build_product_rating_query(product_id, value);
+        wrap_api_data(self.api_get("/v6/apk/rating", &query).await?)
     }
 
     /// 看看号（官方号）详情

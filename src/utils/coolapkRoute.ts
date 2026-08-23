@@ -118,6 +118,10 @@ function normalizeCoolapkProductSelectorRoute(href: string): string | null {
 function normalizeCoolapkUserRoute(href: string): string | null {
   const match = href.match(/^\/(?:u|user)\/([^/?#]+)(?:\?([^#]*))?$/i);
   if (!match) return null;
+  // 系统通知有时会把“点击查看”伪装成 /u/0，0 不是可访问的用户 UID。
+  // 如果把它归一化成 /user/0，桌面端会进入用户资料页并显示“用户资料加载失败”，
+  // 应该让上层回退到通知携带的原始酷安链接。
+  if (/^0+$/.test(match[1])) return null;
   return `/user/${match[1]}${match[2] ? `?${match[2]}` : ''}`;
 }
 

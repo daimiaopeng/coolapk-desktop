@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container custom-scrollbar">
+  <div ref="pageContainerRef" class="page-container custom-scrollbar" @scroll.passive="handlePageScroll">
     <div class="page-header">
       <div class="notification-title-row">
         <h2 class="page-title">通知中心</h2>
@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { onActivated, onDeactivated, ref, watch } from 'vue';
+import { nextTick, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useNotificationStore } from '../stores/notifications';
@@ -98,7 +98,7 @@ import { getNotificationActor } from '../utils/notificationItem';
 import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
 import { openFeedDetail } from '../utils/feedNavigation';
-import { getNotificationFeedId, getNotificationFeedTarget, getNotificationTargetRoute } from '../utils/notificationNavigation';
+import { getNotificationExternalUrl, getNotificationFeedId, getNotificationFeedTarget, getNotificationProductName, resolveNotificationTargetRoute } from '../utils/notificationNavigation';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
@@ -123,6 +123,7 @@ const items = ref<any[]>([]);
 const page = ref(1);
 const hasMore = ref(true);
 const notificationError = ref('');
+const pageContainerRef = ref<HTMLElement | null>(null);
 
 // 切换 Tab
 async function switchTab(tabValue: string) {
@@ -139,6 +140,21 @@ async function loadMore() {
   if (loading.value || !hasMore.value) return;
   page.value += 1;
   await fetchNotifications();
+}
+
+/**
+ * 通知页使用自身作为纵向滚动容器，不能依赖 window 的 scroll 事件。
+ * 距离底部不足一张卡片高度时提前预取，按钮仍保留作键盘/兜底入口。
+ */
+function handlePageScroll(event: Event) {
+  const container = event.currentTarget as HTMLElement | null;
+  loadMoreWhenNearBottom(container);
+}
+
+function loadMoreWhenNearBottom(container = pageContainerRef.value) {
+  if (!container || loading.value || !hasMore.value) return;
+  const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
+  if (remaining <= 240) void loadMore();
 }
 
 // 获取数据
@@ -169,6 +185,10 @@ async function fetchNotifications() {
     if (page.value > 1) page.value -= 1;
   } finally {
     loading.value = false;
+    // “@ 提及”等分类可能只有一两条，首屏没有滚动条时不会触发 scroll。
+    // DOM 更新后检查一次并继续加载，直到内容足以滚动或接口明确到底。
+    await nextTick();
+    loadMoreWhenNearBottom();
   }
 }
 
@@ -254,15 +274,27 @@ function openOriginalFeed(item: any) {
   openFeedDetail(router, id, item);
 }
 
-function openNotificationTarget(item: any): boolean {
+async function resolveNotificationTarget(item: any): Promise<string | null> {
+  return resolveNotificationTargetRoute(item, (name) => CoolapkTauriAPI.getProductDetailByName(name));
+}
+
+async function openNotificationTarget(item: any): Promise<boolean> {
+  const externalUrl = getNotificationExternalUrl(item);
+  if (externalUrl) {
+    markCurrentNotificationViewed();
+    void CoolapkTauriAPI.openUrl(externalUrl);
+    return true;
+  }
   const feedId = getNotificationFeedId(item);
   if (feedId) {
     markCurrentNotificationViewed();
     openFeedDetail(router, feedId, item);
     return true;
   }
-  const targetRoute = getNotificationTargetRoute(item);
-  if (!targetRoute) return false;
+  const targetRoute = await resolveNotificationTarget(item);
+  if (!targetRoute) {
+    return false;
+  }
   markCurrentNotificationViewed();
   void router.push(targetRoute);
   return true;
@@ -303,11 +335,11 @@ function renderSafeHtml(text: string): string {
 }
 
 // 通知内链接点击：动态链接携带通知上下文进入完整动态页，其余走统一处理。
-function handleNotifyClick(e: Event, item: any) {
+async function handleNotifyClick(e: Event, item: any) {
   const anchor = (e.target as HTMLElement).closest('a');
   const href = anchor?.getAttribute('href') || '';
   if (!anchor?.href || !href || href === '#' || href.startsWith('javascript:')) {
-    openNotificationTarget(item);
+    await openNotificationTarget(item);
     return;
   }
   const feedMatch = href.match(/^\/feed\/(\d+)/);
@@ -317,18 +349,27 @@ function handleNotifyClick(e: Event, item: any) {
     openFeedDetail(router, feedMatch[1], item);
     return;
   }
-  const targetRoute = getNotificationTargetRoute({
+  const notification = {
     ...item,
     targetUrl: href,
     note: `${String(item?.note || '')} ${anchor.textContent || ''}`.trim(),
-  });
+  };
+  e.preventDefault();
+  // 系统账号安全通知有时把“点击查看”渲染为普通 /u/:uid 链接。
+  // 不能让该链接先走用户页路由，否则会落到“用户资料加载失败”。
+  const externalUrl = getNotificationExternalUrl(notification);
+  if (externalUrl) {
+    markCurrentNotificationViewed();
+    void CoolapkTauriAPI.openUrl(externalUrl);
+    return;
+  }
+  const targetRoute = await resolveNotificationTarget(notification);
   if (targetRoute) {
-    e.preventDefault();
     markCurrentNotificationViewed();
     void router.push(targetRoute);
     return;
   }
-  handleAnchorClick(e);
+  if (!getNotificationProductName(notification)) handleAnchorClick(e);
 }
 
 onActivated(() => {
@@ -370,9 +411,10 @@ watch(
   background-color: var(--surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  padding: var(--space-4) var(--space-5) 0;
+  padding: var(--space-4) 0 0;
   border-bottom: 1px solid var(--border);
-  margin-bottom: var(--space-4);
+  /* 与下方 content-wrapper 的左右留白保持一致，固定时不会比通知卡片更宽。 */
+  margin: 0 var(--space-5) var(--space-4);
 }
 
 .page-title {

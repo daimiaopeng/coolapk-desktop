@@ -238,7 +238,7 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import { desktopNotify } from '../../utils/desktopNotify';
 import { hasNotificationCountIncreased, type NotificationCategory } from '../../utils/notificationCount';
 import { getNotificationActor } from '../../utils/notificationItem';
-import { getNotificationFeedId, getNotificationTargetRoute } from '../../utils/notificationNavigation';
+import { getNotificationExternalUrl, getNotificationFeedId, resolveNotificationTargetRoute } from '../../utils/notificationNavigation';
 import { syncWindowsNotificationIcons } from '../../utils/taskbarNotificationDot';
 import { openFeedDetail } from '../../utils/feedNavigation';
 import {
@@ -447,16 +447,24 @@ function openNotificationCenter() {
   void router.push('/notifications');
 }
 
-function openNotificationPreview(preview: NotificationPreview) {
+async function openNotificationPreview(preview: NotificationPreview) {
   notificationStore.markViewed(preview.category);
   notificationPreviews.value = notificationPreviews.value.filter((item) => item.key !== preview.key);
   isNotificationPopoverVisible.value = false;
+  const externalUrl = getNotificationExternalUrl(preview.item);
+  if (externalUrl) {
+    void CoolapkTauriAPI.openUrl(externalUrl);
+    return;
+  }
   const feedId = getNotificationFeedId(preview.item);
   if (feedId) {
     openFeedDetail(router, feedId, preview.item);
     return;
   }
-  const targetRoute = getNotificationTargetRoute(preview.item);
+  const targetRoute = await resolveNotificationTargetRoute(
+    preview.item,
+    (name) => CoolapkTauriAPI.getProductDetailByName(name),
+  );
   if (targetRoute) {
     void router.push(targetRoute);
     return;

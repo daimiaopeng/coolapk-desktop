@@ -73,6 +73,27 @@ describe('评论完整信息展示', () => {
     expect(wrapper.find('.stub-comment-images').text()).toBe('comment:2');
   });
 
+  it('优先显示动态接口返回的评论总数', () => {
+    const wrapper = mountSection();
+    expect(wrapper.find('.comment-title').text()).toBe('评论 1');
+
+    wrapper.unmount();
+    const withTotal = mount(FeedCommentSection, {
+      props: {
+        feedId: 'feed-1',
+        totalCommentCount: 22,
+        comments: [{ id: 'reply-1', username: '测试酷友', message: '评论内容' }],
+      },
+      global: { stubs: { AppAvatar: true, Button: true, FeedImageGrid: true } },
+    });
+    expect(withTotal.find('.comment-title').text()).toBe('评论 22');
+  });
+
+  it('没有评论总数时回退到已加载评论数量', () => {
+    const wrapper = mountSection();
+    expect(wrapper.find('.comment-title').text()).toBe('评论 1');
+  });
+
   it('点击评论时间可在相对时间和完整时间之间切换', async () => {
     const wrapper = mountSection();
     const timeButton = wrapper.get('.comment-time-button');

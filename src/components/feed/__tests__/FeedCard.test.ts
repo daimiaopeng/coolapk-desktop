@@ -119,8 +119,8 @@ describe('动态卡片编辑记录', () => {
           FeedImageGrid: true,
           FeedActionBar: true,
           FeedCommentSection: {
-            props: ['comments'],
-            template: '<div class="stub-comments">{{ comments.length }}</div>',
+            props: ['comments', 'totalCommentCount'],
+            template: '<div class="stub-comments">{{ comments.length }} / {{ totalCommentCount }}</div>',
           },
           ForwardDialog: true,
           LoadingState: true,
@@ -131,7 +131,12 @@ describe('动态卡片编辑记录', () => {
     await flushPromises();
 
     expect(mocks.getHotReplies).toHaveBeenCalledWith('789', 1);
-    expect(wrapper.find('.stub-comments').text()).toBe('1');
+    expect(wrapper.find('.stub-comments').text()).toBe('1 /');
+
+    await wrapper.setProps({
+      feed: { id: '789', uid: '456', username: '测试用户', message: '动态正文', replynum: 22 },
+    });
+    expect(wrapper.find('.stub-comments').text()).toBe('1 / 22');
   });
 
   it('通知摘要阶段不请求评论，完整动态准备好后再加载', async () => {

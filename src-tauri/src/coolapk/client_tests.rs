@@ -19,6 +19,60 @@ fn test_classify_path_detects_requirements() {
 }
 
 #[test]
+fn test_product_rating_query_matches_apk_contract() {
+    assert_eq!(
+        build_product_rating_query("2967", 5),
+        vec![("id", "2967".to_string()), ("value", "5".to_string())]
+    );
+    assert_eq!(
+        build_product_rating_query("2967", 0),
+        vec![("id", "2967".to_string()), ("value", "0".to_string())]
+    );
+}
+
+#[test]
+fn test_product_rating_list_query_matches_apk_contract() {
+    assert_eq!(
+        build_product_rating_list_query("5573", 0, 0, 0),
+        vec![
+            ("url", "/feed/nodeRatingList".to_string()),
+            ("targetType", "7".to_string()),
+            ("targetId", "5573".to_string()),
+            ("ratingType", "all".to_string()),
+            ("isOwner", "0".to_string()),
+            ("page", "1".to_string()),
+        ]
+    );
+    assert_eq!(
+        build_product_rating_list_query("5573", 5, 1, 2).last(),
+        Some(&("star", "5".to_string()))
+    );
+}
+
+/// 在线接口探测：需要网络，默认测试集不执行。
+#[tokio::test]
+#[ignore]
+async fn probe_product_rating_endpoints_contract() {
+    let client = CoolapkClient::new();
+    let product_id = "5573";
+
+    let chart = client
+        .api_get("/v6/product/ratingChart", &[("id", product_id.to_string())])
+        .await
+        .expect("评分趋势接口应能返回 HTTP JSON");
+    assert!(chart.get("data").is_some(), "评分趋势响应缺少 data: {chart}");
+    assert!(chart["data"].is_object(), "评分趋势 data 不是对象: {chart}");
+
+    let list_query = build_product_rating_list_query(product_id, 0, 0, 1);
+    let list = client
+        .api_get("/v6/page/dataList", &list_query)
+        .await
+        .expect("产品评分列表接口应能返回 HTTP JSON");
+    assert!(list.get("data").is_some(), "评分列表响应缺少 data: {list}");
+    assert!(list["data"].is_array(), "评分列表 data 不是数组: {list}");
+}
+
+#[test]
 fn test_oss_image_url_uses_prepare_prefix_and_file_name() {
     let url = build_oss_image_url(
         "https://image.coolapk.com/",

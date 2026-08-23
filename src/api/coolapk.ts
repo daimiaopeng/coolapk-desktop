@@ -204,6 +204,7 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_apk_rating_user_list', { apkId, page });
   }
 
+  // 产品评分使用 APK 的 /v6/apk/rating 接口；保留旧参数以兼容页面调用。
   static async changeRatingStatus(productId: string, value: number, uid: string, buyStatus?: number, isOwner?: number) {
     const args: any = { productId, value, uid };
     if (buyStatus !== undefined) args.buyStatus = buyStatus;

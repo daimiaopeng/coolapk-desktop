@@ -122,6 +122,7 @@
         :feed-id="feed.id"
         :feed-uid="feed.uid || feed.userInfo?.uid"
         :feed-username="feed.username"
+        :total-comment-count="feed.replynum"
         :comments="comments"
         :loading="commentsLoading"
         :error="commentsError"
