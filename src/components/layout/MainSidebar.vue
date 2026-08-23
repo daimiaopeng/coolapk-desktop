@@ -51,6 +51,17 @@
         </router-link>
       </div>
 
+      <router-link
+        v-if="moreVisible"
+        to="/more"
+        class="nav-item"
+        active-class="is-active"
+        title="我的"
+      >
+        <i class="fas fa-user nav-icon"></i>
+        <span v-if="!isCollapsed" class="nav-label">我的</span>
+      </router-link>
+
       <div class="nav-divider"></div>
 
       <div class="nav-group">
@@ -170,6 +181,7 @@ const contentNavs = computed(() => {
   return allContentNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
 });
 
+const moreVisible = computed(() => settingsStore.settings.navVisibility?.more !== false);
 function getNavBadge(key: string): number {
   if (key === 'notifications') return notificationStore.notificationCount;
   if (key === 'messages') return notificationStore.messageCount;
@@ -180,7 +192,6 @@ function getNavTitle(item: { key: string; label: string }): string {
   const count = getNavBadge(item.key);
   return count > 0 ? `${item.label}（${count} 条未读）` : item.label;
 }
-
 
 function toggleTheme() {
   const nextTheme = settingsStore.settings.theme === 'dark' ? 'light' : 'dark';
@@ -352,6 +363,74 @@ function handleLogout() {
   height: 1px;
   background-color: var(--divider);
   margin: var(--space-3) var(--space-2);
+}
+
+.nav-more-container {
+  position: relative;
+}
+
+.more-toggle-item {
+  cursor: pointer;
+}
+
+.more-chevron {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.more-inline-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.nav-sub-item {
+  height: 36px;
+  padding-left: calc(var(--space-4) + 20px + var(--space-3));
+  font-size: var(--font-size-caption);
+}
+
+.nav-sub-item .nav-icon {
+  font-size: 13px;
+}
+
+.more-popover {
+  position: absolute;
+  left: calc(100% + var(--space-3));
+  top: 0;
+  width: 190px;
+  padding: var(--space-2);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lg);
+  z-index: 120;
+}
+
+.more-popover-title {
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption);
+}
+
+.more-popover-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  color: var(--text-secondary);
+  border-radius: var(--radius-control);
+  text-decoration: none;
+  font-size: var(--font-size-sub);
+}
+
+.more-popover-item:hover,
+.more-popover-item.router-link-active {
+  color: var(--brand-primary);
+  background: var(--brand-soft);
 }
 
 .action-item {

@@ -650,13 +650,36 @@ pub async fn create_user_vote(
 }
 
 #[tauri::command]
-pub async fn get_hit_history(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
-    state.client.get_hit_history(page).await
+pub async fn get_hit_history(
+    state: State<'_, AppState>,
+    page: u32,
+    history_type: String,
+) -> Result<Value, String> {
+    state.client.get_hit_history(page, &history_type).await
 }
 
 #[tauri::command]
 pub async fn get_recent_history(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.get_recent_history(page).await
+}
+
+#[tauri::command]
+pub async fn get_spam_feed_list(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+    state.client.get_spam_feed_list(page).await
+}
+
+#[tauri::command]
+pub async fn get_hidden_replies(
+    state: State<'_, AppState>,
+    feed_id: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_hidden_replies(&feed_id, page).await
+}
+
+#[tauri::command]
+pub async fn get_followed_topics(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
+    state.client.get_followed_topics(page).await
 }
 
 #[tauri::command]
@@ -801,6 +824,15 @@ pub async fn get_user_follow_nodes(
 }
 
 #[tauri::command]
+pub async fn get_user_forum_follow_list(
+    state: State<'_, AppState>,
+    uid: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_user_forum_follow_list(&uid, page).await
+}
+
+#[tauri::command]
 pub async fn get_user_feeds(
     state: State<'_, AppState>,
     uid: String,
@@ -808,6 +840,15 @@ pub async fn get_user_feeds(
     feed_type: String,
 ) -> Result<Value, String> {
     state.client.get_user_feeds(&uid, page, &feed_type).await
+}
+
+#[tauri::command]
+pub async fn get_user_like_list(
+    state: State<'_, AppState>,
+    uid: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_user_like_list(&uid, page).await
 }
 
 #[tauri::command]
@@ -897,6 +938,14 @@ pub async fn get_notifications(
 #[tauri::command]
 pub async fn list_messages(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
     state.client.list_messages(page).await
+}
+
+#[tauri::command]
+pub async fn get_recent_chat_users(
+    state: State<'_, AppState>,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_recent_chat_users(page).await
 }
 
 #[tauri::command]
@@ -2265,6 +2314,62 @@ pub async fn get_album_detail(
     album_id: String,
 ) -> Result<Value, String> {
     state.client.get_album_detail(&album_id).await
+}
+
+#[tauri::command]
+pub async fn get_user_album_list(
+    state: State<'_, AppState>,
+    uid: String,
+    page: u32,
+) -> Result<Value, String> {
+    state.client.get_user_album_list(&uid, page).await
+}
+
+#[tauri::command]
+pub async fn create_album(
+    state: State<'_, AppState>,
+    title: String,
+    intro: String,
+    cover: String,
+) -> Result<Value, String> {
+    state.client.create_album(&title, &intro, &cover).await
+}
+
+#[tauri::command]
+pub async fn edit_album(
+    state: State<'_, AppState>,
+    album_id: String,
+    title: String,
+    intro: String,
+    cover: String,
+) -> Result<Value, String> {
+    state.client.edit_album(&album_id, &title, &intro, &cover).await
+}
+
+#[tauri::command]
+pub async fn add_album_apk(
+    state: State<'_, AppState>,
+    album_id: String,
+    package_name: String,
+    title: String,
+    url: String,
+    note: String,
+    display_order: i32,
+    logo: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .add_album_apk(&album_id, &package_name, &title, &url, &note, display_order, &logo)
+        .await
+}
+
+#[tauri::command]
+pub async fn delete_album_apk(
+    state: State<'_, AppState>,
+    album_id: String,
+    package_name: String,
+) -> Result<Value, String> {
+    state.client.delete_album_apk(&album_id, &package_name).await
 }
 
 #[tauri::command]
