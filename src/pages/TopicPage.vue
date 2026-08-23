@@ -54,19 +54,6 @@
       <LoadingState text="正在加载话题概况..." />
     </div>
 
-    <!-- 2. Sub-Tabs 分类栏 (截图 1) -->
-    <div class="topic-sub-tabs custom-scrollbar">
-      <button
-        v-for="tab in topicTabs"
-        :key="tab.key"
-        :class="['topic-tab-item', { active: activeTopicTab === tab.key }]"
-        @click="selectTopicTab(tab.key)"
-      >
-        <span>{{ tab.label }}</span>
-        <span v-if="activeTopicTab === tab.key" class="tab-line"></span>
-      </button>
-    </div>
-
     <!-- 4. 排序筛选工具条 [全部讨论: 默认 / 最新 / 热度] -->
     <div class="topic-filter-bar">
       <span class="filter-label">全部讨论</span>
@@ -153,17 +140,6 @@ const feedsLoading = ref(false);
 const page = ref(1);
 const noMore = ref(false);
 const isFollowed = ref(false);
-
-const activeTopicTab = ref('discuss');
-const topicTabs = [
-  { key: 'coupon', label: '搜神券' },
-  { key: 'discuss', label: '讨论' },
-  { key: 'featured', label: '精选' },
-  { key: 'help', label: '助力' },
-  { key: 'bought', label: '买过' },
-  { key: 'cool_product', label: '酷品' },
-  { key: 'trade', label: '交易' },
-];
 
 const currentSort = ref('default');
 const sortOptions = [
@@ -273,12 +249,6 @@ async function fetchFeeds(isLoadMore = false) {
   }
 }
 
-function selectTopicTab(key: string) {
-  activeTopicTab.value = key;
-  page.value = 1;
-  noMore.value = false;
-  fetchFeeds(false);
-}
 
 function changeSort(sortKey: string) {
   currentSort.value = sortKey;

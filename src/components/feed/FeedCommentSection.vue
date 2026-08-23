@@ -190,24 +190,41 @@
         :data-comment-text="c.message || c.replyRowsText || ''"
       >
         <!-- 1. 一级评论人头像 -->
-        <AppAvatar
-          class="comment-avatar"
-          :src="c.userAvatar || c.avatar || c.userInfo?.userAvatar"
-          :size="32"
-          alt="头像"
-          @click="setReplyTarget(c.username || c.userInfo?.username, c.id)"
-        />
+        <UserHoverCard
+          :uid="c.uid || c.userId || c.userInfo?.uid"
+          :avatar="c.userAvatar || c.avatar || c.userInfo?.userAvatar"
+          :username="c.username || c.userInfo?.username"
+          :level="getCommentUserLevel(c)"
+          :verify-title="getCommentVerifyTitle(c)"
+        >
+          <AppAvatar
+            class="comment-avatar"
+            :src="c.userAvatar || c.avatar || c.userInfo?.userAvatar"
+            :plugin-url="getCommentPluginUrl(c)"
+            :size="32"
+            alt="头像"
+            @click="setReplyTarget(c.username || c.userInfo?.username, c.id)"
+          />
+        </UserHoverCard>
 
         <!-- 一级评论主体 -->
         <div class="comment-main">
           <!-- 名字、楼主标签、时间设备 -->
           <div class="comment-meta">
-            <span
-              class="comment-username"
-              @click="setReplyTarget(c.username || c.userInfo?.username, c.id)"
+            <UserHoverCard
+              :uid="c.uid || c.userId || c.userInfo?.uid"
+              :avatar="c.userAvatar || c.avatar || c.userInfo?.userAvatar"
+              :username="c.username || c.userInfo?.username"
+              :level="getCommentUserLevel(c)"
+              :verify-title="getCommentVerifyTitle(c)"
             >
-              {{ c.username || c.userInfo?.username || '酷友' }}
-            </span>
+              <span
+                class="comment-username"
+                @click="setReplyTarget(c.username || c.userInfo?.username, c.id)"
+              >
+                {{ c.username || c.userInfo?.username || '酷友' }}
+              </span>
+            </UserHoverCard>
             
             <!-- 楼主 Tag -->
             <span v-if="isAuthor(c)" class="badge-author">
@@ -302,16 +319,33 @@
               @click="setReplyTarget(sub.username || sub.fromUserName, sub.id || c.id)"
             >
               <!-- 子回复头像 -->
-              <AppAvatar
-                class="sub-reply-avatar"
-                :src="sub.userAvatar || sub.avatar || sub.userInfo?.userAvatar"
-                :size="28"
-                alt="头像"
-              />
+              <UserHoverCard
+                :uid="sub.uid || sub.fromUid || sub.userId || sub.userInfo?.uid"
+                :avatar="sub.userAvatar || sub.avatar || sub.userInfo?.userAvatar"
+                :username="sub.username || sub.fromUserName"
+                :level="getCommentUserLevel(sub)"
+                :verify-title="getCommentVerifyTitle(sub)"
+              >
+                <AppAvatar
+                  class="sub-reply-avatar"
+                  :src="sub.userAvatar || sub.avatar || sub.userInfo?.userAvatar"
+                  :plugin-url="getCommentPluginUrl(sub)"
+                  :size="28"
+                  alt="头像"
+                />
+              </UserHoverCard>
               <div class="sub-reply-main">
                 <!-- 子回复 meta -->
                 <div class="sub-reply-meta">
-                  <span class="sub-user">{{ sub.username || sub.fromUserName || '酷友' }}</span>
+                  <UserHoverCard
+                    :uid="sub.uid || sub.fromUid || sub.userId || sub.userInfo?.uid"
+                    :avatar="sub.userAvatar || sub.avatar || sub.userInfo?.userAvatar"
+                    :username="sub.username || sub.fromUserName"
+                    :level="getCommentUserLevel(sub)"
+                    :verify-title="getCommentVerifyTitle(sub)"
+                  >
+                    <span class="sub-user">{{ sub.username || sub.fromUserName || '酷友' }}</span>
+                  </UserHoverCard>
                   <span v-if="isAuthor(sub)" class="badge-author sub-badge">楼主</span>
                   <span v-if="getCommentUserLevel(sub)" class="level-tag">LV{{ getCommentUserLevel(sub) }}</span>
                   <span v-if="getCommentVerifyTitle(sub)" class="verify-tag" :title="getCommentVerifyTitle(sub)">
@@ -407,6 +441,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import AppAvatar from '../common/AppAvatar.vue';
+import UserHoverCard from '../user/UserHoverCard.vue';
 import Button from '../ui/Button.vue';
 import FeedImageGrid from './FeedImageGrid.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
@@ -419,6 +454,7 @@ import { showToast } from '../../utils/toast';
 import { requestConfirmation } from '../../utils/confirm';
 import { getErrorMessage } from '../../utils/errors';
 import { renderCoolapkRichText } from '../../utils/richText';
+import { reactiveUserProfileMap, getCachedUserProfileSync } from '../../utils/userProfilePreloader';
 import { verifyWithCaptcha, extractCaptchaParamsFromResponse } from '../../utils/neteaseCaptcha';
 import {
   COMMENT_SORT_OPTIONS,
@@ -599,6 +635,17 @@ function toggleCommentTime(item: any) {
 function getCommentFloor(item: any): string {
   const value = item?.floor ?? item?.rank ?? '';
   return String(value).trim();
+}
+
+function getCommentPluginUrl(item: any): string {
+  const direct = item?.avatar_plugin_url || item?.userInfo?.avatar_plugin_url || item?.userAvatarPluginUrl;
+  if (direct) return String(direct).trim();
+  const uid = String(item?.uid || item?.fromUid || item?.userId || item?.userInfo?.uid || '').trim();
+  if (uid) {
+    const p = reactiveUserProfileMap[uid] || getCachedUserProfileSync(uid);
+    return p?.avatar_plugin_url || p?.userInfo?.avatar_plugin_url || p?.userAvatarPluginUrl || '';
+  }
+  return '';
 }
 
 function getCommentDeviceRom(item: any): string {

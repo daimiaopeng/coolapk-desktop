@@ -13,7 +13,7 @@
       @error="handleError"
       v-bind="$attrs"
     />
-    <div v-else-if="loading" class="image-placeholder">
+    <div v-else-if="loading && !hideSpinner" class="image-placeholder">
       <i class="fa-solid fa-spinner fa-spin"></i>
     </div>
     <div v-else-if="error" class="image-error">
@@ -27,15 +27,17 @@ import { ref, watch, onMounted } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useSettingsStore } from '../../stores/settings';
 import { sanitizeImageUrl } from '../../utils/image';
-import { loadImageResource, normalizeResourceUrl } from '../../utils/resourceCache';
+import { loadImageResource, normalizeResourceUrl, getMemoryCachedResourceSync } from '../../utils/resourceCache';
 
 const props = withDefaults(defineProps<{
   src?: string;
   alt?: string;
   imageClass?: string | object | any[];
   fit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
+  hideSpinner?: boolean;
 }>(), {
-  fit: 'cover'
+  fit: 'cover',
+  hideSpinner: false,
 });
 
 const emit = defineEmits<{
@@ -45,8 +47,10 @@ const emit = defineEmits<{
 
 const settingsStore = useSettingsStore();
 
-const renderedSrc = ref<string | undefined>(undefined);
-const loading = ref(false);
+// 同步尝试命中内存缓存
+const initialCached = getMemoryCachedResourceSync(props.src);
+const renderedSrc = ref<string | undefined>(initialCached || undefined);
+const loading = ref(!initialCached && !!props.src);
 const error = ref(false);
 const isFallback = ref(false);
 
@@ -81,11 +85,19 @@ async function loadImage(url: string | undefined) {
     return;
   }
 
-  // 3. 依次检查全局内存缓存、持久缓存和网络
+  // 3. 同步内存缓存秒开命中（0 毫秒零闪烁）
+  const syncCached = getMemoryCachedResourceSync(targetUrl);
+  if (syncCached) {
+    renderedSrc.value = syncCached;
+    loading.value = false;
+    error.value = false;
+    return;
+  }
+
+  // 4. 依次检查持久缓存和网络（保持当前已渲染的图片，平滑过渡，不置为 undefined）
   loading.value = true;
   error.value = false;
   isFallback.value = false;
-  renderedSrc.value = undefined;
 
   try {
     const dataUrl = await loadImageResource(targetUrl, (resourceUrl) => (

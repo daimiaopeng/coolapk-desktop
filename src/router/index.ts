@@ -8,8 +8,8 @@ import AppsPage from '../pages/AppsPage.vue';
 import GamesPage from '../pages/GamesPage.vue';
 import FavoritesPage from '../pages/FavoritesPage.vue';
 import MyLikesPage from '../pages/MyLikesPage.vue';
-import MoreDataPage from '../pages/MoreDataPage.vue';
 import MoreWorkspacePage from '../pages/MoreWorkspacePage.vue';
+import MoreDataPage from '../pages/MoreDataPage.vue';
 import MyAlbumsPage from '../pages/MyAlbumsPage.vue';
 import HistoryPage from '../pages/HistoryPage.vue';
 import FollowingPage from '../pages/FollowingPage.vue';
@@ -45,6 +45,7 @@ import GoodsRankingDetailPage from '../pages/GoodsRankingDetailPage.vue';
 import ProductCategoryPage from '../pages/ProductCategoryPage.vue';
 import MyProductsPage from '../pages/MyProductsPage.vue';
 import ProductComparePage from '../pages/ProductComparePage.vue';
+import MorePage from '../pages/MorePage.vue';
 import SettingsLayout from '../pages/settings/SettingsLayout.vue';
 import AccountSettingsPage from '../pages/settings/AccountSettingsPage.vue';
 import NotificationSettingsPage from '../pages/settings/NotificationSettingsPage.vue';
@@ -70,7 +71,8 @@ const routes = [
   { path: '/topics', name: 'Topics', component: TopicsHubPage },
   { path: '/favorites', name: 'Favorites', component: FavoritesPage },
   { path: '/my-likes', name: 'MyLikes', component: MyLikesPage },
-  { path: '/more', name: 'More', component: MoreWorkspacePage },
+  { path: '/more', name: 'More', component: MorePage },
+  { path: '/my', name: 'My', component: MoreWorkspacePage },
   { path: '/followed-nodes', name: 'FollowedNodes', component: MoreDataPage, meta: { mode: 'nodes' } },
   { path: '/followed-topics', name: 'FollowedTopics', component: MoreDataPage, meta: { mode: 'topics' } },
   { path: '/recent-contacts', name: 'RecentContacts', component: MoreDataPage, meta: { mode: 'contacts' } },

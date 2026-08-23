@@ -1,54 +1,47 @@
 <template>
   <div class="page-container custom-scrollbar">
-    <!-- 头部区域 -->
-    <div class="page-header">
-      <div class="header-main">
-        <div class="header-titles">
-          <h2 class="page-title">
-            <i class="fas fa-cubes icon"></i> 酷安应用中心
-          </h2>
-          <span class="page-subtitle">探索酷安精选 Android 应用、系统工具与流行软件</span>
-        </div>
-
-        <!-- 应用搜索框 -->
-        <div class="search-group">
-          <div class="search-mode-switch" role="group" aria-label="搜索方式">
-            <button
-              v-for="mode in searchModes"
-              :key="mode.key"
-              :class="['mode-btn', { 'is-active': searchMode === mode.key }]"
-              @click="selectSearchMode(mode.key)"
-            >
-              <i :class="mode.icon"></i> {{ mode.label }}
-            </button>
-          </div>
-
-          <div class="search-box">
-            <i class="fas fa-search search-icon"></i>
-            <input
-              v-model="searchQuery"
-              type="text"
-              :placeholder="searchPlaceholder"
-              class="search-input"
-              @keyup.enter="handleSearch"
-            />
-            <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 分类快捷标签栏 -->
-      <div class="category-tabs">
+    <!-- 顶栏工具条：左侧分类 Tab，右侧搜索模式切换 + 搜索框 -->
+    <div class="apps-toolbar-bar">
+      <div class="apps-tabs-wrapper">
         <button
           v-for="cat in categories"
           :key="cat.key"
+          type="button"
           :class="['cat-tab', { active: activeCat === cat.key && !isSearching }]"
           @click="selectCategory(cat.key)"
         >
           <i :class="cat.icon"></i> {{ cat.name }}
         </button>
+      </div>
+
+      <div class="apps-actions-wrapper">
+        <!-- 搜索模式切换（应用名 / 开发者 / 标签） -->
+        <div class="search-mode-switch" role="group" aria-label="搜索方式">
+          <button
+            v-for="mode in searchModes"
+            :key="mode.key"
+            type="button"
+            :class="['mode-btn', { 'is-active': searchMode === mode.key }]"
+            @click="selectSearchMode(mode.key)"
+          >
+            <i :class="mode.icon"></i> {{ mode.label }}
+          </button>
+        </div>
+
+        <!-- 应用搜索输入框 -->
+        <div class="search-box">
+          <i class="fas fa-search search-icon"></i>
+          <input
+            v-model="searchQuery"
+            type="text"
+            :placeholder="searchPlaceholder"
+            class="search-input"
+            @keyup.enter="handleSearch"
+          />
+          <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -239,75 +232,84 @@ onMounted(() => loadApps());
   margin: 0;
 }
 
-.page-header {
-  margin-bottom: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.header-main {
+.apps-toolbar-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: 16px;
+  padding: 4px 0 14px 0;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
   flex-wrap: wrap;
 }
 
-.header-titles {
+.apps-tabs-wrapper {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
 }
 
-.page-title {
-  font-size: var(--font-size-title-lg);
-  font-weight: var(--font-weight-bold);
+.cat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill, 20px);
+  background-color: var(--surface);
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.cat-tab:hover {
+  background-color: var(--surface-hover);
   color: var(--text-primary);
-  margin: 0;
+}
+
+.cat-tab.active {
+  background-color: var(--brand-soft, rgba(16, 185, 129, 0.12));
+  color: var(--brand-primary, #10b981);
+  border-color: var(--brand-primary, #10b981);
+  font-weight: 700;
+}
+
+.apps-actions-wrapper {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-}
-
-.page-title .icon {
-  color: var(--brand-primary);
-}
-
-.page-subtitle {
-  font-size: var(--font-size-sub);
-  color: var(--text-tertiary);
-}
-
-.search-group {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .search-mode-switch {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 3px;
-  background-color: var(--background-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
+  padding: 2px;
+  background-color: var(--background-secondary, var(--surface-hover));
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-pill, 16px);
 }
 
 .mode-btn {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: 4px 12px;
+  gap: 4px;
+  padding: 4px 10px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--font-size-caption);
-  font-weight: var(--font-weight-medium);
-  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-pill, 14px);
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-default);
+  transition: all 0.15s ease;
 }
 
 .mode-btn:hover {
@@ -317,89 +319,57 @@ onMounted(() => loadApps());
 .mode-btn.is-active {
   background-color: var(--surface);
   color: var(--brand-primary);
-  font-weight: var(--font-weight-semibold);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 .search-box {
   position: relative;
   display: flex;
   align-items: center;
-  width: 280px;
+  width: 220px;
 }
 
 .search-icon {
   position: absolute;
-  left: 12px;
+  left: 10px;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: 12px;
   pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  height: 36px;
-  padding: 0 32px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  background-color: var(--surface);
+  height: 32px;
+  padding: 0 28px;
+  border-radius: var(--radius-pill, 16px);
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  background-color: var(--surface-hover);
   color: var(--text-primary);
-  font-size: var(--font-size-sub);
+  font-size: 12.5px;
   outline: none;
-  transition: all var(--duration-fast);
+  transition: all 0.15s ease;
 }
 
 .search-input:focus {
+  background-color: var(--surface);
   border-color: var(--brand-primary);
-  box-shadow: 0 0 0 3px var(--brand-soft);
+  box-shadow: 0 0 0 2px var(--brand-soft);
 }
 
 .clear-btn {
   position: absolute;
-  right: 10px;
+  right: 8px;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   padding: 4px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .clear-btn:hover {
   color: var(--text-primary);
-}
-
-.category-tabs {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.cat-tab {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-pill);
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-
-.cat-tab:hover {
-  background-color: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.cat-tab.active {
-  background-color: var(--brand-soft);
-  color: var(--brand-primary);
-  border-color: var(--brand-primary);
-  font-weight: var(--font-weight-semibold);
 }
 
 .apps-grid {

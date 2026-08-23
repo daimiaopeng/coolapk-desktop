@@ -45,6 +45,19 @@ function remember(url: string, value: string) {
 }
 
 /**
+ * 同步检查并获取内存图片缓存（0 延迟，避免重渲染时出现转菊花白屏）
+ */
+export function getMemoryCachedResourceSync(url: string | undefined): string | null {
+  if (!url) return null;
+  const normalizedUrl = normalizeResourceUrl(url);
+  if (!normalizedUrl) return null;
+  if (normalizedUrl.startsWith('data:') || normalizedUrl.startsWith('blob:') || normalizedUrl.startsWith('/')) {
+    return normalizedUrl;
+  }
+  return memoryCache.get(normalizedUrl) || null;
+}
+
+/**
  * 读取全局内存缓存并合并相同资源的并发请求。
  * 持久缓存由原生图片请求层负责，避免 WebView 缓存故障阻塞图片显示。
  */

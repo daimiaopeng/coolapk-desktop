@@ -46,6 +46,160 @@ pub struct CoolapkClient {
     device_code: RwLock<String>,
 }
 
+fn build_oss_image_url(prefix: &str, file_name: &str) -> Option<String> {
+    let prefix = prefix.trim().trim_end_matches('/');
+    let file_name = file_name.trim().trim_start_matches('/');
+    if (prefix.starts_with("http://") || prefix.starts_with("https://"))
+        && !prefix.is_empty()
+        && !file_name.is_empty()
+    {
+        Some(format!("{prefix}/{file_name}"))
+    } else {
+        None
+    }
+}
+
+fn image_resolution(image_bytes: &[u8]) -> String {
+    let dimensions = if image_bytes.starts_with(b"\x89PNG\r\n\x1a\n") && image_bytes.len() >= 24 {
+        Some((
+            u32::from_be_bytes(image_bytes[16..20].try_into().unwrap_or([0; 4])),
+            u32::from_be_bytes(image_bytes[20..24].try_into().unwrap_or([0; 4])),
+        ))
+    } else if (image_bytes.starts_with(b"GIF87a") || image_bytes.starts_with(b"GIF89a"))
+        && image_bytes.len() >= 10
+    {
+        Some((
+            u16::from_le_bytes(image_bytes[6..8].try_into().unwrap_or([0; 2])) as u32,
+            u16::from_le_bytes(image_bytes[8..10].try_into().unwrap_or([0; 2])) as u32,
+        ))
+    } else if image_bytes.starts_with(b"BM") && image_bytes.len() >= 26 {
+        Some((
+            u32::from_le_bytes(image_bytes[18..22].try_into().unwrap_or([0; 4])),
+            u32::from_le_bytes(image_bytes[22..26].try_into().unwrap_or([0; 4])),
+        ))
+    } else if image_bytes.starts_with(b"RIFF")
+        && image_bytes.len() >= 30
+        && &image_bytes[8..12] == b"WEBP"
+        && &image_bytes[12..16] == b"VP8X"
+    {
+        let width = 1
+            + (image_bytes[24] as u32
+                | ((image_bytes[25] as u32) << 8)
+                | ((image_bytes[26] as u32) << 16));
+        let height = 1
+            + (image_bytes[27] as u32
+                | ((image_bytes[28] as u32) << 8)
+                | ((image_bytes[29] as u32) << 16));
+        Some((width, height))
+    } else if image_bytes.starts_with(&[0xff, 0xd8]) {
+        jpeg_resolution(image_bytes)
+    } else {
+        None
+    };
+
+    dimensions
+        .filter(|(width, height)| *width > 0 && *height > 0)
+        .map(|(width, height)| format!("{width}x{height}"))
+        .unwrap_or_else(|| "0x0".to_string())
+}
+
+fn jpeg_resolution(image_bytes: &[u8]) -> Option<(u32, u32)> {
+    let mut index = 2;
+    while index + 9 < image_bytes.len() {
+        if image_bytes[index] != 0xff {
+            index += 1;
+            continue;
+        }
+        while index < image_bytes.len() && image_bytes[index] == 0xff {
+            index += 1;
+        }
+        if index >= image_bytes.len() {
+            break;
+        }
+        let marker = image_bytes[index];
+        index += 1;
+        if marker == 0xda || marker == 0xd9 {
+            break;
+        }
+        if index + 1 >= image_bytes.len() {
+            break;
+        }
+        let segment_length = u16::from_be_bytes([image_bytes[index], image_bytes[index + 1]]) as usize;
+        if segment_length < 2 || index + segment_length > image_bytes.len() {
+            break;
+        }
+        let is_sof = matches!(
+            marker,
+            0xc0..=0xc3 | 0xc5..=0xc7 | 0xc9..=0xcb | 0xcd..=0xcf
+        );
+        if is_sof && segment_length >= 7 {
+            let height = u16::from_be_bytes([image_bytes[index + 3], image_bytes[index + 4]]) as u32;
+            let width = u16::from_be_bytes([image_bytes[index + 5], image_bytes[index + 6]]) as u32;
+            return Some((width, height));
+        }
+        index += segment_length;
+    }
+    None
+}
+
+fn reply_target_params(feed_id: &str, rid: Option<&str>) -> (String, String) {
+    rid.filter(|value| !value.trim().is_empty())
+        .map(|reply_id| (reply_id.trim().to_string(), "reply".to_string()))
+        .unwrap_or_else(|| (feed_id.trim().to_string(), "feed".to_string()))
+}
+
+fn build_create_feed_form(
+    message: &str,
+    pic: Option<&str>,
+    post_token: Option<&str>,
+) -> Vec<(&'static str, String)> {
+    let mut form = vec![
+        ("id", String::new()),
+        ("message", message.to_string()),
+        ("type", "feed".to_string()),
+        ("pic", pic.unwrap_or_default().to_string()),
+        ("status", "1".to_string()),
+        ("publish_status", "0".to_string()),
+        ("location", String::new()),
+        ("long_location", String::new()),
+        ("latitude", "0.0".to_string()),
+        ("longitude", "0.0".to_string()),
+        ("media_url", String::new()),
+        ("media_type", "0".to_string()),
+        ("media_pic", String::new()),
+        ("message_title", String::new()),
+        ("message_brief", String::new()),
+        ("extra_title", String::new()),
+        ("extra_url", String::new()),
+        ("extra_key", String::new()),
+        ("extra_pic", String::new()),
+        ("extra_info", String::new()),
+        ("message_cover", String::new()),
+        ("original_type", "0".to_string()),
+        ("is_editInDyh", "0".to_string()),
+        ("forwardid", String::new()),
+        ("fid", String::new()),
+        ("dyhId", String::new()),
+        ("targetType", String::new()),
+        ("productId", String::new()),
+        ("targetId", String::new()),
+        ("location_city", String::new()),
+        ("location_country", String::new()),
+        ("disallow_reply", "0".to_string()),
+        ("vote_score", "0".to_string()),
+        ("replyWithForward", "0".to_string()),
+        ("media_info", String::new()),
+        ("insert_product_media", "0".to_string()),
+        ("is_ks_doc", "0".to_string()),
+        ("goods_list_id", String::new()),
+        ("is_html_article", "0".to_string()),
+    ];
+    if let Some(token) = post_token.filter(|value| !value.trim().is_empty()) {
+        form.push(("_v2_post_token", token.to_string()));
+    }
+    form
+}
+
 /// 设备信息覆盖配置（由设置页"设备信息"下发，作用于所有 API 请求头）。
 /// 字段为 None 时使用客户端默认值；全部留空表示恢复默认。
 /// 注意：X-App-Device（设备码）与 X-App-Token 属于账号绑定指纹，不允许覆盖。
@@ -1088,23 +1242,30 @@ impl CoolapkClient {
         if let Some(arr) = obj.get("picArr").and_then(|v| v.as_array()) {
             for p in arr {
                 if let Some(p_str) = p.as_str() {
-                    if p_str.starts_with("http") {
-                        pics.push(p_str.to_string());
+                    let trimmed = p_str.trim();
+                    if trimmed.is_empty() || trimmed == "null" || trimmed == "undefined" {
+                        continue;
+                    }
+                    if trimmed.starts_with("http") {
+                        pics.push(trimmed.to_string());
                     } else {
                         pics.push(format!(
                             "https://image.coolapk.com/{}",
-                            p_str.trim_start_matches('/')
+                            trimmed.trim_start_matches('/')
                         ));
                     }
                 }
             }
         } else if let Some(p_str) = obj.get("pic").and_then(|v| v.as_str()) {
-            if p_str.starts_with("http") {
-                pics.push(p_str.to_string());
+            let trimmed = p_str.trim();
+            if trimmed.is_empty() || trimmed == "null" || trimmed == "undefined" {
+                // 空 pic 是评论/动态接口的常见占位值，不能生成无效图片地址。
+            } else if trimmed.starts_with("http") {
+                pics.push(trimmed.to_string());
             } else {
                 pics.push(format!(
                     "https://image.coolapk.com/{}",
-                    p_str.trim_start_matches('/')
+                    trimmed.trim_start_matches('/')
                 ));
             }
         }
@@ -1211,6 +1372,8 @@ impl CoolapkClient {
         copy_first_field(&mut cleaned, obj, "video", &["video"]);
         copy_first_field(&mut cleaned, obj, "videoInfo", &["videoInfo", "video_info"]);
         copy_first_field(&mut cleaned, obj, "media", &["media"]);
+        // 用户评论列表会把所属原动态放在 feed 字段中，FeedCard 用它展示引用上下文。
+        copy_first_field(&mut cleaned, obj, "feed", &["feed"]);
 
         Some(cleaned)
     }
@@ -3634,6 +3797,15 @@ impl CoolapkClient {
         )
     }
 
+    /// 删除私信会话（需登录）
+    /// 数据来源: GET /v6/message/deleteChat?ukey={ukey}
+    pub async fn delete_message_chat(&self, ukey: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get("/v6/message/deleteChat", &[("ukey", ukey.to_string())])
+                .await?,
+        )
+    }
+
     /// 发送私信（需登录）
     /// 酷安 v6 私信接口要求：POST + multipart/form-data（字段 message）+ X-Requested-With: XMLHttpRequest。
     /// GET + query 方式服务端无法识别内容（报"私信内容不能为空"）。
@@ -3809,7 +3981,7 @@ impl CoolapkClient {
             hasher.update(image_bytes);
             format!("{:x}", hasher.finalize())
         };
-        let resolution = "0x0".to_string();
+        let resolution = image_resolution(image_bytes);
         let file_list = json!([{
             "name": file_name,
             "resolution": resolution,
@@ -3887,10 +4059,25 @@ impl CoolapkClient {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+        let existing_file_url = file_info
+            .get("url")
+            .and_then(|v| v.as_str())
+            .filter(|url| !url.trim().is_empty())
+            .map(str::to_string);
         let bucket = prepare_info
             .get("bucket")
             .and_then(|v| v.as_str())
             .unwrap_or("")
+            .to_string();
+        // 官方 APK 用 uploadImagePrefix + uploadFileName 作为提交给 createFeed
+        // 的图片地址，而不是使用 OSS 回调正文中的地址。
+        let upload_image_prefix = prepare_info
+            .get("uploadImagePrefix")
+            .and_then(|v| v.as_str())
+            .filter(|prefix| !prefix.trim().is_empty())
+            // APK 的默认值是 http://image.coolapk.com；服务端的旧图地址也使用该主机。
+            .unwrap_or("http://image.coolapk.com")
+            .trim_end_matches('/')
             .to_string();
         let end_point = prepare_info
             .get("endPoint")
@@ -3925,6 +4112,11 @@ impl CoolapkClient {
                     .map(|d| d.to_string())
                     .unwrap_or_default()
             ));
+        }
+
+        // 相同 MD5 的文件可能由服务端直接返回已有地址，官方客户端会跳过直传。
+        if let Some(url) = existing_file_url {
+            return Ok(json!({ "code": 200, "data": url }));
         }
 
         // 2. 直传 OSS（PUT Object，OSS V1 签名）
@@ -3990,22 +4182,10 @@ impl CoolapkClient {
             return Err(format!("OSS 直传失败 (HTTP {}): {}", oss_status, &oss_body));
         }
 
-        // 3. 解析 OSS 回调返回的图片地址
-        if let Ok(v) = serde_json::from_str::<Value>(&oss_body) {
-            let url = v
-                .get("data")
-                .and_then(|d| d.get("url"))
-                .and_then(|u| u.as_str())
-                .unwrap_or("")
-                .to_string();
-            if !url.is_empty() {
-                return Ok(json!({ "code": 200, "data": url }));
-            }
-        }
-        // 部分场景 OSS 直接返回 URL 字符串
-        let trimmed = oss_body.trim().trim_matches('"').to_string();
-        if !trimmed.is_empty() && !trimmed.contains("Error") {
-            return Ok(json!({ "code": 200, "data": trimmed }));
+        // 3. 按官方客户端的方式生成最终图片地址。OSS 回调只负责让酷安
+        // 服务端登记文件，回调 JSON 不是 createFeed 的 pic 字段。
+        if let Some(image_url) = build_oss_image_url(&upload_image_prefix, &upload_file_name) {
+            return Ok(json!({ "code": 200, "data": image_url }));
         }
         Err(format!("OSS 直传响应异常: {}", &oss_body))
     }
@@ -4169,8 +4349,11 @@ impl CoolapkClient {
         self.like_action("/v6/feed/unLikeReply", reply_id).await
     }
 
-    /// 发表评论；rid 非空时表示回复楼中楼（某条评论），pic 非空时表示评论图片，post_token 为网易易盾滑块验证 Token
-    /// 对应官方 APK kb1.java:496 (@POST("feed/reply") @Query("id") @Query("type") @Body FormBody) 与 ExtraPostFieldInterceptor.java
+    /// 发表评论；rid 非空时表示回复某条评论，pic 非空时表示评论图片，post_token 为网易易盾滑块验证 Token。
+    ///
+    /// 官方 APK 回复评论时并不是把 rid 作为表单字段发送，而是将目标评论 ID
+    /// 放到查询参数 id，并把 type 设为 reply；只有直接评论动态时才使用动态 ID + type=feed。
+    /// 对应官方 APK kb1.java:496 (@POST("feed/reply") @Query("id") @Query("type") @Body FormBody)。
     pub async fn reply_feed(
         &self,
         feed_id: &str,
@@ -4181,18 +4364,11 @@ impl CoolapkClient {
     ) -> Result<Value, String> {
         // reply 在 `PostToken.List` 内，官方建议携带网易易盾 _v2_post_token。
         // 实测服务端对该字段并非强制，token 为可选：提供则附加，缺失仍正常提交。
-        let query = [
-            ("id", feed_id.to_string()),
-            ("type", "feed".to_string()),
-        ];
+        let (target_id, reply_type) = reply_target_params(feed_id, rid);
+        let query = [("id", target_id), ("type", reply_type)];
         let mut form = vec![
             ("message", message.to_string()),
         ];
-        if let Some(rid) = rid {
-            if !rid.is_empty() {
-                form.push(("rid", rid.to_string()));
-            }
-        }
         if let Some(pic) = pic {
             if !pic.is_empty() {
                 form.push(("pic", pic.to_string()));
@@ -4475,7 +4651,8 @@ impl CoolapkClient {
     }
 
     /// 发布动态（需登录）
-    /// 官方客户端要求 POST multipart：message / type=feed / is_html_article=0 / pic / _v2_post_token
+    /// 官方客户端要求 POST application/x-www-form-urlencoded：
+    /// message / type=feed / is_html_article=0 / pic / _v2_post_token。
     pub async fn create_feed(
         &self,
         message: &str,
@@ -4486,20 +4663,7 @@ impl CoolapkClient {
         // 实测服务端对该字段并非强制（无 token 亦能发布成功），因此 token 为可选，
         // 仅在调用方（前端）提供时附加；缺失时仍正常提交，若服务端拒绝再提示验证。
         let token = self.get_token()?;
-        let mut form = reqwest::multipart::Form::new()
-            .text("message", message.to_string())
-            .text("type", "feed".to_string())
-            .text("is_html_article", "0".to_string());
-        if let Some(pic) = pic {
-            if !pic.is_empty() {
-                form = form.text("pic", pic.to_string());
-            }
-        }
-        if let Some(token) = post_token {
-            if !token.is_empty() {
-                form = form.text("_v2_post_token", token.to_string());
-            }
-        }
+        let form = build_create_feed_form(message, pic, post_token);
 
         let mut request = self.apply_device_profile(
             self.client
@@ -4509,7 +4673,7 @@ impl CoolapkClient {
                 )
                 .header("X-App-Token", token)
                 .header("X-Requested-With", "XMLHttpRequest")
-                .multipart(form),
+                .form(&form),
         )?;
 
         let cookie = self
@@ -4935,24 +5099,26 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": Self::extract_product_entity_list(&raw) }))
     }
 
-    /// 读取品牌/分类下的系列与产品列表
-    /// 数据来源: GET /v6/product/productList?id={id}&type={type}
+    /// 读取品牌/分类下的系列与产品列表。
+    ///
+    /// 分类实体自带的 url/title/subTitle 必须原样传给统一页面列表接口；
+    /// 直接使用 /product/productList?id=... 会丢失分类上下文，服务端可能返回默认的手机列表。
+    /// 数据来源: GET /v6/page/dataList?url={url}&title={title}&subTitle={sub_title}
     pub async fn get_product_list(
         &self,
-        id: &str,
-        product_type: &str,
+        url: &str,
+        title: &str,
+        sub_title: &str,
         page: u32,
     ) -> Result<Value, String> {
-        let raw = self
-            .api_get(
-                "/v6/product/productList",
-                &[
-                    ("id", id.to_string()),
-                    ("type", product_type.to_string()),
-                    ("page", page.to_string()),
-                ],
-            )
-            .await?;
+        let mut query = vec![("url", url.to_string()), ("page", page.max(1).to_string())];
+        if !title.trim().is_empty() {
+            query.push(("title", title.to_string()));
+        }
+        if !sub_title.trim().is_empty() {
+            query.push(("subTitle", sub_title.to_string()));
+        }
+        let raw = self.api_get("/v6/page/dataList", &query).await?;
         Ok(json!({ "code": 200, "data": Self::extract_product_entity_list(&raw) }))
     }
 

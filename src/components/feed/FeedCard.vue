@@ -1,16 +1,26 @@
 <template>
     <article
-      :class="['feed-card', { 'is-detail-mode': detailMode }]"
+      :class="['feed-card', { 'is-detail-mode': detailMode, 'has-user-cover': !!userCoverUrl }]"
       :data-feed-id="feed.id"
       :data-feed-text="feed.message || feed.message_raw_output || ''"
       :data-feed-images="JSON.stringify(feedImages)"
       @click="handleCardClick"
     >
+    <!-- 卡片顶部沉浸式个性空间背景图 -->
+    <div v-if="userCoverUrl" class="card-cover-backdrop" aria-hidden="true">
+      <AppImage :src="userCoverUrl" image-class="card-cover-image" fit="cover" />
+      <div class="card-cover-mask"></div>
+    </div>
+
     <FeedHeader
       :uid="feed.uid || feed.userInfo?.uid"
       :avatar="feed.userAvatar || feed.userInfo?.userAvatar || feed.pic"
+      :plugin-url="(feed.userInfo as any)?.avatar_plugin_url || (feed as any).avatar_plugin_url || (feed as any).userAvatarPluginUrl"
       :username="feed.username || feed.userInfo?.username"
       :level="feed.userInfo?.level || feed.level"
+      :gender="(feed.userInfo as any)?.gender ?? (feed as any).gender"
+      :gender-title="(feed.userInfo as any)?.gender_title ?? (feed as any).gender_title ?? (feed.userInfo as any)?.age_group ?? (feed as any).age_group"
+      :ip-location="(feed as any).ip_location || (feed as any).ipLocation || (feed as any).location || (feed as any).city || (feed as any).province || (feed.userInfo as any)?.ip_location || (feed.userInfo as any)?.city"
       :verify-title="feed.userInfo?.verify_title || feed.verifyTitle"
       :dateline="feed.dateline || feed.infoHtml"
       :device="feed.device_title || feed.deviceTitle"
@@ -118,7 +128,7 @@
         :normalize-img="normalizeImg"
         :format-rich-text="formatRichText"
         @delete-comment="removeComment"
-        @retry-comments="openComments"
+        @retry-comments="openComments(true)"
       />
     </div>
 
@@ -162,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import type { FeedItem } from '../../types/feed';
 import FeedHeader from './FeedHeader.vue';
@@ -178,6 +188,7 @@ import LoadingState from '../common/LoadingState.vue';
 import AppDialog from '../common/AppDialog.vue';
 import AppImage from '../common/AppImage.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { preloadUserProfile, reactiveUserProfileMap } from '../../utils/userProfilePreloader';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { getReplyData, mergeReplies } from '../../utils/commentList';
 import { useAuthStore } from '../../stores/auth';
@@ -206,6 +217,33 @@ const props = defineProps<{
   autoOpenComments?: boolean;
   cloudFavorite?: boolean;
 }>();
+
+const authorUid = computed(() => {
+  const raw = props.feed.uid || props.feed.userInfo?.uid;
+  return raw ? String(raw).trim() : '';
+});
+
+const userCoverUrl = computed(() => {
+  const preloaded = authorUid.value ? reactiveUserProfileMap[authorUid.value] : null;
+  const info = props.feed.userInfo as any;
+  const feedAny = props.feed as any;
+  return (
+    feedAny.userCover ||
+    feedAny.cover ||
+    info?.cover ||
+    info?.userCover ||
+    preloaded?.cover ||
+    ''
+  );
+});
+
+onMounted(() => {
+  if (authorUid.value) preloadUserProfile(authorUid.value);
+});
+
+watch(authorUid, (newUid) => {
+  if (newUid) preloadUserProfile(newUid);
+});
 
 const feedImages = computed<string[]>(() => {
   const raw = props.feed.pics || props.feed.picArr || (props.feed.pic ? [props.feed.pic] : []);
@@ -633,13 +671,14 @@ async function confirmCollectionSelection(selectedIds: string[]) {
   }
 }
 
-async function openComments() {
+async function openComments(force = false) {
   showComments.value = true;
   commentsError.value = '';
-  if (comments.value.length === 0) {
+  if (force || comments.value.length === 0) {
     const requestedFeedId = String(props.feed.id || '');
     if (!requestedFeedId) return;
     const currentRequest = ++commentsRequestVersion;
+    if (force) comments.value = [];
     commentsLoading.value = true;
     try {
       let loadedComments: any[] = [];
@@ -756,6 +795,61 @@ function formatRichText(text: string) {
   margin-bottom: var(--feed-card-gap, 12px);
   transition: background-color 0.2s ease, border-color 0.2s ease;
   cursor: pointer;
+  overflow: hidden;
+}
+
+/* 右上角作者个性空间背景图氛围层 */
+.card-cover-backdrop {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 58%;
+  max-width: 480px;
+  height: 86px;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0.9;
+  transition: opacity 0.3s ease;
+  mask-image: linear-gradient(to left, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.85) 40%, rgba(0, 0, 0, 0.25) 75%, transparent 100%),
+              linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.9) 45%, rgba(0, 0, 0, 0.2) 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to left, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.85) 40%, rgba(0, 0, 0, 0.25) 75%, transparent 100%),
+                      linear-gradient(to bottom, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.9) 45%, rgba(0, 0, 0, 0.2) 80%, transparent 100%);
+  mask-composite: intersect;
+  -webkit-mask-composite: destination-in;
+}
+
+:deep(.card-cover-image) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 25%;
+}
+
+.card-cover-mask {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 60%,
+    var(--surface) 100%
+  );
+}
+
+:root[data-theme='dark'] .card-cover-backdrop,
+.theme-dark .card-cover-backdrop {
+  opacity: 0.82;
+}
+
+:root[data-theme='dark'] .card-cover-mask,
+.theme-dark .card-cover-mask {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(15, 23, 42, 0.3) 60%,
+    var(--surface) 100%
+  );
 }
 
 .feed-card:hover {

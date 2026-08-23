@@ -1,42 +1,12 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <!-- 头部区域 -->
-    <div class="page-header">
-      <div class="header-main">
-        <div class="header-titles">
-          <h2 class="page-title">
-            <i class="fas fa-hashtag icon"></i> 话题广场
-          </h2>
-          <span class="page-subtitle">探索酷安各类热议话题、数码体验与酷友交流圈</span>
-        </div>
-
-        <!-- 话题搜索与刷新 -->
-        <div class="header-actions">
-          <div class="search-box">
-            <i class="fas fa-search search-icon"></i>
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="搜索话题..."
-              class="search-input"
-              @keyup.enter="handleSearch"
-            />
-            <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
-              <i class="fas fa-times"></i>
-            </button>
-          </div>
-
-          <button class="btn-refresh" @click="refreshCurrent" :disabled="loading" title="刷新数据">
-            <i class="fas fa-sync-alt refresh-icon" :class="{ spinning: loading }"></i>
-          </button>
-        </div>
-      </div>
-
-      <!-- 分类快捷标签栏 -->
-      <div class="category-tabs">
+    <!-- 顶栏工具条：左侧 Tab 筛选，右侧搜索框 + 刷新按钮 -->
+    <div class="topics-toolbar-bar">
+      <div class="topics-tabs-wrapper">
         <button
           v-for="cat in categories"
           :key="cat.url"
+          type="button"
           :class="['cat-tab', { active: activeCategoryUrl === cat.url && !searchQuery.trim() }]"
           @click="switchCategory(cat)"
         >
@@ -44,26 +14,25 @@
         </button>
       </div>
 
-      <!-- 内容版块入口 -->
-      <div class="section-row">
-        <span class="section-label">内容版块</span>
-        <div class="section-links">
-          <button class="section-link" @click="go('/events')">
-            <i class="fas fa-trophy"></i> 酷友圈活动
-          </button>
-          <button class="section-link" @click="go('/node/topic/%E6%95%B0%E7%A0%81?title=%E6%95%B0%E7%A0%81')">
-            <i class="fas fa-mobile-alt"></i> 数码
-          </button>
-          <button class="section-link" @click="go('/node/topic/%E9%85%B7%E5%9B%BE?title=%E9%85%B7%E5%9B%BE')">
-            <i class="fas fa-image"></i> 酷图
-          </button>
-          <button class="section-link" @click="go('/node/topic/%E9%97%AE%E7%AD%94?title=%E9%97%AE%E7%AD%94')">
-            <i class="fas fa-question-circle"></i> 问答
-          </button>
-          <button class="section-link" @click="go('/node/topic/%E4%BA%8C%E6%89%8B%E4%BA%A4%E6%98%93?title=%E4%BA%8C%E6%89%8B%E4%BA%A4%E6%98%93')">
-            <i class="fas fa-store"></i> 二手交易
+      <!-- 搜索下移至同一行右侧 -->
+      <div class="topics-actions-wrapper">
+        <div class="search-box">
+          <i class="fas fa-search search-icon"></i>
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="搜索话题..."
+            class="search-input"
+            @keyup.enter="handleSearch"
+          />
+          <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
+            <i class="fas fa-times"></i>
           </button>
         </div>
+
+        <button class="btn-refresh" @click="refreshCurrent" :disabled="loading" title="刷新数据">
+          <i class="fas fa-sync-alt refresh-icon" :class="{ spinning: loading }"></i>
+        </button>
       </div>
     </div>
 
@@ -317,94 +286,103 @@ onMounted(() => {
   margin: 0;
 }
 
-.page-header {
-  margin-bottom: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.header-main {
+.topics-toolbar-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: 16px;
+  padding: 4px 0 14px 0;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+}
+
+.topics-tabs-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
 }
 
-.header-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.cat-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill, 20px);
+  background-color: var(--surface);
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
 }
 
-.page-title {
-  font-size: var(--font-size-title-lg);
-  font-weight: var(--font-weight-bold);
+.cat-tab:hover {
+  background-color: var(--surface-hover);
   color: var(--text-primary);
-  margin: 0;
+}
+
+.cat-tab.active {
+  background-color: var(--brand-soft, rgba(16, 185, 129, 0.12));
+  color: var(--brand-primary, #10b981);
+  border-color: var(--brand-primary, #10b981);
+  font-weight: 700;
+}
+
+.topics-actions-wrapper {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-}
-
-.page-title .icon {
-  color: var(--brand-primary);
-}
-
-.page-subtitle {
-  font-size: var(--font-size-sub);
-  color: var(--text-tertiary);
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .search-box {
   position: relative;
   display: flex;
   align-items: center;
-  width: 260px;
+  width: 220px;
 }
 
 .search-icon {
   position: absolute;
-  left: 12px;
+  left: 10px;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: 12px;
   pointer-events: none;
 }
 
 .search-input {
   width: 100%;
-  height: 36px;
-  padding: 0 32px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  background-color: var(--surface);
+  height: 32px;
+  padding: 0 28px;
+  border-radius: var(--radius-pill, 16px);
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  background-color: var(--surface-hover);
   color: var(--text-primary);
-  font-size: var(--font-size-sub);
+  font-size: 12.5px;
   outline: none;
-  transition: all var(--duration-fast);
+  transition: all 0.15s ease;
 }
 
 .search-input:focus {
+  background-color: var(--surface);
   border-color: var(--brand-primary);
-  box-shadow: 0 0 0 3px var(--brand-soft);
+  box-shadow: 0 0 0 2px var(--brand-soft);
 }
 
 .clear-btn {
   position: absolute;
-  right: 10px;
+  right: 8px;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   padding: 4px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .clear-btn:hover {
@@ -415,21 +393,21 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: 1px solid var(--border);
-  background-color: var(--surface);
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  background-color: var(--surface-hover);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--duration-fast);
+  transition: all 0.15s ease;
   flex-shrink: 0;
 }
 
 .btn-refresh:hover:not(:disabled) {
   color: var(--brand-primary);
   border-color: var(--brand-primary);
-  background-color: var(--surface-hover);
+  background-color: var(--surface);
 }
 
 .spinning {
@@ -439,83 +417,6 @@ onMounted(() => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
-}
-
-.category-tabs {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.cat-tab {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-pill);
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-
-.cat-tab:hover {
-  background-color: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.cat-tab.active {
-  background-color: var(--brand-soft);
-  color: var(--brand-primary);
-  border-color: var(--brand-primary);
-}
-
-.section-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.section-label {
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.section-links {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.section-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  font-size: var(--font-size-caption);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--duration-fast);
-}
-
-.section-link i {
-  color: var(--brand-primary);
-}
-
-.section-link:hover {
-  background-color: var(--surface-hover);
-  color: var(--text-primary);
-  border-color: var(--brand-primary);
 }
 
 .loading-wrapper,

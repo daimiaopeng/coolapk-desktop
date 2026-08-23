@@ -16,72 +16,134 @@
     <div v-else class="app-detail-content">
       <!-- 头部应用主信息卡片 (所有 Tab 共享) -->
       <div class="app-header-card">
-
-        <AppImage :src="logoUrl" alt="App Logo" image-class="app-large-icon" />
+        <div class="app-logo-wrapper">
+          <AppImage :src="logoUrl" alt="App Logo" image-class="app-large-icon" />
+        </div>
 
         <div class="app-main-meta">
+          <!-- 标题与版本、包名行 -->
           <div class="title-row">
             <h1 class="app-title">{{ appTitle }}</h1>
             <span v-if="appVersion" class="version-tag">v{{ appVersion }}</span>
+            <button
+              v-if="packageName"
+              class="package-tag-btn"
+              :title="`点击复制包名: ${packageName}`"
+              @click="copyPackageName"
+            >
+              <i :class="isCopied ? 'fas fa-check text-success' : 'far fa-copy'"></i>
+              <span class="package-name-text">{{ packageName }}</span>
+            </button>
           </div>
 
+          <!-- 开发者、大小、更新时间行 -->
           <div class="sub-row">
-            <span class="developer-text">{{ developerName }}</span>
+            <span class="developer-text"><i class="far fa-building meta-icon"></i>{{ developerName }}</span>
             <span class="dot-divider">•</span>
-            <span class="apk-size">{{ apkSize }}</span>
+            <span class="apk-size"><i class="fas fa-file-arrow-down meta-icon"></i>{{ apkSize }}</span>
             <span class="dot-divider">•</span>
-            <span class="update-time">{{ updateTime }}</span>
+            <span class="update-time"><i class="far fa-clock meta-icon"></i>{{ updateTime }}</span>
           </div>
 
-          <div class="metrics-row">
-            <div class="metric-item">
-              <span class="metric-value text-gold">
-                <i class="fas fa-star"></i> {{ ratingScore }}
-              </span>
-              <span class="metric-label">{{ ratingCount }} 人评分</span>
+          <!-- 核心指标卡片组（评分 + 5 颗星、下载量、分类） -->
+          <div class="metrics-cards-row">
+            <!-- 评分卡片（含 5 颗星 ⭐⭐⭐⭐⭐） -->
+            <div class="metric-card rating-card">
+              <div class="metric-card-top">
+                <span class="rating-score-num">{{ ratingScore }}</span>
+                <div class="stars-track" :title="`评分 ${ratingScore} 分（5星折算 ${starScore} 星）`">
+                  <span
+                    v-for="(star, index) in starList"
+                    :key="index"
+                    :class="['star-unit', `star-${star}`]"
+                  >
+                    <i v-if="star === 'full'" class="fas fa-star"></i>
+                    <i v-else-if="star === 'half'" class="fas fa-star-half-stroke"></i>
+                    <i v-else class="far fa-star"></i>
+                  </span>
+                </div>
+              </div>
+              <span class="metric-card-sub">{{ ratingCount }} 人评分</span>
             </div>
-            <div class="metric-divider"></div>
-            <div class="metric-item">
-              <span class="metric-value">{{ downloadCount }}</span>
-              <span class="metric-label">下载量</span>
+
+            <!-- 下载量卡片 -->
+            <div class="metric-card download-card">
+              <div class="metric-card-top">
+                <span class="metric-big-num">{{ downloadCount }}</span>
+              </div>
+              <span class="metric-card-sub">累计下载量</span>
             </div>
-            <div class="metric-divider"></div>
-            <div class="metric-item">
-              <span class="metric-value">{{ packageName }}</span>
-              <span class="metric-label">包名</span>
+
+            <!-- 分类与属性卡片 -->
+            <div class="metric-card category-card">
+              <div class="metric-card-top">
+                <span class="metric-tag-text"><i class="fas fa-layer-group tag-icon"></i>{{ appCategory }}</span>
+              </div>
+              <span class="metric-card-sub">官方安全应用</span>
             </div>
           </div>
         </div>
 
+        <!-- 右侧操作区：主次分明的分层网格 -->
         <div class="header-actions">
-          <div class="download-update-group">
-            <AppButton variant="primary" size="md" icon="fas fa-download" :loading="downloadLoading" @click="handleDownload">
-              立即下载
+          <!-- 核心主下载按钮 -->
+          <AppButton
+            variant="primary"
+            size="md"
+            icon="fas fa-download"
+            class="primary-download-btn"
+            :loading="downloadLoading"
+            @click="handleDownload"
+          >
+            立即下载
+          </AppButton>
+
+          <!-- 关注与收藏并排行 -->
+          <div class="secondary-actions-row">
+            <AppButton
+              :variant="isFollowed ? 'secondary' : 'soft'"
+              size="sm"
+              :icon="isFollowed ? 'fas fa-check' : 'fas fa-plus'"
+              class="action-half-btn"
+              @click="toggleFollow"
+            >
+              {{ isFollowed ? '已关注' : '关注应用' }}
             </AppButton>
-            <AppButton variant="secondary" size="md" icon="fas fa-qrcode" :loading="qrLoading" @click="handleShowQr">
+            <AppButton
+              :variant="isFavorited ? 'secondary' : 'soft'"
+              size="sm"
+              :icon="isFavorited ? 'fas fa-star text-gold' : 'far fa-star'"
+              class="action-half-btn"
+              :loading="favoriteLoading"
+              @click="toggleFavorite"
+            >
+              {{ isFavorited ? '已收藏' : '收藏应用' }}
+            </AppButton>
+          </div>
+
+          <!-- 辅助工具并排小按钮（二维码、检查更新） -->
+          <div class="utility-actions-row">
+            <AppButton
+              variant="secondary"
+              size="sm"
+              icon="fas fa-qrcode"
+              class="action-half-btn"
+              :loading="qrLoading"
+              @click="handleShowQr"
+            >
               二维码
             </AppButton>
-            <AppButton variant="secondary" size="md" icon="fas fa-sync-alt" :loading="updateLoading" @click="handleCheckUpdate">
+            <AppButton
+              variant="secondary"
+              size="sm"
+              icon="fas fa-sync-alt"
+              class="action-half-btn"
+              :loading="updateLoading"
+              @click="handleCheckUpdate"
+            >
               检查更新
             </AppButton>
           </div>
-          <AppButton
-            :variant="isFollowed ? 'secondary' : 'primary'"
-            size="md"
-            :icon="isFollowed ? 'fas fa-check' : 'fas fa-plus'"
-            @click="toggleFollow"
-          >
-            {{ isFollowed ? '已关注' : '关注应用' }}
-          </AppButton>
-          <AppButton
-            :variant="isFavorited ? 'secondary' : 'soft'"
-            size="md"
-            :icon="isFavorited ? 'fas fa-star' : 'far fa-star'"
-            :loading="favoriteLoading"
-            @click="toggleFavorite"
-          >
-            {{ isFavorited ? '已收藏' : '收藏应用' }}
-          </AppButton>
         </div>
       </div>
 
@@ -546,6 +608,54 @@ const updateTime = computed(() => {
 const ratingScore = computed(() => appInfo.value?.score || appInfo.value?.rating || '8.5');
 const ratingCount = computed(() => appInfo.value?.votenum || appInfo.value?.score_count || appInfo.value?.rating_count || 1280);
 const downloadCount = computed(() => appInfo.value?.downCount || appInfo.value?.downCountFormatted || appInfo.value?.down_count || '10万+');
+
+// 归一化为 5 星制评分 (0.0 ~ 5.0)
+const starScore = computed(() => {
+  const raw = parseFloat(String(ratingScore.value)) || 0;
+  if (raw > 5) return Number((raw / 2).toFixed(1));
+  return Number(raw.toFixed(1));
+});
+
+// 计算 5 颗星每颗星的类型：full / half / empty
+const starList = computed(() => {
+  const score = starScore.value;
+  const stars: ('full' | 'half' | 'empty')[] = [];
+  for (let i = 1; i <= 5; i++) {
+    if (score >= i) {
+      stars.push('full');
+    } else if (score >= i - 0.7) {
+      stars.push('half');
+    } else {
+      stars.push('empty');
+    }
+  }
+  return stars;
+});
+
+const appCategory = computed(() => {
+  return (
+    appInfo.value?.category_title
+    || appInfo.value?.category
+    || appInfo.value?.tag
+    || appInfo.value?.apk_type_title
+    || '精选应用'
+  );
+});
+
+const isCopied = ref(false);
+async function copyPackageName() {
+  if (!packageName.value) return;
+  try {
+    await navigator.clipboard.writeText(packageName.value);
+    isCopied.value = true;
+    showToast('包名已复制到剪贴板');
+    setTimeout(() => {
+      isCopied.value = false;
+    }, 2000);
+  } catch {
+    showToast(`包名: ${packageName.value}`);
+  }
+}
 
 const screenshots = computed<string[]>(() => {
   const raw = appInfo.value?.screenList || appInfo.value?.screenshots || appInfo.value?.screenArr || appInfo.value?.screenshot || appInfo.value?.screen || [];
@@ -1188,112 +1298,218 @@ onMounted(() => fetchAppDetail());
 
 .app-header-card {
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-5);
+  align-items: center;
+  gap: var(--space-6, 24px);
   background-color: var(--surface);
-  border-radius: var(--radius-card);
+  border-radius: 18px;
   border: 1px solid var(--border);
-  padding: var(--space-6);
+  padding: 24px 28px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.app-logo-wrapper {
+  flex-shrink: 0;
 }
 
 .app-large-icon {
-  width: 84px;
-  height: 84px;
-  border-radius: var(--radius-large);
+  width: 92px;
+  height: 92px;
+  border-radius: 20px;
   border: 1px solid var(--border-light);
-  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  display: block;
 }
 
 .app-main-meta {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 8px;
 }
 
 .title-row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .app-title {
-  font-size: var(--font-size-title-lg);
-  font-weight: var(--font-weight-bold);
+  font-size: 22px;
+  font-weight: 800;
   color: var(--text-primary);
   margin: 0;
+  line-height: 1.2;
 }
 
 .version-tag {
-  font-size: var(--font-size-caption);
-  font-weight: var(--font-weight-bold);
+  font-size: 12px;
+  font-weight: 700;
   color: var(--brand-primary);
   background-color: var(--brand-soft);
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
+  padding: 3px 9px;
+  border-radius: 20px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.package-tag-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background-color: var(--surface-hover);
+  border: 1px solid var(--border-light);
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  max-width: 220px;
+}
+
+.package-tag-btn:hover {
+  color: var(--brand-primary);
+  border-color: var(--brand-primary);
+  background-color: var(--brand-soft);
+}
+
+.package-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sub-row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-sub);
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
-.dot-divider {
+.meta-icon {
+  margin-right: 4px;
   color: var(--text-tertiary);
 }
 
-.metrics-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  margin-top: var(--space-3);
-  background-color: var(--background);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-control);
-  width: fit-content;
+.dot-divider {
+  color: var(--border-light);
 }
 
-.metric-item {
+/* 核心指标卡片组 */
+.metrics-cards-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.metric-card {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background-color: var(--background);
+  border: 1px solid var(--border-light);
+  min-width: 100px;
+}
+
+.metric-card-top {
+  display: flex;
   align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
 }
 
-.metric-value {
-  font-size: var(--font-size-title-sm);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
+.rating-score-num {
+  font-size: 18px;
+  font-weight: 800;
+  color: #f59e0b;
+  line-height: 1;
 }
 
-.text-gold {
+.stars-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.star-unit {
+  font-size: 11px;
   color: #f59e0b;
 }
 
-.metric-label {
+.star-empty {
+  color: var(--border);
+  opacity: 0.7;
+}
+
+.metric-big-num {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.metric-tag-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tag-icon {
+  font-size: 11px;
+}
+
+.metric-card-sub {
   font-size: 11px;
   color: var(--text-tertiary);
 }
 
-.metric-divider {
-  width: 1px;
-  height: 20px;
-  background-color: var(--border-light);
-}
-
+/* 右侧紧凑分层操作区 */
 .header-actions {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 8px;
+  width: 190px;
   flex-shrink: 0;
 }
 
-.download-update-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+.primary-download-btn {
+  width: 100%;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25) !important;
+}
+
+.secondary-actions-row,
+.utility-actions-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.action-half-btn {
+  width: 100%;
+  font-size: 12px !important;
+  padding: 6px 4px !important;
+  justify-content: center !important;
+}
+
+@media (max-width: 860px) {
+  .app-header-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .header-actions {
+    width: 100%;
+    margin-top: 12px;
+  }
 }
 
 .qr-modal-body {

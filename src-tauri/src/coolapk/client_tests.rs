@@ -19,6 +19,61 @@ fn test_classify_path_detects_requirements() {
 }
 
 #[test]
+fn test_oss_image_url_uses_prepare_prefix_and_file_name() {
+    let url = build_oss_image_url(
+        "https://image.coolapk.com/",
+        "/feed/2026/08/23/test.png",
+    )
+    .expect("应生成图片地址");
+    assert_eq!(url, "https://image.coolapk.com/feed/2026/08/23/test.png");
+    assert!(build_oss_image_url("image.coolapk.com", "feed/test.png").is_none());
+}
+
+#[test]
+fn test_image_resolution_reads_png_dimensions() {
+    let mut png_header = vec![
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        0, 0, 0, 0, b'I', b'H', b'D', b'R',
+        0, 0, 0x04, 0x38, 0, 0, 0x08, 0x70,
+    ];
+    assert_eq!(image_resolution(&png_header), "1080x2160");
+    png_header[16..20].copy_from_slice(&1u32.to_be_bytes());
+    png_header[20..24].copy_from_slice(&1u32.to_be_bytes());
+    assert_eq!(image_resolution(&png_header), "1x1");
+}
+
+#[test]
+fn test_reply_target_uses_comment_id_and_reply_type() {
+    assert_eq!(
+        reply_target_params("73356707", Some(" 601858220 ")),
+        ("601858220".to_string(), "reply".to_string())
+    );
+    assert_eq!(
+        reply_target_params("73356707", None),
+        ("73356707".to_string(), "feed".to_string())
+    );
+}
+
+#[test]
+fn test_create_feed_form_includes_pic_and_publish_state() {
+    let form = build_create_feed_form(
+        "测试",
+        Some("http://image.coolapk.com/feed/test@0x0.png"),
+        None,
+    );
+    let value = |key: &str| {
+        form.iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, value)| value.as_str())
+    };
+
+    assert_eq!(value("pic"), Some("http://image.coolapk.com/feed/test@0x0.png"));
+    assert_eq!(value("status"), Some("1"));
+    assert_eq!(value("publish_status"), Some("0"));
+    assert_eq!(value("is_html_article"), Some("0"));
+}
+
+#[test]
 fn test_hot_rank_routes_use_statistics_api() {
     assert_eq!(
         rank_feed_url("month"),

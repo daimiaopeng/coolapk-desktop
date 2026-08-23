@@ -23,6 +23,8 @@ export interface ProductBrand {
   name?: string;
   logo?: string;
   pic?: string;
+  url?: string;
+  subTitle?: string;
   type?: string;
   category_level?: string;
   is_recommend?: number;
@@ -117,6 +119,26 @@ export interface NodeRating {
   [key: string]: unknown;
 }
 
+function formatProductConfigValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(formatProductConfigValue).filter(Boolean).join('，');
+  }
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, item]) => {
+        const formatted = formatProductConfigValue(item);
+        return formatted ? `${key}: ${formatted}` : '';
+      })
+      .filter(Boolean)
+      .join('；');
+  }
+  return String(value);
+}
+
 /** 解析产品配置的 config_data JSON 字符串为分组参数表 */
 export function parseProductConfigData(raw: unknown): Record<string, Record<string, string>> {
   if (typeof raw !== 'string' || !raw.trim()) return {};
@@ -129,7 +151,8 @@ export function parseProductConfigData(raw: unknown): Record<string, Record<stri
       const fields: Record<string, string> = {};
       for (const [key, value] of Object.entries(groupValue as Record<string, unknown>)) {
         if (value === null || value === undefined) continue;
-        fields[key] = String(value);
+        const formattedValue = formatProductConfigValue(value);
+        if (formattedValue) fields[key] = formattedValue;
       }
       if (Object.keys(fields).length > 0) groups[groupName] = fields;
     }

@@ -12,6 +12,10 @@
           v-for="session in sessions" 
           :key="session.ukey || session.id" 
           class="session-item"
+          data-context-kind="message"
+          :data-context-message-ukey="String(session.ukey || (session.isNewConversation ? '' : session.id) || '')"
+          :data-context-message-id="String(session.id || '')"
+          :data-context-message-new="session.isNewConversation ? 'true' : 'false'"
           :class="{ active: currentSession && (currentSession.ukey === session.ukey || currentSession.id === session.id) }"
           @click="selectSession(session)"
         >
@@ -179,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, onActivated, nextTick, computed, watch } from 'vue';
 
 defineOptions({
   name: 'MessagesPage'
@@ -199,6 +203,8 @@ import { renderCoolapkRichText } from '../utils/richText';
 import { coolapkHtmlToPlainText } from '../utils/sanitizeHtml';
 import { handleAnchorClick } from '../utils/anchorClick';
 import { clearMessageDraft, loadMessageDraft, saveMessageDraft } from '../utils/messageDrafts';
+import { requestConfirmation } from '../utils/confirm';
+import { showToast } from '../utils/toast';
 
 import { useRoute, useRouter } from 'vue-router';
 
@@ -293,6 +299,8 @@ const getSessionPartnerUid = (session: any) => {
   if (!session) return '';
   return session.messageUid || session.fromuid || session.uid || '';
 };
+
+const getRouteTargetUid = () => String(route.query.uid || route.query.targetUid || '').trim();
 
 /**
  * 从会话列表项中提取对方的用户名。
@@ -434,33 +442,9 @@ const loadSessions = async () => {
     if (res?.data && Array.isArray(res.data)) {
       sessions.value = res.data;
       persistSessionsCache();
-      
-      const queryUid = String(route.query.uid || '');
+      const queryUid = getRouteTargetUid();
       if (queryUid) {
-        const found = sessions.value.find(s => String(getSessionPartnerUid(s)) === queryUid);
-        if (found) {
-          selectSession(found);
-        } else {
-          try {
-            const userProf = await withTimeout(
-              CoolapkTauriAPI.getUserProfile(queryUid),
-              15_000,
-              '用户资料请求超时'
-            );
-            const userData = userProf?.data || {};
-            const tempSession = {
-              messageUid: queryUid,
-              messageUsername: userData.username || `酷友_${queryUid.slice(-4)}`,
-              messageUserAvatar: userData.userAvatar || '',
-              lastMessage: '开始对话...',
-              dateline: Math.floor(Date.now() / 1000)
-            };
-            sessions.value.unshift(tempSession);
-            selectSession(tempSession);
-          } catch {
-            // ignore
-          }
-        }
+        await openTargetConversation(queryUid);
       }
     } else {
       throw new Error('会话列表返回格式不正确');
@@ -473,6 +457,43 @@ const loadSessions = async () => {
   }
 };
 
+async function openTargetConversation(uid: string) {
+  const targetUid = String(uid || '').trim();
+  if (!targetUid) return;
+
+  const found = sessions.value.find((session) => String(getSessionPartnerUid(session)) === targetUid);
+  if (found) {
+    await selectSession(found);
+    return;
+  }
+
+  const tempSession = {
+    id: `new-${targetUid}`,
+    messageUid: targetUid,
+    messageUsername: `酷友_${targetUid.slice(-4)}`,
+    messageUserAvatar: '',
+    lastMessage: '开始对话...',
+    dateline: Math.floor(Date.now() / 1000),
+    isNewConversation: true,
+  };
+  sessions.value = [tempSession, ...sessions.value.filter((session) => session.id !== tempSession.id)];
+  await selectSession(tempSession);
+
+  // 先打开可发送的空会话，再后台补充用户资料，避免资料接口慢导致左侧没有目标会话。
+  try {
+    const userProf = await withTimeout(
+      CoolapkTauriAPI.getUserProfile(targetUid),
+      15_000,
+      '用户资料请求超时',
+    );
+    const userData = userProf?.data || {};
+    tempSession.messageUsername = userData.username || tempSession.messageUsername;
+    tempSession.messageUserAvatar = userData.userAvatar || tempSession.messageUserAvatar;
+  } catch {
+    // 资料接口失败不影响打开空白会话，仍然可以直接发送私信。
+  }
+}
+
 const selectSession = async (session: any) => {
   await saveCurrentDraft();
   const requestSequence = ++historyRequestSequence;
@@ -480,8 +501,15 @@ const selectSession = async (session: any) => {
   await restoreDraft(session);
   historyError.value = '';
   const partnerUid = getSessionPartnerUid(session);
-  if (partnerUid && String(route.query.uid || '') !== String(partnerUid)) {
+  if (partnerUid && getRouteTargetUid() !== String(partnerUid)) {
     router.replace({ path: '/messages', query: { ...route.query, uid: String(partnerUid) } });
+  }
+
+  if (session.isNewConversation) {
+    loadingHistory.value = false;
+    chatHistory.value = [];
+    historyError.value = '';
+    return;
   }
 
   const ukey = session.ukey || session.id;
@@ -549,6 +577,70 @@ const selectSession = async (session: any) => {
 const retryCurrentSession = () => {
   if (currentSession.value) void selectSession(currentSession.value);
 };
+
+async function deleteSession(detail: { ukey?: string; id?: string; isNew?: boolean }) {
+  const session = sessions.value.find((item) => (
+    (detail.ukey && String(item.ukey || item.id) === String(detail.ukey))
+    || (detail.id && String(item.id) === String(detail.id))
+  ));
+  if (!session) return;
+
+  const username = getUsername(session);
+  const confirmed = await requestConfirmation({
+    title: '删除聊天',
+    message: `确定删除与“${username}”的聊天吗？删除后将从私信列表移除。`,
+    confirmText: '删除',
+    danger: true,
+  });
+  if (!confirmed) return;
+
+  const sessionKey = String(session.ukey || session.id || detail.ukey || '').trim();
+  try {
+    if (!session.isNewConversation && !detail.isNew) {
+      if (!sessionKey) throw new Error('该会话缺少删除标识');
+      await CoolapkTauriAPI.deleteMessageChat(sessionKey);
+    }
+
+    const index = sessions.value.indexOf(session);
+    if (index >= 0) sessions.value.splice(index, 1);
+    if (sessionKey) {
+      chatHistoryCache.delete(sessionKey);
+      chatScrollMap.delete(sessionKey);
+    }
+    if (currentSession.value === session) {
+      currentSession.value = null;
+      chatHistory.value = [];
+      historyError.value = '';
+      await router.replace({ path: '/messages' });
+    }
+    persistSessionsCache();
+    showToast('聊天已删除', 'success');
+  } catch (err: any) {
+    showToast(err?.message || '删除聊天失败，请稍后重试', 'error');
+  }
+}
+
+function handleDeleteMessageContext(event: Event) {
+  const detail = (event as CustomEvent<{ ukey?: string; id?: string; isNew?: boolean }>).detail;
+  if (detail) void deleteSession(detail);
+}
+
+watch(
+  () => `${getRouteTargetUid()}|${String(route.query.open || '')}`,
+  (value, previousValue) => {
+    if (!value || value === previousValue) return;
+    const [uid, openToken] = value.split('|');
+    if (!uid || (!openToken && String(getSessionPartnerUid(currentSession.value)) === uid)) return;
+    void openTargetConversation(uid);
+  },
+);
+
+onActivated(() => {
+  const uid = getRouteTargetUid();
+  if (uid && String(getSessionPartnerUid(currentSession.value)) !== uid) {
+    void openTargetConversation(uid);
+  }
+});
 
 // --- 交互事件 ---
 const handleKeydown = (e: KeyboardEvent) => {
@@ -760,10 +852,12 @@ const sendMessage = async () => {
 // --- 生命周期 ---
 onMounted(() => {
   restoreSessionsCache();
+  window.addEventListener('coolapk-context-delete-message', handleDeleteMessageContext);
   void loadSessions();
 });
 
 onUnmounted(() => {
+  window.removeEventListener('coolapk-context-delete-message', handleDeleteMessageContext);
   saveCurrentDraft();
 });
 </script>

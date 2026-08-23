@@ -125,15 +125,15 @@
       <div class="nav-more-settings">
         <div class="setting-row nav-more-master-row">
           <div class="row-info">
-            <span class="row-label"><i class="fas fa-ellipsis nav-item-icon"></i> 我的菜单</span>
-            <span class="row-sub">控制侧栏「我的」分组及其子项是否显示</span>
+            <span class="row-label"><i class="fas fa-user nav-item-icon"></i> 个人中心「我的」</span>
+            <span class="row-sub">控制侧栏「我的」入口及其工作台数据子项</span>
           </div>
           <AppSwitch
-            :model-value="getNavVisible('more')"
-            @update:model-value="toggleNav('more')"
+            :model-value="getNavVisible('my')"
+            @update:model-value="toggleNav('my')"
           />
         </div>
-        <div v-if="getNavVisible('more')" class="nav-grid nav-more-grid">
+        <div v-if="getNavVisible('my')" class="nav-grid nav-more-grid">
           <div v-for="nav in moreNavItems" :key="nav.key" class="nav-toggle-card">
             <div class="nav-item-meta">
               <i :class="[nav.icon, 'nav-item-icon']"></i>
@@ -207,22 +207,16 @@ function adjustFontSize(delta: number) {
 
 const navItems = [
   { key: 'home', label: '首页', icon: 'fas fa-home' },
-  { key: 'topics', label: '话题广场', icon: 'fas fa-hashtag' },
-  { key: 'discover', label: '发现中心', icon: 'fas fa-compass' },
-  { key: 'apps', label: '应用中心', icon: 'fas fa-cubes' },
-  { key: 'games', label: '游戏中心', icon: 'fas fa-gamepad' },
-  { key: 'digital', label: '数码分类', icon: 'fas fa-mobile-alt' },
-  { key: 'reviews', label: '评测区', icon: 'fas fa-flask' },
-  { key: 'secondhand', label: '二手市场', icon: 'fas fa-store' },
-  { key: 'notifications', label: '通知中心', icon: 'far fa-bell' },
-  { key: 'favorites', label: '收藏夹', icon: 'far fa-bookmark' },
-  { key: 'history', label: '历史记录', icon: 'far fa-clock' },
-  { key: 'messages', label: '消息通知', icon: 'far fa-comment-alt' },
+  { key: 'topics', label: '话题', icon: 'fas fa-hashtag' },
+  { key: 'discover', label: '发现', icon: 'fas fa-compass' },
+  { key: 'pictures', label: '酷图', icon: 'far fa-images' },
+  { key: 'apps', label: '应用', icon: 'fas fa-cubes' },
+  { key: 'more', label: '更多服务', icon: 'fas fa-shapes' },
+  { key: 'notifications', label: '通知', icon: 'far fa-bell' },
+  { key: 'favorites', label: '收藏', icon: 'far fa-bookmark' },
+  { key: 'history', label: '历史', icon: 'far fa-clock' },
+  { key: 'messages', label: '消息', icon: 'far fa-comment-alt' },
   { key: 'following', label: '我关注的', icon: 'far fa-user' },
-  { key: 'albums', label: '专辑广场', icon: 'fas fa-layer-group' },
-  { key: 'pictures', label: '酷图广场', icon: 'far fa-image' },
-  { key: 'goods', label: '好物', icon: 'fas fa-gift' },
-  { key: 'my_products', label: '我的数码', icon: 'fas fa-box-open' },
 ];
 
 const moreNavItems = moreNavs.map(({ key, label, icon }) => ({ key, label, icon }));

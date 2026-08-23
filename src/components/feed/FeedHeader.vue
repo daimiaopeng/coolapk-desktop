@@ -1,13 +1,33 @@
 <template>
   <div class="feed-header">
-    <div class="user-clickable" title="查看用户主页" @click.stop="handleUserClick">
-      <AppAvatar :src="avatar" size="md" />
-    </div>
+    <UserHoverCard
+      :uid="uid"
+      :avatar="avatar"
+      :username="username"
+      :level="level"
+      :verify-title="verifyTitle"
+      :device="device"
+    >
+      <div class="user-clickable" @click.stop="handleUserClick">
+        <AppAvatar :src="avatar" :plugin-url="effectivePluginUrl" size="md" />
+      </div>
+    </UserHoverCard>
+
     <div class="user-info">
       <div class="user-row">
-        <span class="username clickable" title="查看用户主页" @click.stop="handleUserClick">
-          {{ username || '酷友' }}
-        </span>
+        <UserHoverCard
+          :uid="uid"
+          :avatar="avatar"
+          :username="username"
+          :level="level"
+          :verify-title="verifyTitle"
+          :device="device"
+        >
+          <span class="username clickable" @click.stop="handleUserClick">
+            {{ username || '酷友' }}
+          </span>
+        </UserHoverCard>
+
         <span v-if="level" :class="['user-level', `level-${Math.min(level, 12)}`]">
           Lv.{{ level }}
         </span>
@@ -22,39 +42,60 @@
           <i class="fas fa-mobile-alt device-icon"></i>
           <span>{{ device }}</span>
         </span>
+        <span v-if="ipLocationText" class="ip-badge" :title="`IP属地: ${ipLocationText}`">
+          <i class="fas fa-location-dot ip-icon"></i>
+          <span>{{ ipLocationText }}</span>
+        </span>
         <template v-if="isEdited">
           <span class="meta-dot">•</span>
           <button class="edited-badge" type="button" title="查看编辑记录" @click.stop="emit('edit-history')">
             <i class="fas fa-pen-to-square"></i>
-            已编辑
+            <span>已编辑</span>
           </button>
         </template>
+        <span v-if="rankIndex" class="rank-badge">
+          <i class="fas fa-trophy rank-icon"></i>
+          <span>TOP {{ rankIndex }}</span>
+        </span>
+        <span v-if="recommendSource" class="recommend-source-badge">
+          {{ recommendSource }}
+        </span>
       </div>
     </div>
 
-    <div class="action-more">
-      <AppIconButton
-        icon="fas fa-ellipsis-h"
-        size="sm"
-        title="更多"
-        aria-label="更多"
-        @click.stop="emit('more')"
-      />
+    <div class="header-actions">
+      <slot name="actions">
+        <AppIconButton
+          icon="fas fa-ellipsis-h"
+          size="sm"
+          variant="subtle"
+          tooltip="更多选项"
+          aria-label="更多选项"
+          @click.stop="emit('more')"
+        />
+      </slot>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useSettingsStore } from '../../stores/settings';
 import AppAvatar from '../common/AppAvatar.vue';
 import AppIconButton from '../common/AppIconButton.vue';
+import UserHoverCard from '../user/UserHoverCard.vue';
+import { reactiveUserProfileMap, getCachedUserProfileSync } from '../../utils/userProfilePreloader';
 
 const props = withDefaults(defineProps<{
   uid?: string | number;
   avatar?: string;
+  pluginUrl?: string;
   username?: string;
   level?: number;
+  gender?: number | string;
+  genderTitle?: string;
+  ipLocation?: string;
   verifyTitle?: string;
   dateline?: number | string;
   device?: string;
@@ -75,6 +116,35 @@ const emit = defineEmits<{
   (e: 'more'): void;
   (e: 'edit-history'): void;
 }>();
+
+const currentUid = computed(() => String(props.uid || '').trim());
+const preloadedProfile = computed(() => {
+  if (!currentUid.value) return null;
+  return reactiveUserProfileMap[currentUid.value] || getCachedUserProfileSync(currentUid.value);
+});
+
+// 头像挂件（支持原生字段与预加载自动补全）
+const effectivePluginUrl = computed(() => {
+  if (props.pluginUrl && String(props.pluginUrl).trim()) {
+    return String(props.pluginUrl).trim();
+  }
+  const p = preloadedProfile.value;
+  return p?.avatar_plugin_url || p?.userInfo?.avatar_plugin_url || p?.userAvatarPluginUrl || '';
+});
+
+// IP 属地计算（支持接口原生字段与静默预加载自动补全）
+const ipLocationText = computed(() => {
+  if (props.ipLocation && String(props.ipLocation).trim()) {
+    const direct = String(props.ipLocation).trim();
+    if (direct !== '未知' && direct !== '保密' && direct !== '未公开') return direct;
+  }
+  const p = preloadedProfile.value;
+  const loc = p?.ip_location || p?.ipLocation || p?.city || p?.province || p?.location || p?.userInfo?.ip_location || p?.userInfo?.city;
+  if (loc && String(loc).trim() && String(loc).trim() !== '未知' && String(loc).trim() !== '保密' && String(loc).trim() !== '未公开') {
+    return String(loc).trim();
+  }
+  return '';
+});
 
 function handleUserClick() {
   const targetUid = props.uid || props.username;
@@ -125,6 +195,8 @@ function normalizeTimestamp(value: number | string): number | null {
 
 <style scoped>
 .feed-header {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -298,5 +370,28 @@ function normalizeTimestamp(value: number | string): number | null {
 
 .rank-icon {
   font-size: 11px;
+}
+
+/* IP 属地微胶囊 */
+.ip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: var(--background-secondary, rgba(0, 0, 0, 0.04));
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+}
+
+.ip-icon {
+  font-size: 10.5px;
+  color: #0284c7;
+}
+
+:root[data-theme='dark'] .ip-icon,
+.theme-dark .ip-icon {
+  color: #38bdf8;
 }
 </style>

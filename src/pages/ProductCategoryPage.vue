@@ -36,9 +36,9 @@
         <div v-else class="side-list">
           <button
             v-for="item in sideItems"
-            :key="String(item.id ?? item.title ?? item.name)"
+            :key="sideItemKey(item)"
             type="button"
-            :class="['side-item', { active: selectedId === String(item.id ?? '') }]"
+            :class="['side-item', { active: selectedId === sideItemKey(item) }]"
             @click="selectSide(item)"
           >
             <AppImage v-if="sideLogo(item)" :src="sideLogo(item)" image-class="side-logo" />
@@ -130,6 +130,13 @@ const productLoading = ref(false);
 const productError = ref(false);
 const productNoMore = ref(false);
 const productPage = ref(1);
+const selectionVersion = ref(0);
+let productRequestVersion = 0;
+let loadingSelectionVersion = -1;
+
+function sideItemKey(item: ProductBrand): string {
+  return String(item.id ?? item.entityId ?? item.url ?? item.title ?? item.name ?? '');
+}
 
 function sideLogo(item: ProductBrand): string {
   return String(item.logo || item.pic || '');
@@ -150,6 +157,7 @@ async function switchMode(mode: 'brand' | 'category') {
   selected.value = null;
   selectedId.value = '';
   products.value = [];
+  selectionVersion.value++;
   await loadSide();
 }
 
@@ -161,7 +169,7 @@ async function loadSide() {
       ? await CoolapkTauriAPI.getProductBrandList()
       : await CoolapkTauriAPI.getProductCategoryList();
     const list = (res && res.data && Array.isArray(res.data)) ? res.data : [];
-    sideItems.value = list.filter((item: any) => item && (item.id !== undefined && item.id !== null));
+    sideItems.value = list.filter((item: ProductBrand) => item && sideItemKey(item));
   } catch (err) {
     sideError.value = true;
     console.warn('加载品牌/分类失败', err);
@@ -172,25 +180,31 @@ async function loadSide() {
 
 function selectSide(item: ProductBrand) {
   selected.value = item;
-  selectedId.value = String(item.id ?? '');
+  selectedId.value = sideItemKey(item);
   productPage.value = 1;
   productNoMore.value = false;
   productError.value = false;
   products.value = [];
-  void loadProducts();
+  selectionVersion.value++;
+  void loadProducts(false, selectionVersion.value);
 }
 
-async function loadProducts(isLoadMore = false) {
-  if (!selected.value || productLoading.value || productNoMore.value) return;
+async function loadProducts(isLoadMore = false, expectedSelectionVersion = selectionVersion.value) {
+  const selection = selected.value;
+  if (!selection || expectedSelectionVersion !== selectionVersion.value) return;
+  if (productLoading.value && loadingSelectionVersion === expectedSelectionVersion) return;
+  if (productNoMore.value) return;
   productLoading.value = true;
+  const requestVersion = ++productRequestVersion;
+  loadingSelectionVersion = expectedSelectionVersion;
   if (!isLoadMore) productError.value = false;
   try {
-    const id = String(selected.value.id ?? '');
-    // 注意：type 只能是 productList 的排序/筛选值（默认 hot），不能沿用 category_level（如
-    // "category"/"brand"），否则酷安返回「参数错误」→ 列表被当作空数据处理，页面显示「暂无产品」。
-    const type = String(selected.value.type || 'hot');
-    const res = await CoolapkTauriAPI.getProductList(id, type, productPage.value);
+    const url = String(selection.url || '');
+    const title = String(selection.title || selection.name || '');
+    const subTitle = String(selection.subTitle || '');
+    const res = await CoolapkTauriAPI.getProductList(url, title, subTitle, productPage.value);
     const newItems = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    if (expectedSelectionVersion !== selectionVersion.value || selection !== selected.value) return;
     if (newItems.length === 0) {
       productNoMore.value = true;
     } else {
@@ -198,10 +212,11 @@ async function loadProducts(isLoadMore = false) {
       productPage.value++;
     }
   } catch (err) {
+    if (expectedSelectionVersion !== selectionVersion.value || selection !== selected.value) return;
     productError.value = true;
     console.warn('加载产品列表失败', err);
   } finally {
-    productLoading.value = false;
+    if (requestVersion === productRequestVersion) productLoading.value = false;
   }
 }
 

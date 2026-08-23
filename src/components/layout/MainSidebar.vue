@@ -27,6 +27,18 @@
           <i :class="[item.icon, 'nav-icon']"></i>
           <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
         </router-link>
+
+        <router-link
+          v-if="moreVisible"
+          to="/more"
+          class="nav-item"
+          :class="{ 'is-active': isMoreActive }"
+          title="更多服务与专区"
+        >
+          <i class="fas fa-shapes nav-icon"></i>
+          <span v-if="!isCollapsed" class="nav-label">更多</span>
+        </router-link>
+
       </div>
 
       <div class="nav-divider"></div>
@@ -52,31 +64,16 @@
       </div>
 
       <router-link
-        v-if="moreVisible"
-        to="/more"
+        v-if="myVisible"
+        to="/my"
         class="nav-item"
+        :class="{ 'is-active': isMyActive }"
         active-class="is-active"
         title="我的"
       >
         <i class="fas fa-user nav-icon"></i>
         <span v-if="!isCollapsed" class="nav-label">我的</span>
       </router-link>
-
-      <div class="nav-divider"></div>
-
-      <div class="nav-group">
-        <router-link
-          v-for="item in contentNavs"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          active-class="is-active"
-          :title="item.label"
-        >
-          <i :class="[item.icon, 'nav-icon']"></i>
-          <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
-        </router-link>
-      </div>
 
       <div class="nav-divider"></div>
 
@@ -106,9 +103,15 @@
     </nav>
 
     <div v-if="!isCollapsed" class="sidebar-footer">
-      <div class="app-info">
-        <span class="version-text">酷安桌面版 v{{ appVersion }}</span>
-        <button class="check-update-btn" @click="requestUpdateCheck">检查更新</button>
+      <div class="app-info-card">
+        <div class="app-info-left">
+          <span class="app-name">酷安桌面版</span>
+          <span class="version-badge">v{{ appVersion }}</span>
+        </div>
+        <button class="check-update-btn" title="检查更新" @click="requestUpdateCheck">
+          <i class="fas fa-sync-alt update-icon"></i>
+          <span>更新</span>
+        </button>
       </div>
     </div>
   </aside>
@@ -116,11 +119,13 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useRoute } from 'vue-router';
 import { useSettingsStore } from '../../stores/settings';
 import { useAuthStore } from '../../stores/auth';
 import { useNotificationStore } from '../../stores/notifications';
 import { APP_VERSION } from '../../constants/version';
 
+const route = useRoute();
 const settingsStore = useSettingsStore();
 const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
@@ -136,15 +141,13 @@ const isDark = computed(() => {
   return settingsStore.settings.theme === 'dark';
 });
 
+// 主侧边栏精简保留核心主干
 const allPrimaryNavs = [
   { key: 'home', path: '/', label: '首页', icon: 'fas fa-home' },
   { key: 'topics', path: '/topics', label: '话题', icon: 'fas fa-hashtag' },
   { key: 'discover', path: '/discover', label: '发现', icon: 'fas fa-compass' },
+  { key: 'pictures', path: '/pictures', label: '酷图', icon: 'far fa-images' },
   { key: 'apps', path: '/apps', label: '应用', icon: 'fas fa-cubes' },
-  { key: 'games', path: '/games', label: '游戏', icon: 'fas fa-gamepad' },
-  { key: 'digital', path: '/digital', label: '数码', icon: 'fas fa-mobile-alt' },
-  { key: 'reviews', path: '/reviews', label: '评测区', icon: 'fas fa-flask' },
-  { key: 'secondhand', path: '/secondhand', label: '二手市场', icon: 'fas fa-store' },
 ];
 
 const allSecondaryNavs = [
@@ -153,14 +156,6 @@ const allSecondaryNavs = [
   { key: 'history', path: '/history', label: '历史', icon: 'far fa-clock' },
   { key: 'messages', path: '/messages', label: '消息', icon: 'far fa-comment-alt' },
   { key: 'following', path: '/following', label: '我关注的', icon: 'far fa-user' },
-  { key: 'albums', path: '/albums', label: '专辑', icon: 'fas fa-layer-group' },
-  { key: 'pictures', path: '/pictures', label: '酷图', icon: 'far fa-image' },
-  { key: 'my_products', path: '/my-products', label: '我的数码', icon: 'fas fa-box-open' },
-];
-
-const allContentNavs = [
-  { key: 'goods', path: '/goods', label: '好物', icon: 'fas fa-gift' },
-  { key: 'center', path: '/center', label: '酷安中心', icon: 'fas fa-shapes' },
 ];
 
 const primaryNavs = computed(() => {
@@ -175,13 +170,63 @@ const secondaryNavs = computed(() => {
   return allSecondaryNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
 });
 
-const contentNavs = computed(() => {
-  const vis = settingsStore.settings.navVisibility;
-  if (!vis) return allContentNavs;
-  return allContentNavs.filter((item) => vis[item.key as keyof typeof vis] !== false);
+// 属于“更多专区”的下属路由集合
+const moreSubPaths = [
+  '/more',
+  '/my-products',
+  '/goods',
+  '/center',
+  '/albums',
+  '/pictures',
+  '/secondhand',
+  '/reviews',
+  '/digital',
+  '/games',
+  '/events',
+  '/event',
+  '/anylist',
+  '/my-dyh',
+  '/product-compare',
+  '/product-selector',
+  '/headline',
+  '/blacklist',
+];
+
+// 当处于 /more 或下属未在侧边栏独立展示的专区时，“更多”保持高亮
+const isMoreActive = computed(() => {
+  const currentPath = route.path;
+  if (currentPath === '/more') return true;
+
+  const currentVisiblePaths = [
+    ...primaryNavs.value.map((n) => n.path),
+    ...secondaryNavs.value.map((n) => n.path),
+  ];
+
+  // 如果当前路由已经在主侧边栏独立显示，则不重复高亮“更多”
+  if (currentVisiblePaths.some((p) => p === currentPath || (p !== '/' && currentPath.startsWith(p)))) {
+    return false;
+  }
+
+  // 属于更多子路由集合时高亮
+  return moreSubPaths.some((sub) => currentPath === sub || (sub !== '/' && currentPath.startsWith(sub)));
+});
+
+const isMyActive = computed(() => {
+  const currentPath = route.path;
+  return currentPath === '/my'
+    || currentPath === '/my-likes'
+    || currentPath === '/followed-nodes'
+    || currentPath === '/followed-topics'
+    || currentPath === '/recent-contacts'
+    || currentPath === '/recycle-bin'
+    || currentPath === '/hidden-replies'
+    || currentPath === '/my-devices'
+    || currentPath === '/my-albums'
+    || currentPath === '/my-votes';
 });
 
 const moreVisible = computed(() => settingsStore.settings.navVisibility?.more !== false);
+const myVisible = computed(() => settingsStore.settings.navVisibility?.my !== false);
 function getNavBadge(key: string): number {
   if (key === 'notifications') return notificationStore.notificationCount;
   if (key === 'messages') return notificationStore.messageCount;
@@ -448,35 +493,87 @@ function handleLogout() {
 }
 
 .sidebar-footer {
-  padding: var(--space-3) var(--space-3);
-  border-top: 1px solid var(--border-light);
+  padding: 6px 8px;
+  border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
 }
 
-.app-info {
+.app-info-card {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 4px;
-  background-color: var(--surface-elevated);
+  background-color: var(--surface-elevated, rgba(0, 0, 0, 0.02));
   border: 1px solid var(--border-light, #e4e9ef);
   border-radius: var(--radius-control, 8px);
-  padding: 8px 12px;
+  padding: 5px 8px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+  overflow: hidden;
 }
 
-.version-text {
-  font-size: var(--font-size-caption);
+.app-info-card:hover {
+  border-color: var(--border, rgba(0, 0, 0, 0.12));
+}
+
+.app-info-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.app-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.version-badge {
+  font-size: 10px;
+  font-weight: 600;
   color: var(--text-tertiary);
+  background-color: var(--bg-hover, rgba(0, 0, 0, 0.04));
+  padding: 1px 3px;
+  border-radius: 4px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .check-update-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 11px;
+  font-weight: 500;
   color: var(--brand-primary);
-  text-align: left;
-  padding: 0;
+  background-color: var(--brand-soft, rgba(16, 185, 129, 0.1));
+  border: none;
+  border-radius: 5px;
+  padding: 3px 6px;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.check-update-btn .update-icon {
+  font-size: 10px;
+  transition: transform 0.3s ease;
 }
 
 .check-update-btn:hover {
-  text-decoration: underline;
+  color: #fff;
+  background-color: var(--brand-primary);
+}
+
+.check-update-btn:hover .update-icon {
+  transform: rotate(180deg);
+}
+
+.check-update-btn:active {
+  transform: scale(0.96);
 }
 
 @media (max-width: 1100px) {

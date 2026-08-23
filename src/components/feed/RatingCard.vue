@@ -4,8 +4,12 @@
     <FeedHeader
       :uid="feed.uid || feed.userInfo?.uid"
       :avatar="feed.userAvatar || feed.userInfo?.userAvatar || feed.pic"
+      :plugin-url="(feed.userInfo as any)?.avatar_plugin_url || (feed as any).avatar_plugin_url || (feed as any).userAvatarPluginUrl"
       :username="feed.username || feed.userInfo?.username"
       :level="feed.userInfo?.level"
+      :gender="(feed.userInfo as any)?.gender ?? (feed as any).gender"
+      :gender-title="(feed.userInfo as any)?.gender_title ?? (feed as any).gender_title ?? (feed.userInfo as any)?.age_group ?? (feed as any).age_group"
+      :ip-location="(feed as any).ip_location || (feed as any).ipLocation || (feed as any).location || (feed as any).city || (feed as any).province || (feed.userInfo as any)?.ip_location || (feed.userInfo as any)?.city"
       :verify-title="feed.userInfo?.verify_title"
       :dateline="feed.dateline"
       :device="feed.device_title || feed.target_title"

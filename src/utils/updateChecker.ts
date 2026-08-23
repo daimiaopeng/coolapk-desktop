@@ -8,6 +8,7 @@ export type UpdateInfo = {
   hasNew: boolean;
   latestVersion?: string;
   releaseNotes?: string;
+  publishedAt?: string;
   downloadUrl?: string;
   installerUrl?: string;
 };
@@ -83,6 +84,61 @@ async function pickRelease(channel: UpdateChannel): Promise<any> {
   return await response.json();
 }
 
+export const BUILTIN_CHANGELOGS: Record<string, string> = {
+  '1.9.1': `• 完善版本更新与安装包生命周期管理，支持跨重启恢复与架构智能匹配
+• 优化安装包清理机制，启动时后台异步清理避免占用磁盘空间
+• 修复通知中心滚动背景穿透与站内链接跳转问题
+• 修复头条动态发布时间显示异常
+• 修复动态视频播放地址解析与卡片展示`,
+  '1.9.0': `• 新增动态视频播放功能，支持动态中内嵌视频的解析与直接播放
+• 首页栏目体系全面扩充：新增热榜、快讯、新机、摄影、开箱、值得看、热闻等
+• 新增机型搜索与多维排行榜功能
+• 新增投票卡片互动支持
+• 优化通知中心与评论输入框体验`,
+  '1.8.3': `• 完善评论接口与点赞交互
+• 修复特定场景下的更新下载流程与 Toast 提示`,
+  '1.8.2': `• 完善信息流与草稿保存
+• 修复云端收藏夹选择与同步`,
+  '1.8.1': `• 动态发现页支持全量卡片下发
+• 重构用户主页并增加用户关系管理
+• 增加频道排序与本地持久化`,
+};
+
+export const BUILTIN_RELEASE_DATES: Record<string, string> = {
+  '1.9.1': '2026-08-21 19:51',
+  '1.9.0': '2026-08-19 20:30',
+  '1.8.3': '2026-08-15 16:20',
+  '1.8.2': '2026-08-12 14:10',
+  '1.8.1': '2026-08-10 11:00',
+};
+
+export function formatReleaseDate(dateStr?: string): string {
+  if (!dateStr) return '';
+  if (/^\d{4}-\d{2}-\d{2}( \d{2}:\d{2})?$/.test(dateStr)) return dateStr;
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const y = date.getFullYear();
+    const m = pad(date.getMonth() + 1);
+    const d = pad(date.getDate());
+    const hh = pad(date.getHours());
+    const mm = pad(date.getMinutes());
+    return `${y}-${m}-${d} ${hh}:${mm}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+export function getCurrentVersionChangelog(version = APP_VERSION, remoteBody?: string): string {
+  const cleanRemote = (remoteBody || '').trim();
+  if (cleanRemote) {
+    return cleanRemote;
+  }
+  const norm = normalizeVersion(version) || version;
+  return BUILTIN_CHANGELOGS[norm] || BUILTIN_CHANGELOGS[APP_VERSION] || '暂无当前版本的更新日志。';
+}
+
 export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Promise<UpdateInfo> {
   const release = await pickRelease(channel);
   const tagName = release.tag_name || '';
@@ -121,12 +177,19 @@ export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Pro
     }
   }
 
+  const releaseNotes = hasNew
+    ? (release.body ? release.body.trim() : '暂无特别更新说明')
+    : getCurrentVersionChangelog(APP_VERSION, release.body);
+
+  const publishedAt = release.published_at
+    ? formatReleaseDate(release.published_at)
+    : (BUILTIN_RELEASE_DATES[normalizeVersion(tagName) || ''] || BUILTIN_RELEASE_DATES[APP_VERSION]);
+
   return {
     hasNew,
     latestVersion: tagName || '最新发布',
-    releaseNotes: hasNew
-      ? (release.body ? release.body.slice(0, 300) : '暂无特别更新说明')
-      : '当前已是最新版本，无需更新。',
+    releaseNotes,
+    publishedAt,
     downloadUrl: release.html_url || 'https://github.com/daimiaopeng/coolapk-desktop/releases',
     installerUrl,
   };

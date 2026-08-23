@@ -61,7 +61,7 @@
                     <i :class="isFlag(profile.isFollow) ? 'fas fa-check' : 'fas fa-plus'"></i>
                     {{ isFlag(profile.isFollow) ? (isFlag(profile.isSpecialFollow) ? '特别关注' : '已关注') : '关注' }}
                   </button>
-                  <button class="app-btn btn-icon-glass" @click="sendMessage" title="私信">
+                  <button class="app-btn btn-icon-glass" @click.stop="sendMessage" title="私信">
                     <i class="far fa-envelope"></i>
                   </button>
                   <button class="app-btn btn-icon-glass" @click="openProfileMenu" title="更多操作">
@@ -569,6 +569,7 @@ import { useAuthStore } from '../stores/auth';
 import { showToast } from '../utils/toast';
 import { requestConfirmation } from '../utils/confirm';
 import { asUserSpaceProfile, entityKey, normalizeEntityPage } from '../types/userSpace';
+import { getCachedUserProfileSync } from '../utils/userProfilePreloader';
 
 const route = useRoute();
 const router = useRouter();
@@ -924,11 +925,14 @@ const formatLoginTime = (ts: any) => {
   } catch { return '刚刚'; }
 };
 
+let profileFetchSequence = 0;
+
 async function fetchUserProfile() {
   const targetUid = effectiveUid.value;
   if (!targetUid) return;
+  const seq = ++profileFetchSequence;
 
-  loadingProfile.value = true;
+  loadingProfile.value = !profile.value;
   profileError.value = '';
   try {
     let profRes: any;
@@ -938,6 +942,8 @@ async function fetchUserProfile() {
       // 与 APK 的降级路径一致：部分旧账号的 space 被拦截时仍可读取 profile。
       profRes = await CoolapkTauriAPI.getUserProfile(targetUid).catch(() => { throw spaceError; });
     }
+    if (seq !== profileFetchSequence || targetUid !== effectiveUid.value) return;
+
     if (profRes && profRes.data) {
       const spaceData = profRes.data;
       profile.value = asUserSpaceProfile(spaceData, targetUid);
@@ -947,16 +953,20 @@ async function fetchUserProfile() {
       await enrichProfileDetails(targetUid, spaceData);
     } else {
       const backupProf = await CoolapkTauriAPI.getUserProfile(targetUid);
+      if (seq !== profileFetchSequence || targetUid !== effectiveUid.value) return;
       if (backupProf && backupProf.data) {
         profile.value = asUserSpaceProfile(backupProf.data, targetUid);
         selectInitialTab(backupProf.data);
       }
     }
   } catch (err) {
+    if (seq !== profileFetchSequence || targetUid !== effectiveUid.value) return;
     profileError.value = err instanceof Error ? err.message : '用户资料加载失败';
     console.warn('获取用户信息异常:', err);
   } finally {
-    loadingProfile.value = false;
+    if (seq === profileFetchSequence) {
+      loadingProfile.value = false;
+    }
   }
 }
 
@@ -1115,9 +1125,12 @@ async function toggleIgnore() {
 }
 
 function sendMessage() {
-  if (effectiveUid.value) {
-    router.push(`/messages?uid=${effectiveUid.value}`);
+  const uid = String(profile.value?.uid || effectiveUid.value || '').trim();
+  if (!uid) {
+    showToast('暂时无法获取该用户 UID', 'error');
+    return;
   }
+  window.location.hash = `#/messages?uid=${encodeURIComponent(uid)}&open=${Date.now()}`;
 }
 
 async function showUserQr() {
@@ -1301,9 +1314,23 @@ watch(effectiveUid, (newUid) => {
   isBlacklisted.value = false;
   isIgnored.value = false;
   if (newUid) {
+    // 1. 优先同步读取后台静默预加载的该用户资料（0 延迟秒开）
+    const cached = getCachedUserProfileSync(newUid);
+    if (cached) {
+      profile.value = asUserSpaceProfile(cached, newUid);
+      isBlacklisted.value = isFlag(cached.isBlackList ?? cached.isInBlackList);
+      isIgnored.value = isFlag(cached.isIgnoreList ?? cached.isInIgnoreList);
+      selectInitialTab(cached);
+    } else {
+      // 2. 若暂无预加载数据，立即将 profile 置空，严禁残留上一个用户的旧资料（避免“先闪现我的主页再变别人”）
+      profile.value = null;
+    }
     resetTabStates();
     void fetchUserProfile();
     void fetchTabFeeds(true);
+  } else {
+    profile.value = null;
+    resetTabStates();
   }
 }, { immediate: true });
 

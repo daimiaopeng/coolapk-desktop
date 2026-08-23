@@ -634,7 +634,13 @@ async function toggleServerCompare(configId: string) {
 function goCompare() {
   const ids = compareSelected.value.filter(Boolean);
   if (ids.length < 2) return;
-  router.push({ path: '/product-compare', query: { ids: ids.join(',') } });
+  router.push({
+    path: '/product-compare',
+    query: {
+      ids: ids.join(','),
+      productIds: ids.map(() => productId.value).join(','),
+    },
+  });
 }
 
 // ===== 媒体 =====
@@ -1039,15 +1045,27 @@ watch(productId, () => {
 
 .product-sub-tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 20px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 6px;
+  align-items: center;
+  gap: 20px;
+  background-color: var(--surface);
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+  border-radius: var(--radius-card, 12px);
+  padding: 0 16px;
+  height: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
   position: sticky;
   top: 0;
   z-index: 20;
-  background-color: var(--background);
-  box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.04);
+  overflow-x: auto;
+  user-select: none;
+  scrollbar-width: none;
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.04));
+  box-sizing: border-box;
+}
+
+.product-sub-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .product-tab-item {
@@ -1058,24 +1076,36 @@ watch(productId, () => {
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 6px 2px;
+  padding: 0 4px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.product-tab-item:hover {
+  color: var(--text-primary);
 }
 
 .product-tab-item.active {
-  color: var(--brand-primary, #10b981);
+  color: var(--text-primary);
   font-weight: 700;
+  font-size: 16px;
 }
 
 .tab-line {
   position: absolute;
-  bottom: -5px;
+  bottom: 4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 18px;
-  height: 3px;
-  background: var(--brand-primary, #10b981);
-  border-radius: 2px;
+  width: 22px;
+  height: 3.5px;
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
 }
 
 .feed-list {

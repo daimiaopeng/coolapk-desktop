@@ -38,7 +38,7 @@ import { openFeedDetail } from '../../utils/feedNavigation';
 import { showToast } from '../../utils/toast';
 import { getOriginalImageUrl } from '../../utils/image';
 
-type ContextKind = 'page' | 'selection' | 'link' | 'image' | 'comment' | 'feed';
+type ContextKind = 'page' | 'selection' | 'link' | 'image' | 'comment' | 'feed' | 'message';
 
 type ContextState = {
   x: number;
@@ -55,6 +55,9 @@ type ContextState = {
   commentId: string;
   commentUsername: string;
   commentText: string;
+  messageUkey?: string;
+  messageId?: string;
+  messageIsNew?: boolean;
 };
 
 type MenuItem = {
@@ -109,6 +112,29 @@ function buildContext(event: MouseEvent): ContextState | null {
   const text = selectedText();
   const interactive = element.closest('input, textarea, select, [contenteditable="true"]');
   if (interactive && !text) return null;
+
+  const message = element.closest<HTMLElement>('[data-context-kind="message"]');
+  if (message) {
+    return {
+      x: event.clientX,
+      y: event.clientY,
+      kind: 'message',
+      selectedText: '',
+      linkUrl: '',
+      linkText: '',
+      imageUrl: '',
+      imageUrls: [],
+      feedId: '',
+      feedText: '',
+      feedUrl: '',
+      commentId: '',
+      commentUsername: '',
+      commentText: '',
+      messageUkey: message.dataset.contextMessageUkey || '',
+      messageId: message.dataset.contextMessageId || '',
+      messageIsNew: message.dataset.contextMessageNew === 'true',
+    };
+  }
 
   const comment = element.closest<HTMLElement>('[data-context-kind="comment"]');
   if (comment && !element.closest('img, [data-context-image-url]')) {
@@ -237,6 +263,15 @@ function separator(id: string): MenuItem {
 }
 
 function createItems(state: ContextState): MenuItem[] {
+  if (state.kind === 'message') {
+    return [
+      item('delete-message-chat', '删除聊天', 'far fa-trash-alt', () => deleteMessageChat(state), {
+        danger: true,
+        disabled: !state.messageUkey && !state.messageIsNew,
+      }),
+    ];
+  }
+
   if (state.kind === 'comment') {
     return [
       item('reply-comment', '回复评论', 'fas fa-reply', () => replyComment(state)),
@@ -387,6 +422,16 @@ function replyComment(state: ContextState) {
       feedId: state.feedId,
       commentId: state.commentId,
       username: state.commentUsername,
+    },
+  }));
+}
+
+function deleteMessageChat(state: ContextState) {
+  window.dispatchEvent(new CustomEvent('coolapk-context-delete-message', {
+    detail: {
+      ukey: state.messageUkey || '',
+      id: state.messageId || '',
+      isNew: Boolean(state.messageIsNew),
     },
   }));
 }

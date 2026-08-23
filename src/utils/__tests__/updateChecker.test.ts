@@ -81,5 +81,36 @@ describe('updateChecker', () => {
       expect(info.hasNew).toBe(true);
       expect(info.installerUrl).toBeUndefined();
     });
+
+    it('returns remote release body as changelog when current version is latest and remote has body', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          tag_name: 'v1.9.1',
+          body: '1.9.1 远程说明',
+          published_at: '2026-08-21T11:51:14Z',
+        }),
+      } as Response);
+
+      const info = await checkLatestRelease('stable');
+      expect(info.hasNew).toBe(false);
+      expect(info.releaseNotes).toBe('1.9.1 远程说明');
+      expect(info.publishedAt).toBeDefined();
+    });
+
+    it('returns builtin changelog when current version is latest and remote body is empty', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          tag_name: 'v1.9.1',
+          body: '',
+        }),
+      } as Response);
+
+      const info = await checkLatestRelease('stable');
+      expect(info.hasNew).toBe(false);
+      expect(info.releaseNotes).toContain('完善版本更新与安装包生命周期管理');
+      expect(info.publishedAt).toBe('2026-08-21 19:51');
+    });
   });
 });

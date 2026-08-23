@@ -155,13 +155,14 @@ pub async fn get_product_category_list(state: State<'_, AppState>) -> Result<Val
 #[tauri::command]
 pub async fn get_product_list(
     state: State<'_, AppState>,
-    id: String,
-    product_type: String,
+    url: String,
+    title: String,
+    sub_title: String,
     page: u32,
 ) -> Result<Value, String> {
     state
         .client
-        .get_product_list(&id, &product_type, page)
+        .get_product_list(&url, &title, &sub_title, page)
         .await
 }
 
@@ -955,6 +956,14 @@ pub async fn list_chat_history(
     page: u32,
 ) -> Result<Value, String> {
     state.client.list_chat_history(&ukey, page).await
+}
+
+#[tauri::command]
+pub async fn delete_message_chat(
+    state: State<'_, AppState>,
+    ukey: String,
+) -> Result<Value, String> {
+    state.client.delete_message_chat(&ukey).await
 }
 
 #[tauri::command]

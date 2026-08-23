@@ -69,4 +69,14 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
     await CoolapkTauriAPI.getNodeFeeds('topic', '数码', 1);
     expect(invoke).toHaveBeenCalledWith('get_node_feeds', { nodeType: 'topic', nodeId: '数码', page: 1 });
   });
+
+  it('数码分类产品列表保留服务端下发的页面上下文', async () => {
+    await CoolapkTauriAPI.getProductList('#/product/categoryList?type=tablet', '平板', '平板电脑', 2);
+    expect(invoke).toHaveBeenCalledWith('get_product_list', {
+      url: '#/product/categoryList?type=tablet',
+      title: '平板',
+      subTitle: '平板电脑',
+      page: 2,
+    });
+  });
 });

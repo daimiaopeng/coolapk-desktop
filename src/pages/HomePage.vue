@@ -14,12 +14,18 @@
         <!-- 1. 头条 Tab 专属：服务端要闻与动态子栏目 -->
         <div v-if="isHeadlineTab" class="headline-header-section">
           <!-- APK ConfigPage.rawEntities 动态下发的头条子栏目 -->
-          <div v-if="headlineSubChannels.length" class="quick-icons-grid">
+          <div
+            v-if="headlineSubChannels.length"
+            ref="subChannelsContainer"
+            class="quick-icons-grid custom-scrollbar"
+            @wheel.passive="handleSubChannelsWheel"
+          >
             <button
               v-for="channel in headlineSubChannels"
               :key="channel.key"
               type="button"
-              :class="['icon-btn-item', { selected: selectedHeadlineSubChannelUrl === channel.url }]"
+              :class="['icon-btn-item', { selected: isSubChannelSelected(channel) }]"
+              :title="isSubChannelSelected(channel) ? `已选中 ${channel.title}（再次点击可取消）` : channel.title"
               @click="openHeadlineSubChannel(channel)"
             >
               <span class="icon-circle">
@@ -32,7 +38,7 @@
                 />
                 <i v-else :class="channel.icon"></i>
               </span>
-              <span>{{ channel.title }}</span>
+              <span class="channel-title">{{ channel.title }}</span>
             </button>
           </div>
           <div v-if="headlineNestedSubChannels.length" class="headline-nested-tabs" role="tablist" aria-label="头条子栏目">
@@ -116,8 +122,11 @@
           <div v-else-if="noMore && feeds.length > 0" class="dyh-tab-no-more">没有更多看看号了</div>
         </div>
 
+        <!-- 选机中心子栏目专属：直接内嵌展示选机页面 -->
+        <ProductSelectorPage v-if="isProductSelectorActive" />
+
         <!-- 动态列表与 Loading/Error/Empty 状态 -->
-        <div v-if="!isDyhTab && loading && feeds.length === 0" class="skeleton-padding">
+        <div v-else-if="!isDyhTab && loading && feeds.length === 0" class="skeleton-padding">
           <FeedSkeleton :count="4" />
         </div>
 
@@ -225,6 +234,7 @@ import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppImage from '../components/common/AppImage.vue';
+import ProductSelectorPage from './ProductSelectorPage.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
 import { hasFeedRenderableContent, shouldHideFeed } from '../utils/feedFilter';
@@ -246,7 +256,14 @@ let isInitializingHome = true;
 const page = ref(1);
 const feeds = ref<any[]>([]);
 const feedScrollContainer = ref<HTMLElement | null>(null);
+const subChannelsContainer = ref<HTMLElement | null>(null);
 const loading = ref(false);
+
+function handleSubChannelsWheel(e: WheelEvent) {
+  if (subChannelsContainer.value && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    subChannelsContainer.value.scrollLeft += e.deltaY;
+  }
+}
 const loadingMore = ref(false);
 const noMore = ref(false);
 const error = ref('');
@@ -352,6 +369,21 @@ const headlineSubChannels = computed(() => {
       logo: string;
       icon: string;
     } => Boolean(channel));
+});
+
+const isProductSelectorActive = computed(() => {
+  if (!isHeadlineTab.value) return false;
+  const current = selectedHeadlineSubChannelUrl.value;
+  if (!current) return false;
+  const channel = headlineSubChannels.value.find(isSubChannelSelected);
+  return Boolean(
+    channel && (
+      channel.title.includes('选机')
+      || channel.url.includes('productSelector')
+      || channel.url.includes('filter')
+      || channel.url.includes('/product/filter')
+    )
+  );
 });
 
 function updateHeadlineQuickLinks(items: any[]) {
@@ -533,14 +565,28 @@ function updateHeadlineCursor(items: any[]) {
 }
 
 function normalizeHeadlinePageUrl(url: string): string {
-  const trimmed = url.trim();
-  if (!trimmed.startsWith('/page?url=')) return trimmed;
-  const encodedAction = trimmed.slice('/page?url='.length).split('&')[0];
-  try {
-    return decodeURIComponent(encodedAction);
-  } catch {
-    return encodedAction;
+  let trimmed = String(url || '').trim();
+  if (!trimmed) return '';
+
+  // 1. 去除 http/https 酷安域名
+  const hostMatch = trimmed.match(/^https?:\/\/(?:[a-zA-Z0-9-]+\.)*coolapk\.com(\/.*)?$/i);
+  if (hostMatch) {
+    trimmed = hostMatch[1] || '/';
   }
+
+  // 2. 解析 /page?url=
+  if (trimmed.startsWith('/page?url=')) {
+    const encodedAction = trimmed.slice('/page?url='.length).split('&')[0];
+    try {
+      trimmed = decodeURIComponent(encodedAction);
+    } catch {
+      trimmed = encodedAction;
+    }
+  }
+
+  // 3. 去除可能残留的协议头或首尾空白
+  trimmed = trimmed.replace(/^https?:\/\/[^/]+/i, '');
+  return trimmed || url;
 }
 
 function findDefaultHeadlineSubPage(items: any[]): string {
@@ -563,52 +609,96 @@ async function getHeadlineSubChannelData(
   subTitle: string,
   page: number,
 ) {
-  if (headlineResolvedUrl.value) {
-    return await CoolapkTauriAPI.getDiscoveryPageData({
-      url: headlineResolvedUrl.value,
-      title,
-      subTitle,
-      page,
-      firstItem: headlineCursor.firstItem,
-      lastItem: headlineCursor.lastItem,
-      pageContext: headlinePageContext.value,
-    });
-  }
+  const targetUrl = normalizeHeadlinePageUrl(headlineResolvedUrl.value || url);
+  const isProductSelector = targetUrl.includes('filter') || targetUrl.includes('product') || title.includes('选机');
 
-  let currentUrl = normalizeHeadlinePageUrl(url);
-  const visited = new Set<string>();
-  for (let depth = 0; depth < 4; depth += 1) {
-    if (!currentUrl || visited.has(currentUrl)) break;
-    visited.add(currentUrl);
-    const response: any = await CoolapkTauriAPI.getDiscoveryPageData({
-      url: currentUrl,
-      title,
-      subTitle,
-      page,
-      firstItem: headlineCursor.firstItem,
-      lastItem: headlineCursor.lastItem,
-      pageContext: headlinePageContext.value,
-    });
-    const items = Array.isArray(response?.data) ? response.data : [];
-    if (page === 1) updateHeadlineNestedSubChannels(items);
-    const nextUrl = page === 1 ? findDefaultHeadlineSubPage(items) : '';
-    if (!nextUrl) {
-      headlineResolvedUrl.value = currentUrl;
-      return response;
+  // 1. 如果是选机中心入口，优先请求酷安官方数码分类/选机数据
+  if (isProductSelector) {
+    try {
+      const productPageRes: any = await CoolapkTauriAPI.getDiscoveryPageData({
+        url: targetUrl.startsWith('#') ? targetUrl : '#/product/categoryList',
+        title: title || '选机中心',
+        subTitle: subTitle || '数码库',
+        page,
+        firstItem: headlineCursor.firstItem,
+        lastItem: headlineCursor.lastItem,
+        pageContext: headlinePageContext.value,
+      });
+      if (productPageRes && productPageRes.data && Array.isArray(productPageRes.data) && productPageRes.data.length > 0) {
+        if (page === 1) updateHeadlineNestedSubChannels(productPageRes.data);
+        return productPageRes;
+      }
+    } catch (e) {
+      console.warn('选机中心 discovery 请求重定向:', e);
     }
-    currentUrl = normalizeHeadlinePageUrl(nextUrl);
+
+    try {
+      const catRes: any = await CoolapkTauriAPI.getProductCategoryList();
+      if (catRes && catRes.data && Array.isArray(catRes.data) && catRes.data.length > 0) {
+        return catRes;
+      }
+    } catch (e) {
+      console.warn('getProductCategoryList 失败:', e);
+    }
   }
 
-  headlineResolvedUrl.value = currentUrl;
-  return await CoolapkTauriAPI.getDiscoveryPageData({
-    url: currentUrl,
-    title,
-    subTitle,
-    page,
-    firstItem: headlineCursor.firstItem,
-    lastItem: headlineCursor.lastItem,
-    pageContext: headlinePageContext.value,
-  });
+  // 2. 通用发现页请求
+  try {
+    const res: any = await CoolapkTauriAPI.getDiscoveryPageData({
+      url: targetUrl,
+      title,
+      subTitle,
+      page,
+      firstItem: headlineCursor.firstItem,
+      lastItem: headlineCursor.lastItem,
+      pageContext: headlinePageContext.value,
+    });
+    if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+      const items = res.data;
+      if (page === 1) updateHeadlineNestedSubChannels(items);
+      const nextUrl = page === 1 ? findDefaultHeadlineSubPage(items) : '';
+      if (nextUrl && targetUrl !== normalizeHeadlinePageUrl(nextUrl)) {
+        headlineResolvedUrl.value = normalizeHeadlinePageUrl(nextUrl);
+        // 自动拉取默认子 Tab（如优质酷友）的榜单/动态数据
+        try {
+          const subRes: any = await CoolapkTauriAPI.getDiscoveryPageData({
+            url: headlineResolvedUrl.value,
+            title,
+            subTitle,
+            page,
+            firstItem: headlineCursor.firstItem,
+            lastItem: headlineCursor.lastItem,
+            pageContext: headlinePageContext.value,
+          });
+          if (subRes && subRes.data && Array.isArray(subRes.data) && subRes.data.length > 0) {
+            return subRes;
+          }
+        } catch (e) {
+          console.warn('子 Tab 自动拉取异常:', e);
+        }
+      } else {
+        headlineResolvedUrl.value = targetUrl;
+      }
+      return res;
+    }
+  } catch (err) {
+    console.warn('getDiscoveryPageData 请求异常，尝试降级:', err);
+  }
+
+  // 3. 降级 1: 若涉及产品库，调用 getProductList
+  if (targetUrl.includes('product')) {
+    try {
+      const productRes: any = await CoolapkTauriAPI.getProductList(targetUrl, title, subTitle, page);
+      if (productRes && productRes.data && Array.isArray(productRes.data) && productRes.data.length > 0) {
+        return productRes;
+      }
+    } catch (e) {
+      console.warn('getProductList 降级失败:', e);
+    }
+  }
+
+  // 4. 降级 2: 通用板块数据流 getBoardFeeds
+  return await CoolapkTauriAPI.getBoardFeeds(targetUrl, page);
 }
 
 const prefetchBuffer = ref<any[]>([]);
@@ -642,10 +732,10 @@ async function fetchTabApi(tabKey: string, p: number) {
 
   if (matchedTab ? isHeadlineConfigTab(matchedTab) : tabKey === 'digest' || tabKey === 'V9_HOME_TAB_HEADLINE' || tabKey === '/main/headline') {
     const selectedSubChannel = headlineSubChannels.value.find(
-      channel => channel.url === selectedHeadlineSubChannelUrl.value
+      channel => isSubChannelSelected(channel)
     );
     if (selectedSubChannel) {
-      const selectedUrl = selectedSubChannel.url.trim();
+      const selectedUrl = normalizeSubChannelUrl(selectedSubChannel.url);
       if (selectedUrl.startsWith('/t/')) {
         const tag = decodeURIComponent(selectedUrl.slice(3).split('?')[0]).trim();
         if (tag) {
@@ -669,6 +759,10 @@ async function fetchTabApi(tabKey: string, p: number) {
       firstItem: headlineCursor.firstItem,
       lastItem: headlineCursor.lastItem,
     });
+  }
+
+  if (matchedTab ? isHotConfigTab(matchedTab) : isHotTab.value) {
+    return await CoolapkTauriAPI.getRankFeeds(activeHotRank.value, p);
   }
 
   const targetUrl = matchedTab ? (matchedTab.url || matchedTab.page_name || '') : tabKey;
@@ -739,9 +833,14 @@ async function loadFeeds(isRefresh: boolean = false) {
         ) {
           const incomingUsers = extractHeadlineUserItems(rawItems);
           const incomingDiscoveryItems = rawItems.filter((item: any) => {
+            if (!item || typeof item !== 'object') return false;
             const template = String(item?.entityTemplate || item?.entity_template || '').trim();
             const entityType = String(item?.entityType || item?.entity_type || '').toLowerCase();
-            return template && template !== 'configCard' && !entityType.includes('user');
+            const isNavCard = template === 'iconTabLinkGridCard'
+              || template === 'iconLinkGridCard'
+              || template === 'selectorLinkGridCard'
+              || (Array.isArray(item?.entities) && item.entities.length > 0 && template.toLowerCase().includes('linkgrid'));
+            return template !== 'configCard' && !isNavCard && !entityType.includes('user');
           });
           if (isRefresh) {
             headlineUserItems.value = incomingUsers;
@@ -752,6 +851,14 @@ async function loadFeeds(isRefresh: boolean = false) {
             const existingDiscovery = new Set(headlineDiscoveryItems.value.map((item) => String(item.entityId || item.id || item.url)));
             headlineDiscoveryItems.value.push(...incomingDiscoveryItems.filter((item) => !existingDiscovery.has(String(item.entityId || item.id || item.url))));
           }
+          if (headlineDiscoveryItems.value.length === 0 && headlineUserItems.value.length === 0 && validItems.length > 0) {
+            if (isRefresh) feeds.value = validItems;
+            else feeds.value.push(...validItems);
+          }
+        } else if (isRefresh) {
+          feeds.value = validItems;
+        } else {
+          feeds.value.push(...validItems);
         }
       }
       page.value++;
@@ -827,16 +934,54 @@ function handleTabOrderUpdated() {
   serverTabs.value = [...serverTabs.value];
 }
 
+function normalizeSubChannelUrl(rawUrl: string): string {
+  let url = String(rawUrl || '').trim();
+  if (!url) return '';
+  // 如果是 coolapk 站内 http/https 链接，去掉域名部分，转换为站内 API 相对路径
+  const match = url.match(/^https?:\/\/(?:[a-zA-Z0-9-]+\.)*coolapk\.com(\/.*)?$/i);
+  if (match) {
+    url = match[1] || '/';
+  }
+  return url;
+}
+
+function isSubChannelSelected(channel: { url: string }): boolean {
+  const current = selectedHeadlineSubChannelUrl.value;
+  if (!current) return false;
+  const channelUrl = normalizeSubChannelUrl(channel.url);
+  return current === channelUrl || current === channel.url.trim();
+}
+
 function openHeadlineSubChannel(channel: { title: string; url: string; subTitle: string }) {
-  const url = channel.url.trim();
+  let url = normalizeSubChannelUrl(channel.url);
   if (!url) return;
+
+  // 如果非酷安内部地址的纯外链，才调用外部浏览器
   if (/^https?:\/\//i.test(url)) {
     void CoolapkTauriAPI.openUrl(url, settingsStore.settings.externalLinkMode);
     return;
   }
-  selectedHeadlineSubChannelUrl.value = url;
-  resetHeadlineCursor();
-  void loadFeeds(true);
+
+  // 如果再次点击已选中的子栏目，则取消选中切回默认全部头条流
+  if (isSubChannelSelected(channel)) {
+    selectedHeadlineSubChannelUrl.value = '';
+    headlineDiscoveryItems.value = [];
+    headlineUserItems.value = [];
+    headlineResolvedUrl.value = '';
+    selectedHeadlineNestedSubChannelUrl.value = '';
+    resetHeadlineCursor();
+    void loadFeeds(true);
+  } else {
+    selectedHeadlineSubChannelUrl.value = url;
+    headlineDiscoveryItems.value = [];
+    headlineUserItems.value = [];
+    headlineResolvedUrl.value = '';
+    selectedHeadlineNestedSubChannelUrl.value = '';
+    resetHeadlineCursor();
+    if (!isProductSelectorActive.value) {
+      void loadFeeds(true);
+    }
+  }
 }
 
 function openHeadlineNestedSubChannel(channel: { title: string; url: string }) {
@@ -1006,13 +1151,28 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: nowrap;
   gap: 12px;
-  padding: 4px 0;
+  padding: 4px 0 6px 0;
   overflow-x: auto;
-  scrollbar-width: none;
+  user-select: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border, rgba(0, 0, 0, 0.15)) transparent;
 }
 
 .quick-icons-grid::-webkit-scrollbar {
-  display: none;
+  height: 5px;
+}
+
+.quick-icons-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.quick-icons-grid::-webkit-scrollbar-thumb {
+  background-color: var(--border, rgba(0, 0, 0, 0.15));
+  border-radius: 4px;
+}
+
+.quick-icons-grid::-webkit-scrollbar-thumb:hover {
+  background-color: var(--border-hover, rgba(0, 0, 0, 0.3));
 }
 
 .headline-nested-tabs {
@@ -1064,35 +1224,44 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  flex: 0 0 88px;
+  flex: 0 0 80px;
   cursor: pointer;
   font-size: 12px;
   color: var(--text-primary);
+  transition: background-color 0.15s ease;
+  padding: 8px 4px;
+  border-radius: 12px;
+}
+
+.icon-btn-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.icon-btn-item.selected {
+  background-color: var(--surface-hover);
+  font-weight: 700;
 }
 
 .icon-circle {
   width: 48px;
   height: 48px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 20px;
   color: var(--text-secondary);
-  transition: transform 0.2s ease;
+  transition: transform 0.15s ease;
 }
 
 .headline-sub-channel-logo {
   width: 48px;
   height: 48px;
-  border-radius: 6px;
+  border-radius: 14px;
 }
 
 .icon-btn-item:hover .icon-circle {
   transform: translateY(-2px);
-}
-
-.icon-btn-item.selected {
-  color: var(--primary);
 }
 
 .headline-discovery-list {

@@ -1,15 +1,5 @@
 <template>
   <div class="compare-page page-container custom-scrollbar">
-    <header class="page-header">
-      <div>
-        <h2 class="page-title"><i class="fas fa-code-compare icon"></i>配置对比</h2>
-        <p>横向对比多个产品配置的参数差异</p>
-      </div>
-      <button type="button" class="back-link" @click="router.back()">
-        <i class="fas fa-arrow-left"></i> 返回
-      </button>
-    </header>
-
     <div v-if="loading" class="state-wrapper">
       <LoadingState text="正在加载配置对比数据..." />
     </div>
@@ -19,7 +9,11 @@
     </div>
 
     <div v-else-if="configs.length < 2" class="state-wrapper">
-      <EmptyState title="至少需要两个配置" description="请回到产品参数页选择至少两个配置进行对比" />
+      <EmptyState title="至少需要两个配置" description="先选择机型，再到产品参数页勾选至少两个配置进行对比">
+        <button type="button" class="primary-action" @click="router.push('/product-selector?mode=compare')">
+          <i class="fas fa-mobile-screen-button"></i> 去选择机型
+        </button>
+      </EmptyState>
     </div>
 
     <div v-else class="compare-table-wrapper">
@@ -27,23 +21,29 @@
         <thead>
           <tr>
             <th class="field-col">参数</th>
-            <th v-for="config in configs" :key="String(config.id)" class="config-col">
+            <th v-for="(config, index) in configs" :key="String(config.id)" class="config-col">
               <div class="config-head-cell">
-                <strong>{{ config.title }}</strong>
+                <strong>{{ modelName(config, index) }}</strong>
+                <span v-if="config.title" class="config-variant">{{ config.title }}</span>
                 <span v-if="config.price" class="config-price">参考价 ¥{{ config.price }}</span>
               </div>
             </th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="field in fieldRows" :key="field.name" class="compare-row">
-            <th scope="row" class="field-col">{{ field.name }}</th>
-            <td v-for="config in configs" :key="String(config.id)" class="config-col">
-              <span :class="{ 'highlight-diff': isDifferent(field.name) }">
-                {{ fieldValue(config, field.name) || '—' }}
-              </span>
-            </td>
-          </tr>
+          <template v-for="group in compareGroups" :key="group.key">
+            <tr class="group-row">
+              <th class="group-label" :colspan="configs.length + 1">{{ group.label }}</th>
+            </tr>
+            <tr v-for="field in group.fields" :key="field.name" class="compare-row">
+              <th scope="row" class="field-col">{{ field.label }}</th>
+              <td v-for="config in configs" :key="String(config.id)" class="config-col">
+                <span :class="{ 'highlight-diff': isDifferent(field.name) }">
+                  {{ fieldValue(config, field.name) || '—' }}
+                </span>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
@@ -63,6 +63,7 @@ const route = useRoute();
 const router = useRouter();
 
 const configs = ref<ProductConfig[]>([]);
+const modelTitles = ref<Record<string, string>>({});
 const loading = ref(false);
 const error = ref('');
 
@@ -72,8 +73,6 @@ interface CompareField {
 }
 
 const baseFields: CompareField[] = [
-  { name: 'title', label: '名称' },
-  { name: 'price', label: '参考价' },
   { name: 'release_time', label: '发布时间' },
   { name: 'cpu', label: '处理器' },
   { name: 'ram', label: '运行内存' },
@@ -82,29 +81,68 @@ const baseFields: CompareField[] = [
   { name: 'keywords', label: '关键词' },
 ];
 
-const fieldRows = computed<CompareField[]>(() => {
-  const rows: CompareField[] = [...baseFields];
-  const seen = new Set(rows.map((row) => row.name));
+interface CompareGroup {
+  key: string;
+  label: string;
+  fields: CompareField[];
+}
+
+const fieldLabels: Record<string, string> = {
+  soc_model: 'SoC型号',
+  screen_size: '屏幕尺寸',
+  screen_shape: '屏幕形态',
+  screen_resolution: '屏幕分辨率',
+  screen_refresh_rate: '屏幕刷新率',
+  ram_capacity: 'RAM容量',
+  rom_capacity: 'ROM容量',
+  battery_capacity: '电池容量',
+  rear_camera: '后置摄像头',
+  front_camera: '前置摄像头',
+};
+
+function labelForField(fieldName: string): string {
+  return fieldLabels[fieldName] || fieldName.replace(/_/g, ' ');
+}
+
+function modelName(config: ProductConfig, index: number): string {
+  return modelTitles.value[String(config.id)] || String(config.title || `配置 ${index + 1}`);
+}
+
+const compareGroups = computed<CompareGroup[]>(() => {
+  const basicFields = baseFields.filter((field) =>
+    configs.value.some((config) => rawFieldValue(config, field.name).trim()),
+  );
+  const groupedFields = new Map<string, CompareField[]>();
+  const seen = new Set<string>(basicFields.map((field) => field.name));
+
   for (const config of configs.value) {
-    const groups = parseProductConfigData(config.config_data);
-    for (const [groupName, fields] of Object.entries(groups)) {
+    const configGroups = parseProductConfigData(config.config_data);
+    for (const [groupName, fields] of Object.entries(configGroups)) {
       for (const fieldName of Object.keys(fields)) {
         const key = `${groupName}.${fieldName}`;
         if (!seen.has(key)) {
           seen.add(key);
-          rows.push({ name: key, label: `${groupName} / ${fieldName}` });
+          const fieldsInGroup = groupedFields.get(groupName) || [];
+          fieldsInGroup.push({ name: key, label: labelForField(fieldName) });
+          groupedFields.set(groupName, fieldsInGroup);
         }
       }
     }
   }
-  return rows;
+
+  return [
+    ...(basicFields.length > 0 ? [{ key: 'basic', label: '基础信息', fields: basicFields }] : []),
+    ...Array.from(groupedFields.entries()).map(([key, fields]) => ({ key, label: key, fields })),
+  ];
 });
 
 function rawFieldValue(config: ProductConfig, fieldName: string): string {
   if (fieldName.includes('.')) {
-    const [groupName, field] = fieldName.split('.');
-    const groups = parseProductConfigData(config.config_data);
-    return groups[groupName]?.[field] ?? '';
+    const separatorIndex = fieldName.indexOf('.');
+    const groupName = fieldName.slice(0, separatorIndex);
+    const field = fieldName.slice(separatorIndex + 1);
+    const configGroups = parseProductConfigData(config.config_data);
+    return configGroups[groupName]?.[field] ?? '';
   }
   const value = config[fieldName];
   if (value === undefined || value === null) return '';
@@ -115,6 +153,9 @@ function fieldValue(config: ProductConfig, fieldName: string): string {
   const value = rawFieldValue(config, fieldName).trim();
   if (!value) return '';
   if (fieldName === 'price') return `¥${value}`;
+  if (fieldName === 'release_time' && /^\d{8}$/.test(value)) {
+    return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6)}`;
+  }
   return value;
 }
 
@@ -132,6 +173,9 @@ async function loadCompare() {
     loading.value = false;
     return;
   }
+  const productIds = String(route.query.productIds || '')
+    .split(',')
+    .map((id) => id.trim());
   loading.value = true;
   error.value = '';
   try {
@@ -142,6 +186,25 @@ async function loadCompare() {
         loaded.push({ ...result.value.data, id: ids[index] });
       }
     });
+    const productIdByConfig = new Map<string, string>();
+    loaded.forEach((config, index) => {
+      const configProductId = config.product_id ?? config.productId ?? productIds[index];
+      if (configProductId !== undefined && configProductId !== null && String(configProductId)) {
+        productIdByConfig.set(String(config.id), String(configProductId));
+      }
+    });
+    const productEntries = Array.from(productIdByConfig.entries());
+    const detailResults = await Promise.allSettled(
+      productEntries.map(([, productId]) => CoolapkTauriAPI.getProductDetail(productId)),
+    );
+    const titles: Record<string, string> = {};
+    detailResults.forEach((result, index) => {
+      if (result.status !== 'fulfilled' || !result.value?.data) return;
+      const product = result.value.data as Record<string, unknown>;
+      const title = product.title || product.index_title || product.alias_title || product.name;
+      if (title) titles[productEntries[index][0]] = String(title);
+    });
+    modelTitles.value = titles;
     configs.value = loaded;
   } catch (err: any) {
     error.value = err?.message || '加载对比数据失败';
@@ -158,53 +221,35 @@ onMounted(() => {
 <style scoped>
 .compare-page {
   width: 100%;
-  max-width: 1180px;
+  max-width: none;
   height: 100%;
   min-width: 0;
   overflow: auto;
   box-sizing: border-box;
-  padding: var(--space-5, 20px);
-  margin: 0 auto;
+  padding: 0;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-.page-header {
-  display: flex;
+.primary-action {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 12px;
-}
-
-.page-title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--font-size-title-lg, 24px);
-}
-
-.page-title .icon {
-  color: var(--brand-primary, #10b981);
-  margin-right: 10px;
-}
-
-.page-header p {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
-}
-
-.back-link {
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 14px;
   border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
+  border-radius: var(--radius-control, 8px);
+  background: var(--brand-primary);
+  color: var(--text-inverse, #fff);
   font: inherit;
-  white-space: nowrap;
+  font-size: var(--font-size-sub, 13px);
+  cursor: pointer;
 }
 
-.back-link:hover {
-  color: var(--brand-primary, #10b981);
+.primary-action:hover {
+  background: var(--brand-primary-hover, var(--brand-primary));
 }
 
 .state-wrapper {
@@ -238,16 +283,36 @@ onMounted(() => {
 .compare-table thead th {
   position: sticky;
   top: 0;
-  background: var(--surface);
+  background: var(--surface-elevated, var(--surface));
+  border-bottom: 2px solid var(--border);
+  box-shadow: var(--shadow-dropdown);
   z-index: 1;
 }
 
+.group-row .group-label {
+  padding: 9px 14px;
+  color: var(--text-secondary);
+  background: var(--background-secondary, rgba(0, 0, 0, .03));
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
 .field-col {
+  position: sticky;
+  left: 0;
   color: var(--text-secondary);
   font-weight: 500;
   background: var(--background-secondary, rgba(0, 0, 0, .02));
+  border-right: 2px solid var(--border);
   white-space: nowrap;
   min-width: 120px;
+  z-index: 2;
+}
+
+.compare-table thead .field-col {
+  background: var(--surface-elevated, var(--surface));
+  z-index: 3;
 }
 
 .config-col {
@@ -264,6 +329,11 @@ onMounted(() => {
 
 .config-head-cell strong {
   font-size: 14px;
+}
+
+.config-variant {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .config-price {

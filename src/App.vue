@@ -21,14 +21,24 @@
     <BackToTop />
     <AppContextMenu />
 
-    <AppDialog :is-open="Boolean(updateInfo)" :title="updateInfo?.hasNew ? '发现新版本' : '检查更新'" :width="460" @close="updateInfo = null">
+    <AppDialog :is-open="Boolean(updateInfo)" :title="updateInfo?.hasNew ? '发现新版本' : '检查更新'" :width="500" @close="updateInfo = null">
       <div v-if="updateInfo" class="startup-update">
         <p class="startup-update-version">
-          {{ updateInfo.hasNew ? `酷安桌面版 ${updateInfo.latestVersion}` : '当前已是最新版本' }}
+          {{ updateInfo.hasNew ? `酷安桌面版 ${updateInfo.latestVersion}` : `当前已是最新版本 (v${APP_VERSION})` }}
         </p>
-        <p class="startup-update-notes" v-if="updateInfo.hasNew"><span class="startup-update-notes-label">更新内容：</span>{{ updateInfo.releaseNotes }}</p>
-        <p class="startup-update-notes" v-else>{{ updateInfo.releaseNotes }}</p>
+        <p v-if="updateInfo.publishedAt" class="startup-update-date">
+          <i class="far fa-clock"></i> 发版时间：{{ updateInfo.publishedAt }}
+        </p>
+        <div class="startup-update-notes-block">
+          <p class="startup-update-notes-label">{{ updateInfo.hasNew ? '更新内容：' : '当前版本更新日志：' }}</p>
+          <div
+            class="startup-update-notes"
+            v-html="renderReleaseMarkdown(updateInfo.releaseNotes || '')"
+            @click="handleAnchorClick"
+          ></div>
+        </div>
         <div class="startup-update-actions">
+          <button v-if="!updateInfo.hasNew" class="startup-update-later" @click="openReleasePage">查看 Release 页面</button>
           <button v-if="!updateInfo.hasNew" class="startup-update-later" @click="updateInfo = null">关闭</button>
           <button v-if="updateInfo.hasNew" class="startup-update-later" @click="ignoreThisVersion">忽略此版本</button>
           <button v-if="updateInfo.hasNew" class="startup-update-later" @click="ignoreAllUpdates">忽略所有更新</button>
@@ -97,7 +107,9 @@ import AppContextMenu from './components/common/AppContextMenu.vue';
 import AppDialog from './components/common/AppDialog.vue';
 import { useAuthStore } from './stores/auth';
 import { useSettingsStore } from './stores/settings';
-import { checkLatestRelease, isNewerVersion, normalizeVersion, type UpdateInfo } from './utils/updateChecker';
+import { APP_VERSION, checkLatestRelease, isNewerVersion, normalizeVersion, type UpdateInfo } from './utils/updateChecker';
+import { renderReleaseMarkdown } from './utils/markdown';
+import { handleAnchorClick } from './utils/anchorClick';
 import { desktopNotify } from './utils/desktopNotify';
 import { registerGlobalHotkeys } from './utils/hotkeys';
 import { CoolapkTauriAPI } from './api/coolapk';
@@ -279,6 +291,11 @@ function openUpdate() {
   updateInfo.value = null;
 }
 
+function openReleasePage() {
+  const url = updateInfo.value?.downloadUrl || 'https://github.com/daimiaopeng/coolapk-desktop/releases';
+  void CoolapkTauriAPI.openUrl(url, 'system');
+}
+
 async function restorePendingUpdate(): Promise<boolean> {
   const clearInvalidPending = async () => {
     localStorage.removeItem(PENDING_UPDATE_KEY);
@@ -386,22 +403,124 @@ html, body {
 }
 
 .startup-update-version {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
   color: var(--text-primary);
   font-size: 18px;
   font-weight: 600;
 }
 
-.startup-update-notes {
-  margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  white-space: pre-wrap;
+.startup-update-date {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-tertiary, #888);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.startup-update-date i {
+  font-size: 11px;
+  color: var(--text-tertiary, #888);
+}
+
+.startup-update-notes-block {
+  margin: 10px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .startup-update-notes-label {
   color: var(--text-primary);
   font-weight: 600;
+  font-size: 14px;
+}
+
+.startup-update-notes {
+  margin: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 6px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.startup-update-notes :deep(h4),
+.startup-update-notes :deep(h5),
+.startup-update-notes :deep(h6) {
+  color: var(--text-primary);
+  margin: 10px 0 4px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.startup-update-notes :deep(h4) {
+  font-size: 15px;
+}
+
+.startup-update-notes :deep(h5) {
+  font-size: 14px;
+}
+
+.startup-update-notes :deep(h6) {
+  font-size: 13px;
+}
+
+.startup-update-notes :deep(p) {
+  margin: 4px 0;
+}
+
+.startup-update-notes :deep(ul),
+.startup-update-notes :deep(ol) {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+
+.startup-update-notes :deep(li) {
+  margin: 2px 0;
+}
+
+.startup-update-notes :deep(blockquote) {
+  margin: 8px 0;
+  padding: 6px 12px;
+  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+  border-left: 3px solid var(--brand-green, #10b981);
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.startup-update-notes :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  margin: 10px 0;
+}
+
+.startup-update-notes :deep(code) {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-hover, rgba(0, 0, 0, 0.06));
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.startup-update-notes :deep(pre) {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--bg-hover, rgba(0, 0, 0, 0.06));
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.startup-update-notes :deep(a) {
+  color: var(--brand-green, #10b981);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.startup-update-notes :deep(a:hover) {
+  text-decoration: underline;
 }
 
 .startup-update-actions {

@@ -63,7 +63,10 @@ export interface NavVisibilitySettings {
   anylist: boolean;
   mydyh: boolean;
   more: boolean;
+  my: boolean;
   my_likes: boolean;
+  my_comments: boolean;
+  my_feeds: boolean;
   followed_nodes: boolean;
   followed_topics: boolean;
   recent_contacts: boolean;

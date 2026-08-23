@@ -8,9 +8,8 @@
         type="button"
         @click="selectTab(tab.key)"
       >
-        <i :class="[tab.icon, 'goods-tab-icon']"></i>
-        <span>{{ tab.label }}</span>
-        <span v-if="activeTab === tab.key" class="tab-line"></span>
+        <span class="tab-label">{{ tab.label }}</span>
+        <span v-if="activeTab === tab.key" class="coolapk-tab-indicator"></span>
       </button>
     </div>
 
@@ -32,10 +31,10 @@ import GoodsListsPage from './GoodsListsPage.vue';
 import GoodsRankingPage from './GoodsRankingPage.vue';
 
 const tabs = [
-  { key: 'search', label: '好物搜索', icon: 'fas fa-search' },
-  { key: 'mine', label: '我的好物', icon: 'fas fa-gift' },
-  { key: 'lists', label: '好物清单', icon: 'fas fa-list-ul' },
-  { key: 'ranking', label: '好物榜', icon: 'fas fa-trophy' },
+  { key: 'search', label: '好物搜索' },
+  { key: 'mine', label: '我的好物' },
+  { key: 'lists', label: '好物清单' },
+  { key: 'ranking', label: '好物榜' },
 ] as const;
 
 type GoodsTabKey = (typeof tabs)[number]['key'];
@@ -69,29 +68,35 @@ function selectTab(key: GoodsTabKey) {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: var(--space-5);
-  padding: 0 var(--space-5);
+  gap: 16px;
+  padding: 0 16px;
   height: 48px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
   background-color: var(--surface);
   overflow-x: auto;
+  user-select: none;
+  scrollbar-width: none;
+}
+
+.goods-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .goods-tab {
   position: relative;
-  height: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: none;
-  background: transparent;
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
+  justify-content: center;
+  padding: 8px 6px;
+  font-size: 15px;
+  font-weight: 500;
   color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0 2px;
+  transition: all var(--duration-fast, 0.15s) var(--ease-default, ease);
   white-space: nowrap;
-  transition: color var(--duration-fast) var(--ease-default);
+  background: transparent;
+  cursor: pointer;
+  border: none;
+  outline: none;
 }
 
 .goods-tab:hover {
@@ -99,23 +104,34 @@ function selectTab(key: GoodsTabKey) {
 }
 
 .goods-tab.is-active {
-  color: var(--brand-primary);
-  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 16px;
 }
 
-.goods-tab-icon {
-  font-size: 13px;
-}
-
-.tab-line {
+/* 首页同款绿色胶囊指示条 */
+.coolapk-tab-indicator {
   position: absolute;
-  bottom: 0;
+  bottom: 2px;
   left: 50%;
   transform: translateX(-50%);
-  width: 20px;
-  height: 3px;
-  background: var(--brand-primary);
-  border-radius: 2px;
+  width: 22px;
+  height: 3.5px;
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
+  animation: tabSlideIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes tabSlideIn {
+  from {
+    width: 0px;
+    opacity: 0;
+  }
+  to {
+    width: 22px;
+    opacity: 1;
+  }
 }
 
 .goods-content {

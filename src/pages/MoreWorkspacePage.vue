@@ -18,6 +18,8 @@ import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import FeedTabs from '../components/feed/FeedTabs.vue';
 import MyAlbumsPage from './MyAlbumsPage.vue';
+import MyCommentsPage from './MyCommentsPage.vue';
+import MyFeedsPage from './MyFeedsPage.vue';
 import MyLikesPage from './MyLikesPage.vue';
 import MoreDataPage from './MoreDataPage.vue';
 import { moreNavs } from '../config/navigation';
@@ -52,6 +54,8 @@ const dataModeByKey: Record<string, string> = {
 };
 const componentByKey: Record<string, Component> = {
   my_likes: MyLikesPage,
+  my_comments: MyCommentsPage,
+  my_feeds: MyFeedsPage,
   my_albums: MyAlbumsPage,
   followed_nodes: MoreDataPage,
   followed_topics: MoreDataPage,

@@ -165,8 +165,8 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_product_category_list');
   }
 
-  static async getProductList(id: string, productType: string = 'hot', page: number = 1) {
-    return await invokeNative('get_product_list', { id, productType, page });
+  static async getProductList(url: string, title: string = '', subTitle: string = '', page: number = 1) {
+    return await invokeNative('get_product_list', { url, title, subTitle, page });
   }
 
   // 1.4.3 产品媒体库
@@ -476,6 +476,10 @@ export class CoolapkTauriAPI {
 
   static async listChatHistory(ukey: string, page: number = 1) {
     return await invokeNative('list_chat_history', { ukey, page });
+  }
+
+  static async deleteMessageChat(ukey: string) {
+    return await invokeNative('delete_message_chat', { ukey });
   }
 
   static async sendPrivateMessage(uid: string, message: string) {
@@ -1055,6 +1059,10 @@ export class CoolapkTauriAPI {
 
   static async getUserLikeList(uid: string, page: number = 1) {
     return await invokeNative('get_user_like_list', { uid, page });
+  }
+
+  static async getMyComments(uid: string, page: number = 1) {
+    return await this.getUserFeeds(uid, page, 'reply');
   }
 
   // === 专辑/应用集 ===

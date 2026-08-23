@@ -29,6 +29,19 @@ describe('product config data parsing', () => {
     expect(groups['空组']).toBeUndefined();
     expect(groups['正常']['价格']).toBe('3999');
   });
+
+  it('formats nested objects and arrays instead of rendering object references', () => {
+    const groups = parseProductConfigData(JSON.stringify({
+      影像: {
+        摄像头数量: 4,
+        后置主摄参数: { 像素: '50MP', 光圈: 'f/1.8' },
+        镜头: ['广角', '长焦'],
+      },
+    }));
+    expect(groups['影像']['后置主摄参数']).toBe('像素: 50MP；光圈: f/1.8');
+    expect(groups['影像']['镜头']).toBe('广角，长焦');
+    expect(groups['影像']['后置主摄参数']).not.toContain('[object Object]');
+  });
 });
 
 describe('rating chart series extraction', () => {
