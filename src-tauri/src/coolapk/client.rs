@@ -7,6 +7,36 @@ use std::path::PathBuf;
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// 接口路径需求：判断写接口需要哪些额外的风控令牌。
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PathRequirements {
+    /// 需要 Cookie 携带 `ddid`（数盟会话，任意 v4 UUID 即可）。
+    pub needs_ddid: bool,
+    /// 需要表单携带 `_v2_post_token`（网易易盾滑块验证 Token）。
+    pub needs_post_token: bool,
+}
+
+/// 酷安服务端下发的 `MainInit.useDDIEventList`（写接口需 ddid）。
+/// 可通过 `GET /v6/main/init` 的配置卡片动态更新。
+const DDI_EVENT_PATHS: &[&str] = &[
+    "/v6/feed/createFeed",
+    "/v6/feed/reply",
+    "/v6/feed/like",
+    "/v6/feed/likeReply",
+    "/v6/message/send",
+];
+
+/// 酷安服务端下发的 `PostToken.List`（需网易易盾 `_v2_post_token`）。
+const POST_TOKEN_PATHS: &[&str] = &["/v6/feed/createFeed", "/v6/feed/reply"];
+
+/// 根据请求路径自动判断需要哪些风控令牌。
+pub fn classify_path(path: &str) -> PathRequirements {
+    PathRequirements {
+        needs_ddid: DDI_EVENT_PATHS.iter().any(|p| path == *p || path.starts_with(p)),
+        needs_post_token: POST_TOKEN_PATHS.iter().any(|p| path == *p || path.starts_with(p)),
+    }
+}
+
 pub struct CoolapkClient {
     client: Client,
     auth: RwLock<CoolapkAuth>,
@@ -288,6 +318,19 @@ impl CoolapkClient {
             .iter()
             .position(|a| a.get("uid").and_then(|v| v.as_str()) == Some(uid))
         {
+            // 优先使用账号配置的独立数盟设备 ID（发动态需要真实注册的设备 ID）。
+            if let Some(dev_id) = accounts[pos]
+                .get("deviceId")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty())
+            {
+                let code = generate_device_code_with_id(dev_id);
+                if let Some(obj) = accounts[pos].as_object_mut() {
+                    obj.insert("deviceCode".to_string(), json!(code.clone()));
+                }
+                self.save_accounts(&accounts);
+                return code;
+            }
             if let Some(code) = accounts[pos]
                 .get("deviceCode")
                 .and_then(|v| v.as_str())
@@ -795,7 +838,16 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
+            // 酷安 v6 写接口（feed/like、createFeed、reply 等）要求 Cookie 携带 ddid。
+            // 服务端只校验 ddid 是否为合法 v4 UUID 格式（实测任意 UUID 均通过），
+            // 因此按路径自动判断（`useDDIEventList`）后附加一个伪随机 v4 UUID。
+            let req = classify_path(path);
+            let full_cookie = if req.needs_ddid {
+                format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid())
+            } else {
+                cookie
+            };
+            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
         }
@@ -3498,7 +3550,8 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
+            let full_cookie = format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid());
+            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
         }
@@ -3528,7 +3581,8 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
+            let full_cookie = format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid());
+            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
         }
@@ -3600,7 +3654,8 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
+            let full_cookie = format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid());
+            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
         }
@@ -4018,6 +4073,8 @@ impl CoolapkClient {
         pic: Option<&str>,
         post_token: Option<&str>,
     ) -> Result<Value, String> {
+        // reply 在 `PostToken.List` 内，官方建议携带网易易盾 _v2_post_token。
+        // 实测服务端对该字段并非强制，token 为可选：提供则附加，缺失仍正常提交。
         let query = [
             ("id", feed_id.to_string()),
             ("type", "feed".to_string()),
@@ -4319,6 +4376,9 @@ impl CoolapkClient {
         pic: Option<&str>,
         post_token: Option<&str>,
     ) -> Result<Value, String> {
+        // createFeed 在 `PostToken.List` 内，官方建议携带网易易盾 _v2_post_token。
+        // 实测服务端对该字段并非强制（无 token 亦能发布成功），因此 token 为可选，
+        // 仅在调用方（前端）提供时附加；缺失时仍正常提交，若服务端拒绝再提示验证。
         let token = self.get_token()?;
         let mut form = reqwest::multipart::Form::new()
             .text("message", message.to_string())
@@ -4352,7 +4412,8 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
+            let full_cookie = format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid());
+            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
         }
@@ -4415,7 +4476,8 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
+            let full_cookie = format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid());
+            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
         }
@@ -5820,13 +5882,31 @@ fn is_valid_device_code(code: &str) -> bool {
 /// 按照官方客户端 C11918.java:248 规则生成标准设备码：
 /// byte[] bytes = (android_id + "; ; ; ; " + manufacturer + "; " + brand + "; " + model + "; " + build_display + "; " + oaid).getBytes(Charsets.UTF_8);
 /// String strReplace = new Regex("\\r\\n|\\r|\\n|=").replace(new StringBuilder(strEncodeToString).reverse().toString(), "");
-fn generate_device_code_for_id(id: &str) -> String {
-    use md5::{Digest, Md5};
-    let mut hasher = Md5::new();
-    hasher.update(id.as_bytes());
-    let digest = hasher.finalize();
-    let android_id = format!("{:016x}", u64::from_le_bytes(digest[..8].try_into().unwrap_or_default()));
-    let raw = format!("{android_id}; ; ; ; Xiaomi; Xiaomi; 23113RKC6C; UKQ1.230804.001; ");
+/// 生成设备码（官方标准逆序 Base64 格式）。
+///
+/// 重要：设备码首字段必须是**真实注册的数盟（Shuzilm）设备 ID**。
+/// - 点赞等 DDI 写接口：只校验 `DUWX3-` 前缀，伪造后缀亦可；
+/// - 发动态（createFeed）/评论（reply）等：要求设备 ID **真实在数盟注册过**，
+///   否则返回 `err_request_need_upgrade_new_version`。
+///
+/// 因此这里默认使用一个已注册有效的数盟设备 ID（DUWX3-…，来自模拟器 SDK）。
+/// 如需每个账号各自独立的已注册设备 ID，可在 accounts.json 中为该账号配置
+/// `deviceId` 字段（数盟设备 ID），`account_device_code` 会优先采用。
+fn generate_device_code_for_id(_id: &str) -> String {
+    let raw = format!(
+        "DUWX3-wyzReiFlzBTpYKkLgysnkduUFakgg9; ; ; ; REDMI; REDMI; 25060RK16C; UQ1A.240205.08180011 release-keys; null"
+    );
+    let b64 = BASE64.encode(raw.as_bytes());
+    let mut rev: String = b64.chars().rev().collect();
+    rev.retain(|c| c != '=' && c != '\r' && c != '\n');
+    rev
+}
+
+/// 用指定的数盟设备 ID 生成设备码（每账号独立注册设备 ID 时使用）。
+fn generate_device_code_with_id(device_id: &str) -> String {
+    let raw = format!(
+        "{device_id}; ; ; ; REDMI; REDMI; 25060RK16C; UQ1A.240205.08180011 release-keys; null"
+    );
     let b64 = BASE64.encode(raw.as_bytes());
     let mut rev: String = b64.chars().rev().collect();
     rev.retain(|c| c != '=' && c != '\r' && c != '\n');
@@ -5836,6 +5916,7 @@ fn generate_device_code_for_id(id: &str) -> String {
 /// 生成随机设备码（官方标准逆序 Base64 格式）
 fn generate_random_device_code() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};
+    use md5::{Digest, Md5};
 
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let mut seed = SystemTime::now()
@@ -5847,7 +5928,18 @@ fn generate_random_device_code() -> String {
         .wrapping_mul(0x9E3779B97F4A7C15);
     seed ^= std::process::id() as u64;
 
-    generate_device_code_for_id(&seed.to_string())
+    let mut hasher = Md5::new();
+    hasher.update(seed.to_string().as_bytes());
+    let digest = hasher.finalize();
+    let android_id = format!(
+        "{:016x}",
+        u64::from_le_bytes(digest[..8].try_into().unwrap_or_default())
+    );
+    let raw = format!("{android_id}; ; ; ; Xiaomi; Xiaomi; 23113RKC6C; UKQ1.230804.001; ");
+    let b64 = BASE64.encode(raw.as_bytes());
+    let mut rev: String = b64.chars().rev().collect();
+    rev.retain(|c| c != '=' && c != '\r' && c != '\n');
+    rev
 }
 
 fn value_to_string(value: &Value) -> String {

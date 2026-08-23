@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn test_classify_path_detects_requirements() {
+    // DDI 写接口：需要 ddid（unlike 不在 useDDIEventList 内）
+    assert!(classify_path("/v6/feed/like").needs_ddid);
+    assert!(!classify_path("/v6/feed/unlike").needs_ddid);
+    assert!(classify_path("/v6/feed/likeReply").needs_ddid);
+    assert!(classify_path("/v6/message/send").needs_ddid);
+    // PostToken 接口：发动态/评论需要 _v2_post_token
+    assert!(classify_path("/v6/feed/createFeed").needs_post_token);
+    assert!(classify_path("/v6/feed/reply").needs_post_token);
+    assert!(classify_path("/v6/feed/createFeed").needs_ddid);
+    // 只读接口：不需要
+    assert!(!classify_path("/v6/main/indexV8").needs_ddid);
+    assert!(!classify_path("/v6/feed/detail").needs_post_token);
+    // 带查询串也能匹配
+    assert!(classify_path("/v6/feed/like?id=123").needs_ddid);
+}
+
+#[test]
 fn test_hot_rank_routes_use_statistics_api() {
     assert_eq!(
         rank_feed_url("month"),
