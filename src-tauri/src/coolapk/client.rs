@@ -5149,6 +5149,27 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": Self::extract_product_entity_list(&raw) }))
     }
 
+    /// 读取品牌下的系列与产品列表，保持 APK 的 product/productList 调用链。
+    /// 数据来源: GET /v6/product/productList?id={brand_id}&type={brand_type}
+    pub async fn get_product_brand_products(
+        &self,
+        brand_id: &str,
+        brand_type: &str,
+        page: u32,
+    ) -> Result<Value, String> {
+        let raw = self
+            .api_get(
+                "/v6/product/productList",
+                &[
+                    ("id", brand_id.to_string()),
+                    ("type", brand_type.to_string()),
+                    ("page", page.max(1).to_string()),
+                ],
+            )
+            .await?;
+        Ok(json!({ "code": 200, "data": Self::extract_product_entity_list(&raw) }))
+    }
+
     /// 产品媒体/图集列表（图片/视频）
     /// 数据来源: GET /v6/product/mediaList?id={id}&type={type}&is_recommend={is_recommend}
     pub async fn get_product_media_list(

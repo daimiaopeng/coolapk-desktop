@@ -169,6 +169,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_product_list', { url, title, subTitle, page });
   }
 
+  static async getProductBrandProducts(brandId: string, brandType: string = 'recommend', page: number = 1) {
+    return await invokeNative('get_product_brand_products', { brandId, brandType, page });
+  }
+
   // 1.4.3 产品媒体库
   static async getProductMediaList(productId: string, mediaType: string = 'image', isRecommend: number = 0, page: number = 1) {
     return await invokeNative('get_product_media_list', { productId, mediaType, isRecommend, page });

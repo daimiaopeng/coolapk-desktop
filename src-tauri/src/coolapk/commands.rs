@@ -167,6 +167,19 @@ pub async fn get_product_list(
 }
 
 #[tauri::command]
+pub async fn get_product_brand_products(
+    state: State<'_, AppState>,
+    brand_id: String,
+    brand_type: String,
+    page: u32,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_product_brand_products(&brand_id, &brand_type, page)
+        .await
+}
+
+#[tauri::command]
 pub async fn get_product_media_list(
     state: State<'_, AppState>,
     product_id: String,

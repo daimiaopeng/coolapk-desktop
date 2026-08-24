@@ -79,4 +79,13 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
       page: 2,
     });
   });
+
+  it('品牌产品列表沿用 APK 的品牌 ID 与类型参数', async () => {
+    await CoolapkTauriAPI.getProductBrandProducts('1016', 'recommend', 2);
+    expect(invoke).toHaveBeenCalledWith('get_product_brand_products', {
+      brandId: '1016',
+      brandType: 'recommend',
+      page: 2,
+    });
+  });
 });

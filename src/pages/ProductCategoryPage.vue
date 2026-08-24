@@ -1,43 +1,53 @@
 <template>
   <div class="product-category-page page-container custom-scrollbar">
-    <header class="category-header">
-      <div>
-        <h2 class="page-title"><i class="fas fa-mobile-alt icon"></i>数码分类</h2>
-        <p>按品牌或分类浏览酷安数码产品</p>
-      </div>
-      <router-link to="/product-selector" class="selector-link">
-        <i class="fas fa-magnifying-glass"></i> 机型搜索
-      </router-link>
-    </header>
-
     <div class="category-toolbar">
-      <button
-        v-for="mode in modes"
-        :key="mode.key"
-        type="button"
-        :class="['mode-btn', { active: activeMode === mode.key }]"
-        @click="switchMode(mode.key)"
-      >
-        {{ mode.label }}
-      </button>
+      <div class="mode-switch" role="tablist" aria-label="数码分类筛选">
+        <button
+          v-for="mode in modes"
+          :key="mode.key"
+          type="button"
+          role="tab"
+          :aria-selected="activeMode === mode.key"
+          :class="['mode-btn', { active: activeMode === mode.key }]"
+          @click="switchMode(mode.key)"
+        >
+          <i :class="mode.key === 'brand' ? 'fas fa-tags' : 'fas fa-layer-group'"></i>
+          {{ mode.label }}
+        </button>
+      </div>
+      <label class="category-search">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <input v-model="searchQuery" type="search" :placeholder="activeMode === 'brand' ? '搜索品牌' : '搜索分类'" aria-label="搜索品牌或分类" @keydown.esc="searchQuery = ''" />
+        <button v-if="searchQuery" type="button" class="category-search-clear" aria-label="清除搜索" @click="searchQuery = ''">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </label>
     </div>
 
     <div class="category-body">
       <aside class="category-side">
+        <div class="side-heading">
+          <div>
+            <span class="side-heading-kicker">{{ activeMode === 'brand' ? 'BRANDS' : 'CATEGORIES' }}</span>
+            <strong>{{ activeMode === 'brand' ? '品牌列表' : '分类列表' }}</strong>
+          </div>
+          <span class="side-total">{{ searchQuery.trim() ? filteredSideItems.length : sideItems.length }}</span>
+        </div>
         <div v-if="sideLoading" class="side-state">
           <LoadingState text="加载中..." />
         </div>
         <div v-else-if="sideError" class="side-state">
           <ErrorState title="加载失败" message="无法获取列表" @retry="loadSide" />
         </div>
-        <div v-else-if="sideItems.length === 0" class="side-state">
-          <EmptyState title="暂无数据" />
+        <div v-else-if="filteredSideItems.length === 0" class="side-state">
+          <EmptyState :title="searchQuery.trim() ? '未找到匹配项' : '暂无数据'" :description="searchQuery.trim() ? '换个关键词试试' : undefined" />
         </div>
         <div v-else class="side-list">
           <button
-            v-for="item in sideItems"
+            v-for="item in filteredSideItems"
             :key="sideItemKey(item)"
             type="button"
+            :aria-label="`查看${item.title || item.name || ''}`"
             :class="['side-item', { active: selectedId === sideItemKey(item) }]"
             @click="selectSide(item)"
           >
@@ -56,6 +66,13 @@
         </div>
 
         <template v-else>
+          <div class="category-content-header">
+            <div class="content-title-group">
+              <span class="content-kicker">{{ activeMode === 'brand' ? '当前品牌' : '当前分类' }}</span>
+              <h3>{{ selected.title || selected.name }}</h3>
+            </div>
+            <span v-if="productCount(selected)" class="content-count">{{ formatCount(productCount(selected)) }} 个产品</span>
+          </div>
           <div v-if="productLoading && products.length === 0" class="content-state">
             <LoadingState text="正在加载产品列表..." />
           </div>
@@ -102,7 +119,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -120,6 +137,7 @@ const modes = [
 
 const activeMode = ref<'brand' | 'category'>('brand');
 const sideItems = ref<ProductBrand[]>([]);
+const searchQuery = ref('');
 const sideLoading = ref(false);
 const sideError = ref(false);
 const selected = ref<ProductBrand | null>(null);
@@ -133,6 +151,12 @@ const productPage = ref(1);
 const selectionVersion = ref(0);
 let productRequestVersion = 0;
 let loadingSelectionVersion = -1;
+
+const filteredSideItems = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase();
+  if (!query) return sideItems.value;
+  return sideItems.value.filter((item) => `${item.title || ''} ${item.name || ''}`.toLocaleLowerCase().includes(query));
+});
 
 function sideItemKey(item: ProductBrand): string {
   return String(item.id ?? item.entityId ?? item.url ?? item.title ?? item.name ?? '');
@@ -154,6 +178,7 @@ function productImage(product: any): string {
 async function switchMode(mode: 'brand' | 'category') {
   if (activeMode.value === mode && sideItems.value.length > 0) return;
   activeMode.value = mode;
+  searchQuery.value = '';
   selected.value = null;
   selectedId.value = '';
   products.value = [];
@@ -170,6 +195,8 @@ async function loadSide() {
       : await CoolapkTauriAPI.getProductCategoryList();
     const list = (res && res.data && Array.isArray(res.data)) ? res.data : [];
     sideItems.value = list.filter((item: ProductBrand) => item && sideItemKey(item));
+    const nextSelection = sideItems.value.find((item) => sideItemKey(item) === selectedId.value) || sideItems.value[0];
+    if (nextSelection && (!selected.value || selectedId.value !== sideItemKey(nextSelection))) selectSide(nextSelection);
   } catch (err) {
     sideError.value = true;
     console.warn('加载品牌/分类失败', err);
@@ -199,10 +226,9 @@ async function loadProducts(isLoadMore = false, expectedSelectionVersion = selec
   loadingSelectionVersion = expectedSelectionVersion;
   if (!isLoadMore) productError.value = false;
   try {
-    const url = String(selection.url || '');
-    const title = String(selection.title || selection.name || '');
-    const subTitle = String(selection.subTitle || '');
-    const res = await CoolapkTauriAPI.getProductList(url, title, subTitle, productPage.value);
+    const res = activeMode.value === 'brand'
+      ? await CoolapkTauriAPI.getProductBrandProducts(String(selection.id ?? selection.entityId ?? ''), String(selection.type || 'recommend'), productPage.value)
+      : await CoolapkTauriAPI.getProductList(String(selection.url || ''), String(selection.title || selection.name || ''), String(selection.subTitle || ''), productPage.value);
     const newItems = (res && res.data && Array.isArray(res.data)) ? res.data : [];
     if (expectedSelectionVersion !== selectionVersion.value || selection !== selected.value) return;
     if (newItems.length === 0) {
@@ -239,151 +265,275 @@ onMounted(() => {
 
 <style scoped>
 .product-category-page {
+  --category-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
   width: 100%;
-  max-width: 1180px;
+  max-width: none;
   height: 100%;
+  min-height: 0;
   min-width: 0;
-  overflow-y: auto;
+  overflow: hidden;
   box-sizing: border-box;
-  padding: var(--space-5, 20px);
-  margin: 0 auto;
+  padding: 0;
+  margin: 0;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 14px;
-}
-
-.category-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 18px;
-}
-
-.page-title {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: var(--font-size-title-lg, 24px);
-}
-
-.page-title .icon {
-  color: var(--brand-primary, #10b981);
-  margin-right: 10px;
-}
-
-.category-header p {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
-}
-
-.selector-link {
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  white-space: nowrap;
-  text-decoration: none;
-}
-
-.selector-link:hover {
-  color: var(--brand-primary, #10b981);
+  font-family: var(--category-font-family);
 }
 
 .category-toolbar {
   display: flex;
-  gap: 6px;
-  padding: 12px 14px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  flex: 0 0 auto;
+  min-height: 64px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 20px;
   background: var(--surface);
-  border: 1px solid var(--border-light, rgba(0, 0, 0, .08));
-  border-radius: var(--radius-card, 12px);
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, .08));
+}
+
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface-hover);
+}
+
+.category-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(320px, 36vw);
+  height: 44px;
+  margin-left: auto;
+  padding: 0 13px;
+  border: 1px solid var(--border-light, rgba(0, 0, 0, .1));
+  border-radius: 11px;
+  background: var(--surface-hover);
+  color: var(--text-tertiary);
+  transition: border-color var(--duration-normal, 180ms) var(--ease-default), background var(--duration-normal, 180ms) var(--ease-default), box-shadow var(--duration-normal, 180ms) var(--ease-default);
+}
+
+.category-search:focus-within {
+  border-color: var(--brand-primary, #10b981);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--brand-soft, rgba(0, 190, 120, .12));
+}
+
+.category-search > i {
+  flex: 0 0 auto;
+  font-size: 15px;
+}
+
+.category-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: text;
+  font: inherit;
+  font-size: 14px;
+  user-select: text;
+}
+
+.category-search input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.category-search-clear {
+  display: grid;
+  flex: 0 0 24px;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.category-search-clear:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
 }
 
 .mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 104px;
+  height: 44px;
   border: 0;
-  border-radius: 7px;
-  padding: 8px 16px;
+  border-radius: 9px;
+  padding: 0 20px;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   font: inherit;
+  font-size: 16px;
+  transition: background var(--duration-normal, 180ms) var(--ease-default), color var(--duration-normal, 180ms) var(--ease-default), box-shadow var(--duration-normal, 180ms) var(--ease-default);
 }
 
 .mode-btn.active {
   background: var(--brand-soft, rgba(0, 190, 120, .12));
   color: var(--brand-primary, #10b981);
   font-weight: 700;
+  box-shadow: 0 2px 8px rgba(16, 183, 104, .12);
+}
+
+.mode-btn:not(.active):hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.mode-btn i {
+  font-size: 15px;
 }
 
 .category-body {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 0;
   flex: 1;
   min-height: 0;
+  min-width: 0;
 }
 
 .category-side {
-  border: 1px solid var(--border-light, rgba(0, 0, 0, .08));
-  border-radius: var(--radius-card, 12px);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  border: 0;
+  border-right: 1px solid var(--border-light, rgba(0, 0, 0, .08));
+  border-radius: 0;
   background: var(--surface);
-  overflow-y: auto;
-  max-height: 100%;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.side-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+  min-height: 72px;
+  padding: 14px 18px 13px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.side-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.side-heading-kicker,
+.content-kicker {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.side-heading strong {
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.side-total,
+.content-count {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: var(--radius-pill, 9999px);
+  background: var(--surface-hover);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .side-list {
   display: flex;
   flex-direction: column;
-  padding: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  gap: 1px;
+  padding: 8px 0 16px;
+  background: #fff;
 }
 
 .side-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+  min-height: 68px;
   border: 0;
-  background: transparent;
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--divider);
+  background: #fff;
   color: var(--text-primary);
   font: inherit;
-  padding: 9px 10px;
-  border-radius: var(--radius-control, 8px);
+  box-sizing: border-box;
+  padding: 12px 20px 12px 22px;
+  border-radius: 0;
   cursor: pointer;
   text-align: left;
   width: 100%;
+  transition: background var(--duration-normal, 180ms) var(--ease-default), border-color var(--duration-normal, 180ms) var(--ease-default), color var(--duration-normal, 180ms) var(--ease-default);
+}
+
+.side-item + .side-item {
+  margin-top: 0;
 }
 
 .side-item:hover {
-  background: var(--surface-hover);
+  background: #f8faf9;
 }
 
 .side-item.active {
-  background: var(--brand-soft, rgba(0, 190, 120, .12));
+  border-left-color: var(--brand-primary);
+  background: #fff;
   color: var(--brand-primary, #10b981);
-  font-weight: 600;
 }
 
 .side-logo,
 .side-logo-fallback {
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--surface-hover);
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
 }
 
 .side-logo :deep(img) {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  padding: 0;
+  object-fit: contain;
 }
 
 .side-logo-fallback {
   display: grid;
   place-items: center;
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: 17px;
 }
 
 .side-name {
@@ -392,28 +542,68 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-family: var(--category-font-family);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.35;
 }
 
 .side-count {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
 }
 
 .side-state {
-  min-height: 200px;
+  flex: 1 1 auto;
+  min-height: 220px;
   display: grid;
   place-items: center;
 }
 
 .category-content {
-  min-width: 0;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.category-content-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: 0 0 auto;
+  min-height: 72px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.content-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.content-title-group h3 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .content-hint {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 320px;
   display: flex;
   flex-direction: column;
@@ -429,25 +619,32 @@ onMounted(() => {
 }
 
 .content-state {
+  flex: 1 1 auto;
   min-height: 300px;
   display: grid;
   place-items: center;
 }
 
 .product-grid {
+  flex: 1 1 auto;
+  align-content: start;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
 }
 
 .product-card {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px;
+  min-width: 0;
+  padding: 12px;
   border: 1px solid var(--border-light, rgba(0, 0, 0, .08));
-  border-radius: var(--radius-card, 12px);
-  background: var(--surface);
+  border-radius: 12px;
+  background: var(--surface-hover);
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
@@ -455,8 +652,9 @@ onMounted(() => {
 }
 
 .product-card:hover {
+  border-color: var(--brand-green-border, rgba(16, 185, 102, .25));
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, .08));
+  box-shadow: 0 8px 22px rgba(23, 25, 28, .08);
 }
 
 .product-image,
@@ -511,6 +709,7 @@ onMounted(() => {
 }
 
 .pagination-footer {
+  grid-column: 1 / -1;
   padding: 16px 0;
   text-align: center;
 }
@@ -529,14 +728,66 @@ onMounted(() => {
 }
 
 @media (max-width: 800px) {
+  .category-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .category-search {
+    width: min(320px, 42vw);
+  }
+
   .category-body {
     grid-template-columns: 1fr;
+    overflow-y: auto;
   }
+
   .category-side {
-    max-height: 220px;
+    min-height: 0;
+    max-height: 286px;
   }
+
+  .side-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    gap: 3px;
+  }
+
+  .side-item + .side-item {
+    margin-top: 0;
+  }
+
   .product-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .category-toolbar {
+    padding: 8px 12px;
+  }
+
+  .category-search {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+  }
+
+  .mode-btn {
+    flex: 1 1 0;
+  }
+
+  .side-list {
+    grid-template-columns: 1fr;
+  }
+
+  .category-content-header {
+    padding: 13px 15px;
+  }
+
+  .product-grid {
+    padding: 12px;
   }
 }
 </style>
