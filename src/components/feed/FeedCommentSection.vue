@@ -2,16 +2,24 @@
   <div class="feed-comment-section">
     <div class="comment-toolbar">
       <strong class="comment-title">评论 <span>{{ commentCount }}</span></strong>
-      <div class="comment-sort" aria-label="评论排序">
+      <div class="comment-sort" aria-label="评论排序和筛选">
         <button
           v-for="option in commentSortOptions"
           :key="option.value"
           type="button"
-          :class="['comment-sort-button', { 'is-active': commentSortMode === option.value }]"
-          :aria-pressed="commentSortMode === option.value"
-          @click.stop="commentSortMode = option.value"
+          :class="['comment-sort-button', { 'is-active': !authorOnly && commentSortMode === option.value }]"
+          :aria-pressed="!authorOnly && commentSortMode === option.value"
+          @click.stop="selectCommentSort(option.value)"
         >
           {{ option.label }}
+        </button>
+        <button
+          type="button"
+          :class="['comment-sort-button', { 'is-active': authorOnly }]"
+          :aria-pressed="authorOnly"
+          @click.stop="authorOnly = !authorOnly"
+        >
+          只看楼主
         </button>
       </div>
     </div>
@@ -174,7 +182,7 @@
     <!-- 无评论提示 -->
     <div v-else-if="!sortedComments.length" class="comment-empty">
       <i class="fa-regular fa-comments empty-icon"></i>
-      <span>暂无评论，快来抢沙发吧~</span>
+      <span>{{ authorOnly ? '暂无楼主评论' : '暂无评论，快来抢沙发吧~' }}</span>
     </div>
 
     <!-- 微博/酷安 规范楼中楼树状结构列表 -->
@@ -187,7 +195,7 @@
         :data-context-feed-id="feedId"
         :data-context-comment-id="c.id"
         :data-comment-username="c.username || c.userInfo?.username || '酷友'"
-        :data-comment-text="c.message || c.replyRowsText || ''"
+        :data-comment-text="getCommentText(c)"
       >
         <!-- 1. 一级评论人头像 -->
         <UserHoverCard
@@ -230,6 +238,7 @@
             <span v-if="isAuthor(c)" class="badge-author">
               <i class="fa-solid fa-user-pen"></i> 楼主
             </span>
+            <span v-else-if="authorOnly && c.authorOnlyContext" class="author-filter-context-label">上下文</span>
 
             <span v-if="getCommentUserLevel(c)" class="level-tag">LV{{ getCommentUserLevel(c) }}</span>
             <span v-if="getCommentVerifyTitle(c)" class="verify-tag" :title="getCommentVerifyTitle(c)">
@@ -263,7 +272,7 @@
           <!-- 一级评论正文 -->
           <div
             class="comment-text"
-            v-html="formatCommentText(c.message || c.replyRowsText || '')"
+            v-html="formatCommentText(getCommentText(c))"
             @click="handleCommentTextClick($event, c)"
           ></div>
 
@@ -315,7 +324,7 @@
               :data-context-feed-id="feedId"
               :data-context-comment-id="sub.id"
               :data-comment-username="sub.username || sub.fromUserName || '酷友'"
-              :data-comment-text="sub.message || ''"
+              :data-comment-text="getCommentText(sub)"
               @click="setReplyTarget(sub.username || sub.fromUserName, sub.id || c.id)"
             >
               <!-- 子回复头像 -->
@@ -381,7 +390,7 @@
                   </span>
                 </div>
                 <!-- 子回复正文 -->
-                <div class="sub-reply-text" v-html="formatCommentText(sub.message || '')" @click="handleAnchorClick"></div>
+                <div class="sub-reply-text" v-html="formatCommentText(getCommentText(sub))" @click="handleAnchorClick"></div>
                 <FeedImageGrid
                   v-if="getCommentImages(sub).length"
                   class="comment-image-grid sub-comment-images"
@@ -494,6 +503,12 @@ const props = withDefaults(
   }
 );
 
+function getCommentText(item: any): string {
+  const text = String(item?.message || item?.replyRowsText || '');
+  if (!text || getCommentImages(item).length === 0) return text;
+  return text.replace(/\[\s*图片\s*\]/gi, '').trim();
+}
+
 function formatCommentText(text: string): string {
   if (!text) return '';
   return props.formatRichText ? props.formatRichText(text) : renderCoolapkRichText(text);
@@ -515,8 +530,14 @@ const inputRef = ref<HTMLDivElement | null>(null);
 const replyTargetUser = ref('');
 const replyTargetId = ref('');
 const commentSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const authorOnly = ref(false);
 const commentSortOptions = COMMENT_SORT_OPTIONS;
 const absoluteTimeIds = ref<Set<string>>(new Set());
+
+function selectCommentSort(mode: CommentSortMode) {
+  authorOnly.value = false;
+  commentSortMode.value = mode;
+}
 
 // 评论配图与酷安表情输入
 const MAX_IMAGES = 9;
@@ -1133,7 +1154,7 @@ function handleCommentTextClick(e: MouseEvent, c: any) {
 function isAuthor(commentItem: any) {
   const authorUid = String(props.feedUid || '');
   const authorName = String(props.feedUsername || '');
-  const itemUid = String(commentItem.uid || commentItem.userInfo?.uid || '');
+  const itemUid = String(commentItem.uid || commentItem.fromUid || commentItem.userId || commentItem.userInfo?.uid || '');
   const itemName = String(commentItem.username || commentItem.userInfo?.username || '');
 
   if (commentItem.isAuthor || commentItem.is_author === 1 || commentItem.isFeedAuthor) {
@@ -1143,6 +1164,33 @@ function isAuthor(commentItem: any) {
   if (authorUid && itemUid && authorUid === itemUid) return true;
   if (authorName && itemName && authorName === itemName) return true;
   return false;
+}
+
+function collectAuthorReplies(items: any[]): any[] {
+  const result: any[] = [];
+  items.forEach((item) => {
+    const children = Array.isArray(item?.replyRows) ? item.replyRows : [];
+    if (isAuthor(item)) {
+      const authorChildren = collectAuthorReplies(children);
+      result.push({ ...item, replyRows: authorChildren, replyRowsCount: authorChildren.length });
+    } else {
+      result.push(...collectAuthorReplies(children));
+    }
+  });
+  return result;
+}
+
+function filterAuthorOnlyComments(comments: any[]): any[] {
+  const result: any[] = [];
+  comments.forEach((floor) => {
+    const authorReplies = collectAuthorReplies(Array.isArray(floor.replyRows) ? floor.replyRows : []);
+    if (isAuthor(floor)) {
+      result.push({ ...floor, replyRows: authorReplies, replyRowsCount: authorReplies.length });
+    } else if (authorReplies.length > 0) {
+      result.push({ ...floor, replyRows: authorReplies, replyRowsCount: authorReplies.length, authorOnlyContext: true });
+    }
+  });
+  return result;
 }
 
 /**
@@ -1205,7 +1253,10 @@ const nestedComments = computed(() => {
   return topList;
 });
 
-const sortedComments = computed(() => sortComments(nestedComments.value, commentSortMode.value));
+const sortedComments = computed(() => {
+  const visibleComments = authorOnly.value ? filterAuthorOnlyComments(nestedComments.value) : nestedComments.value;
+  return sortComments(visibleComments, commentSortMode.value);
+});
 
 const commentCount = computed(() => {
   const total = props.totalCommentCount;
@@ -1213,7 +1264,7 @@ const commentCount = computed(() => {
     const parsed = Number(total);
     if (Number.isFinite(parsed) && parsed >= 0) return parsed;
   }
-  return sortedComments.value.length;
+  return nestedComments.value.length;
 });
 
 async function handleSend() {
@@ -1743,6 +1794,18 @@ async function handleSend() {
   padding: 1px 6px;
   border-radius: var(--radius-xs);
   font-weight: 600;
+  line-height: 1.3;
+}
+
+.author-filter-context-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-xs);
+  color: var(--text-tertiary);
+  background: var(--background-secondary);
+  font-size: 0.68rem;
   line-height: 1.3;
 }
 

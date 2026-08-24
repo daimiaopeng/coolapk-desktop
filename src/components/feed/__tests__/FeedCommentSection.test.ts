@@ -28,7 +28,7 @@ describe('评论完整信息展示', () => {
     setActivePinia(createPinia());
   });
 
-  function mountSection() {
+  function mountSection(commentOverrides: Record<string, any> = {}, extraProps: Record<string, any> = {}) {
     const timestamp = new Date(2026, 7, 9, 10, 20, 30).getTime() / 1000;
     return mount(FeedCommentSection, {
       props: {
@@ -43,9 +43,11 @@ describe('评论完整信息展示', () => {
           ip_location: '广东深圳',
           userInfo: { level: 6, verify_title: '酷安认证用户' },
           picArr: ['/feed/a.jpg', '/feed/b.jpg'],
+          ...commentOverrides,
         }],
         normalizeImg: (url: string) => url,
         formatRichText: (text: string) => text,
+        ...extraProps,
       },
       global: {
         stubs: {
@@ -71,6 +73,40 @@ describe('评论完整信息展示', () => {
     expect(wrapper.text()).toContain('#12楼');
     expect(wrapper.text()).toContain('广东深圳');
     expect(wrapper.find('.stub-comment-images').text()).toBe('comment:2');
+  });
+
+  it('评论图片已单独展示时移除正文中的图片占位文本', () => {
+    const wrapper = mountSection({ message: '[图片]', picArr: ['/feed/animated.gif'] });
+    expect(wrapper.find('.comment-text').text()).not.toContain('[图片]');
+  });
+
+  it('只看楼主只展示楼主评论且保留原始评论总数', async () => {
+    const wrapper = mountSection({}, {
+      feedUid: 'owner-1',
+      feedUsername: '楼主',
+      totalCommentCount: 2,
+      comments: [
+        { id: 'owner-comment', uid: 'owner-1', username: '楼主', message: '楼主评论' },
+        {
+          id: 'other-comment',
+          uid: 'other-1',
+          username: '其他用户',
+          message: '其他评论',
+          replyRows: [{ id: 'owner-sub-comment', uid: 'owner-1', username: '楼主', message: '楼主楼中楼回复' }],
+        },
+      ],
+    });
+
+    const authorOnlyButton = wrapper.findAll('.comment-sort-button').find(button => button.text() === '只看楼主');
+    expect(authorOnlyButton).toBeDefined();
+    expect(wrapper.findAll('.comment-row')).toHaveLength(2);
+    await authorOnlyButton!.trigger('click');
+
+    expect(wrapper.findAll('.comment-row')).toHaveLength(2);
+    expect(wrapper.find('.comment-row').text()).toContain('楼主评论');
+    expect(wrapper.find('.sub-reply-row').text()).toContain('楼主楼中楼回复');
+    expect(wrapper.find('.author-filter-context-label').text()).toBe('上下文');
+    expect(wrapper.find('.comment-title').text()).toBe('评论 2');
   });
 
   it('优先显示动态接口返回的评论总数', () => {
