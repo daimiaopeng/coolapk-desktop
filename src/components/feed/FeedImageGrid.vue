@@ -39,7 +39,7 @@ import { computed, ref } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { useSettingsStore } from '../../stores/settings';
 import AppImage from '../common/AppImage.vue';
-import { getHdImageUrl, isPortraitLongImage } from '../../utils/image';
+import { getHdImageUrl, isAnimatedImageUrl, isPortraitLongImage } from '../../utils/image';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 
 const props = defineProps<{
@@ -61,7 +61,7 @@ const processedImages = computed(() => {
     const trimmed = url.trim();
     if (trimmed.length <= 5 || trimmed === 'null' || trimmed === 'undefined') return false;
     // 关闭动图自动播放时，过滤 GIF 图片以节省流量
-    if (!settingsStore.settings.autoPlayGif && /\.gif(?:v)?[\s?]|\.gif$/i.test(trimmed)) {
+    if (!settingsStore.settings.autoPlayGif && isAnimatedImageUrl(trimmed)) {
       return false;
     }
     return true;

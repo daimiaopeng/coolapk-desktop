@@ -2,6 +2,16 @@ import { useSettingsStore } from '../stores/settings';
 
 export type ImageQualityMode = 'standard' | 'hd' | 'raw';
 
+/** 判断图片地址是否指向可直接播放的 GIF 动图。 */
+export function isAnimatedImageUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (/^data:image\/gif[;,]/i.test(trimmed)) return true;
+  const path = trimmed.split(/[?#]/, 1)[0].toLowerCase();
+  return /\.(?:gif|gifv)$/.test(path);
+}
+
 /**
  * 根据系统设置或指定的图片质量参数获取处理后的图片 URL
  * - 'standard': 标准 (轻量缩略图 .s.jpg)
@@ -10,6 +20,7 @@ export type ImageQualityMode = 'standard' | 'hd' | 'raw';
  */
 export function getImageUrlByQuality(url: string, targetQuality?: ImageQualityMode): string {
   if (!url || typeof url !== 'string') return '';
+  if (isAnimatedImageUrl(url)) return url;
   if (!url.startsWith('http')) return url;
 
   // 不给非 酷安 CDN 图片追加后缀
