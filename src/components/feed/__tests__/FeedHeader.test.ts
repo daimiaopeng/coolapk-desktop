@@ -3,6 +3,13 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import FeedHeader from '../FeedHeader.vue';
 
+const routerPush = vi.hoisted(() => vi.fn());
+
+vi.mock('vue-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-router')>();
+  return { ...actual, useRouter: () => ({ push: routerPush }) };
+});
+
 describe('动态头部信息布局', () => {
   it('按 APK 顺序展示认证、发布时间和机型', () => {
     setActivePinia(createPinia());
@@ -47,5 +54,20 @@ describe('动态头部信息布局', () => {
 
     expect(wrapper.find('.meta-row .dateline').text()).toBe('12 分钟前');
     vi.useRealTimers();
+  });
+
+  it('没有有效 UID 时不把用户名拼成错误用户路由', async () => {
+    setActivePinia(createPinia());
+    const wrapper = mount(FeedHeader, {
+      props: { uid: '0', username: '酷安头条' },
+      global: { stubs: { AppAvatar: true, AppIconButton: true, UserHoverCard: { template: '<div><slot /></div>' } } },
+    });
+
+    await wrapper.find('.username').trigger('click');
+    expect(routerPush).not.toHaveBeenCalled();
+
+    await wrapper.setProps({ uid: '24680' });
+    await wrapper.find('.username').trigger('click');
+    expect(routerPush).toHaveBeenCalledWith('/user/24680');
   });
 });

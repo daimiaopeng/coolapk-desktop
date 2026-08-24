@@ -130,6 +130,7 @@ import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
 import { preloadUserProfile, getUserProfileCached, getCachedUserProfileSync } from '../../utils/userProfilePreloader';
+import { normalizeUserUid } from '../../utils/userRoute';
 import AppAvatar from '../common/AppAvatar.vue';
 import AppImage from '../common/AppImage.vue';
 
@@ -168,7 +169,7 @@ const popoverStyle = ref({
 let showTimer: any = null;
 let hideTimer: any = null;
 
-const currentUid = computed(() => String(props.uid || '').trim());
+const currentUid = computed(() => normalizeUserUid(props.uid));
 const isSelf = computed(() => authStore.user?.uid && String(authStore.user.uid) === currentUid.value);
 
 // 初始化时若缓存中有数据直接同步展示

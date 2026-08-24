@@ -24,6 +24,12 @@ describe('酷安站内路由', () => {
     expect(normalizeCoolapkRoute('/page?url=%2Fproduct%2FfeedList')).toBe('/page?url=%2Fproduct%2FfeedList');
   });
 
+  it('将动态里的话题入口转换为话题页，而不是通用头条页', () => {
+    expect(normalizeCoolapkRoute('/feed/multiTagFeedList?tag=Android%2016')).toBe('/topic/Android%2016');
+    expect(normalizeCoolapkRoute('/topic/tagFeedList?title=桌面改造')).toBe('/topic/%E6%A1%8C%E9%9D%A2%E6%94%B9%E9%80%A0');
+    expect(normalizeCoolapkRoute('/page?url=%2Ftopic%2FtagFeedList%3Ftitle%3D桌面改造')).toBe('/topic/%E6%A1%8C%E9%9D%A2%E6%94%B9%E9%80%A0');
+  });
+
   it('将酷安机型搜索链接转换为原生机型列表页', () => {
     expect(normalizeCoolapkRoute('https://m.coolapk.com/mp/productSelector/configSearch?&callFunction=indexSearch'))
       .toBe('/product-selector?&callFunction=indexSearch');
@@ -50,6 +56,11 @@ describe('酷安站内路由', () => {
 
   it('不把系统通知的 /u/0 当成普通用户页', () => {
     expect(normalizeCoolapkRoute('/u/0')).toBeNull();
+  });
+
+  it('不把用户名当成用户 UID 拼成本地用户页', () => {
+    expect(normalizeCoolapkRoute('/u/好事儿')).toBeNull();
+    expect(normalizeCoolapkRoute('/u/123456')).toBe('/user/123456');
   });
 
   it('不会把未知的 feed 页面误判成动态详情', () => {

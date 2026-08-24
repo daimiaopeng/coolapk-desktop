@@ -14,7 +14,7 @@
     </div>
 
     <FeedHeader
-      :uid="feed.uid || feed.userInfo?.uid"
+      :uid="authorUid"
       :avatar="feed.userAvatar || feed.userInfo?.userAvatar || feed.pic"
       :plugin-url="(feed.userInfo as any)?.avatar_plugin_url || (feed as any).avatar_plugin_url || (feed as any).userAvatarPluginUrl"
       :username="feed.username || feed.userInfo?.username"
@@ -121,7 +121,7 @@
     <div v-if="showComments" class="inline-comment-wrapper" @click.stop>
       <FeedCommentSection
         :feed-id="feed.id"
-        :feed-uid="feed.uid || feed.userInfo?.uid"
+        :feed-uid="authorUid"
         :feed-username="feed.username"
         :total-comment-count="feed.replynum"
         :comments="comments"
@@ -237,6 +237,7 @@ import {
   getFeedRelationTitle,
   getFeedRelationType,
 } from '../../utils/feedRelations';
+import { getUserUid } from '../../utils/userRoute';
 
 const settingsStore = useSettingsStore();
 const appStore = useAppStore();
@@ -252,8 +253,7 @@ const props = defineProps<{
 }>();
 
 const authorUid = computed(() => {
-  const raw = props.feed.uid || props.feed.userInfo?.uid;
-  return raw ? String(raw).trim() : '';
+  return getUserUid(props.feed);
 });
 
 const userCoverUrl = computed(() => {
@@ -301,8 +301,7 @@ const authStore = useAuthStore();
 
 const isMyFeed = computed(() => {
   if (!authStore.isLoggedIn || !authStore.user) return false;
-  const feedUid = String(props.feed.uid ?? props.feed.userInfo?.uid ?? '');
-  return !!feedUid && feedUid === String(authStore.user.uid);
+  return !!authorUid.value && authorUid.value === String(authStore.user.uid);
 });
 
 const isEdited = computed(() => {
@@ -414,6 +413,11 @@ function openTarget(target: any) {
   if (!target) return;
   const targetUrl = target.url || target.targetUrl || target.target_url || target.webUrl || target.web_url;
   if (typeof targetUrl === 'string' && targetUrl) {
+    const normalizedRoute = normalizeCoolapkRoute(targetUrl);
+    if (normalizedRoute && !/^\/page(?:\?|$)/i.test(normalizedRoute)) {
+      void router.push(normalizedRoute);
+      return;
+    }
     const pageRoute = normalizeCoolapkPageRoute(targetUrl);
     if (pageRoute) {
       const pageUrl = new URL(pageRoute, 'https://www.coolapk.com');
@@ -426,7 +430,6 @@ function openTarget(target: any) {
       });
       return;
     }
-    const normalizedRoute = normalizeCoolapkRoute(targetUrl);
     if (normalizedRoute) void router.push(normalizedRoute);
     else if (targetUrl.startsWith('/')) void router.push(normalizeCoolapkNativeRoute(targetUrl) || targetUrl);
     else void CoolapkTauriAPI.openUrl(targetUrl);
@@ -435,17 +438,21 @@ function openTarget(target: any) {
   const type = getFeedRelationType(target);
   const id = target.id || target.entityId || target.entity_id || target.targetId || target.target_id;
   const packageName = target.packageName || target.package_name || target.apkName || target.apkname;
+  const topicTag = target.tag || target.topicTag || target.topic_tag || target.title || target.name || id;
   if (packageName && (type.includes('apk') || type.includes('app') || type.includes('game'))) {
     const appRoute = normalizeCoolapkNativeRoute(`/apk/${String(packageName)}`);
     if (appRoute) void router.push(appRoute);
+    return;
+  }
+  if (type.includes('topic') || type.includes('node') || type.includes('tag')) {
+    const normalizedTopicTag = String(topicTag || '').trim();
+    if (normalizedTopicTag) void router.push(`/topic/${encodeURIComponent(normalizedTopicTag)}`);
     return;
   }
   if (id) {
     if (type.includes('apk') || type.includes('app')) {
       const appRoute = normalizeCoolapkNativeRoute(`/apk/${String(id)}`);
       if (appRoute) void router.push(appRoute);
-    } else if (type.includes('topic') || type.includes('node') || type.includes('tag')) {
-      void router.push(`/topic/${id}`);
     } else if (type.includes('product') || type.includes('device')) {
       void router.push(`/product/${id}`);
     }

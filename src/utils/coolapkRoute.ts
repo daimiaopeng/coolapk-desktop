@@ -1,4 +1,6 @@
 /** 将酷安应用链接统一转换为桌面端应用详情路由。 */
+import { normalizeUserUid } from './userRoute';
+
 export function normalizeCoolapkAppRoute(href: string): string | null {
   const detailMatch = href.match(/^\/apk\/detail\/?(?:\?([^#]*))?(?:#.*)?$/i);
   if (detailMatch) {
@@ -89,6 +91,33 @@ function normalizeCoolapkWriterRoute(href: string): string | null {
   return `/product/${encodeURIComponent(targetId)}?tab=rating&mode=writer`;
 }
 
+/** 将酷安动态里的话题列表入口转换为桌面端话题页。 */
+function normalizeCoolapkTopicFeedRoute(href: string): string | null {
+  const path = extractCoolapkPath(href);
+  if (!path) return null;
+  const match = path.match(/^\/(?:feed\/multiTagFeedList|topic\/tagFeedList)(?:\?([^#]*))?$/i);
+  if (!match) return null;
+  const params = new URLSearchParams(match[1] || '');
+  const tag = String(params.get('tag') || params.get('title') || '').trim();
+  return tag ? `/topic/${encodeURIComponent(tag)}` : null;
+}
+
+/** 解析被酷安 /page?url= 包裹的话题入口，避免落入通用头条列表页。 */
+function normalizeCoolapkNestedTopicRoute(href: string): string | null {
+  const path = extractCoolapkPath(href);
+  if (!path) return null;
+  const match = path.match(/^\/page\?url=(.+)$/i);
+  if (!match) return null;
+  let nestedUrl = match[1];
+  try {
+    nestedUrl = decodeURIComponent(nestedUrl);
+  } catch {
+    // 保留原始值，避免异常编码阻断其他站内链接处理。
+  }
+  const nestedPath = extractCoolapkPath(nestedUrl) || nestedUrl;
+  return normalizeCoolapkTopicFeedRoute(nestedUrl) || normalizeCoolapkTopicRoute(nestedPath);
+}
+
 /** 将酷安服务端动态列表页转换为桌面端的通用列表路由。 */
 export function normalizeCoolapkPageRoute(href: string): string | null {
   const path = extractCoolapkPath(href);
@@ -118,11 +147,11 @@ function normalizeCoolapkProductSelectorRoute(href: string): string | null {
 function normalizeCoolapkUserRoute(href: string): string | null {
   const match = href.match(/^\/(?:u|user)\/([^/?#]+)(?:\?([^#]*))?$/i);
   if (!match) return null;
-  // 系统通知有时会把“点击查看”伪装成 /u/0，0 不是可访问的用户 UID。
-  // 如果把它归一化成 /user/0，桌面端会进入用户资料页并显示“用户资料加载失败”，
-  // 应该让上层回退到通知携带的原始酷安链接。
-  if (/^0+$/.test(match[1])) return null;
-  return `/user/${match[1]}${match[2] ? `?${match[2]}` : ''}`;
+  // 酷安用户入口使用数字 UID；用户名或占位 UID 不能拼成本地用户路由，
+  // 否则点击动态里的 @用户名 会进入用户资料错误页。
+  const uid = normalizeUserUid(match[1]);
+  if (!uid) return null;
+  return `/user/${uid}${match[2] ? `?${match[2]}` : ''}`;
 }
 
 function normalizeCoolapkTopicRoute(href: string): string | null {
@@ -153,6 +182,8 @@ export function normalizeCoolapkRoute(href: string): string | null {
     normalizeCoolapkRatingRoute,
     normalizeCoolapkWriterRoute,
     normalizeCoolapkProductSelectorRoute,
+    normalizeCoolapkNestedTopicRoute,
+    normalizeCoolapkTopicFeedRoute,
     normalizeCoolapkPageRoute,
     normalizeCoolapkNativeRoute,
     normalizeCoolapkUserRoute,

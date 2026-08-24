@@ -86,6 +86,7 @@ import AppAvatar from '../common/AppAvatar.vue';
 import AppIconButton from '../common/AppIconButton.vue';
 import UserHoverCard from '../user/UserHoverCard.vue';
 import { reactiveUserProfileMap, getCachedUserProfileSync } from '../../utils/userProfilePreloader';
+import { normalizeUserUid } from '../../utils/userRoute';
 
 const props = withDefaults(defineProps<{
   uid?: string | number;
@@ -117,7 +118,7 @@ const emit = defineEmits<{
   (e: 'edit-history'): void;
 }>();
 
-const currentUid = computed(() => String(props.uid || '').trim());
+const currentUid = computed(() => normalizeUserUid(props.uid));
 const preloadedProfile = computed(() => {
   if (!currentUid.value) return null;
   return reactiveUserProfileMap[currentUid.value] || getCachedUserProfileSync(currentUid.value);
@@ -147,7 +148,7 @@ const ipLocationText = computed(() => {
 });
 
 function handleUserClick() {
-  const targetUid = props.uid || props.username;
+  const targetUid = normalizeUserUid(props.uid);
   if (targetUid) {
     router.push(`/user/${targetUid}`);
   }

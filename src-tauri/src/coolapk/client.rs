@@ -1139,20 +1139,8 @@ impl CoolapkClient {
             })
             .or_else(|| obj.get("user_name").and_then(|v| v.as_str()));
 
-        let uid = obj
-            .get("uid")
-            .and_then(|v| {
-                v.as_str()
-                    .map(|s| s.to_string())
-                    .or_else(|| v.as_u64().map(|n| n.to_string()))
-            })
-            .or_else(|| {
-                user_info.and_then(|u| u.get("uid")).and_then(|v| {
-                    v.as_str()
-                        .map(|s| s.to_string())
-                        .or_else(|| v.as_u64().map(|n| n.to_string()))
-                })
-            });
+        let uid = get_str_by_keys(obj, &["uid", "userId", "user_id", "authorUid", "author_uid"])
+            .or_else(|| user_info.and_then(|u| u.as_object()).and_then(|info| get_str_by_keys(info, &["uid", "userId", "user_id", "authorUid", "author_uid", "id"])));
 
         let entity_type = obj.get("entityType").and_then(|v| v.as_str()).unwrap_or("");
 
