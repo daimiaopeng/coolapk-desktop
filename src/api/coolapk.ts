@@ -475,6 +475,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_notification_count', {}, { retry: true });
   }
 
+  static async clearNotificationCount(notificationType: string = 'all') {
+    return await invokeNative('clear_notification_count', { notificationType });
+  }
+
   static async getNotifications(notificationType: string = 'atme', page: number = 1) {
     return await invokeNative('get_notifications', { notificationType, page }, { retry: true });
   }

@@ -4,7 +4,6 @@
     <div class="messages-sidebar">
       <div class="sidebar-header">
         <h2>私信</h2>
-        <AppButton icon="fas fa-plus" size="sm" variant="secondary">新建私信</AppButton>
       </div>
       
       <div class="session-list" v-if="sessions.length">
@@ -16,7 +15,7 @@
           :data-context-message-ukey="String(session.ukey || (session.isNewConversation ? '' : session.id) || '')"
           :data-context-message-id="String(session.id || '')"
           :data-context-message-new="session.isNewConversation ? 'true' : 'false'"
-          :class="{ active: currentSession && (currentSession.ukey === session.ukey || currentSession.id === session.id) }"
+          :class="{ active: currentSession && (currentSession.ukey === session.ukey || currentSession.id === session.id), unread: isSessionUnread(session) }"
           @click="selectSession(session)"
         >
           <AppAvatar :src="getSessionPartnerAvatar(session)" size="md" />
@@ -27,6 +26,7 @@
             </div>
             <div class="last-message">{{ getLastMessage(session) }}</div>
           </div>
+          <span v-if="getSessionUnreadCount(session) > 0" class="session-unread-badge" aria-label="未读消息数">{{ getSessionUnreadLabel(session) }}</span>
         </div>
       </div>
       
@@ -183,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, onActivated, nextTick, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, computed, watch } from 'vue';
 
 defineOptions({
   name: 'MessagesPage'
@@ -230,6 +230,9 @@ const loadingHistory = ref(false);
 const historyError = ref('');
 const chatHistoryCache = new Map<string, any[]>();
 let historyRequestSequence = 0;
+const MESSAGE_POLL_INTERVAL_MS = 10_000;
+let messagePollTimer: number | null = null;
+let messagePollingActive = false;
 
 const inputText = ref('');
 const draftSaved = ref(false);
@@ -298,6 +301,52 @@ function persistSessionsCache() {
 const getSessionPartnerUid = (session: any) => {
   if (!session) return '';
   return session.messageUid || session.fromuid || session.uid || '';
+};
+
+const getSessionUnreadCount = (session: any) => {
+  const unreadNum = Number(session?.unreadNum);
+  if (Number.isFinite(unreadNum) && unreadNum > 0) return Math.floor(unreadNum);
+  return Number(session?.isnew ?? 0) === 1 || Number(session?.isNew ?? 0) === 1 ? 1 : 0;
+};
+
+const getSessionUnreadLabel = (session: any) => {
+  const unreadCount = getSessionUnreadCount(session);
+  return unreadCount > 99 ? '99+' : String(unreadCount);
+};
+
+const isSessionUnread = (session: any) => getSessionUnreadCount(session) > 0;
+
+const isSameSession = (left: any, right: any) => {
+  if (!left || !right) return false;
+  const leftKey = getConversationKey(left);
+  const rightKey = getConversationKey(right);
+  if (leftKey && rightKey && leftKey === rightKey) return true;
+  const leftUid = String(getSessionPartnerUid(left) || '');
+  const rightUid = String(getSessionPartnerUid(right) || '');
+  return Boolean(leftUid && rightUid && leftUid === rightUid);
+};
+
+const clearSessionUnreadState = (session: any) => {
+  if (!session) return;
+  session.isnew = 0;
+  session.isNew = false;
+  session.unreadNum = 0;
+  session.unread_num = 0;
+  session.unread_count = 0;
+  session.unreadCount = 0;
+};
+
+/** 同时清理接口对象、当前会话和列表中的同一会话，避免轮询替换对象后角标残留。 */
+const markSessionRead = (session: any) => {
+  if (!session) return false;
+  const relatedSessions = new Set<any>([session]);
+  if (isSameSession(session, currentSession.value)) relatedSessions.add(currentSession.value);
+  for (const item of sessions.value) {
+    if (isSameSession(session, item)) relatedSessions.add(item);
+  }
+  const wasUnread = Array.from(relatedSessions).some((item) => isSessionUnread(item));
+  relatedSessions.forEach(clearSessionUnreadState);
+  return wasUnread;
 };
 
 const getRouteTargetUid = () => String(route.query.uid || route.query.targetUid || '').trim();
@@ -441,9 +490,13 @@ const loadSessions = async () => {
     );
     if (res?.data && Array.isArray(res.data)) {
       sessions.value = res.data;
+      // 当前聊天已打开时，即使轮询接口暂时返回旧的未读值，也保持当前会话的即时已读状态。
+      if (currentSession.value && !isSessionUnread(currentSession.value)) {
+        markSessionRead(currentSession.value);
+      }
       persistSessionsCache();
       const queryUid = getRouteTargetUid();
-      if (queryUid) {
+      if (queryUid && String(getSessionPartnerUid(currentSession.value)) !== queryUid) {
         await openTargetConversation(queryUid);
       }
     } else {
@@ -456,6 +509,31 @@ const loadSessions = async () => {
     loadingSessions.value = false;
   }
 };
+
+function stopMessagePolling() {
+  messagePollingActive = false;
+  if (messagePollTimer !== null) {
+    window.clearTimeout(messagePollTimer);
+    messagePollTimer = null;
+  }
+}
+
+function scheduleMessagePolling() {
+  if (!messagePollingActive || messagePollTimer !== null) return;
+  messagePollTimer = window.setTimeout(async () => {
+    messagePollTimer = null;
+    if (messagePollingActive && !document.hidden && authStore.isLoggedIn) {
+      await loadSessions();
+    }
+    scheduleMessagePolling();
+  }, MESSAGE_POLL_INTERVAL_MS);
+}
+
+function startMessagePolling() {
+  if (messagePollingActive) return;
+  messagePollingActive = true;
+  scheduleMessagePolling();
+}
 
 async function openTargetConversation(uid: string) {
   const targetUid = String(uid || '').trim();
@@ -498,6 +576,8 @@ const selectSession = async (session: any) => {
   await saveCurrentDraft();
   const requestSequence = ++historyRequestSequence;
   currentSession.value = session;
+  // 进入会话即先清理本地角标，不等待聊天记录和下一轮轮询返回。
+  if (markSessionRead(session)) notificationStore.markViewed('message');
   await restoreDraft(session);
   historyError.value = '';
   const partnerUid = getSessionPartnerUid(session);
@@ -521,16 +601,17 @@ const selectSession = async (session: any) => {
   }
   const sessionKey = String(ukey);
 
-  // 0. 若有未读消息则标记已读（本地即时清零 + 服务端同步）
-  if (session.isnew == 1 || session.isNew) {
-    session.isnew = 0;
-    session.isNew = false;
-    notificationStore.markViewed('message');
-    // 标记已读不阻塞聊天记录显示，网络异常时只记录错误。
-    void withTimeout(CoolapkTauriAPI.readMessage(sessionKey), 10_000, '标记已读请求超时').catch((err) => {
+  // APK 在打开具体会话后调用 message/read；请求与聊天记录加载并行，避免已读状态延迟到下一次轮询。
+  void withTimeout(CoolapkTauriAPI.readMessage(sessionKey), 10_000, '标记已读请求超时')
+    .then((readResult: any) => {
+      markSessionRead(session);
+      if (readResult?.data && typeof readResult.data === 'object') {
+        notificationStore.applyServerResponse(readResult);
+      }
+    })
+    .catch((err) => {
       console.error('标记会话已读失败', err);
     });
-  }
 
   // 1. 如果缓存中已存在历史记录，直接使用，实现 0 延迟秒切无转圈
   if (chatHistoryCache.has(sessionKey)) {
@@ -625,6 +706,10 @@ function handleDeleteMessageContext(event: Event) {
   if (detail) void deleteSession(detail);
 }
 
+function handleMessageCountIncrease() {
+  if (authStore.isLoggedIn) void loadSessions();
+}
+
 watch(
   () => `${getRouteTargetUid()}|${String(route.query.open || '')}`,
   (value, previousValue) => {
@@ -636,10 +721,14 @@ watch(
 );
 
 onActivated(() => {
-  const uid = getRouteTargetUid();
-  if (uid && String(getSessionPartnerUid(currentSession.value)) !== uid) {
-    void openTargetConversation(uid);
-  }
+  window.addEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
+  void loadSessions();
+  startMessagePolling();
+});
+
+onDeactivated(() => {
+  window.removeEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
+  stopMessagePolling();
 });
 
 // --- 交互事件 ---
@@ -853,11 +942,15 @@ const sendMessage = async () => {
 onMounted(() => {
   restoreSessionsCache();
   window.addEventListener('coolapk-context-delete-message', handleDeleteMessageContext);
+  window.addEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
   void loadSessions();
+  startMessagePolling();
 });
 
 onUnmounted(() => {
   window.removeEventListener('coolapk-context-delete-message', handleDeleteMessageContext);
+  window.removeEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
+  stopMessagePolling();
   saveCurrentDraft();
 });
 </script>
@@ -952,6 +1045,7 @@ onUnmounted(() => {
 
 .session-item {
   display: flex;
+  align-items: center;
   padding: var(--space-3) var(--space-4);
   gap: var(--space-3);
   cursor: pointer;
@@ -980,10 +1074,11 @@ onUnmounted(() => {
 .session-header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
 }
 
 .session-header .username {
+  min-width: 0;
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
@@ -996,6 +1091,28 @@ onUnmounted(() => {
   font-size: var(--font-size-caption);
   color: var(--text-tertiary);
   flex-shrink: 0;
+}
+
+.session-unread-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: #ef4444;
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  line-height: 18px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+.session-item.unread .session-header .username {
+  font-weight: var(--font-weight-bold);
 }
 
 .last-message {

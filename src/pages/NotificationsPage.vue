@@ -38,14 +38,17 @@
       </div>
 
       <div v-else class="notification-list">
-        <div v-for="(item, i) in items" :key="item.id || i" class="notify-card">
+        <div v-for="item in items" :key="getNotificationKey(item)" :class="['notify-card', { unread: isNotificationUnread(item) }]">
           <div class="notify-avatar-wrap">
             <AppAvatar :src="getAvatar(item)" size="md" class="notify-avatar" />
           </div>
           <div class="notify-content">
             <div class="notify-header">
               <span class="notify-user">{{ getUsername(item) }}</span>
-              <span class="notify-time">{{ formatTime(item.likeTime || item.dateline) }}</span>
+              <span class="notify-header-right">
+                <span class="notify-time">{{ formatTime(item.likeTime || item.dateline) }}</span>
+                <span v-if="getNotificationUnreadCount(item) > 0" class="notify-unread-badge" aria-label="未读通知数">{{ getNotificationUnreadLabel(item) }}</span>
+              </span>
             </div>
             
             <div v-if="getNote(item)" class="notify-action" v-html="renderCoolapkRichText(getNote(item))" @click="handleNotifyClick($event, item)"></div>
@@ -270,7 +273,6 @@ function getOriginalFeedSummary(item: any): string {
 function openOriginalFeed(item: any) {
   const id = getOriginalFeedId(item);
   if (!id) return;
-  markCurrentNotificationViewed();
   openFeedDetail(router, id, item);
 }
 
@@ -281,13 +283,11 @@ async function resolveNotificationTarget(item: any): Promise<string | null> {
 async function openNotificationTarget(item: any): Promise<boolean> {
   const externalUrl = getNotificationExternalUrl(item);
   if (externalUrl) {
-    markCurrentNotificationViewed();
     void CoolapkTauriAPI.openUrl(externalUrl);
     return true;
   }
   const feedId = getNotificationFeedId(item);
   if (feedId) {
-    markCurrentNotificationViewed();
     openFeedDetail(router, feedId, item);
     return true;
   }
@@ -295,7 +295,6 @@ async function openNotificationTarget(item: any): Promise<boolean> {
   if (!targetRoute) {
     return false;
   }
-  markCurrentNotificationViewed();
   void router.push(targetRoute);
   return true;
 }
@@ -322,8 +321,31 @@ function getCurrentCategory(): NotificationCategory {
   return tabs.find((tab) => tab.value === currentTab.value)?.countKey || 'comment';
 }
 
-function markCurrentNotificationViewed() {
-  notificationStore.markViewed(getCurrentCategory());
+function getNotificationKey(item: any): string {
+  const category = currentTab.value;
+  const stableId = item?.id ?? item?.entityId ?? item?.targetId;
+  if (stableId !== undefined && stableId !== null && String(stableId).trim()) {
+    return `${category}:${String(stableId)}`;
+  }
+  const actor = item?.fromuid ?? item?.uid ?? item?.likeUid ?? '';
+  const timestamp = item?.dateline ?? item?.likeTime ?? item?.lastUpdate ?? '';
+  const content = String(item?.note || item?.message || item?.targetTitle || '').slice(0, 80);
+  return `${category}:${actor}:${timestamp}:${content}`;
+}
+
+function getNotificationUnreadCount(item: any): number {
+  const count = Number(item?.unread_count ?? item?.unreadCount);
+  if (Number.isFinite(count) && count > 0) return Math.floor(count);
+  return Number(item?.isnew ?? item?.isNew ?? 0) > 0 ? 1 : 0;
+}
+
+function getNotificationUnreadLabel(item: any): string {
+  const count = getNotificationUnreadCount(item);
+  return count > 99 ? '99+' : String(count);
+}
+
+function isNotificationUnread(item: any): boolean {
+  return getNotificationUnreadCount(item) > 0;
 }
 
 function markCurrentTabViewed() {
@@ -345,7 +367,6 @@ async function handleNotifyClick(e: Event, item: any) {
   const feedMatch = href.match(/^\/feed\/(\d+)/);
   if (feedMatch?.[1]) {
     e.preventDefault();
-    markCurrentNotificationViewed();
     openFeedDetail(router, feedMatch[1], item);
     return;
   }
@@ -359,13 +380,11 @@ async function handleNotifyClick(e: Event, item: any) {
   // 不能让该链接先走用户页路由，否则会落到“用户资料加载失败”。
   const externalUrl = getNotificationExternalUrl(notification);
   if (externalUrl) {
-    markCurrentNotificationViewed();
     void CoolapkTauriAPI.openUrl(externalUrl);
     return;
   }
   const targetRoute = await resolveNotificationTarget(notification);
   if (targetRoute) {
-    markCurrentNotificationViewed();
     void router.push(targetRoute);
     return;
   }
@@ -375,6 +394,9 @@ async function handleNotifyClick(e: Event, item: any) {
 onActivated(() => {
   window.addEventListener('coolapk-notification-count-increased', handleNotificationCountIncrease);
   notificationStore.markAllNotificationsViewed();
+  void CoolapkTauriAPI.clearNotificationCount('feed').catch((err) => {
+    console.warn('清除服务端通知数失败', err);
+  });
   const requestedTab = String(route.query.tab || '');
   if (tabs.some((tab) => tab.value === requestedTab)) currentTab.value = requestedTab;
   void refreshNotifications();
@@ -526,6 +548,11 @@ watch(
   border-color: rgba(var(--brand-primary-rgb), 0.3);
 }
 
+.notify-card.unread {
+  border-left: 3px solid var(--danger);
+  padding-left: calc(var(--space-4) - 2px);
+}
+
 .notify-avatar-wrap {
   flex-shrink: 0;
 }
@@ -545,7 +572,15 @@ watch(
   gap: var(--space-2);
 }
 
+.notify-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
 .notify-user {
+  min-width: 0;
   font-size: var(--font-size-sub);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
@@ -558,6 +593,26 @@ watch(
   font-size: var(--font-size-caption);
   color: var(--text-tertiary);
   white-space: nowrap;
+}
+
+.notify-unread-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  line-height: 18px;
+  box-sizing: border-box;
+}
+
+.notify-card.unread .notify-user {
+  font-weight: var(--font-weight-bold);
 }
 
 .notify-action {

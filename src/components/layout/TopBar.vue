@@ -104,13 +104,66 @@
         </Transition>
       </div>
 
-      <AppIconButton
-        icon="fas fa-envelope"
-        :title="notificationStore.messageCount > 0 ? `${notificationStore.messageCount} 条未读私信` : '私信'"
-        aria-label="私信"
-        :badge="notificationStore.messageCount"
-        @click="navigateTo('/messages')"
-      />
+      <div
+        class="message-wrapper"
+        @mouseenter="handleMessageMouseEnter"
+        @mouseleave="handleMessageMouseLeave"
+      >
+        <AppIconButton
+          icon="fas fa-envelope"
+          :title="notificationStore.messageCount > 0 ? `${notificationStore.messageCount} 条未读私信` : '私信'"
+          aria-label="私信"
+          :badge="notificationStore.messageCount"
+          @click="openMessagePopover"
+        />
+
+        <Transition name="popover-fade">
+          <div
+            v-if="isMessagePopoverVisible"
+            class="notification-popover message-popover"
+            @mouseenter="handleMessageMouseEnter"
+            @mouseleave="handleMessageMouseLeave"
+          >
+            <div class="notification-popover-header">
+              <div>
+                <strong>私信</strong>
+                <span v-if="notificationStore.messageCount > 0">
+                  {{ notificationStore.messageCount }} 条未读
+                </span>
+              </div>
+              <button type="button" @click="openMessagesPage">查看全部</button>
+            </div>
+
+            <div v-if="messagePreviewLoading" class="notification-popover-state">
+              <i class="fas fa-circle-notch fa-spin"></i>
+              <span>正在加载私信...</span>
+            </div>
+            <div v-else-if="messagePreviews.length === 0" class="notification-popover-state">
+              <i class="far fa-envelope-open"></i>
+              <span>暂无未读私信</span>
+            </div>
+            <div v-else class="message-preview-list">
+              <button
+                v-for="preview in messagePreviews"
+                :key="preview.key"
+                type="button"
+                class="notification-preview-item message-preview-item"
+                @click="openMessagePreview(preview)"
+              >
+                <AppAvatar :src="getMessagePreviewAvatar(preview)" size="sm" />
+                <span class="notification-preview-content">
+                  <span class="message-preview-meta">
+                    <strong>{{ getMessagePreviewUsername(preview) }}</strong>
+                    <em>{{ getMessagePreviewTime(preview) }}</em>
+                  </span>
+                  <span class="notification-preview-text">{{ getMessagePreviewText(preview) }}</span>
+                </span>
+                <span class="message-preview-badge">{{ getMessagePreviewUnreadLabel(preview) }}</span>
+              </button>
+            </div>
+          </div>
+        </Transition>
+      </div>
 
       <div
         class="user-profile-wrapper"
@@ -276,8 +329,12 @@ function refreshPage() {
   reloadCurrentPage();
 }
 
-let notifTimer: any = null;
+const NOTIFICATION_POLL_MIN_INTERVAL_MS = 60 * 1000;
+const NOTIFICATION_POLL_MAX_BACKOFF_MS = 10 * 60 * 1000;
+let notifTimer: ReturnType<typeof setTimeout> | null = null;
 let notificationRequestRunning = false;
+let notificationPollFailureCount = 0;
+let notificationPollingActive = false;
 
 interface NotificationPreview {
   key: string;
@@ -285,6 +342,12 @@ interface NotificationPreview {
   category: NotificationCategory;
   label: string;
   item: any;
+}
+
+interface MessagePreview {
+  key: string;
+  item: any;
+  unreadCount: number;
 }
 
 const notificationPreviewSources: Array<{
@@ -304,6 +367,11 @@ const notificationPreviewLoading = ref(false);
 const notificationPreviews = ref<NotificationPreview[]>([]);
 let notificationPopoverHideTimer: ReturnType<typeof setTimeout> | null = null;
 let notificationPreviewLoadedAt = 0;
+const isMessagePopoverVisible = ref(false);
+const messagePreviewLoading = ref(false);
+const messagePreviews = ref<MessagePreview[]>([]);
+let messagePopoverHideTimer: ReturnType<typeof setTimeout> | null = null;
+let messagePreviewLoadedAt = 0;
 
 function isDesktopNotificationEnabledFor(categories: NotificationCategory[]): boolean {
   if (!settingsStore.settings.desktopNotifications) return false;
@@ -321,12 +389,12 @@ function isDesktopNotificationEnabledFor(categories: NotificationCategory[]): bo
   });
 }
 
-async function fetchNotificationCount() {
+async function fetchNotificationCount(): Promise<boolean | null> {
   if (!authStore.isLoggedIn) {
     notificationStore.reset();
-    return;
+    return true;
   }
-  if (notificationRequestRunning) return;
+  if (notificationRequestRunning) return null;
   notificationRequestRunning = true;
   try {
     const res: any = await CoolapkTauriAPI.getNotificationCount();
@@ -347,12 +415,20 @@ async function fetchNotificationCount() {
     }
     if (countIncreased) {
       notificationPreviewLoadedAt = 0;
-      window.dispatchEvent(new CustomEvent('coolapk-notification-count-increased', {
-        detail: { previous, count },
-      }));
+      if (increasedCategories.includes('message')) {
+        messagePreviewLoadedAt = 0;
+        if (isMessagePopoverVisible.value) void fetchMessagePreviews(true);
+      }
+      const detail = { previous, count, increasedCategories };
+      window.dispatchEvent(new CustomEvent('coolapk-notification-count-increased', { detail }));
+      if (increasedCategories.includes('message')) {
+        window.dispatchEvent(new CustomEvent('coolapk-message-count-increased', { detail }));
+      }
     }
+    return true;
   } catch (e) {
     console.warn('获取通知未读数失败:', e);
+    return false;
   } finally {
     notificationRequestRunning = false;
   }
@@ -429,6 +505,82 @@ async function fetchNotificationPreviews(force = false) {
   }
 }
 
+function getMessagePreviewPartnerUid(preview: MessagePreview): string {
+  const item = preview.item;
+  return String(item?.messageUid || item?.fromuid || item?.uid || '').trim();
+}
+
+function getMessagePreviewUsername(preview: MessagePreview): string {
+  const item = preview.item;
+  return item?.messageUsername
+    || item?.fromusername
+    || item?.username
+    || item?.messageUserInfo?.username
+    || '未知酷友';
+}
+
+function getMessagePreviewAvatar(preview: MessagePreview): string {
+  const item = preview.item;
+  return item?.messageUserAvatar
+    || item?.fromUserAvatar
+    || item?.messageUserInfo?.userAvatar
+    || item?.fromUserInfo?.userAvatar
+    || item?.userAvatar
+    || '';
+}
+
+function getMessagePreviewText(preview: MessagePreview): string {
+  const item = preview.item;
+  return stripNotificationHtml(item?.message || item?.lastMessage || item?.summary || item?.last_message || '暂无消息');
+}
+
+function getMessagePreviewUnreadLabel(preview: MessagePreview): string {
+  return preview.unreadCount > 99 ? '99+' : String(preview.unreadCount);
+}
+
+function getMessagePreviewTime(preview: MessagePreview): string {
+  const timestamp = getNotificationItemTime(preview.item);
+  if (!timestamp) return '';
+  const date = new Date(timestamp > 9_999_999_999 ? timestamp : timestamp * 1000);
+  const now = new Date();
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  }
+  return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+}
+
+function getMessagePreviewUnreadCount(item: any): number {
+  const count = Number(item?.unreadNum ?? item?.unread_num ?? item?.unreadCount ?? item?.unread_count);
+  if (Number.isFinite(count) && count > 0) return Math.floor(count);
+  return Number(item?.isnew ?? item?.isNew ?? 0) > 0 ? 1 : 0;
+}
+
+async function fetchMessagePreviews(force = false) {
+  if (!authStore.isLoggedIn || messagePreviewLoading.value) return;
+  if (!force && Date.now() - messagePreviewLoadedAt < 10_000) return;
+  messagePreviewLoading.value = true;
+  try {
+    const response = await CoolapkTauriAPI.listMessages(1);
+    const data = Array.isArray(response?.data) ? response.data : [];
+    const previews: MessagePreview[] = data
+      .map((item: any, index: number): MessagePreview => ({
+        key: String(item?.messageUid || item?.fromuid || item?.uid || item?.ukey || item?.id || index),
+        item,
+        unreadCount: getMessagePreviewUnreadCount(item),
+      }));
+    messagePreviews.value = previews
+      .filter((preview: MessagePreview) => preview.unreadCount > 0)
+      .sort((a: MessagePreview, b: MessagePreview) => getNotificationItemTime(b.item) - getNotificationItemTime(a.item))
+      .slice(0, 6);
+    messagePreviewLoadedAt = Date.now();
+  } catch (error) {
+    console.warn('获取私信预览失败:', error);
+    messagePreviews.value = [];
+  } finally {
+    messagePreviewLoading.value = false;
+  }
+}
+
 function handleNotificationMouseEnter() {
   if (notificationPopoverHideTimer) clearTimeout(notificationPopoverHideTimer);
   isNotificationPopoverVisible.value = true;
@@ -440,6 +592,40 @@ function handleNotificationMouseLeave() {
   notificationPopoverHideTimer = setTimeout(() => {
     isNotificationPopoverVisible.value = false;
   }, 220);
+}
+
+function handleMessageMouseEnter() {
+  if (messagePopoverHideTimer) clearTimeout(messagePopoverHideTimer);
+  isMessagePopoverVisible.value = true;
+  void fetchMessagePreviews();
+}
+
+function handleMessageMouseLeave() {
+  if (messagePopoverHideTimer) clearTimeout(messagePopoverHideTimer);
+  messagePopoverHideTimer = setTimeout(() => {
+    isMessagePopoverVisible.value = false;
+  }, 220);
+}
+
+function openMessagePopover() {
+  if (messagePopoverHideTimer) clearTimeout(messagePopoverHideTimer);
+  isMessagePopoverVisible.value = true;
+  void fetchMessagePreviews();
+}
+
+function openMessagesPage() {
+  isMessagePopoverVisible.value = false;
+  void router.push('/messages');
+}
+
+function openMessagePreview(preview: MessagePreview) {
+  const uid = getMessagePreviewPartnerUid(preview);
+  isMessagePopoverVisible.value = false;
+  if (!uid) {
+    void router.push('/messages');
+    return;
+  }
+  void router.push({ path: '/messages', query: { uid, open: String(Date.now()) } });
 }
 
 function openNotificationCenter() {
@@ -472,35 +658,80 @@ async function openNotificationPreview(preview: NotificationPreview) {
   void router.push({ path: '/notifications', query: { tab: preview.apiType } });
 }
 
-function startPolling() {
-  if (notifTimer) clearInterval(notifTimer);
-  if (!settingsStore.settings.desktopNotifications) {
-    // 未开启桌面通知时仍按最小频率刷新角标，避免完全失去未读提示
-    notifTimer = setInterval(fetchNotificationCount, 60000);
-    return;
-  }
+function getNotificationPollIntervalMs(): number {
+  if (!settingsStore.settings.desktopNotifications) return NOTIFICATION_POLL_MIN_INTERVAL_MS;
   const minutes = Math.max(1, Math.min(settingsStore.settings.notificationPollInterval || 1, 60));
-  notifTimer = setInterval(fetchNotificationCount, minutes * 60 * 1000);
+  return minutes * NOTIFICATION_POLL_MIN_INTERVAL_MS;
+}
+
+function getNextNotificationPollDelayMs(): number {
+  const baseInterval = getNotificationPollIntervalMs();
+  const maxDelay = Math.max(baseInterval, NOTIFICATION_POLL_MAX_BACKOFF_MS);
+  const backoffFactor = 2 ** Math.min(notificationPollFailureCount, 3);
+  return Math.min(baseInterval * backoffFactor, maxDelay);
+}
+
+function clearNotificationPollTimer() {
+  if (!notifTimer) return;
+  clearTimeout(notifTimer);
+  notifTimer = null;
+}
+
+function scheduleNotificationPoll(delayMs = getNextNotificationPollDelayMs()) {
+  clearNotificationPollTimer();
+  if (!notificationPollingActive || document.visibilityState !== 'visible') return;
+  notifTimer = setTimeout(() => {
+    notifTimer = null;
+    void runScheduledNotificationPoll();
+  }, Math.max(0, delayMs));
+}
+
+async function runScheduledNotificationPoll() {
+  const result = await fetchNotificationCount();
+  if (result === false) notificationPollFailureCount += 1;
+  if (result === true) notificationPollFailureCount = 0;
+  scheduleNotificationPoll();
+}
+
+async function pollNotificationCountNow() {
+  if (!notificationPollingActive || document.visibilityState !== 'visible') return;
+  clearNotificationPollTimer();
+  const result = await fetchNotificationCount();
+  if (result === false) notificationPollFailureCount += 1;
+  if (result === true) notificationPollFailureCount = 0;
+  scheduleNotificationPoll();
+}
+
+function startPolling() {
+  notificationPollFailureCount = 0;
+  scheduleNotificationPoll();
 }
 
 function handleWindowFocus() {
-  void fetchNotificationCount();
+  void pollNotificationCountNow();
 }
 
 function handleVisibilityChange() {
-  if (document.visibilityState === 'visible') void fetchNotificationCount();
+  if (document.visibilityState === 'visible') {
+    void pollNotificationCountNow();
+    return;
+  }
+  clearNotificationPollTimer();
 }
 
 onMounted(() => {
-  void fetchNotificationCount();
+  notificationPollingActive = true;
   startPolling();
+  void pollNotificationCountNow();
   window.addEventListener('focus', handleWindowFocus);
   document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
 onUnmounted(() => {
-  if (notifTimer) clearInterval(notifTimer);
+  notificationPollingActive = false;
+  clearNotificationPollTimer();
   if (notificationPopoverHideTimer) clearTimeout(notificationPopoverHideTimer);
+  if (messagePopoverHideTimer) clearTimeout(messagePopoverHideTimer);
   window.removeEventListener('focus', handleWindowFocus);
   document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
@@ -510,7 +741,11 @@ watch(
   () => {
     notificationPreviews.value = [];
     notificationPreviewLoadedAt = 0;
-    void fetchNotificationCount();
+    messagePreviews.value = [];
+    messagePreviewLoadedAt = 0;
+    isMessagePopoverVisible.value = false;
+    if (!authStore.isLoggedIn) notificationStore.reset();
+    void pollNotificationCountNow();
   }
 );
 
@@ -760,6 +995,12 @@ function handleUserClick() {
   align-items: center;
 }
 
+.message-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .notification-popover {
   position: absolute;
   top: calc(100% + 10px);
@@ -885,6 +1126,55 @@ function handleUserClick() {
   flex-shrink: 0;
   color: var(--text-tertiary);
   font-size: 10px;
+}
+
+.message-preview-list {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+}
+
+.message-preview-item {
+  min-height: 58px;
+}
+
+.message-preview-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.message-preview-meta strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-preview-meta em {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.message-preview-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--danger);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: var(--font-weight-bold);
+  line-height: 18px;
 }
 
 @media (max-width: 1100px) {

@@ -968,6 +968,14 @@ pub async fn get_notification_count(state: State<'_, AppState>) -> Result<Value,
 }
 
 #[tauri::command]
+pub async fn clear_notification_count(
+    state: State<'_, AppState>,
+    notification_type: String,
+) -> Result<Value, String> {
+    state.client.clear_notification_count(&notification_type).await
+}
+
+#[tauri::command]
 pub async fn get_notifications(
     state: State<'_, AppState>,
     notification_type: String,

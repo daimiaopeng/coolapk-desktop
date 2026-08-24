@@ -3865,6 +3865,19 @@ impl CoolapkClient {
         wrap_api_data(self.api_get("/v6/notification/checkCount", &[]).await?)
     }
 
+    /// 清除服务端通知数。对应 APK 的 POST /v6/notification/clearCount?type={type}。
+    pub async fn clear_notification_count(&self, notification_type: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.request_api(
+                Method::POST,
+                "/v6/notification/clearCount",
+                &[("type", notification_type.to_string())],
+                None,
+            )
+            .await?,
+        )
+    }
+
     pub async fn get_notifications(
         &self,
         notification_type: &str,
