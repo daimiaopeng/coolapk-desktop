@@ -624,8 +624,13 @@ pub async fn get_device_feed_list(
     state: State<'_, AppState>,
     tag: String,
     page: u32,
+    first_item: Option<String>,
+    last_item: Option<String>,
 ) -> Result<Value, String> {
-    state.client.get_device_feed_list(&tag, page).await
+    state
+        .client
+        .get_device_feed_list(&tag, page, first_item.as_deref().unwrap_or(""), last_item.as_deref().unwrap_or(""))
+        .await
 }
 
 #[tauri::command]
@@ -978,12 +983,34 @@ pub async fn get_topic_feeds(
 }
 
 #[tauri::command]
+pub async fn get_topic_tab_data(
+    state: State<'_, AppState>,
+    url: String,
+    title: String,
+    sub_title: String,
+    page: u32,
+    first_item: String,
+    last_item: String,
+    page_context: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .get_topic_tab_data(&url, &title, &sub_title, page, &first_item, &last_item, &page_context)
+        .await
+}
+
+#[tauri::command]
 pub async fn get_topic_hub_data(
     state: State<'_, AppState>,
     sub_url: String,
     page: u32,
+    first_item: String,
+    last_item: String,
 ) -> Result<Value, String> {
-    state.client.get_topic_hub_data(&sub_url, page).await
+    state
+        .client
+        .get_topic_hub_data(&sub_url, page, &first_item, &last_item)
+        .await
 }
 
 #[tauri::command]

@@ -38,7 +38,12 @@
         </div>
 
         <div class="topic-actions">
-          <button :class="['btn-follow', { followed: isFollowed }]" @click="toggleFollow">
+          <button
+            :class="['btn-follow', { followed: isFollowed }]"
+            :disabled="followPending"
+            :aria-pressed="isFollowed"
+            @click="toggleFollow"
+          >
             {{ isFollowed ? '已关注' : '关注' }}
           </button>
         </div>
@@ -54,8 +59,22 @@
       <LoadingState text="正在加载话题概况..." />
     </div>
 
+    <!-- APK 话题页由 tabList 下发栏目，展示方式与设备页 Tab 保持一致。 -->
+    <div v-if="topicTabs.length > 1" class="topic-sub-tabs custom-scrollbar">
+      <button
+        v-for="tab in topicTabs"
+        :key="tab.key"
+        :class="['topic-tab-item', { active: activeTopicTabKey === tab.key }]"
+        type="button"
+        @click="changeTopicTab(tab.key)"
+      >
+        <span>{{ tab.label }}</span>
+        <span v-if="activeTopicTabKey === tab.key" class="tab-line"></span>
+      </button>
+    </div>
+
     <!-- 4. 排序筛选工具条 [全部讨论: 默认 / 最新 / 热度] -->
-    <div class="topic-filter-bar">
+    <div v-if="isDiscussionTab(activeTopicTab)" class="topic-filter-bar">
       <span class="filter-label">全部讨论</span>
       <div class="filter-options">
         <button
@@ -69,32 +88,20 @@
       </div>
     </div>
 
-    <!-- 4.1 动态类型筛选 [全部动态 / 设备动态] -->
-    <div class="topic-filter-bar">
-      <span class="filter-label">动态类型</span>
-      <div class="filter-options">
-        <button
-          v-for="mode in feedModes"
-          :key="mode.key"
-          :class="['filter-btn', { active: feedMode === mode.key }]"
-          @click="switchFeedMode(mode.key)"
-        >
-          {{ mode.label }}
-        </button>
-      </div>
-    </div>
-
     <!-- 5. Feed 动态列表 -->
     <div v-if="feedsLoading && page === 1" class="loading-wrapper">
-      <LoadingState :text="feedMode === 'device' ? '正在获取设备动态...' : '正在获取话题动态...'" />
+      <LoadingState :text="loadingText" />
     </div>
 
     <div v-else-if="topicFeeds.length === 0" class="empty-wrapper">
-      <EmptyState :title="feedMode === 'device' ? '暂无设备动态' : '暂无相关话题动态'" />
+      <EmptyState :title="emptyStateTitle" />
     </div>
 
     <div v-else class="feed-list">
-      <FeedCard v-for="item in topicFeeds" :key="item.id || item.ttype + item.uid" :feed="item" @deleted="handleFeedDeleted" />
+      <template v-for="(item, index) in topicFeeds" :key="topicItemKey(item, index)">
+        <FeedCard v-if="isTopicFeedItem(item)" :feed="item" @deleted="handleFeedDeleted" />
+        <DiscoveryEntityCard v-else :entity="item" @open="openTopicEntity" />
+      </template>
       
       <div class="pagination-footer">
         <LoadingState v-if="feedsLoading && page > 1" text="加载更多中..." />
@@ -110,9 +117,29 @@ import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import FeedCard from '../components/feed/FeedCard.vue';
+import DiscoveryEntityCard from '../components/discovery/DiscoveryEntityCard.vue';
 import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+import { showToast } from '../utils/toast';
+import { normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../utils/coolapkRoute';
+import { resolveDiscoveryRoute } from '../utils/discovery';
+
+interface TopicSortOption {
+  key: string;
+  label: string;
+  listType: string;
+  url: string;
+}
+
+interface TopicTab {
+  key: string;
+  label: string;
+  pageName: string;
+  url: string;
+  subTitle: string;
+  kind: 'discussion' | 'device' | 'feature' | 'rating' | 'generic';
+}
 
 const route = useRoute();
 const router = useRouter();
@@ -130,6 +157,8 @@ const tag = ref(decodeTopicTag((route.params.tag as string) || ''));
 
 const topicDetail = ref<any>(null);
 const headerLoading = ref(false);
+const topicTabs = ref<TopicTab[]>([]);
+const activeTopicTabKey = ref('feed');
 
 const topicFeeds = ref<any[]>([]);
 
@@ -140,19 +169,32 @@ const feedsLoading = ref(false);
 const page = ref(1);
 const noMore = ref(false);
 const isFollowed = ref(false);
+const followPending = ref(false);
 
 const currentSort = ref('default');
-const sortOptions = [
-  { key: 'default', label: '默认' },
-  { key: 'latest', label: '最新' },
-  { key: 'hot', label: '热度' },
+const FALLBACK_SORT_OPTIONS: TopicSortOption[] = [
+  { key: 'default', label: '默认', listType: '', url: '' },
+  { key: 'latest', label: '最新', listType: 'lastupdate_desc', url: '' },
+  { key: 'hot', label: '热度', listType: 'hot', url: '' },
 ];
+const sortOptions = ref<TopicSortOption[]>([...FALLBACK_SORT_OPTIONS]);
 
-const feedMode = ref('all');
-const feedModes = [
-  { key: 'all', label: '全部动态' },
-  { key: 'device', label: '设备动态' },
-];
+const activeTopicTab = computed(() => {
+  return topicTabs.value.find((tab) => tab.key === activeTopicTabKey.value) || topicTabs.value[0] || null;
+});
+
+const loadingText = computed(() => {
+  const tab = activeTopicTab.value;
+  if (!tab || tab.kind === 'discussion') return '正在获取话题动态...';
+  return `正在获取${tab.label}...`;
+});
+
+const emptyStateTitle = computed(() => {
+  const tab = activeTopicTab.value;
+  if (!tab || tab.kind === 'discussion') return '暂无相关话题动态';
+  if (tab.kind === 'rating') return '暂无评分';
+  return `暂无${tab.label || '相关内容'}`;
+});
 
 const topicLogo = computed(() => {
   if (!topicDetail.value) return '';
@@ -189,7 +231,212 @@ function formatNumber(num: number | string) {
 }
 
 function readFollowedState(detail: any) {
-  return !!(detail && (detail.followed ?? detail.isFollowed ?? detail.is_follow ?? detail.follow ?? false));
+  const userAction = detail?.userAction || detail?.user_action;
+  const value = userAction?.follow ?? detail?.followed ?? detail?.isFollowed ?? detail?.is_follow ?? detail?.follow;
+  return value === true || Number(value) === 1;
+}
+
+function readQueryParameter(rawUrl: unknown, name: string): string {
+  const raw = String(rawUrl || '').trim();
+  if (!raw) return '';
+  const candidates = [raw];
+  const hashIndex = raw.indexOf('#');
+  if (hashIndex >= 0) candidates.push(raw.slice(hashIndex + 1));
+  for (const candidate of candidates) {
+    const queryIndex = candidate.indexOf('?');
+    if (queryIndex < 0) continue;
+    const value = new URLSearchParams(candidate.slice(queryIndex + 1)).get(name);
+    if (value) return value;
+  }
+  return '';
+}
+
+function normalizeSortKey(label: string, listType: string, index: number): string {
+  if (listType === 'hot' || listType === 'popular' || /热度|热门/.test(label)) return 'hot';
+  if (listType === 'dateline_desc' || /最新回复/.test(label)) return 'latest-reply';
+  if (listType === 'lastupdate_desc' || /最新/.test(label)) return 'latest';
+  if (!listType && /默认|综合/.test(label)) return 'default';
+  return `sort-${index}`;
+}
+
+function normalizeSortOptions(rawOptions: unknown): TopicSortOption[] {
+  if (!Array.isArray(rawOptions)) return [];
+  return rawOptions
+    .map((rawOption: any, index): TopicSortOption => {
+      const label = String(rawOption?.title || rawOption?.name || '').trim();
+      const url = String(rawOption?.url || rawOption?.link || rawOption?.requestArg || rawOption?.request_arg || '').trim();
+      const listType = readQueryParameter(url, 'listType') || (
+        /最新回复/.test(label) ? 'dateline_desc' : /最新/.test(label) ? 'lastupdate_desc' : /热度|热门/.test(label) ? 'hot' : ''
+      );
+      return { key: normalizeSortKey(label, listType, index), label, listType, url };
+    })
+    .filter((option) => option.label.length > 0);
+}
+
+function applyServerSortOptions(response: any) {
+  const serverOptions = normalizeSortOptions(response?.sortOptions);
+  if (serverOptions.length === 0) return;
+  sortOptions.value = serverOptions;
+  if (!serverOptions.some((option) => option.key === currentSort.value)) {
+    currentSort.value = serverOptions[0].key;
+  }
+}
+
+function topicTabKind(pageName: string, label: string, url: string): TopicTab['kind'] {
+  const text = `${pageName} ${label} ${url}`.toLowerCase();
+  if (/评分|beta|rating|score/.test(text)) return 'rating';
+  if (/新特性|特性|feature|changelog|更新日志/.test(text)) return 'feature';
+  if (/机型|设备|device|model/.test(text)) return 'device';
+  if (/讨论|discussion|tagfeed|feed/.test(text)) return 'discussion';
+  return 'generic';
+}
+
+function defaultTopicTab(): TopicTab {
+  return { key: 'feed', label: '讨论', pageName: 'feed', url: '', subTitle: '', kind: 'discussion' };
+}
+
+function normalizeTopicTabs(detail: any): TopicTab[] {
+  const tabSource = detail?.tabList || detail?.tabApiList || detail?.tab_list || detail?.tab_api_list || detail?.tabs || detail?.pages;
+  const rawTabs = Array.isArray(tabSource)
+    ? tabSource
+    : Array.isArray(tabSource?.data)
+      ? tabSource.data
+      : Array.isArray(tabSource?.entities)
+        ? tabSource.entities
+        : [];
+  if (!Array.isArray(rawTabs)) {
+    return [defaultTopicTab()];
+  }
+  const seen = new Set<string>();
+  const tabs = rawTabs.map((rawTab: any, index: number): TopicTab | null => {
+    const item = typeof rawTab === 'string' ? { title: rawTab } : rawTab || {};
+    const pageName = String(item.pageName || item.page_name || item.page || item.type || item.kind || '').trim();
+    const label = String(item.title || item.name || item.label || item.tabTitle || item.tab_title || pageName || '').trim();
+    const url = String(item.url || item.link || item.pageUrl || item.page_url || item.apiUrl || item.api_url || item.requestArg || item.request_arg || item.requestUrl || item.request_url || item.targetUrl || item.target_url || item.api || '').trim();
+    const visible = item.page_visibility !== 0 && item.page_visibility !== '0' && item.page_visibility !== false
+      && item.pageVisibility !== 0 && item.pageVisibility !== '0' && item.pageVisibility !== false
+      && item.visibility !== 0 && item.visibility !== '0' && item.visibility !== false
+      && item.status !== 0 && item.status !== '0' && item.status !== false
+      && item.hidden !== true && item.hide !== true && item.isShow !== false && item.is_show !== false
+      && item.visible !== false && item.enabled !== false;
+    if (!visible || !label) return null;
+    const baseKey = pageName || url || `tab-${index}`;
+    const key = seen.has(baseKey) ? `${baseKey}-${index}` : baseKey;
+    seen.add(key);
+    const kind = topicTabKind(pageName, label, url);
+    return {
+      key,
+      label,
+      pageName,
+      url,
+      subTitle: String(item.subTitle || item.sub_title || item.subtitle || '').trim(),
+      kind,
+    };
+  }).filter((tab): tab is TopicTab => tab !== null);
+  return tabs.length > 0 ? tabs : [defaultTopicTab()];
+}
+
+function applyTopicTabs(detail: any) {
+  const tabs = normalizeTopicTabs(detail);
+  const selected = String(detail?.selectedTab || detail?.selected_tab || '').trim();
+  const selectedTab = tabs.find((tab) => tab.key === selected || tab.pageName === selected || tab.url === selected || tab.label === selected);
+  topicTabs.value = tabs;
+  activeTopicTabKey.value = selectedTab?.key || tabs[0]?.key || 'feed';
+}
+
+function isDiscussionTab(tab: TopicTab | null): boolean {
+  if (!tab) return true;
+  return tab.kind === 'discussion';
+}
+
+function getTopicTabUrl(tab: TopicTab): string {
+  const rawUrl = tab.url.trim();
+  if (rawUrl) {
+    if (rawUrl.startsWith('/v6/')) return rawUrl;
+    if (rawUrl.startsWith('#')) return rawUrl;
+    if (rawUrl.startsWith('/')) return `#${rawUrl}`;
+    if (rawUrl.startsWith('topic/') || rawUrl.startsWith('feed/')) return `#/${rawUrl}`;
+    return rawUrl;
+  }
+  const type = tab.pageName || 'feed';
+  return `#/topic/tagFeedList?tag=${encodeURIComponent(tag.value)}&type=${encodeURIComponent(type)}`;
+}
+
+function readFeedCursor(feed: any): string {
+  const value = feed?.id ?? feed?.feedId ?? feed?.feed_id ?? feed?.entityId ?? '';
+  return value === null || value === undefined ? '' : String(value);
+}
+
+function isTopicFeedItem(item: any): boolean {
+  if (!item || typeof item !== 'object') return false;
+  const type = String(item.entityType || item.entity_type || item.entityTemplate || item.entity_template || '').toLowerCase();
+  return ['feed', 'feed_reply', 'feedreply', 'article', 'news'].includes(type) || type.startsWith('feed_') || Boolean(item.message || item.message_raw_output || item.username || item.userInfo || item.user_info);
+}
+
+function isTopicDisplayItem(item: any): boolean {
+  if (!item || typeof item !== 'object') return false;
+  return Boolean(item.title || item.description || item.subTitle || item.sub_title || item.message || item.pic || item.logo || item.cover || item.url);
+}
+
+function appendTopicRows(value: any, output: any[]): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  const isFeed = isTopicFeedItem(value);
+  if (!isFeed) {
+    const nested = value.feed || value.ratingFeed || value.rating_feed;
+    if (nested && typeof nested === 'object') {
+      appendTopicRows(nested, output);
+      return;
+    }
+    if (Array.isArray(value.entities)) {
+      value.entities.forEach((child: any) => appendTopicRows(child, output));
+      if (value.entities.length > 0) return;
+    }
+  }
+  if (isFeed || isTopicDisplayItem(value)) output.push(value);
+}
+
+function extractTopicRows(response: any): any[] {
+  const data = response?.data;
+  const rows = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.rows)
+      ? data.rows
+      : Array.isArray(data?.entities)
+        ? data.entities
+        : Array.isArray(response?.rows)
+          ? response.rows
+          : [];
+  const output: any[] = [];
+  rows.forEach((row: any) => appendTopicRows(row, output));
+  return output;
+}
+
+function topicItemKey(item: any, index: number): string {
+  const value = item?.id ?? item?.entityId ?? item?.feedId ?? item?.feed_id ?? item?.url;
+  return value === undefined || value === null || String(value).trim() === ''
+    ? `${item?.entityType || item?.entityTemplate || 'topic'}-${index}`
+    : String(value);
+}
+
+function openTopicEntity(entity: any) {
+  const routeInfo = resolveDiscoveryRoute(entity);
+  if (!routeInfo) return;
+  if (routeInfo.kind === 'web') {
+    void CoolapkTauriAPI.openUrl(routeInfo.target, 'internal');
+    return;
+  }
+  const pageRoute = normalizeCoolapkPageRoute(routeInfo.target);
+  if (pageRoute) {
+    const pageUrl = new URL(pageRoute, 'https://www.coolapk.com');
+    void router.push({ path: '/page', query: { url: pageUrl.searchParams.get('url') || '', title: routeInfo.title || '' } });
+    return;
+  }
+  const nativeRoute = normalizeCoolapkRoute(routeInfo.target);
+  if (nativeRoute) {
+    void router.push(nativeRoute);
+  } else if (routeInfo.target.startsWith('/')) {
+    void router.push(routeInfo.target);
+  }
 }
 
 async function fetchTopicHeader() {
@@ -198,8 +445,17 @@ async function fetchTopicHeader() {
   try {
     const res = await CoolapkTauriAPI.getTopicDetail(tag.value);
     if (res && res.data) {
-      topicDetail.value = res.data;
-      isFollowed.value = readFollowedState(res.data);
+      let detail = res.data;
+      if (normalizeTopicTabs(detail).length <= 1) {
+        const legacyRes = await CoolapkTauriAPI.getTopicDetailV7(tag.value).catch(() => null);
+        const legacyDetail = legacyRes?.data;
+        if (legacyDetail && normalizeTopicTabs(legacyDetail).length > normalizeTopicTabs(detail).length) {
+          detail = { ...legacyDetail, ...detail, tabList: legacyDetail.tabList || legacyDetail.tabApiList };
+        }
+      }
+      topicDetail.value = detail;
+      isFollowed.value = readFollowedState(detail);
+      applyTopicTabs(detail);
     } else {
       topicDetail.value = {
         title: tag.value,
@@ -208,6 +464,8 @@ async function fetchTopicHeader() {
         commentnum: 0,
         view_num: 0,
       };
+      isFollowed.value = false;
+      applyTopicTabs(null);
     }
   } catch (err) {
     topicDetail.value = {
@@ -217,6 +475,8 @@ async function fetchTopicHeader() {
       commentnum: 0,
       view_num: 0,
     };
+    isFollowed.value = false;
+    applyTopicTabs(null);
   } finally {
     headerLoading.value = false;
   }
@@ -227,20 +487,50 @@ async function fetchFeeds(isLoadMore = false) {
   
   feedsLoading.value = true;
   try {
-    const res = feedMode.value === 'device'
-      ? await CoolapkTauriAPI.getDeviceFeedList(tag.value, page.value)
-      : await CoolapkTauriAPI.getTopicFeeds(tag.value, page.value);
-    const newFeeds = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    const sortOption = sortOptions.value.find((option) => option.key === currentSort.value) || FALLBACK_SORT_OPTIONS[0];
+    const firstItem = isLoadMore && topicFeeds.value.length > 0 ? readFeedCursor(topicFeeds.value[0]) : '';
+    const lastItem = isLoadMore && topicFeeds.value.length > 0 ? readFeedCursor(topicFeeds.value[topicFeeds.value.length - 1]) : '';
+    const tab = activeTopicTab.value;
+    const res = !tab || isDiscussionTab(tab)
+      ? await CoolapkTauriAPI.getTopicFeeds(tag.value, page.value, {
+        listType: sortOption.listType,
+        firstItem,
+        lastItem,
+        blockStatus: 1,
+      })
+      : tab.kind === 'device'
+        ? await CoolapkTauriAPI.getDeviceFeedList(tag.value, page.value, { firstItem, lastItem })
+      : await CoolapkTauriAPI.getTopicTabData({
+        url: getTopicTabUrl(tab),
+        title: tab.label,
+        subTitle: tab.subTitle,
+        page: page.value,
+        firstItem,
+        lastItem,
+        pageContext: JSON.stringify({ source: 'desktop-topic', tag: tag.value, tab: tab.pageName || tab.key }),
+      });
+    applyServerSortOptions(res);
+    const newFeeds = extractTopicRows(res);
     
     if (newFeeds.length === 0) {
       noMore.value = true;
     } else {
+      const existingKeys = new Set(topicFeeds.value.map((item, index) => topicItemKey(item, index)));
+      const itemsToAdd = isLoadMore
+        ? newFeeds.filter((item, index) => {
+          const key = topicItemKey(item, index);
+          if (existingKeys.has(key)) return false;
+          existingKeys.add(key);
+          return true;
+        })
+        : newFeeds;
       if (isLoadMore) {
-        topicFeeds.value.push(...newFeeds);
+        topicFeeds.value.push(...itemsToAdd);
       } else {
-        topicFeeds.value = newFeeds;
+        topicFeeds.value = itemsToAdd;
       }
       page.value++;
+      if (itemsToAdd.length === 0) noMore.value = true;
     }
   } catch (err) {
     console.warn('获取话题动态失败', err);
@@ -251,19 +541,23 @@ async function fetchFeeds(isLoadMore = false) {
 
 
 function changeSort(sortKey: string) {
+  if (currentSort.value === sortKey) return;
   currentSort.value = sortKey;
   page.value = 1;
   noMore.value = false;
-  fetchFeeds(false);
+  topicFeeds.value = [];
+  void fetchFeeds(false);
 }
 
-function switchFeedMode(mode: string) {
-  if (feedMode.value === mode) return;
-  feedMode.value = mode;
+function changeTopicTab(tabKey: string) {
+  if (activeTopicTabKey.value === tabKey) return;
+  activeTopicTabKey.value = tabKey;
+  currentSort.value = 'default';
+  sortOptions.value = [...FALLBACK_SORT_OPTIONS];
   page.value = 1;
   noMore.value = false;
   topicFeeds.value = [];
-  fetchFeeds(false);
+  void fetchFeeds(false);
 }
 
 function handleScroll(e: Event) {
@@ -277,20 +571,31 @@ function handleScroll(e: Event) {
 }
 
 async function toggleFollow() {
+  if (followPending.value) return;
   if (!authStore.isLoggedIn) {
     authStore.openLoginModal();
     return;
   }
   const target = !isFollowed.value;
+  const previous = isFollowed.value;
+  isFollowed.value = target;
+  followPending.value = true;
   try {
     if (target) {
       await CoolapkTauriAPI.followTag(tag.value);
     } else {
       await CoolapkTauriAPI.unfollowTag(tag.value);
     }
-    isFollowed.value = target;
+    if (topicDetail.value) {
+      const userAction = topicDetail.value.userAction || topicDetail.value.user_action || {};
+      topicDetail.value = { ...topicDetail.value, userAction: { ...userAction, follow: target ? 1 : 0 } };
+    }
   } catch (err) {
+    isFollowed.value = previous;
     console.warn(target ? '关注话题失败' : '取消关注失败', err);
+    showToast(target ? '关注话题失败' : '取消关注失败', 'error');
+  } finally {
+    followPending.value = false;
   }
 }
 
@@ -298,11 +603,13 @@ function focusSearch() {
   router.push({ path: '/search', query: { q: tag.value } });
 }
 
+async function initializeTopic() {
+  await fetchTopicHeader();
+  await fetchFeeds(false);
+}
+
 onMounted(() => {
-  Promise.all([
-    fetchTopicHeader(),
-    fetchFeeds(false)
-  ]);
+  void initializeTopic();
 });
 
 watch(() => route.params.tag, (newTag) => {
@@ -312,8 +619,13 @@ watch(() => route.params.tag, (newTag) => {
     noMore.value = false;
     topicFeeds.value = [];
     topicDetail.value = null;
-    void fetchTopicHeader();
-    void fetchFeeds(false);
+    topicTabs.value = [];
+    activeTopicTabKey.value = 'feed';
+    currentSort.value = 'default';
+    sortOptions.value = [...FALLBACK_SORT_OPTIONS];
+    isFollowed.value = false;
+    followPending.value = false;
+    void initializeTopic();
   }
 });
 </script>
@@ -438,6 +750,11 @@ watch(() => route.params.tag, (newTag) => {
   color: var(--text-secondary);
 }
 
+.btn-follow:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 .topic-description {
   font-size: 12px;
   color: var(--text-secondary);
@@ -483,10 +800,27 @@ watch(() => route.params.tag, (newTag) => {
 /* 2. Sub-Tabs 分类栏 */
 .topic-sub-tabs {
   display: flex;
+  align-items: center;
   gap: 20px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 4px;
+  background-color: var(--surface);
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+  border-radius: var(--radius-card, 12px);
+  padding: 0 16px;
+  height: 48px;
+  min-height: 48px;
+  flex: 0 0 48px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
   overflow-x: auto;
+  user-select: none;
+  scrollbar-width: none;
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.04));
+  box-sizing: border-box;
+}
+
+.topic-sub-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .topic-tab-item {
@@ -497,24 +831,36 @@ watch(() => route.params.tag, (newTag) => {
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 6px 2px;
+  padding: 0 4px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.topic-tab-item:hover {
+  color: var(--text-primary);
 }
 
 .topic-tab-item.active {
-  color: var(--brand-primary, #10b981);
+  color: var(--text-primary);
   font-weight: 700;
+  font-size: 16px;
 }
 
 .tab-line {
   position: absolute;
-  bottom: -5px;
+  bottom: 4px;
   left: 50%;
   transform: translateX(-50%);
-  width: 18px;
-  height: 3px;
-  background: var(--brand-primary, #10b981);
-  border-radius: 2px;
+  width: 22px;
+  height: 3.5px;
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
 }
 
 /* 3. 优惠券 Banner */

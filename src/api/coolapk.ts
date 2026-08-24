@@ -508,8 +508,28 @@ export class CoolapkTauriAPI {
     });
   }
 
-  static async getTopicHubData(subUrl: string = '', page: number = 1) {
-    return await safeFetch(`/page/dataList?url=${encodeURIComponent(subUrl || '/main/tagList')}&page=${page}`, 'get_topic_hub_data', { subUrl, page });
+  static async getTopicTabData(options: {
+    url: string;
+    title?: string;
+    subTitle?: string;
+    page?: number;
+    firstItem?: string;
+    lastItem?: string;
+    pageContext?: string;
+  }) {
+    return await invokeNative('get_topic_tab_data', {
+      url: options.url,
+      title: options.title || '',
+      subTitle: options.subTitle || '',
+      page: options.page || 1,
+      firstItem: options.firstItem || '',
+      lastItem: options.lastItem || '',
+      pageContext: options.pageContext || '',
+    }, { retry: true, kind: 'feed' });
+  }
+
+  static async getTopicHubData(subUrl: string = '', page: number = 1, firstItem: string = '', lastItem: string = '') {
+    return await invokeNative('get_topic_hub_data', { subUrl, page, firstItem, lastItem }, { retry: true, kind: 'feed' });
   }
 
   static async getAppDetail(packageName: string) {
@@ -775,8 +795,13 @@ export class CoolapkTauriAPI {
     return await invokeNative('unfollow_tag', { tag });
   }
 
-  static async getDeviceFeedList(tag: string, page: number = 1) {
-    return await invokeNative('get_device_feed_list', { tag, page });
+  static async getDeviceFeedList(tag: string, page: number = 1, options: { firstItem?: string; lastItem?: string } = {}) {
+    return await invokeNative('get_device_feed_list', {
+      tag,
+      page,
+      firstItem: options.firstItem || '',
+      lastItem: options.lastItem || '',
+    });
   }
 
   static async getQuestionAnswers(feedId: string, sort: string = 'hot', page: number = 1) {

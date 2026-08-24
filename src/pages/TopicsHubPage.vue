@@ -1,65 +1,45 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <!-- 顶栏工具条：左侧 Tab 筛选，右侧搜索框 + 刷新按钮 -->
+    <!-- 顶栏工具条：动态栏目与刷新按钮 -->
     <div class="topics-toolbar-bar">
       <div class="topics-tabs-wrapper">
         <button
           v-for="cat in categories"
-          :key="cat.url"
+          :key="cat.key"
           type="button"
-          :class="['cat-tab', { active: activeCategoryUrl === cat.url && !searchQuery.trim() }]"
+          :class="['cat-tab', { active: activeCategoryUrl === cat.url }]"
           @click="switchCategory(cat)"
         >
-          <i :class="cat.icon"></i> {{ cat.title }}
+          {{ cat.title }}
         </button>
       </div>
 
-      <!-- 搜索下移至同一行右侧 -->
-      <div class="topics-actions-wrapper">
-        <div class="search-box">
-          <i class="fas fa-search search-icon"></i>
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="搜索话题..."
-            class="search-input"
-            @keyup.enter="handleSearch"
-          />
-          <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-
-        <button class="btn-refresh" @click="refreshCurrent" :disabled="loading" title="刷新数据">
-          <i class="fas fa-sync-alt refresh-icon" :class="{ spinning: loading }"></i>
-        </button>
-      </div>
     </div>
 
     <!-- 加载中状态 -->
     <div v-if="loading && page === 1" class="loading-wrapper">
-      <LoadingState :text="searchMode ? '正在搜索话题...' : '正在加载话题列表...'" />
+      <LoadingState text="正在加载话题列表..." />
     </div>
 
     <!-- 空数据状态 -->
-    <div v-else-if="filteredTopics.length === 0" class="empty-wrapper">
+    <div v-else-if="rawTopicItems.length === 0" class="empty-wrapper">
       <EmptyState
-        :title="searchMode ? '未找到相关话题' : '暂无相关话题'"
-        :description="searchMode ? '未找到相关话题，可尝试更换关键词重新搜索' : '未能找到相关话题，可尝试切换上方分类标签或重新搜索'"
+        title="暂无相关话题"
+        description="未能找到相关话题，可尝试切换上方分类标签或刷新"
       />
     </div>
 
-    <!-- 话题网格展示 -->
+    <!-- 多列话题卡片：保持桌面端之前的网格排列，同时继续支持到底部加载更多 -->
     <div v-else class="topics-grid">
       <TopicCard
-        v-for="(topic, idx) in filteredTopics"
+        v-for="(topic, idx) in rawTopicItems"
         :key="topic.id || topic.tag || topic.title || idx"
         :topic="topic"
       />
     </div>
 
     <!-- 底部加载状态 -->
-    <div class="pagination-footer" v-if="filteredTopics.length > 0">
+    <div class="pagination-footer" v-if="rawTopicItems.length > 0">
       <div v-if="loading && page > 1" class="loading-more-footer">
         <i class="fas fa-circle-notch fa-spin"></i> 加载更多话题...
       </div>
@@ -69,97 +49,135 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import TopicCard from '../components/topic/TopicCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 
-const router = useRouter();
-
-function go(path: string) {
-  void router.push(path);
-}
-
 interface CategoryItem {
+  key: string;
   title: string;
-  icon: string;
   url: string;
 }
 
-const categories = ref<CategoryItem[]>([
-  { title: '热门话题', icon: 'fas fa-fire', url: '/v6/topic/tagList?sort=hot' },
-  { title: '最受关注', icon: 'fas fa-star', url: '/v6/topic/tagList?sort=follow' },
-  { title: '最新话题', icon: 'fas fa-clock', url: '/v6/topic/tagList?sort=new' },
-  { title: '手机数码', icon: 'fas fa-mobile-alt', url: '/v6/topic/tagList?tagType=1' },
-  { title: '电脑外设', icon: 'fas fa-laptop', url: '/v6/topic/tagList?tagType=2' },
-  { title: '游戏生活', icon: 'fas fa-gamepad', url: '/v6/topic/tagList?tagType=3' },
-]);
-
-const activeCategoryUrl = ref<string>('/v6/topic/tagList?sort=hot');
+const topicEntryUrl = '/page?url=V11_VERTICAL_TOPIC';
+const categories = ref<CategoryItem[]>([]);
+const activeCategoryUrl = ref('');
 const rawTopicItems = ref<any[]>([]);
-const searchQuery = ref('');
-const searchMode = ref(false);
 const loading = ref(false);
 const page = ref(1);
 const noMore = ref(false);
+const firstItemCursor = ref('');
+const lastItemCursor = ref('');
 
-const filteredTopics = computed(() => {
-  if (searchMode.value || !searchQuery.value.trim()) {
-    return rawTopicItems.value;
-  }
-  const q = searchQuery.value.trim().toLowerCase();
-  return rawTopicItems.value.filter((item) => {
-    const title = (item.title || item.tag || item.title_format || '').toLowerCase();
-    const desc = (item.description || item.sub_title || '').toLowerCase();
-    return title.includes(q) || desc.includes(q);
-  });
-});
-
-async function fetchTopicData(url: string = '/v6/topic/tagList?sort=hot', isLoadMore = false) {
-  if (loading.value) return;
+async function fetchTopicData(url: string = topicEntryUrl, isLoadMore = false, allowNestedLoad = false) {
+  if (loading.value && !allowNestedLoad) return;
   loading.value = true;
 
   try {
     const currentPage = isLoadMore ? page.value : 1;
-    let extractedTopics: any[];
-
-    if (searchMode.value && searchQuery.value.trim()) {
-      extractedTopics = await fetchSearchTopics(searchQuery.value.trim(), currentPage);
-    } else {
-      const res = await CoolapkTauriAPI.getTopicHubData(url, currentPage);
-      const dataList = (res && res.data && Array.isArray(res.data)) ? res.data : [];
-      extractedTopics = [];
-
-      dataList.forEach((item: any) => {
-        if (item.entityType === 'card' && Array.isArray(item.entities)) {
-          item.entities.forEach((sub: any) => {
-            if (isTopicEntity(sub)) {
-              extractedTopics.push(sub);
-            }
-          });
-        } else if (isTopicEntity(item)) {
-          extractedTopics.push(item);
+    const res = await CoolapkTauriAPI.getTopicHubData(url, currentPage, isLoadMore ? firstItemCursor.value : '', isLoadMore ? lastItemCursor.value : '');
+    if (!isLoadMore && Array.isArray(res?.tabs) && res.tabs.length > 0) {
+      const nextCategories = normalizeCategoryList(res.tabs);
+      const serverSelectedUrl = normalizeCategoryText(res?.selectedUrl);
+      updateCategories(nextCategories, serverSelectedUrl);
+      if (url === topicEntryUrl) {
+        const defaultCategory = findHotCategory(nextCategories);
+        const defaultUrl = defaultCategory?.url || serverSelectedUrl || nextCategories[0]?.url || '';
+        if (defaultUrl) {
+          activeCategoryUrl.value = defaultUrl;
+          if (defaultUrl !== serverSelectedUrl && defaultUrl !== topicEntryUrl) {
+            return fetchTopicData(defaultUrl, false, true);
+          }
         }
-      });
+      }
     }
+    const dataList = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    const extractedTopics: any[] = [];
+
+    dataList.forEach((item: any) => {
+      if (item.entityType === 'card' && Array.isArray(item.entities)) {
+        item.entities.forEach((sub: any) => {
+          if (isTopicEntity(sub)) {
+            extractedTopics.push(sub);
+          }
+        });
+      } else if (isTopicEntity(item)) {
+        extractedTopics.push(item);
+      }
+    });
+
+    const responseFirstItem = normalizeCursor(res?.firstItem);
+    const responseLastItem = normalizeCursor(res?.lastItem);
+    if (!isLoadMore) {
+      firstItemCursor.value = responseFirstItem || itemCursor(extractedTopics[0]);
+    }
+    lastItemCursor.value = responseLastItem || itemCursor(extractedTopics[extractedTopics.length - 1]);
 
     if (extractedTopics.length === 0) {
       noMore.value = true;
     } else {
+      const itemsToAdd = isLoadMore ? extractedTopics.filter((item) => {
+        const key = topicKey(item);
+        return !key || !rawTopicItems.value.some((existing) => topicKey(existing) === key);
+      }) : extractedTopics;
       if (isLoadMore) {
-        rawTopicItems.value.push(...extractedTopics);
+        rawTopicItems.value.push(...itemsToAdd);
       } else {
-        rawTopicItems.value = extractedTopics;
+        rawTopicItems.value = itemsToAdd;
       }
       page.value = currentPage + 1;
+      if (itemsToAdd.length === 0) noMore.value = true;
     }
   } catch (err) {
     console.warn('获取话题数据失败:', err);
   } finally {
     loading.value = false;
   }
+}
+
+function normalizeCategoryText(value: unknown): string {
+  return value === undefined || value === null ? '' : String(value).trim();
+}
+
+function normalizeCategoryList(value: any): CategoryItem[] {
+  const source = Array.isArray(value)
+    ? value
+    : Array.isArray(value?.entities)
+      ? value.entities
+      : Array.isArray(value?.data)
+        ? value.data
+        : [];
+  return source.map((item: any, index: number) => {
+    const extra = item?.extraData || item?.extra_data || {};
+    const title = normalizeCategoryText(item?.title || item?.name || item?.label);
+    const url = normalizeCategoryText(item?.url || item?.link || item?.pageUrl || item?.page_url || item?.pageName || item?.page_name || extra?.url || extra?.pageName);
+    const key = normalizeCategoryText(item?.id || item?.entityId || item?.entity_id || `${title}-${url}-${index}`);
+    return { key, title, url };
+  }).filter((item: CategoryItem) => item.title && item.url);
+}
+
+function updateCategories(value: any, selectedUrl = ''): void {
+  const nextCategories = normalizeCategoryList(value);
+  categories.value = nextCategories;
+  if (selectedUrl && nextCategories.some((item) => item.url === selectedUrl)) {
+    activeCategoryUrl.value = selectedUrl;
+  } else if (!activeCategoryUrl.value && nextCategories.length > 0) {
+    activeCategoryUrl.value = nextCategories[0].url;
+  }
+}
+
+function findHotCategory(items: CategoryItem[]): CategoryItem | undefined {
+  return items.find((item) => item.title === '热门') || items.find((item) => item.title.includes('热门'));
+}
+
+function normalizeCursor(value: unknown): string {
+  return value === undefined || value === null ? '' : String(value).trim();
+}
+
+function itemCursor(item: any): string {
+  return normalizeCursor(item?.entityId ?? item?.id);
 }
 
 function isTopicEntity(item: any): boolean {
@@ -172,63 +190,17 @@ function isTopicEntity(item: any): boolean {
   return false;
 }
 
-function extractItems(res: any): any[] {
-  if (!res) return [];
-  const raw = Array.isArray(res)
-    ? res
-    : Array.isArray(res.data)
-      ? res.data
-      : Array.isArray(res.data?.rows)
-        ? res.data.rows
-        : Array.isArray(res.rows)
-          ? res.rows
-          : [];
-  const out: any[] = [];
-  raw.forEach((item: any) => {
-    if (item && item.entityType === 'card' && Array.isArray(item.entities)) {
-      out.push(...item.entities);
-    } else if (item) {
-      out.push(item);
-    }
-  });
-  return out;
-}
-
-function isTagEntity(item: any): boolean {
-  if (!item) return false;
-  const type = item.entityType || '';
-  if (type === 'topic' || type === 'tag') return true;
-  return !!item.tag && !item.message;
-}
-
 function topicKey(item: any): string {
   const raw = item?.tag || item?.title || item?.title_format || item?.entityTemplate || '';
   return String(raw).replace(/^#|#$/g, '').trim().toLowerCase();
 }
 
-async function fetchSearchTopics(query: string, currentPage: number): Promise<any[]> {
-  const [tagsRes, feedTopicsRes] = await Promise.all([
-    CoolapkTauriAPI.searchTags(query, currentPage).catch(() => null),
-    CoolapkTauriAPI.searchFeedTopics(query, currentPage).catch(() => null),
-  ]);
-  const merged: any[] = [];
-  const seen = new Set<string>();
-  [...extractItems(tagsRes).filter(isTagEntity), ...extractItems(feedTopicsRes).filter(isTopicEntity)]
-    .forEach((item: any) => {
-      const key = topicKey(item);
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      merged.push(item);
-    });
-  return merged;
-}
-
 function switchCategory(cat: CategoryItem) {
   activeCategoryUrl.value = cat.url;
-  searchQuery.value = '';
-  searchMode.value = false;
   page.value = 1;
   noMore.value = false;
+  firstItemCursor.value = '';
+  lastItemCursor.value = '';
   rawTopicItems.value = [];
   fetchTopicData(cat.url, false);
 }
@@ -236,29 +208,10 @@ function switchCategory(cat: CategoryItem) {
 function refreshCurrent() {
   page.value = 1;
   noMore.value = false;
+  firstItemCursor.value = '';
+  lastItemCursor.value = '';
   rawTopicItems.value = [];
-  fetchTopicData(activeCategoryUrl.value, false);
-}
-
-function handleSearch() {
-  const query = searchQuery.value.trim().replace(/^#|#$/g, '');
-  if (!query) return;
-  searchMode.value = true;
-  page.value = 1;
-  noMore.value = false;
-  rawTopicItems.value = [];
-  fetchTopicData(activeCategoryUrl.value, false);
-}
-
-function clearSearch() {
-  if (!searchQuery.value.trim()) return;
-  searchQuery.value = '';
-  if (!searchMode.value) return;
-  searchMode.value = false;
-  page.value = 1;
-  noMore.value = false;
-  rawTopicItems.value = [];
-  fetchTopicData(activeCategoryUrl.value, false);
+  fetchTopicData(activeCategoryUrl.value || topicEntryUrl, false);
 }
 
 function handleScroll(e: Event) {
@@ -266,13 +219,13 @@ function handleScroll(e: Event) {
   const { scrollTop, clientHeight, scrollHeight } = target;
   if (scrollTop + clientHeight >= scrollHeight - 120) {
     if (!loading.value && !noMore.value) {
-      fetchTopicData(activeCategoryUrl.value, true);
+      fetchTopicData(activeCategoryUrl.value || topicEntryUrl, true);
     }
   }
 }
 
 onMounted(() => {
-  fetchTopicData(activeCategoryUrl.value, false);
+  fetchTopicData(topicEntryUrl, false);
 });
 </script>
 
@@ -288,135 +241,73 @@ onMounted(() => {
 
 .topics-toolbar-bar {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 4px 0 14px 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  height: auto;
+  min-height: 48px;
+  padding: 0;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+  background-color: var(--surface);
 }
 
 .topics-tabs-wrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
+  align-content: center;
   flex-wrap: wrap;
-  flex: 1;
+  column-gap: 0;
+  row-gap: 0;
+  min-height: 48px;
+  height: auto;
+  flex: 0 0 auto;
   min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 16px;
+  user-select: none;
 }
 
 .cat-tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: var(--radius-pill, 20px);
-  background-color: var(--surface);
-  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
-  font-size: 13px;
+  justify-content: center;
+  height: 48px;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: 15px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.15s ease;
+  transition: color var(--duration-fast, 0.15s) var(--ease-default, ease);
 }
 
 .cat-tab:hover {
-  background-color: var(--surface-hover);
   color: var(--text-primary);
 }
 
 .cat-tab.active {
-  background-color: var(--brand-soft, rgba(16, 185, 129, 0.12));
-  color: var(--brand-primary, #10b981);
-  border-color: var(--brand-primary, #10b981);
+  color: var(--text-primary);
   font-weight: 700;
+  font-size: 16px;
 }
 
-.topics-actions-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 220px;
-}
-
-.search-icon {
+.cat-tab.active::after {
+  content: '';
   position: absolute;
-  left: 10px;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  pointer-events: none;
-}
-
-.search-input {
-  width: 100%;
-  height: 32px;
-  padding: 0 28px;
-  border-radius: var(--radius-pill, 16px);
-  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
-  background-color: var(--surface-hover);
-  color: var(--text-primary);
-  font-size: 12.5px;
-  outline: none;
-  transition: all 0.15s ease;
-}
-
-.search-input:focus {
-  background-color: var(--surface);
-  border-color: var(--brand-primary);
-  box-shadow: 0 0 0 2px var(--brand-soft);
-}
-
-.clear-btn {
-  position: absolute;
-  right: 8px;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 4px;
-  font-size: 11px;
-}
-
-.clear-btn:hover {
-  color: var(--text-primary);
-}
-
-.btn-refresh {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
-  background-color: var(--surface-hover);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
-}
-
-.btn-refresh:hover:not(:disabled) {
-  color: var(--brand-primary);
-  border-color: var(--brand-primary);
-  background-color: var(--surface);
-}
-
-.spinning {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  bottom: 2px;
+  left: 50%;
+  width: 22px;
+  height: 3.5px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
 }
 
 .loading-wrapper,
@@ -431,6 +322,14 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: var(--space-4, 16px);
+}
+
+.cat-tab-icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .pagination-footer {

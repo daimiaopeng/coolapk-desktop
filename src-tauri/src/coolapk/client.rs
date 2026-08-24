@@ -386,6 +386,172 @@ fn get_str_by_keys(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> Optio
     None
 }
 
+fn topic_hub_cursor(value: &Value) -> String {
+    value
+        .as_object()
+        .and_then(|obj| get_str_by_keys(obj, &["entityId", "id"]))
+        .unwrap_or_default()
+}
+
+fn topic_hub_tab_target(obj: &serde_json::Map<String, Value>) -> Option<String> {
+    let target_keys = [
+        "url",
+        "link",
+        "pageUrl",
+        "page_url",
+        "pageName",
+        "page_name",
+        "requestArg",
+        "request_arg",
+        "requestUrl",
+        "request_url",
+        "apiUrl",
+        "api_url",
+    ];
+    get_str_by_keys(obj, &target_keys).or_else(|| {
+        obj.get("extraData")
+            .or_else(|| obj.get("extra_data"))
+            .and_then(Value::as_object)
+            .and_then(|extra| get_str_by_keys(extra, &target_keys))
+    })
+}
+
+fn append_topic_hub_tab_entities(value: &Value, output: &mut Vec<Value>) {
+    let Some(items) = value.as_array() else {
+        return;
+    };
+    for entity in items {
+        let Some(entity_obj) = entity.as_object() else {
+            continue;
+        };
+        let title = get_str_by_keys(entity_obj, &["title", "title_txt", "name", "label"]);
+        if title.is_some() && topic_hub_tab_target(entity_obj).is_some() {
+            output.push(entity.clone());
+        }
+    }
+}
+
+fn collect_topic_hub_tabs(value: &Value, output: &mut Vec<Value>) {
+    let Some(obj) = value.as_object() else {
+        return;
+    };
+    let template = obj
+        .get("entityTemplate")
+        .or_else(|| obj.get("entity_template"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let is_tab_card = template.contains("icontablink")
+        || template.contains("iconlinkgrid")
+        || template.contains("verticalcolumnsfullpagecard")
+        || template.contains("selectorlinkgrid");
+    if is_tab_card {
+        if let Some(entities) = obj.get("entities").and_then(Value::as_array) {
+            append_topic_hub_tab_entities(&Value::Array(entities.clone()), output);
+        }
+        if !output.is_empty() {
+            return;
+        }
+    }
+    for key in ["entities", "data", "rows", "card", "category", "tabs", "tabList", "tab_list"] {
+        let Some(nested) = obj.get(key) else {
+            continue;
+        };
+        if matches!(key, "tabs" | "tabList" | "tab_list") {
+            append_topic_hub_tab_entities(nested, output);
+        }
+        if !output.is_empty() {
+            return;
+        }
+        if let Some(items) = nested.as_array() {
+            for entity in items {
+                collect_topic_hub_tabs(entity, output);
+                if !output.is_empty() {
+                    return;
+                }
+            }
+        } else {
+            collect_topic_hub_tabs(nested, output);
+            if !output.is_empty() {
+                return;
+            }
+        }
+    }
+}
+
+fn extract_topic_hub_tabs(raw: &Value) -> Value {
+    let mut tabs = Vec::new();
+    for key in ["tabs", "tabList", "tab_list", "categories", "category"] {
+        if let Some(value) = raw.get(key) {
+            append_topic_hub_tab_entities(value, &mut tabs);
+            if !tabs.is_empty() {
+                return Value::Array(tabs);
+            }
+        }
+    }
+    if let Some(data) = raw.get("data").and_then(Value::as_array) {
+        for item in data {
+            collect_topic_hub_tabs(item, &mut tabs);
+            if !tabs.is_empty() {
+                break;
+            }
+        }
+    }
+    Value::Array(tabs)
+}
+
+fn topic_hub_selected_tab(value: &Value) -> Option<String> {
+    match value {
+        Value::Array(items) => items.iter().find_map(topic_hub_selected_tab),
+        Value::Object(obj) => {
+            for key in ["extraData", "extra_data"] {
+                let Some(extra) = obj.get(key) else {
+                    continue;
+                };
+                if let Some(selected) = topic_hub_selected_tab(extra) {
+                    return Some(selected);
+                }
+            }
+            if let Some(selected) = get_str_by_keys(obj, &["selectedTab", "selected_tab"]) {
+                return Some(selected);
+            }
+            obj.values().find_map(topic_hub_selected_tab)
+        }
+        Value::String(text) => serde_json::from_str::<Value>(text)
+            .ok()
+            .and_then(|parsed| topic_hub_selected_tab(&parsed)),
+        _ => None,
+    }
+}
+
+fn topic_hub_selected_category(raw: &Value) -> Option<(String, String)> {
+    let tabs = extract_topic_hub_tabs(raw);
+    let items = tabs.as_array()?;
+    let selected_title = topic_hub_selected_tab(raw).unwrap_or_default();
+    let selected = items
+        .iter()
+        .find(|item| get_str_by_keys(item.as_object().unwrap_or(&serde_json::Map::new()), &["title", "name", "label"]).as_deref() == Some(selected_title.as_str()))
+        .or_else(|| items.first())?;
+    let selected_obj = selected.as_object()?;
+    let title = get_str_by_keys(selected_obj, &["title", "name", "label"])?;
+    let url = topic_hub_tab_target(selected_obj)?;
+    Some((title, url))
+}
+
+fn topic_hub_result(raw: &Value) -> Value {
+    let data = raw.get("data").cloned().unwrap_or_else(|| json!([]));
+    let (first_item, last_item) = data
+        .as_array()
+        .map(|items| {
+            (
+                items.first().map(topic_hub_cursor).unwrap_or_default(),
+                items.last().map(topic_hub_cursor).unwrap_or_default(),
+            )
+        })
+        .unwrap_or_default();
+    json!({ "code": 200, "data": data, "firstItem": first_item, "lastItem": last_item, "tabs": extract_topic_hub_tabs(raw) })
+}
+
 fn first_value_by_keys<'a>(obj: &'a serde_json::Map<String, Value>, keys: &[&str]) -> Option<&'a Value> {
     keys.iter().find_map(|key| obj.get(*key))
 }
@@ -1447,6 +1613,83 @@ impl CoolapkClient {
             }
         }
         cleaned_list
+    }
+
+    // 话题子栏目可能下发 Feed、评分 Feed、卡片或嵌套 entities，统一展开但保留未知实体。
+    fn append_topic_tab_row(value: &Value, index: usize, output: &mut Vec<Value>) {
+        let Some(obj) = value.as_object() else {
+            return;
+        };
+        let entity_type = obj
+            .get("entityType")
+            .or_else(|| obj.get("entity_type"))
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let is_feed = matches!(entity_type.as_str(), "feed" | "feed_reply" | "feedreply" | "article" | "news")
+            || entity_type.starts_with("feed_")
+            || obj.contains_key("message")
+            || obj.contains_key("username")
+            || obj.contains_key("userInfo")
+            || obj.contains_key("user_info");
+
+        if !is_feed {
+            if let Some(nested) = obj
+                .get("feed")
+                .or_else(|| obj.get("ratingFeed"))
+                .or_else(|| obj.get("rating_feed"))
+            {
+                Self::append_topic_tab_row(nested, index, output);
+                return;
+            }
+            if let Some(entities) = obj.get("entities").and_then(Value::as_array) {
+                for (child_index, child) in entities.iter().enumerate() {
+                    Self::append_topic_tab_row(child, child_index, output);
+                }
+                if !entities.is_empty() {
+                    return;
+                }
+            }
+        }
+
+        if let Some(cleaned) = Self::clean_single_feed(value, index) {
+            output.push(cleaned);
+            return;
+        }
+
+        let has_display_fields = [
+            "title",
+            "description",
+            "subTitle",
+            "sub_title",
+            "message",
+            "pic",
+            "logo",
+            "url",
+        ]
+        .iter()
+        .any(|key| obj.get(*key).is_some_and(|item| !item.is_null()));
+        if has_display_fields {
+            output.push(value.clone());
+        }
+    }
+
+    fn extract_topic_tab_list(json_data: &Value) -> Vec<Value> {
+        let mut rows = Vec::new();
+        if let Some(data_arr) = json_data.get("data").and_then(Value::as_array) {
+            for (index, item) in data_arr.iter().enumerate() {
+                Self::append_topic_tab_row(item, index, &mut rows);
+            }
+        } else if let Some(entities) = json_data
+            .get("data")
+            .and_then(|value| value.get("entities"))
+            .and_then(Value::as_array)
+        {
+            for (index, item) in entities.iter().enumerate() {
+                Self::append_topic_tab_row(item, index, &mut rows);
+            }
+        }
+        rows
     }
 
     /// 提取 APK 话题页服务端下发的排序卡片，避免桌面端把排序项写死。
@@ -3643,18 +3886,29 @@ impl CoolapkClient {
 
     /// 话题设备（数码）动态列表
     /// 数据来源: GET /v6/topic/deviceFeedList?tag={tag}&page={page}&listType=lastupdate_desc
-    pub async fn get_device_feed_list(&self, tag: &str, page: u32) -> Result<Value, String> {
-        let raw = self
-            .api_get(
-                "/v6/topic/deviceFeedList",
-                &[
-                    ("tag", tag.to_string()),
-                    ("page", page.to_string()),
-                    ("listType", "lastupdate_desc".to_string()),
-                ],
-            )
-            .await?;
-        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    pub async fn get_device_feed_list(
+        &self,
+        tag: &str,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+    ) -> Result<Value, String> {
+        let mut query = vec![
+            ("tag", tag.to_string()),
+            ("page", page.max(1).to_string()),
+            ("listType", "lastupdate_desc".to_string()),
+        ];
+        if !first_item.trim().is_empty() {
+            query.push(("firstItem", first_item.trim().to_string()));
+        }
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.trim().to_string()));
+        }
+        let raw = self.api_get("/v6/topic/deviceFeedList", &query).await?;
+        let data = Self::extract_cleaned_list(&raw);
+        let first = data.first().map(topic_hub_cursor).unwrap_or_default();
+        let last = data.last().map(topic_hub_cursor).unwrap_or_default();
+        Ok(json!({ "code": 200, "data": data, "firstItem": first, "lastItem": last }))
     }
 
     /// 问答（Q&A）列表
@@ -3943,8 +4197,109 @@ impl CoolapkClient {
         }))
     }
 
-    pub async fn get_topic_hub_data(&self, sub_url: &str, page: u32) -> Result<Value, String> {
-        let clean_sub_url = sub_url.trim_start_matches('#');
+    /// 加载 APK 话题页服务端下发的其他栏目。
+    /// 数据来源: GET /v6/page/dataList?url={tab_url}
+    pub async fn get_topic_tab_data(
+        &self,
+        url: &str,
+        title: &str,
+        sub_title: &str,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+        page_context: &str,
+    ) -> Result<Value, String> {
+        if !is_safe_discovery_page_url(url) {
+            return Err("话题栏目地址不受信任，已拒绝请求".to_string());
+        }
+        let mut query = vec![("url", url.to_string()), ("page", page.max(1).to_string())];
+        if !title.trim().is_empty() {
+            query.push(("title", title.to_string()));
+        }
+        if !sub_title.trim().is_empty() {
+            query.push(("subTitle", sub_title.to_string()));
+        }
+        if !first_item.trim().is_empty() {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.to_string()));
+        }
+        if !page_context.trim().is_empty() {
+            query.push(("pageContext", page_context.to_string()));
+        }
+        let raw = self.api_get("/v6/page/dataList", &query).await?;
+        let data = Self::extract_topic_tab_list(&raw);
+        let first = data.first().map(topic_hub_cursor).unwrap_or_default();
+        let last = data.last().map(topic_hub_cursor).unwrap_or_default();
+        Ok(json!({
+            "code": 200,
+            "data": data,
+            "firstItem": first,
+            "lastItem": last,
+            "sortOptions": Self::extract_topic_sort_options(&raw),
+        }))
+    }
+
+    async fn fetch_topic_hub_page(&self, url: &str, title: &str, page: u32, first_item: &str, last_item: &str) -> Result<Value, String> {
+        let mut query = vec![("url", url.to_string()), ("page", page.max(1).to_string())];
+        if !title.trim().is_empty() {
+            query.push(("title", title.to_string()));
+        }
+        if !first_item.trim().is_empty() {
+            query.push(("firstItem", first_item.trim().to_string()));
+        }
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.trim().to_string()));
+        }
+        self.api_get("/v6/page/dataList", &query).await
+    }
+
+    pub async fn get_topic_hub_data(
+        &self,
+        sub_url: &str,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+    ) -> Result<Value, String> {
+        let requested_url = sub_url.trim();
+        let clean_sub_url = requested_url.trim_start_matches('#');
+
+        // APK 话题首页先请求 V11_VERTICAL_TOPIC 获取服务端栏目，再按配置中的 selectedTab 加载当前栏目。
+        // 栏目标题和地址全部来自服务端，桌面端不维护本地栏目兜底。
+        if clean_sub_url.contains("V11_VERTICAL_TOPIC") {
+            let config_raw = self
+                .fetch_topic_hub_page(requested_url, "话题", 1, "", "")
+                .await?;
+            let tabs = extract_topic_hub_tabs(&config_raw);
+            let mut result = json!({ "code": 200, "data": [], "tabs": tabs });
+            if let Some((selected_title, selected_url)) = topic_hub_selected_category(&config_raw) {
+                let selected_raw = self
+                    .fetch_topic_hub_page(&selected_url, &selected_title, page, first_item, last_item)
+                    .await?;
+                result = topic_hub_result(&selected_raw);
+                if let Some(obj) = result.as_object_mut() {
+                    obj.insert("tabs".to_string(), tabs);
+                    obj.insert("selectedUrl".to_string(), json!(selected_url));
+                }
+            }
+            return Ok(result);
+        }
+
+        // APK 的热门话题使用服务端驱动的连续流，而不是 topic/tagList 的分页网格。
+        // 后续请求必须携带首尾实体游标，否则服务端可能返回另一段热门话题，导致
+        // 手机上的“薅羊毛”等高热度话题在桌面端缺失或下刷时跳页。
+        if clean_sub_url.contains("/topic/hotTagList") {
+            let raw = self.fetch_topic_hub_page(requested_url, "热门话题", page, first_item, last_item).await?;
+            return Ok(topic_hub_result(&raw));
+        }
+
+        // 服务端栏目可能是 /page?url=... 或 #/topic/...，必须原样交给 page/dataList，
+        // 否则会被桌面端旧的本地分类逻辑改写成另一套接口。
+        if clean_sub_url.starts_with("/page?url=") || clean_sub_url.starts_with("/topic/") {
+            let raw = self.fetch_topic_hub_page(requested_url, "", page, first_item, last_item).await?;
+            return Ok(topic_hub_result(&raw));
+        }
 
         // 识别分类 Tag 维度 (1: 手机数码, 2: 电脑外设, 3: 游戏生活)
         let tag_type = if clean_sub_url.contains("tagType=1") || clean_sub_url.contains("type=1") {
@@ -4038,7 +4393,13 @@ impl CoolapkClient {
             }
         }
 
-        Ok(json!({ "code": 200, "data": data }))
+        let mut result = topic_hub_result(&json!({ "data": data }));
+        if clean_sub_url.contains("sort=follow") {
+            if let Some(obj) = result.as_object_mut() {
+                obj.insert("sort".to_string(), json!("follow"));
+            }
+        }
+        Ok(result)
     }
 
     pub async fn get_app_detail(&self, package_name: &str) -> Result<Value, String> {

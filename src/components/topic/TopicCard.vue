@@ -52,12 +52,14 @@ const iconUrl = computed(() => {
 const subText = computed(() => {
   const item = props.topic;
   if (!item) return '';
-  
+
   if (item.sub_title) return item.sub_title;
-  if (item.follower_num || item.follownum) return `${formatNumber(item.follower_num || item.follownum)} 关注`;
-  if (item.commentnum || item.discuss_num) return `${formatNumber(item.commentnum || item.discuss_num)} 讨论`;
-  if (item.hot_num) return `${formatNumber(item.hot_num)} 热度`;
-  if (item.hot_num_txt) return item.hot_num_txt;
+  const followers = item.follownum_txt || formatNumber(item.follower_num || item.follownum);
+  if (followers && followers !== '0') return `${followers} 关注`;
+  const comments = item.commentnum_txt || formatNumber(item.commentnum || item.discuss_num);
+  if (comments && comments !== '0') return `${comments} 讨论`;
+  const hot = item.hot_num_txt || formatNumber(item.hot_num);
+  if (hot && hot !== '0') return `${hot} 热度`;
   return '';
 });
 
