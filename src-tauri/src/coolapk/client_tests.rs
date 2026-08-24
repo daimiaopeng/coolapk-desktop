@@ -1,6 +1,24 @@
 use super::*;
 
 #[test]
+fn test_search_response_filters_sponsor_entities_recursively() {
+    let raw = serde_json::json!({
+        "data": [{
+            "entities": [
+                {"entityType": "feed", "id": "1", "message": "正常动态"},
+                {"entityTemplate": "sponsorForSearch", "sponsorType": "apk", "id": "2"},
+                {"entityType": "entityCard", "entities": [{"entityType": "sponsorForSearch", "id": "3"}]}
+            ]
+        }]
+    });
+    let filtered = CoolapkClient::wrap_sanitized_search_data(&raw);
+    let json = filtered.to_string();
+    assert!(json.contains("正常动态"));
+    assert!(!json.contains("sponsorForSearch"));
+    assert!(!json.contains("sponsorType"));
+}
+
+#[test]
 fn test_classify_path_detects_requirements() {
     // DDI 写接口：需要 ddid（unlike 不在 useDDIEventList 内）
     assert!(classify_path("/v6/feed/like").needs_ddid);

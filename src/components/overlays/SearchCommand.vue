@@ -25,7 +25,7 @@
               v-for="(item, i) in searchSuggestions"
               :key="i"
               class="suggestion-item"
-              @mousedown.prevent="selectSuggestion(item.title)"
+              @mousedown.prevent="selectSuggestion(item)"
             >
               <i class="fas fa-search suggestion-icon"></i>
               <span class="suggestion-text">{{ item.title }}</span>
@@ -70,10 +70,10 @@
                 @mouseenter="activeResultIndex = i"
                 @click="selectResult(item)"
               >
-                <i :class="[getIcon(item.type), 'result-icon']"></i>
+                <i :class="[getIcon(item), 'result-icon']"></i>
                 <div class="result-info">
-                  <span class="result-title">{{ item.title || item.username || item.entityTemplate }}</span>
-                  <span class="result-sub">{{ item.subTitle || item.message }}</span>
+                  <span class="result-title">{{ getSearchEntityTitle(item) }}</span>
+                  <span class="result-sub">{{ getSearchEntitySubtitle(item) }}</span>
                 </div>
               </div>
             </div>
@@ -92,21 +92,41 @@ import { useAppStore } from '../../stores/app';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import LoadingState from '../common/LoadingState.vue';
 import EmptyState from '../common/EmptyState.vue';
-import { openFeedDetail } from '../../utils/feedNavigation';
 import { addSearchHistory, clearSearchHistory, loadSearchHistory, searchHistory } from '../../utils/searchHistory';
+import type { SearchEntity } from '../../types/search';
+import {
+  extractHotSearchKeywords,
+  extractSearchEntities,
+  getSearchEntityKind,
+  getSearchEntitySubtitle,
+  getSearchEntityTitle,
+  isNavigableSearchEntity,
+  navigateSearchEntity,
+} from '../../utils/searchEntities';
 
 const appStore = useAppStore();
 const router = useRouter();
 
 const query = ref('');
 const loading = ref(false);
-const results = ref<any[]>([]);
-const searchSuggestions = ref<{ title: string }[]>([]);
+const results = ref<SearchEntity[]>([]);
+const searchSuggestions = ref<SearchEntity[]>([]);
 const searchInput = ref<HTMLInputElement | null>(null);
 const activeResultIndex = ref(-1);
 let searchRequestVersion = 0;
+const suggestions = ref<string[]>([]);
+let hotSearchRequestVersion = 0;
 
-const suggestions = ['小米15', 'RTX 5090', 'iOS 18', '酷安桌面版', '鸿蒙OS'];
+async function loadHotSearches() {
+  const requestVersion = ++hotSearchRequestVersion;
+  try {
+    const res = await CoolapkTauriAPI.getHotSearches(true);
+    if (requestVersion !== hotSearchRequestVersion) return;
+    suggestions.value = extractHotSearchKeywords(res).slice(0, 12);
+  } catch (err) {
+    console.error('加载热门搜索失败', err);
+  }
+}
 
 watch(() => appStore.isSearchOpen, (open) => {
   if (open) {
@@ -114,6 +134,7 @@ watch(() => appStore.isSearchOpen, (open) => {
     results.value = [];
     searchSuggestions.value = [];
     activeResultIndex.value = -1;
+    if (!suggestions.value.length) void loadHotSearches();
     nextTick(() => searchInput.value?.focus());
   }
 });
@@ -136,13 +157,9 @@ watch(query, (val) => {
         CoolapkTauriAPI.getSearchSuggestions(val.trim())
       ]);
       if (requestVersion !== searchRequestVersion) return;
-      if (searchRes && searchRes.data) {
-        results.value = searchRes.data.slice(0, 8);
-        activeResultIndex.value = results.value.length ? 0 : -1;
-      }
-      if (suggestRes?.data && Array.isArray(suggestRes.data)) {
-        searchSuggestions.value = suggestRes.data;
-      }
+      results.value = extractSearchEntities(searchRes).filter(isNavigableSearchEntity).slice(0, 8);
+      activeResultIndex.value = results.value.length ? 0 : -1;
+      searchSuggestions.value = extractSearchEntities(suggestRes).filter((item) => getSearchEntityTitle(item)).slice(0, 8);
     } catch (err) {
       console.error('Search error', err);
     } finally {
@@ -155,7 +172,9 @@ function applySearch(tag: string) {
   query.value = tag;
 }
 
-function selectSuggestion(title: string) {
+function selectSuggestion(item: SearchEntity) {
+  const title = getSearchEntityTitle(item);
+  if (!title) return;
   query.value = title;
   searchSuggestions.value = [];
   handleEnterSearch();
@@ -192,22 +211,15 @@ function clearHistory() {
   clearSearchHistory();
 }
 
-function selectResult(item: any) {
+function selectResult(item: SearchEntity) {
   appStore.closeSearch();
-  const type = String(item.type || item.entityTemplate || item.entityType || '').toLowerCase();
-  const uid = item.uid || item.userId || item.entityId;
-  const packageName = item.packageName || item.package_name || item.pkg;
-  const tag = item.tag || item.topicTag;
-  if (type.includes('user') && uid) return void router.push(`/user/${uid}`);
-  if (type.includes('topic') && tag) return void router.push(`/topic/${encodeURIComponent(tag)}`);
-  if ((type.includes('apk') || type.includes('app') || type.includes('game')) && packageName) return void router.push(`/app/${encodeURIComponent(packageName)}`);
-  if (item.id) openFeedDetail(router, item.id, item);
+  if (!navigateSearchEntity(router, item)) handleEnterSearch();
 }
 
-function getIcon(type?: string) {
-  switch (type) {
+function getIcon(item: SearchEntity) {
+  switch (getSearchEntityKind(item)) {
     case 'user': return 'fas fa-user';
-    case 'apk': return 'fas fa-cube';
+    case 'app': return 'fas fa-cube';
     case 'topic': return 'fas fa-hashtag';
     default: return 'fas fa-align-left';
   }

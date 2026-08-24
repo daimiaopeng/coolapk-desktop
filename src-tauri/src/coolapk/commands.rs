@@ -805,6 +805,44 @@ pub async fn search_all(
 }
 
 #[tauri::command]
+pub async fn search_by_type(
+    state: State<'_, AppState>,
+    search_type: String,
+    query: String,
+    page: u32,
+    first_item: String,
+    last_item: String,
+    page_type: String,
+    page_param: String,
+    feed_type: String,
+    sort: String,
+    category: String,
+    page_context: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .search_by_type(
+            &search_type,
+            &query,
+            page,
+            &first_item,
+            &last_item,
+            &page_type,
+            &page_param,
+            &feed_type,
+            &sort,
+            &category,
+            &page_context,
+        )
+        .await
+}
+
+#[tauri::command]
+pub async fn get_hot_searches(state: State<'_, AppState>, refresh: bool) -> Result<Value, String> {
+    state.client.get_hot_searches(refresh).await
+}
+
+#[tauri::command]
 pub async fn search_feeds(
     state: State<'_, AppState>,
     query: String,
@@ -928,8 +966,15 @@ pub async fn get_topic_feeds(
     state: State<'_, AppState>,
     tag: String,
     page: u32,
+    list_type: String,
+    first_item: String,
+    last_item: String,
+    block_status: i32,
 ) -> Result<Value, String> {
-    state.client.get_topic_feeds(&tag, page).await
+    state
+        .client
+        .get_topic_feeds(&tag, page, &list_type, &first_item, &last_item, block_status)
+        .await
 }
 
 #[tauri::command]

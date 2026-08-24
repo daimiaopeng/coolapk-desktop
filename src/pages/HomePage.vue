@@ -240,6 +240,7 @@ import { useSettingsStore } from '../stores/settings';
 import { hasFeedRenderableContent, shouldHideFeed } from '../utils/feedFilter';
 import { DEFAULT_HOME_TAB_ORDER } from '../stores/settings';
 import type { FeedLayout, ConfigPageTab } from '../types/settings';
+import { extractHotSearchKeywords } from '../utils/searchEntities';
 
 const settingsStore = useSettingsStore();
 
@@ -445,9 +446,16 @@ function updateHeadlineNestedSubChannels(items: any[]) {
 }
 
 // 热门搜索关键词 Chips
-const hotKeywords = ref<string[]>([
-  '酷安优惠券', 'ios27', '小米15', '抖音', '酷安', 'scene', '小米17', '电动车', '澎湃os4', 'shizuku'
-]);
+const hotKeywords = ref<string[]>([]);
+
+async function loadHotSearchKeywords() {
+  try {
+    const response = await CoolapkTauriAPI.getHotSearches(false);
+    hotKeywords.value = extractHotSearchKeywords(response).slice(0, 12);
+  } catch (error) {
+    console.warn('加载首页热门搜索失败', error);
+  }
+}
 
 type HotRankType = 'week' | 'month' | 'favorite' | 'index' | 'picture';
 const activeHotRank = ref<HotRankType>('week');
@@ -1074,6 +1082,7 @@ async function initializeHome() {
 
 onMounted(() => {
   void initializeHome();
+  void loadHotSearchKeywords();
   window.addEventListener('feed-nav-next', onNavNext);
   window.addEventListener('feed-nav-prev', onNavPrev);
   window.addEventListener('refresh-feeds', onRefreshFeeds);

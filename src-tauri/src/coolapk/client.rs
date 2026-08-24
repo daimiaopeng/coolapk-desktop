@@ -1449,6 +1449,37 @@ impl CoolapkClient {
         cleaned_list
     }
 
+    /// 提取 APK 话题页服务端下发的排序卡片，避免桌面端把排序项写死。
+    fn extract_topic_sort_options(json_data: &Value) -> Vec<Value> {
+        let mut options = Vec::new();
+        if let Some(data_arr) = json_data.get("data").and_then(|v| v.as_array()) {
+            for item in data_arr {
+                let template = item
+                    .get("entityTemplate")
+                    .or_else(|| item.get("entity_template"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                let entity_type = item
+                    .get("entityType")
+                    .or_else(|| item.get("entity_type"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                if template != "sortSelectCard" && entity_type != "sortSelectCard" {
+                    continue;
+                }
+                if let Some(entities) = item.get("entities").and_then(|v| v.as_array()) {
+                    options.extend(
+                        entities
+                            .iter()
+                            .filter(|entity| entity.get("title").and_then(Value::as_str).is_some())
+                            .cloned(),
+                    );
+                }
+            }
+        }
+        options
+    }
+
     /// 品牌/分类/产品实体提取：原样保留 id/title/logo 等原始字段。
     /// 不能用 clean_single_feed：品牌分类实体没有 username/author/dyh_name，
     /// 会被当作「无真实发帖人」的无效动态整条丢弃，导致「数码分类」左侧列表为空。
@@ -2015,7 +2046,107 @@ impl CoolapkClient {
                 ],
             )
             .await?;
-        wrap_api_data(raw)
+        Ok(Self::wrap_sanitized_search_data(&raw))
+    }
+
+    /// 按 APK 的 searchType 请求搜索结果，保留服务端实体字段供桌面端动态渲染。
+    pub async fn search_by_type(
+        &self,
+        search_type: &str,
+        query: &str,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+        page_type: &str,
+        page_param: &str,
+        feed_type: &str,
+        sort: &str,
+        category: &str,
+        page_context: &str,
+    ) -> Result<Value, String> {
+        let mut params = vec![
+            ("type", search_type.to_string()),
+            ("searchValue", query.to_string()),
+            ("page", page.to_string()),
+        ];
+        if !first_item.is_empty() {
+            params.push(("firstItem", first_item.to_string()));
+        }
+        if !last_item.is_empty() {
+            params.push(("lastItem", last_item.to_string()));
+        }
+        if !page_context.is_empty() {
+            params.push(("pageContext", page_context.to_string()));
+        }
+
+        if search_type == "ershou" {
+            params = vec![
+                ("type", "ershou".to_string()),
+                ("sort", sort.to_string()),
+                ("searchValue", query.to_string()),
+                ("status", "1".to_string()),
+                ("deal_type", "all".to_string()),
+                ("city_code", String::new()),
+                ("is_link", String::new()),
+                ("ershou_type", page_type.to_string()),
+                ("product_id", page_param.to_string()),
+                ("tags", String::new()),
+                ("page", page.to_string()),
+            ];
+            if !first_item.is_empty() {
+                params.push(("firstItem", first_item.to_string()));
+            }
+            if !last_item.is_empty() {
+                params.push(("lastItem", last_item.to_string()));
+            }
+        } else if search_type == "feed" || search_type == "ask" {
+            if !feed_type.is_empty() {
+                params.push(("feedType", feed_type.to_string()));
+            }
+            if !sort.is_empty() {
+                params.push(("sort", sort.to_string()));
+            }
+            if !page_type.is_empty() {
+                params.push(("pageType", page_type.to_string()));
+            }
+            if !page_param.is_empty() {
+                params.push(("pageParam", page_param.to_string()));
+            }
+            params.push(("isStrict", "0".to_string()));
+            params.push(("showAnonymous", "-1".to_string()));
+        } else {
+            if search_type == "apk" || search_type == "game" {
+                params.push(("cat", category.to_string()));
+                params.push(("sort", sort.to_string()));
+            } else {
+                if !category.is_empty() {
+                    params.push(("category", category.to_string()));
+                }
+                if !sort.is_empty() {
+                    params.push(("sort", sort.to_string()));
+                }
+            }
+            params.push(("showAnonymous", "-1".to_string()));
+        }
+
+        let raw = self.api_get("/v6/search", &params).await?;
+        Ok(Self::wrap_sanitized_search_data(&raw))
+    }
+
+    /// 搜索页热门词，接口与 APK 的 type=hotSearch 请求一致
+    pub async fn get_hot_searches(&self, refresh: bool) -> Result<Value, String> {
+        let refresh_value = if refresh { "1" } else { "0" };
+        let raw = self
+            .api_get(
+                "/v6/search",
+                &[
+                    ("type", "hotSearch".to_string()),
+                    ("refresh", refresh_value.to_string()),
+                    ("returnType", "all".to_string()),
+                ],
+            )
+            .await?;
+        Ok(Self::wrap_sanitized_search_data(&raw))
     }
 
     pub async fn get_sub_replies(
@@ -3149,6 +3280,77 @@ impl CoolapkClient {
         Vec::new()
     }
 
+    /// 判断搜索结果中的 sponsor 实体。桌面版不展示搜索广告，但仍保留其它 server-driven 字段。
+    fn is_sponsor_search_entity(value: &Value) -> bool {
+        let Some(object) = value.as_object() else {
+            return false;
+        };
+        let field_text = |key: &str| {
+            object
+                .get(key)
+                .or_else(|| object.get(match key {
+                    "entityType" => "entity_type",
+                    "entityTemplate" => "entity_template",
+                    _ => key,
+                }))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_ascii_lowercase()
+        };
+        let type_name = field_text("entityType");
+        let template = field_text("entityTemplate");
+        let sponsor_type = object
+            .get("sponsorType")
+            .or_else(|| object.get("sponsor_type"));
+        type_name.starts_with("sponsor")
+            || template.starts_with("sponsor")
+            || sponsor_type.is_some_and(|value| match value {
+                Value::Null => false,
+                Value::String(text) => !text.trim().is_empty(),
+                Value::Bool(flag) => *flag,
+                Value::Number(number) => number.as_i64().map(|number| number != 0).unwrap_or(true),
+                Value::Array(items) => !items.is_empty(),
+                Value::Object(items) => !items.is_empty(),
+            })
+    }
+
+    /// 递归过滤 sponsorForSearch，同时保留 APK 返回的原始实体结构。
+    fn sanitize_search_value(value: &Value) -> Option<Value> {
+        if Self::is_sponsor_search_entity(value) {
+            return None;
+        }
+        match value {
+            Value::Array(items) => Some(Value::Array(
+                items
+                    .iter()
+                    .filter_map(Self::sanitize_search_value)
+                    .collect(),
+            )),
+            Value::Object(object) => {
+                let mut cleaned = serde_json::Map::new();
+                for (key, child) in object {
+                    if let Some(sanitized) = Self::sanitize_search_value(child) {
+                        cleaned.insert(key.clone(), sanitized);
+                    }
+                }
+                Some(Value::Object(cleaned))
+            }
+            _ => Some(value.clone()),
+        }
+    }
+
+    fn wrap_sanitized_search_data(raw: &Value) -> Value {
+        let data = raw
+            .get("data")
+            .and_then(|value| Self::sanitize_search_value(value))
+            .unwrap_or_else(|| Value::Array(Vec::new()));
+        let mut response = raw.as_object().cloned().unwrap_or_default();
+        response.insert("code".to_string(), json!(200));
+        response.insert("data".to_string(), data);
+        Value::Object(response)
+    }
+
     /// 收藏列表（需登录）
     /// 数据来源: GET /v6/favorite/list，type 支持 feed/apk/album
     pub async fn get_favorite_list(
@@ -3713,14 +3915,32 @@ impl CoolapkClient {
         )
     }
 
-    pub async fn get_topic_feeds(&self, tag: &str, page: u32) -> Result<Value, String> {
-        let raw = self
-            .api_get(
-                "/v6/topic/tagFeedList",
-                &[("tag", tag.to_string()), ("page", page.to_string())],
-            )
-            .await?;
-        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+    pub async fn get_topic_feeds(
+        &self,
+        tag: &str,
+        page: u32,
+        list_type: &str,
+        first_item: &str,
+        last_item: &str,
+        block_status: i32,
+    ) -> Result<Value, String> {
+        let mut query = vec![("tag", tag.to_string()), ("page", page.to_string())];
+        if !list_type.trim().is_empty() {
+            query.push(("listType", list_type.to_string()));
+        }
+        if !first_item.trim().is_empty() {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.to_string()));
+        }
+        query.push(("blockStatus", block_status.to_string()));
+        let raw = self.api_get("/v6/topic/tagFeedList", &query).await?;
+        Ok(json!({
+            "code": 200,
+            "data": Self::extract_cleaned_list(&raw),
+            "sortOptions": Self::extract_topic_sort_options(&raw),
+        }))
     }
 
     pub async fn get_topic_hub_data(&self, sub_url: &str, page: u32) -> Result<Value, String> {
@@ -6590,6 +6810,19 @@ mod discovery_url_tests {
         assert!(!is_safe_discovery_page_url("javascript:alert(1)"));
         assert!(!is_safe_discovery_page_url("file:///C:/secret"));
         assert!(!is_safe_discovery_page_url("bad\nroute"));
+    }
+}
+
+#[cfg(test)]
+mod path_requirements_tests {
+    use super::classify_path;
+
+    #[test]
+    fn ddi_paths_match_server_config() {
+        assert!(classify_path("/v6/feed/like").needs_ddid);
+        assert!(classify_path("/v6/feed/likeReply").needs_ddid);
+        assert!(!classify_path("/v6/feed/followTag").needs_ddid);
+        assert!(!classify_path("/v6/feed/unFollowTag").needs_ddid);
     }
 }
 

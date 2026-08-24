@@ -129,6 +129,11 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_search_suggestions', { query });
   }
 
+  // 搜索页热门词（与 APK 的 type=hotSearch 接口一致）
+  static async getHotSearches(refresh: boolean = true) {
+    return await invokeNative('get_hot_searches', { refresh }, { retry: true, kind: 'feed' });
+  }
+
   // 1.3 话题详情（旧版 tagDetail，字段与新版互补）
   static async getTopicDetailV7(tag: string) {
     return await invokeNative('get_topic_detail_v7', { tag });
@@ -354,6 +359,35 @@ export class CoolapkTauriAPI {
     return await safeFetch(`/search?q=${encodeURIComponent(query)}&page=${page}`, 'search_all', { query, page });
   }
 
+  // 按 APK 的动态 searchType 搜索，返回原始 Entity/Card 字段；sponsor 实体已在 Rust 端过滤。
+  static async searchByType(options: {
+    searchType: string;
+    query: string;
+    page?: number;
+    firstItem?: string;
+    lastItem?: string;
+    pageType?: string;
+    pageParam?: string;
+    feedType?: string;
+    sort?: string;
+    category?: string;
+    pageContext?: string;
+  }) {
+    return await invokeNative('search_by_type', {
+      searchType: options.searchType,
+      query: options.query,
+      page: options.page || 1,
+      firstItem: options.firstItem || '',
+      lastItem: options.lastItem || '',
+      pageType: options.pageType || '',
+      pageParam: options.pageParam || '',
+      feedType: options.feedType || '',
+      sort: options.sort || '',
+      category: options.category || '',
+      pageContext: options.pageContext || '',
+    }, { retry: true, kind: 'feed' });
+  }
+
   static async searchFeeds(query: string, page: number = 1, sortType: string = 'default') {
     return await invokeNative('search_feeds', { query, page, sortType });
   }
@@ -459,8 +493,19 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_topic_detail', { tag });
   }
 
-  static async getTopicFeeds(tag: string, page: number = 1) {
-    return await invokeNative('get_topic_feeds', { tag, page });
+  static async getTopicFeeds(
+    tag: string,
+    page: number = 1,
+    options: { listType?: string; firstItem?: string; lastItem?: string; blockStatus?: number } = {},
+  ) {
+    return await invokeNative('get_topic_feeds', {
+      tag,
+      page,
+      listType: options.listType || '',
+      firstItem: options.firstItem || '',
+      lastItem: options.lastItem || '',
+      blockStatus: options.blockStatus ?? 1,
+    });
   }
 
   static async getTopicHubData(subUrl: string = '', page: number = 1) {

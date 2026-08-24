@@ -1,199 +1,205 @@
 <template>
-  <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <div class="page-header">
-      <h2 class="page-title" v-if="!queryStr">搜索</h2>
-      <h2 class="page-title" v-else>搜索结果：{{ queryStr }}</h2>
-    </div>
+  <div class="search-page-layout">
+    <div class="search-main-column">
+      <div class="search-toolbar">
+        <div class="search-toolbar-content">
+          <div class="page-header">
+            <h2 class="page-title">{{ queryStr ? `搜索结果：${queryStr}` : '搜索' }}</h2>
+          </div>
 
-    <div class="search-input-area" ref="searchAreaRef">
-      <div class="search-input-wrapper">
-        <i class="fas fa-search search-input-icon"></i>
-        <input
-          v-model="searchQuery"
-          type="text"
-          placeholder="搜索应用、动态、用户、话题..."
-          class="search-field"
-          @keydown.enter="doSearch(searchQuery)"
-          @focus="onInputFocus"
-        />
-        <button v-if="searchQuery" class="clear-btn" @click="clearSearch">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      <div v-if="showHistory && !searchQuery.trim() && searchHistory.length" class="search-history-dropdown">
-        <div class="search-history-header"><span>最近搜索</span><button type="button" @mousedown.prevent="clearHistory">清空</button></div>
-        <button v-for="item in searchHistory" :key="item" type="button" class="search-history-item" @mousedown.prevent="selectHistory(item)">
-          <i class="far fa-clock"></i><span>{{ item }}</span><i class="fas fa-times remove-history" @mousedown.stop.prevent="removeHistory(item)"></i>
-        </button>
-      </div>
-      <div v-if="searchSuggestions.length > 0 && showSuggestions" class="suggestions-dropdown custom-scrollbar">
-        <div
-          v-for="(item, i) in searchSuggestions"
-          :key="i"
-          class="suggestion-item"
-          @mousedown.prevent="selectSuggestion(item)"
-        >
-          <i class="fas fa-search suggestion-icon"></i>
-          <span class="suggestion-text">{{ item.title || item.searchValue }}</span>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="queryStr" class="search-tabs custom-scrollbar">
-      <button
-        v-for="tab in resultTabs"
-        :key="tab.key"
-        :class="['search-tab-item', { active: activeTab === tab.key }]"
-        @click="switchTab(tab.key)"
-      >
-        <span>{{ tab.label }}</span>
-        <span v-if="activeTab === tab.key" class="tab-line"></span>
-      </button>
-    </div>
-
-    <template v-if="activeTab === 'all'">
-      <div v-if="loading" class="loading-wrapper">
-        <LoadingState text="正在全局检索内容..." />
-      </div>
-
-      <div v-else-if="queryStr && results.length === 0" class="empty-wrapper">
-        <EmptyState title="未搜索到任何相关数据" description="请尝试输入其他关键字重新搜索" />
-      </div>
-
-      <div v-else-if="results.length > 0" class="search-result-list">
-        <FeedCard v-for="item in results" :key="item.id" :feed="item" @deleted="handleFeedDeleted" />
-      </div>
-    </template>
-
-    <template v-else-if="activeTab === 'users'">
-      <div v-if="usersLoading && usersPage === 1" class="loading-wrapper">
-        <LoadingState text="正在搜索用户..." />
-      </div>
-
-      <div v-else-if="users.length === 0" class="empty-wrapper">
-        <EmptyState title="未找到相关用户" description="请尝试输入其他关键字重新搜索" />
-      </div>
-
-      <div v-else class="search-user-list">
-        <div
-          v-for="user in users"
-          :key="user.uid"
-          class="search-user-item"
-          @click="openUser(user)"
-        >
-          <AppAvatar :src="user.avatar" size="md" :alt="user.username" />
-          <div class="user-info">
-            <div class="user-info-top">
-              <span class="user-name">{{ user.username }}</span>
-              <span v-if="user.verifyTitle" class="user-verify">{{ user.verifyTitle }}</span>
+          <div ref="searchAreaRef" class="search-input-area">
+            <div class="search-input-wrapper">
+              <i class="fas fa-search search-input-icon"></i>
+              <input v-model="searchQuery" type="text" class="search-field" placeholder="搜索应用、动态、用户、话题..." @keydown.enter="doSearch(searchQuery)" @focus="onInputFocus" />
+              <button v-if="searchQuery" type="button" class="clear-btn" aria-label="清空搜索" @click="clearSearch"><i class="fas fa-times"></i></button>
             </div>
-            <span class="user-bio">{{ user.bio || '暂无个性签名' }}</span>
-            <span class="user-fans">{{ formatNumber(user.fans) }} 粉丝</span>
+            <div v-if="showHistory && !searchQuery.trim() && searchHistory.length" class="search-history-dropdown">
+              <div class="search-history-header"><span>最近搜索</span><button type="button" @mousedown.prevent="clearHistory">清空</button></div>
+              <button v-for="item in searchHistory" :key="item" type="button" class="search-history-item" @mousedown.prevent="selectHistory(item)">
+                <i class="far fa-clock"></i><span>{{ item }}</span><i class="fas fa-times remove-history" @mousedown.stop.prevent="removeHistory(item)"></i>
+              </button>
+            </div>
+            <div v-if="searchSuggestions.length && showSuggestions" class="suggestions-dropdown custom-scrollbar">
+              <button v-for="(item, index) in searchSuggestions" :key="`${getSearchEntityTitle(item)}-${index}`" type="button" class="suggestion-item" @mousedown.prevent="selectSuggestion(item)">
+                <i class="fas fa-search suggestion-icon"></i><span class="suggestion-text">{{ getSearchEntityTitle(item) }}</span>
+              </button>
+            </div>
           </div>
-          <AppButton variant="soft" size="sm" @click.stop="toggleFollow(user)">
-            {{ isUserFollowed(user) ? '已关注' : '关注' }}
-          </AppButton>
         </div>
 
-        <div class="pagination-footer">
-          <LoadingState v-if="usersLoading && usersPage > 1" text="加载更多用户中..." />
-          <div v-else-if="usersNoMore" class="no-more">没有更多用户了</div>
+        <div v-if="queryStr" class="search-tabs custom-scrollbar">
+          <button v-for="tab in searchTabs" :key="tab.key" type="button" :class="['search-tab-item', { active: activeTab === tab.key }]" @click="switchTab(tab.key)">
+            <i v-if="tab.icon" :class="tab.icon"></i><span>{{ tab.label }}</span>
+          </button>
         </div>
       </div>
-    </template>
 
-    <template v-else>
-      <div v-if="topicsLoading && topicsPage === 1" class="loading-wrapper">
-        <LoadingState text="正在搜索话题..." />
+      <div class="search-scroll-container custom-scrollbar" @scroll="handleScroll">
+        <template v-if="queryStr">
+          <section class="search-results-section">
+            <div v-if="activeState.loading && !activeState.items.length" class="loading-wrapper"><LoadingState text="正在搜索..." /></div>
+            <div v-else-if="activeState.error && !activeState.items.length" class="empty-wrapper"><EmptyState title="搜索失败" :description="activeState.error" /><button type="button" class="retry-button" @click="fetchTab(activeTab)">重试</button></div>
+            <div v-else-if="!activeState.items.length" class="empty-wrapper"><EmptyState title="未搜索到相关结果" description="请尝试输入其他关键字重新搜索" /></div>
+            <div v-else class="search-result-list">
+              <SearchResultItem v-for="(item, index) in activeState.items" :key="entityKey(item, index)" :entity="item" :show-follow="activeTab === 'user' || activeTab === 'users'" :followed="isUserFollowed(item)" @deleted="removeEntity" @search="doSearch" @toggle-follow="toggleFollow" />
+              <div class="pagination-footer">
+                <LoadingState v-if="activeState.loadingMore" text="加载更多中..." />
+                <div v-else-if="activeState.cursor.noMore" class="no-more">没有更多结果了</div>
+              </div>
+            </div>
+          </section>
+        </template>
+
+        <section v-else class="search-welcome">
+          <p class="search-welcome-hint">输入关键词，搜索酷安的应用、游戏、动态、用户和话题</p>
+          <SearchHotListCard v-for="(item, index) in hotItems" :key="entityKey(item, index)" :entity="item" @search="doSearch" />
+          <EmptyState v-if="!hotItems.length" title="开始搜索" description="热门搜索由酷安接口动态提供" />
+        </section>
       </div>
-
-      <div v-else-if="topics.length === 0" class="empty-wrapper">
-        <EmptyState title="未找到相关话题" description="请尝试输入其他关键字重新搜索" />
-      </div>
-
-      <div v-else class="search-topic-list">
-        <div
-          v-for="topic in topics"
-          :key="topic.tag || topic.title"
-          class="search-topic-item"
-          @click="openTopic(topic)"
-        >
-          <i class="fas fa-hashtag topic-icon"></i>
-          <div class="topic-info">
-            <span class="topic-tag">#{{ topic.tag || topic.title }}</span>
-            <span class="topic-commentnum">{{ formatNumber(topic.commentnum) }} 讨论</span>
-          </div>
-          <i class="fas fa-chevron-right topic-arrow"></i>
-        </div>
-
-        <div class="pagination-footer">
-          <LoadingState v-if="topicsLoading && topicsPage > 1" text="加载更多话题中..." />
-          <div v-else-if="topicsNoMore" class="no-more">没有更多话题了</div>
-        </div>
-      </div>
-    </template>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
-import { useAuthStore } from '../stores/auth';
-import FeedCard from '../components/feed/FeedCard.vue';
-import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
-import AppAvatar from '../components/common/AppAvatar.vue';
-import AppButton from '../components/common/AppButton.vue';
+import LoadingState from '../components/common/LoadingState.vue';
+import SearchHotListCard from '../components/search/SearchHotListCard.vue';
+import SearchResultItem from '../components/search/SearchResultItem.vue';
+import { useAuthStore } from '../stores/auth';
+import type { SearchEntity, SearchTabDefinition, SearchTabState } from '../types/search';
+import { DEFAULT_SEARCH_TABS } from '../types/search';
 import { addSearchHistory, clearSearchHistory, loadSearchHistory, removeSearchHistory, searchHistory } from '../utils/searchHistory';
+import { extractSearchEntities, extractSearchTabs, getSearchEntityId, getSearchEntityTitle, isSponsorSearchEntity } from '../utils/searchEntities';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-// 每个查询地址拥有独立缓存实例，固定本实例的查询词。
-const queryStr = ref((route.query.q as string) || '');
-const loading = ref(false);
-const results = ref<any[]>([]);
-
-function handleFeedDeleted(id: string | number) {
-  results.value = results.value.filter((f: any) => String(f.id) !== String(id));
-}
-const searchQuery = ref('');
-const searchSuggestions = ref<any[]>([]);
+const queryStr = ref(String(route.query.q || '').trim());
+const searchQuery = ref(queryStr.value);
+const searchTabs = ref<SearchTabDefinition[]>(DEFAULT_SEARCH_TABS);
+const activeTab = ref(String(route.query.tab || 'all'));
+const hotItems = ref<SearchEntity[]>([]);
+const tabStates = reactive<Record<string, SearchTabState>>({});
 const showSuggestions = ref(false);
 const showHistory = ref(false);
+const searchSuggestions = ref<SearchEntity[]>([]);
 const searchAreaRef = ref<HTMLElement | null>(null);
+let suggestTimer: ReturnType<typeof setTimeout> | null = null;
+let searchSequence = 0;
+let configLoaded = false;
 
-const activeTab = ref<'all' | 'users' | 'topics'>('all');
-const resultTabs: { key: 'all' | 'users' | 'topics'; label: string }[] = [
-  { key: 'all', label: '全部' },
-  { key: 'users', label: '用户' },
-  { key: 'topics', label: '话题' },
-];
+function newTabState(): SearchTabState {
+  return { items: [], loading: false, loadingMore: false, error: '', cursor: { page: 1, firstItem: '', lastItem: '', noMore: false }, requestVersion: 0 };
+}
 
-const users = ref<any[]>([]);
-const usersLoading = ref(false);
-const usersPage = ref(1);
-const usersNoMore = ref(false);
+function ensureTabState(key: string): SearchTabState {
+  if (!tabStates[key]) tabStates[key] = newTabState();
+  return tabStates[key];
+}
 
-const topics = ref<any[]>([]);
-const topicsLoading = ref(false);
-const topicsPage = ref(1);
-const topicsNoMore = ref(false);
+const activeState = computed(() => ensureTabState(activeTab.value));
 
-let suggestTimer: any = null;
+function entityKey(entity: SearchEntity, index: number): string {
+  return `${getSearchEntityId(entity) || getSearchEntityTitle(entity) || 'entity'}-${index}`;
+}
+
+function resetTabStates() {
+  Object.keys(tabStates).forEach((key) => delete tabStates[key]);
+  searchTabs.value.forEach((tab) => ensureTabState(tab.key));
+}
+
+function syncActiveTab(requested: string) {
+  activeTab.value = searchTabs.value.some((tab) => tab.key === requested) ? requested : (searchTabs.value[0]?.key || 'all');
+}
+
+async function loadSearchConfig() {
+  try {
+    const response = await CoolapkTauriAPI.getTabConfig();
+    searchTabs.value = extractSearchTabs(response);
+  } catch (error) {
+    console.warn('加载搜索页签配置失败，使用协议默认页签', error);
+    searchTabs.value = DEFAULT_SEARCH_TABS;
+  } finally {
+    configLoaded = true;
+    syncActiveTab(String(route.query.tab || activeTab.value || 'all'));
+    resetTabStates();
+    if (queryStr.value) void fetchTab(activeTab.value);
+  }
+}
+
+async function loadHotItems() {
+  try {
+    const response = await CoolapkTauriAPI.getHotSearches(false);
+    hotItems.value = extractSearchEntities(response).filter((item) => !isSponsorSearchEntity(item)).filter((item) => item.entities?.length || getSearchEntityTitle(item));
+  } catch (error) {
+    console.warn('加载热门搜索失败', error);
+  }
+}
+
+function responseFlag(value: unknown): boolean {
+  return value === true || value === 1 || value === '1' || value === 'true';
+}
+
+async function fetchTab(tabKey: string, loadMore = false) {
+  if (!queryStr.value) return;
+  const tab = searchTabs.value.find((item) => item.key === tabKey) || DEFAULT_SEARCH_TABS.find((item) => item.key === tabKey);
+  if (!tab) return;
+  const state = ensureTabState(tab.key);
+  if (loadMore && (state.loading || state.loadingMore || state.cursor.noMore)) return;
+  if (!loadMore && state.loading) return;
+  const requestVersion = ++state.requestVersion;
+  const sequence = ++searchSequence;
+  if (loadMore) state.loadingMore = true;
+  else { state.loading = true; state.error = ''; }
+  try {
+    const response: any = await CoolapkTauriAPI.searchByType({
+      searchType: tab.searchType,
+      query: queryStr.value,
+      page: loadMore ? state.cursor.page : 1,
+      firstItem: loadMore ? state.cursor.firstItem : '',
+      lastItem: loadMore ? state.cursor.lastItem : '',
+      pageType: tab.searchType === 'feed' ? 'search' : '',
+      feedType: tab.searchType === 'feed' ? 'all' : '',
+      sort: tab.searchType === 'feed' ? 'default' : '',
+    });
+    if (requestVersion !== state.requestVersion || sequence !== searchSequence) return;
+    const rows = extractSearchEntities(response).filter((item) => !isSponsorSearchEntity(item));
+    const existing = new Set(state.items.map((item) => entityKey(item, 0)));
+    const uniqueRows = rows.filter((item, index) => {
+      const key = entityKey(item, index);
+      if (existing.has(key)) return false;
+      existing.add(key);
+      return true;
+    });
+    if (loadMore) state.items.push(...uniqueRows);
+    else state.items = uniqueRows;
+    const first = uniqueRows[0] ? getSearchEntityId(uniqueRows[0]) : '';
+    const last = uniqueRows[uniqueRows.length - 1] ? getSearchEntityId(uniqueRows[uniqueRows.length - 1]) : '';
+    const responseFirst = String(response?.firstItem ?? response?.first_item ?? response?.data?.firstItem ?? response?.data?.first_item ?? '').trim();
+    const responseLast = String(response?.lastItem ?? response?.last_item ?? response?.data?.lastItem ?? response?.data?.last_item ?? '').trim();
+    state.cursor = {
+      page: loadMore ? state.cursor.page + 1 : 2,
+      firstItem: responseFirst || first || state.cursor.firstItem,
+      lastItem: responseLast || last || state.cursor.lastItem,
+      noMore: responseFlag(response?.noMore ?? response?.data?.noMore) || rows.length === 0,
+    };
+  } catch (error) {
+    if (requestVersion === state.requestVersion) state.error = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (requestVersion === state.requestVersion) { state.loading = false; state.loadingMore = false; }
+  }
+}
 
 function onInputFocus() {
   showHistory.value = !searchQuery.value.trim();
-  if (searchSuggestions.value.length > 0) {
-    showSuggestions.value = true;
-  }
+  showSuggestions.value = searchSuggestions.value.length > 0;
 }
 
-function handleClickOutside(e: MouseEvent) {
-  if (searchAreaRef.value && !searchAreaRef.value.contains(e.target as Node)) {
-    showSuggestions.value = false;
-  }
+function handleClickOutside(event: MouseEvent) {
+  if (searchAreaRef.value && !searchAreaRef.value.contains(event.target as Node)) { showSuggestions.value = false; showHistory.value = false; }
 }
 
 function clearSearch() {
@@ -209,543 +215,148 @@ function selectHistory(value: string) {
   doSearch(value);
 }
 
-function removeHistory(value: string) {
-  removeSearchHistory(value);
+function removeHistory(value: string) { removeSearchHistory(value); }
+function clearHistory() { clearSearchHistory(); showHistory.value = false; }
+
+function selectSuggestion(item: SearchEntity) {
+  const title = getSearchEntityTitle(item);
+  if (title) doSearch(title);
 }
 
-function clearHistory() {
-  clearSearchHistory();
-  showHistory.value = false;
-}
-
-function selectSuggestion(item: any) {
-  const title = item.searchValue || item.title || '';
-  searchQuery.value = title;
-  showSuggestions.value = false;
-  doSearch(title);
-}
-
-function doSearch(q: string) {
-  const trimmed = q.trim();
+function doSearch(value: string) {
+  const trimmed = value.trim();
   if (!trimmed) return;
   showSuggestions.value = false;
   showHistory.value = false;
   addSearchHistory(trimmed);
-  router.push({ path: '/search', query: { q: trimmed } });
+  void router.push({ path: '/search', query: { q: trimmed, tab: activeTab.value } });
 }
 
-function switchTab(key: 'all' | 'users' | 'topics') {
+function switchTab(key: string) {
   if (activeTab.value === key) return;
   activeTab.value = key;
-  if (key === 'users' && users.value.length === 0) {
-    fetchUsers(false);
-  } else if (key === 'topics' && topics.value.length === 0) {
-    fetchTopics(false);
-  }
+  void router.push({ path: '/search', query: { q: queryStr.value, tab: key } });
 }
 
-function formatNumber(num: number | string) {
-  const n = Number(num);
-  if (isNaN(n)) return '0';
-  if (n >= 10000) return (n / 10000).toFixed(1) + '万';
-  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
-  return String(n);
+function removeEntity(id: string | number) {
+  const state = ensureTabState(activeTab.value);
+  state.items = state.items.filter((item) => String(getSearchEntityId(item)) !== String(id));
 }
 
-function openUser(user: any) {
-  if (user.uid) {
-    router.push(`/user/${user.uid}`);
-  }
+function isUserFollowed(user: SearchEntity): boolean {
+  const value = user.follow ?? user.following;
+  return value === true || value === 1 || value === '1' || value === 'true';
 }
 
-function openTopic(topic: any) {
-  const tag = topic.tag || topic.title;
-  if (tag) {
-    router.push(`/topic/${tag}`);
-  }
-}
-
-function isUserFollowed(user: any): boolean {
-  const f = user.follow;
-  const g = user.following;
-  if (typeof f === 'boolean') return f;
-  if (typeof f === 'number') return f === 1;
-  if (typeof f === 'string') return f === '1' || f === 'true';
-  if (typeof g === 'boolean') return g;
-  return false;
-}
-
-async function toggleFollow(user: any) {
-  if (!authStore.isLoggedIn) {
-    authStore.openLoginModal();
-    return;
-  }
+async function toggleFollow(user: SearchEntity) {
+  const uid = String(user.uid ?? user.userId ?? user.user_id ?? '');
+  if (!uid) return;
+  if (!authStore.isLoggedIn) { authStore.openLoginModal(); return; }
   const followed = isUserFollowed(user);
   try {
-    if (followed) {
-      await CoolapkTauriAPI.unfollowUser(String(user.uid));
-    } else {
-      await CoolapkTauriAPI.followUser(String(user.uid));
-    }
+    if (followed) await CoolapkTauriAPI.unfollowUser(uid);
+    else await CoolapkTauriAPI.followUser(uid);
     user.follow = !followed;
-    if (user.following !== undefined) user.following = !followed;
-  } catch (err) {
-    console.error('关注操作失败', err);
+    user.following = !followed;
+  } catch (error) {
+    console.error('关注操作失败', error);
   }
 }
 
-async function fetchSearch() {
-  if (!queryStr.value) return;
-  loading.value = true;
-  results.value = [];
+function handleScroll(event: Event) {
+  const target = event.target as HTMLElement;
+  if (target.scrollTop + target.clientHeight >= target.scrollHeight - 120) void fetchTab(activeTab.value, true);
+}
+
+async function fetchSuggestions(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) { searchSuggestions.value = []; return; }
   try {
-    let res = await CoolapkTauriAPI.searchFeeds(queryStr.value, 1);
-    let list = (res && res.data && Array.isArray(res.data)) ? res.data : [];
-
-    if (list.length === 0) {
-      res = await CoolapkTauriAPI.searchAll(queryStr.value, 1);
-      list = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    let response = await CoolapkTauriAPI.getSearchSuggestionsApp(trimmed);
+    let rows = extractSearchEntities(response).filter((item) => getSearchEntityTitle(item));
+    if (!rows.length) {
+      response = await CoolapkTauriAPI.getSearchSuggestions(trimmed);
+      rows = extractSearchEntities(response).filter((item) => getSearchEntityTitle(item));
     }
-
-    results.value = list.filter((item: any) => {
-      if (!item || !item.id) return false;
-      const isEntity = item.entityType === 'product' || item.entityType === 'dyh';
-      const hasContent = item.message || item.description || item.title || item.pic || (item.pics && item.pics.length > 0);
-      const isHeaderCard = ['数码', '用户', '话题', '应用', '游戏', '酷图'].includes(item.title) && !item.message && !isEntity;
-      return hasContent && !isHeaderCard;
-    });
-  } catch (err) {
-    console.error('Search error', err);
-  } finally {
-    loading.value = false;
+    searchSuggestions.value = rows.slice(0, 8);
+    showSuggestions.value = rows.length > 0;
+  } catch (error) {
+    console.warn('加载搜索联想失败', error);
   }
 }
 
-async function fetchUsers(isLoadMore = false) {
-  if (!queryStr.value || usersLoading.value || usersNoMore.value) return;
-  usersLoading.value = true;
-  try {
-    const res = await CoolapkTauriAPI.searchUsers(queryStr.value, usersPage.value);
-    const list = (res && res.data && Array.isArray(res.data)) ? res.data : [];
-    if (list.length === 0) {
-      usersNoMore.value = true;
-    } else {
-      if (isLoadMore) {
-        users.value.push(...list);
-      } else {
-        users.value = list;
-      }
-      usersPage.value++;
-    }
-  } catch (err) {
-    console.error('Search users error', err);
-  } finally {
-    usersLoading.value = false;
-  }
-}
-
-async function fetchTopics(isLoadMore = false) {
-  if (!queryStr.value || topicsLoading.value || topicsNoMore.value) return;
-  topicsLoading.value = true;
-  try {
-    const res = await CoolapkTauriAPI.searchFeedTopics(queryStr.value, topicsPage.value);
-    const list = (res && res.data && Array.isArray(res.data)) ? res.data : [];
-    if (list.length === 0) {
-      topicsNoMore.value = true;
-    } else {
-      if (isLoadMore) {
-        topics.value.push(...list);
-      } else {
-        topics.value = list;
-      }
-      topicsPage.value++;
-    }
-  } catch (err) {
-    console.error('Search topics error', err);
-  } finally {
-    topicsLoading.value = false;
-  }
-}
-
-function handleScroll(e: Event) {
-  const target = e.target as HTMLElement;
-  const { scrollTop, clientHeight, scrollHeight } = target;
-  if (scrollTop + clientHeight >= scrollHeight - 100) {
-    if (activeTab.value === 'users') {
-      fetchUsers(true);
-    } else if (activeTab.value === 'topics') {
-      fetchTopics(true);
-    }
-  }
-}
-
-function extractSuggestions(res: any): any[] {
-  if (!res) return [];
-  if (Array.isArray(res)) return res;
-  if (res.data && Array.isArray(res.data)) return res.data;
-  return [];
-}
-
-async function fetchSuggestions(q: string) {
-  if (!q.trim()) {
-    searchSuggestions.value = [];
-    return;
-  }
-  try {
-    let res = await CoolapkTauriAPI.getSearchSuggestionsApp(q.trim());
-    let list = extractSuggestions(res);
-    if (list.length === 0) {
-      res = await CoolapkTauriAPI.getSearchSuggestions(q.trim());
-      list = extractSuggestions(res);
-    }
-    searchSuggestions.value = list.filter((item: any) => item && (item.title || item.searchValue));
-    showSuggestions.value = searchSuggestions.value.length > 0;
-  } catch (err) {
-    console.error('Suggestions error', err);
-  }
-}
-
-watch(searchQuery, (val) => {
-  showHistory.value = !val.trim();
+watch(searchQuery, (value) => {
+  showHistory.value = !value.trim();
   if (suggestTimer) clearTimeout(suggestTimer);
-  if (!val.trim()) {
-    searchSuggestions.value = [];
-    showSuggestions.value = false;
-    return;
-  }
-  suggestTimer = setTimeout(() => fetchSuggestions(val), 300);
+  if (!value.trim()) { searchSuggestions.value = []; showSuggestions.value = false; return; }
+  suggestTimer = setTimeout(() => void fetchSuggestions(value), 300);
 });
 
-watch(queryStr, () => {
-  searchQuery.value = queryStr.value;
-  activeTab.value = 'all';
-  users.value = [];
-  usersPage.value = 1;
-  usersNoMore.value = false;
-  topics.value = [];
-  topicsPage.value = 1;
-  topicsNoMore.value = false;
-  fetchSearch();
-});
+watch(() => [String(route.query.q || ''), String(route.query.tab || '')], ([nextQuery, nextTab]) => {
+  const normalizedQuery = nextQuery.trim();
+  queryStr.value = normalizedQuery;
+  searchQuery.value = normalizedQuery;
+  if (configLoaded) syncActiveTab(nextTab || activeTab.value || 'all');
+  resetTabStates();
+  if (normalizedQuery) void fetchTab(activeTab.value);
+}, { immediate: true });
 
 onMounted(() => {
   void loadSearchHistory();
+  void loadHotItems();
+  void loadSearchConfig();
   document.addEventListener('click', handleClickOutside);
-  if (queryStr.value) {
-    searchQuery.value = queryStr.value;
-    fetchSearch();
-  }
 });
 
 onUnmounted(() => {
+  if (suggestTimer) clearTimeout(suggestTimer);
   document.removeEventListener('click', handleClickOutside);
 });
 </script>
 
 <style scoped>
-.page-container {
-  width: 100%;
-  max-width: var(--feed-max-width);
-  height: 100%;
-  overflow-y: auto;
-  padding: var(--space-5);
-  margin: 0 auto;
-}
-
-.page-header {
-  margin-bottom: var(--space-4);
-}
-
-.page-title {
-  font-size: var(--font-size-title-md);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-}
-
-.search-input-area {
-  position: relative;
-  margin-bottom: var(--space-4);
-}
-
-.search-input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 0 var(--space-4);
-  height: 44px;
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  transition: border-color var(--duration-fast) var(--ease-default);
-}
-
-.search-input-wrapper:focus-within {
-  border-color: var(--brand-primary);
-}
-
-.search-input-icon {
-  font-size: 15px;
-  color: var(--text-tertiary);
-}
-
-.search-field {
-  flex: 1;
-  font-size: var(--font-size-sub);
-  color: var(--text-primary);
-}
-
-.search-field::placeholder {
-  color: var(--text-tertiary);
-}
-
-.clear-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  transition: all var(--duration-fast) var(--ease-default);
-}
-
-.clear-btn:hover {
-  background-color: var(--surface-hover);
-  color: var(--text-primary);
-}
-
-.suggestions-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  max-height: 260px;
-  overflow-y: auto;
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  box-shadow: var(--shadow-dialog);
-  z-index: 100;
-  padding: var(--space-1);
-}
-
-.search-history-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; padding: 8px; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--radius-control); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); }
-.search-history-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 8px; color: var(--text-tertiary); font-size: var(--font-size-caption); }
+.search-page-layout { container-type: inline-size; container-name: search-layout; display: flex; width: 100%; height: 100%; overflow: hidden; }
+.search-main-column { display: flex; flex: 1; flex-direction: column; min-width: 0; height: 100%; overflow: hidden; background: var(--surface); }
+.search-toolbar { position: relative; z-index: 2; flex: 0 0 auto; background: var(--surface); border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, .06)); }
+.search-toolbar-content { padding: 18px 20px 14px; }
+.page-header { display: flex; align-items: center; margin-bottom: 14px; }
+.page-title { margin: 0; color: var(--text-primary); font-size: clamp(20px, 2vw, 26px); font-weight: var(--font-weight-bold); line-height: 1.25; }
+.search-input-area { position: relative; margin: 0; }
+.search-input-wrapper { display: flex; align-items: center; gap: 12px; height: 46px; box-sizing: border-box; padding: 0 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; transition: border-color var(--duration-fast) var(--ease-default), box-shadow var(--duration-fast) var(--ease-default); }
+.search-input-wrapper:focus-within { border-color: var(--brand-primary); box-shadow: 0 0 0 3px var(--brand-soft); }
+.search-input-icon { color: var(--text-secondary); font-size: 15px; }
+.search-field { flex: 1; min-width: 0; color: var(--text-primary); font-size: var(--font-size-sub); outline: none; }
+.search-field::placeholder { color: var(--text-tertiary); }
+.clear-btn { display: grid; place-items: center; width: 26px; height: 26px; color: var(--text-tertiary); background: transparent; border: 0; border-radius: 50%; cursor: pointer; }
+.clear-btn:hover { color: var(--text-primary); background: var(--surface-hover); }
+.suggestions-dropdown, .search-history-dropdown { position: absolute; top: calc(100% + 4px); right: 0; left: 0; z-index: 20; max-height: 260px; padding: 6px; overflow-y: auto; background: var(--surface-elevated); border: 1px solid var(--border); border-radius: var(--radius-control); box-shadow: var(--shadow-dialog); }
+.suggestion-item, .search-history-item { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px; color: var(--text-secondary); text-align: left; background: transparent; border: 0; border-radius: var(--radius-xs); cursor: pointer; }
+.suggestion-item:hover, .search-history-item:hover { color: var(--text-primary); background: var(--surface-hover); }
+.suggestion-text, .search-history-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggestion-icon, .search-history-item > .far { color: var(--text-tertiary); }
+.search-history-header { display: flex; justify-content: space-between; padding: 5px 9px 8px; color: var(--text-tertiary); font-size: var(--font-size-caption); }
 .search-history-header button { color: var(--brand-primary); background: transparent; border: 0; cursor: pointer; }
-.search-history-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px; color: var(--text-secondary); background: transparent; border: 0; border-radius: var(--radius-xs); cursor: pointer; text-align: left; }
-.search-history-item:hover { color: var(--text-primary); background: var(--surface-hover); }
-.search-history-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .remove-history { padding: 3px; color: var(--text-tertiary); }
 .remove-history:hover { color: var(--danger); }
-
-.suggestion-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-default);
-}
-
-.suggestion-item:hover {
-  background-color: var(--surface-hover);
-}
-
-.suggestion-icon {
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
-.suggestion-text {
-  font-size: var(--font-size-sub);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.search-tabs {
-  display: flex;
-  gap: var(--space-5);
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 4px;
-  overflow-x: auto;
-  margin-bottom: var(--space-4);
-}
-
-.search-tab-item {
-  position: relative;
-  border: none;
-  background: transparent;
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 6px 2px;
-  white-space: nowrap;
-  transition: color var(--duration-fast) var(--ease-default);
-}
-
-.search-tab-item.active {
-  color: var(--brand-primary);
-  font-weight: var(--font-weight-bold);
-}
-
-.tab-line {
-  position: absolute;
-  bottom: -5px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 18px;
-  height: 3px;
-  background: var(--brand-primary);
-  border-radius: 2px;
-}
-
-.loading-wrapper, .empty-wrapper {
-  padding: var(--space-6) 0;
-}
-
-.search-result-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.search-user-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.search-user-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-default);
-}
-
-.search-user-item:hover {
-  border-color: var(--brand-primary);
-}
-
-.user-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.user-info-top {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  overflow: hidden;
-}
-
-.user-name {
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-verify {
-  flex-shrink: 0;
-  font-size: var(--font-size-caption);
-  color: var(--brand-primary);
-  background-color: var(--brand-soft);
-  border-radius: var(--radius-pill);
-  padding: 1px 8px;
-}
-
-.user-bio {
-  font-size: var(--font-size-caption);
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-fans {
-  font-size: var(--font-size-caption);
-  color: var(--text-tertiary);
-}
-
-.search-topic-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.search-topic-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-default);
-}
-
-.search-topic-item:hover {
-  border-color: var(--brand-primary);
-}
-
-.topic-icon {
-  font-size: 14px;
-  color: var(--brand-primary);
-}
-
-.topic-info {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  overflow: hidden;
-  min-width: 0;
-}
-
-.topic-tag {
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.topic-commentnum {
-  flex-shrink: 0;
-  font-size: var(--font-size-caption);
-  color: var(--text-tertiary);
-}
-
-.topic-arrow {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.pagination-footer {
-  padding: var(--space-4) 0;
-  text-align: center;
-}
-
-.no-more {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-caption);
+.search-tabs { display: flex; gap: clamp(8px, 2vw, 24px); min-width: 0; padding: 0 20px; overflow-x: auto; scrollbar-width: none; }
+.search-tabs::-webkit-scrollbar { display: none; }
+.search-tab-item { display: inline-flex; align-items: center; gap: 7px; position: relative; flex: 0 0 auto; min-height: 44px; padding: 0 8px; color: var(--text-secondary); font-size: var(--font-size-sub); font-weight: var(--font-weight-medium); white-space: nowrap; background: transparent; border: 0; cursor: pointer; }
+.search-tab-item.active { color: var(--brand-primary); font-weight: var(--font-weight-bold); }
+.search-tab-item.active::after { position: absolute; right: 8px; bottom: 0; left: 8px; height: 3px; content: ''; background: var(--brand-primary); border-radius: 3px 3px 0 0; }
+.search-scroll-container { flex: 1; min-height: 0; overflow-y: auto; background: var(--background-secondary); }
+.search-results-section, .search-welcome { width: 100%; box-sizing: border-box; padding: 16px 20px 28px; }
+.search-result-list { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.loading-wrapper, .empty-wrapper { padding: var(--space-6) 0; text-align: center; }
+.retry-button { margin-top: 10px; padding: 6px 14px; color: var(--brand-primary); background: var(--brand-soft); border: 0; border-radius: var(--radius-control); cursor: pointer; }
+.pagination-footer { padding: var(--space-4) 0; text-align: center; }
+.no-more { color: var(--text-tertiary); font-size: var(--font-size-caption); }
+.search-welcome { display: flex; flex-direction: column; gap: 12px; }
+.search-welcome-hint { margin: 0 0 4px; padding: 0 2px; color: var(--text-secondary); font-size: var(--font-size-sub); }
+@container search-layout (max-width: 640px) {
+  .search-toolbar-content { padding: 14px 12px 10px; }
+  .search-tabs { gap: 4px; padding: 0 12px; }
+  .search-tab-item { min-height: 42px; padding: 0 7px; }
+  .search-tab-item.active::after { right: 7px; left: 7px; }
+  .search-results-section, .search-welcome { padding: 12px 12px 24px; }
 }
 </style>
