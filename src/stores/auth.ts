@@ -16,6 +16,13 @@ export interface UserProfile {
   gender?: string | number;
   astro?: string;
   ageTag?: string;
+  cover?: string;
+  birthyear?: number;
+  birthmonth?: number;
+  birthday?: number;
+  province?: string;
+  city?: string;
+  zodiacSign?: string;
   exp?: number;
   maxExp?: number;
 }
@@ -468,6 +475,21 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
     localStorage.setItem('coolapk_user', JSON.stringify(user.value));
   }
 
+  /** 更新当前账号的资料缓存，保证资料页修改后顶部用户信息立即同步。 */
+  async function updateCurrentUserProfile(data: Partial<UserProfile>) {
+    if (!user.value) return;
+    const avatarChanged = typeof data.userAvatar === 'string' && data.userAvatar !== user.value.userAvatar;
+    user.value = { ...user.value, ...data };
+    localStorage.setItem('coolapk_user', JSON.stringify(user.value));
+    if (avatarChanged) clearResourceMemoryCache();
+    try {
+      await CoolapkTauriAPI.persistCurrentAccount(String(user.value.uid), user.value.username || '', user.value.userAvatar || '');
+      await loadAccounts();
+    } catch (e) {
+      console.warn('同步本地账户资料失败:', e);
+    }
+  }
+
   return {
     isLoggedIn,
     user,
@@ -487,6 +509,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
     loadAccounts,
     loginAs,
     removeAccount,
-    updateProfileStats
+    updateProfileStats,
+    updateCurrentUserProfile
   };
 });

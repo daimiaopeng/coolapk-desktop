@@ -421,6 +421,14 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_user_profile', { uid });
   }
 
+  static async updateUserProfile(key: string, value: string) {
+    return await invokeNative('update_user_profile', { key, value });
+  }
+
+  static async updateUserCover(url: string) {
+    return await invokeNative('update_user_cover', { url });
+  }
+
   static async getUserQrImage(uid: string) {
     return await invokeNative('get_user_qr_image', { uid }, { retry: true, kind: 'default' });
   }
@@ -826,6 +834,10 @@ export class CoolapkTauriAPI {
 
   static async uploadImage(imageBytes: Uint8Array, fileName: string, contentType: string, dir: string = 'feed', toUid?: string) {
     return await invokeNative('upload_image', { imageBytes, fileName, contentType, dir, toUid });
+  }
+
+  static async changeAvatar(imageBytes: Uint8Array, fileName: string, contentType: string) {
+    return await invokeNative('change_avatar', { imageBytes, fileName, contentType });
   }
 
   static async getBlackList(page: number = 1) {

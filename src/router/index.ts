@@ -47,6 +47,7 @@ import MyProductsPage from '../pages/MyProductsPage.vue';
 import ProductComparePage from '../pages/ProductComparePage.vue';
 import MorePage from '../pages/MorePage.vue';
 import SettingsLayout from '../pages/settings/SettingsLayout.vue';
+import ProfileSettingsPage from '../pages/settings/ProfileSettingsPage.vue';
 import AccountSettingsPage from '../pages/settings/AccountSettingsPage.vue';
 import NotificationSettingsPage from '../pages/settings/NotificationSettingsPage.vue';
 import PrivacySettingsPage from '../pages/settings/PrivacySettingsPage.vue';
@@ -126,6 +127,7 @@ const routes = [
     component: SettingsLayout,
     redirect: '/settings/appearance',
     children: [
+      { path: 'profile', component: ProfileSettingsPage },
       { path: 'account', component: AccountSettingsPage },
       { path: 'notifications', component: NotificationSettingsPage },
       { path: 'privacy', component: PrivacySettingsPage },

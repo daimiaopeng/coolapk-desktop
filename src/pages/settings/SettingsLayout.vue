@@ -26,6 +26,7 @@
 
 <script setup lang="ts">
 const settingsMenu = [
+  { path: '/settings/profile', label: '个人信息', icon: 'fas fa-id-card' },
   { path: '/settings/account', label: '账号与安全', icon: 'fas fa-user-shield' },
   { path: '/settings/notifications', label: '通知设置', icon: 'fas fa-bell' },
   { path: '/settings/privacy', label: '隐私设置', icon: 'fas fa-lock' },

@@ -45,7 +45,7 @@
               />
               <div class="banner-actions">
                 <template v-if="isSelfUser">
-                  <button class="app-btn btn-secondary-glass" @click="router.push('/settings/account')">
+                  <button class="app-btn btn-secondary-glass" @click="router.push('/settings/profile')">
                     <i class="fas fa-edit"></i> 编辑资料
                   </button>
                   <button class="app-btn btn-icon-glass" title="二维码" @click="showUserQr">

@@ -825,6 +825,36 @@ pub async fn get_user_profile(state: State<'_, AppState>, uid: String) -> Result
 }
 
 #[tauri::command]
+pub async fn update_user_profile(
+    state: State<'_, AppState>,
+    key: String,
+    value: String,
+) -> Result<Value, String> {
+    state.client.update_user_profile(&key, &value).await
+}
+
+#[tauri::command]
+pub async fn change_avatar(
+    state: State<'_, AppState>,
+    image_bytes: Vec<u8>,
+    file_name: String,
+    content_type: String,
+) -> Result<Value, String> {
+    state
+        .client
+        .change_avatar(&image_bytes, &file_name, &content_type)
+        .await
+}
+
+#[tauri::command]
+pub async fn update_user_cover(
+    state: State<'_, AppState>,
+    url: String,
+) -> Result<Value, String> {
+    state.client.update_user_cover(&url).await
+}
+
+#[tauri::command]
 pub async fn get_user_qr_image(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
     state.client.get_user_qr_image(&uid).await
 }

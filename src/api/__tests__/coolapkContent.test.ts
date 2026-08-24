@@ -88,4 +88,22 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
       page: 2,
     });
   });
+
+  it('个人资料读取调用 get_user_profile', async () => {
+    await CoolapkTauriAPI.getUserProfile('2014');
+    expect(invoke).toHaveBeenCalledWith('get_user_profile', { uid: '2014' });
+  });
+
+  it('个人资料字段修改调用 update_user_profile', async () => {
+    await CoolapkTauriAPI.updateUserProfile('gender', '1');
+    expect(invoke).toHaveBeenCalledWith('update_user_profile', { key: 'gender', value: '1' });
+  });
+
+  it('头像和背景图修改分别调用对应 Tauri 命令', async () => {
+    const imageBytes = new Uint8Array([1, 2, 3]);
+    await CoolapkTauriAPI.changeAvatar(imageBytes, 'avatar.png', 'image/png');
+    expect(invoke).toHaveBeenCalledWith('change_avatar', { imageBytes, fileName: 'avatar.png', contentType: 'image/png' });
+    await CoolapkTauriAPI.updateUserCover('https://image.coolapk.com/cover.jpg');
+    expect(invoke).toHaveBeenCalledWith('update_user_cover', { url: 'https://image.coolapk.com/cover.jpg' });
+  });
 });

@@ -1083,6 +1083,43 @@ impl CoolapkClient {
             .await
     }
 
+    /// 发送带登录态的 multipart 写请求。头像接口使用 multipart，不能复用普通表单请求。
+    async fn request_multipart_api(
+        &self,
+        path: &str,
+        form: reqwest::multipart::Form,
+    ) -> Result<Value, String> {
+        let token = self.get_token()?;
+        let url = format!("https://api.coolapk.com{path}");
+        let mut request = self.apply_device_profile(
+            self.client
+                .request(Method::POST, url)
+                .header("X-App-Token", token)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .multipart(form),
+        )?;
+
+        let cookie = self
+            .user_cookie
+            .read()
+            .map_err(|_| "failed to read login state".to_string())?
+            .clone();
+        if let Some(cookie) = cookie {
+            let requirements = classify_path(path);
+            let full_cookie = if requirements.needs_ddid {
+                format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid())
+            } else {
+                cookie
+            };
+            if let Ok(header_val) = HeaderValue::from_str(&full_cookie) {
+                request = request.header(COOKIE, header_val);
+            }
+        }
+
+        let response = request.send().await.map_err(|e| e.to_string())?;
+        wrap_api_data(response_json(response).await?)
+    }
+
     fn clean_single_feed(item: &Value, idx: usize) -> Option<Value> {
         let obj = item.as_object()?;
 
@@ -2796,6 +2833,63 @@ impl CoolapkClient {
         wrap_api_data(
             self.api_get("/v6/user/profile", &[("uid", uid.to_string())])
                 .await?,
+        )
+    }
+
+    /// 修改个人资料字段。对应 APK 的 POST /v6/account/changeProfile。
+    pub async fn update_user_profile(&self, key: &str, value: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_post(
+                "/v6/account/changeProfile",
+                &[],
+                &[("key", key.to_string()), ("value", value.to_string())],
+            )
+            .await?,
+        )
+    }
+
+    /// 修改头像。对应 APK 的 multipart POST /v6/account/changeAvatar。
+    pub async fn change_avatar(
+        &self,
+        image_bytes: &[u8],
+        file_name: &str,
+        content_type: &str,
+    ) -> Result<Value, String> {
+        if image_bytes.is_empty() {
+            return Err("头像文件不能为空".to_string());
+        }
+
+        let safe_file_name = if file_name.trim().is_empty() {
+            "avatar.jpg"
+        } else {
+            file_name.trim()
+        };
+        let part = reqwest::multipart::Part::bytes(image_bytes.to_vec())
+            .file_name(safe_file_name.to_string());
+        let part = if content_type.trim().is_empty() {
+            part
+        } else {
+            part.mime_str(content_type.trim())
+                .map_err(|e| format!("头像文件类型无效: {e}"))?
+        };
+        let form = reqwest::multipart::Form::new().part("imgFile", part);
+        self.request_multipart_api("/v6/account/changeAvatar", form)
+            .await
+    }
+
+    /// 修改个人主页背景图。图片地址由前端先通过 OSS 上传后再提交。
+    pub async fn update_user_cover(&self, url: &str) -> Result<Value, String> {
+        let trimmed = url.trim();
+        if trimmed.is_empty() {
+            return Err("背景图地址不能为空".to_string());
+        }
+        wrap_api_data(
+            self.api_post(
+                "/v6/account/changeAvatarCover",
+                &[],
+                &[("url", trimmed.to_string())],
+            )
+            .await?,
         )
     }
 
