@@ -219,11 +219,25 @@ function recentKey(item: any): string {
   return `${item.id || item.entityId || ''}-${item.type || item.entityType || ''}`;
 }
 
+function asText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
+function firstText(...values: unknown[]): string {
+  for (const value of values) {
+    const text = asText(value);
+    if (text) return text;
+  }
+  return '';
+}
+
 function getItemType(item: any): 'feed' | 'user' | 'topic' | 'apk' {
   if (!item) return 'feed';
-  const type = (item?.type || item?.entityType || item?.entity_type || item?.target_type || item?.entityTemplate || '').toLowerCase();
-  const url = (item?.url || item?.targetUrl || '').toLowerCase();
-  const title = item?.title || '';
+  const type = firstText(item?.type, item?.entityType, item?.entity_type, item?.target_type, item?.entityTemplate).toLowerCase();
+  const url = firstText(item?.url, item?.targetUrl).toLowerCase();
+  const title = asText(item?.title);
 
   // URL 前缀优先判定（历史条目 url 形如 /u/xxx、/feed/xxx、/t/xxx、/apk/xxx）
   if (type === 'user' || url.startsWith('/u/')) return 'user';
@@ -385,8 +399,8 @@ const groupedFilteredTimeline = computed(() => {
 });
 
 function openItem(item: any) {
-  const type = (item?.type || item?.entityType || '').toLowerCase();
-  const url = item?.url || item?.targetUrl || '';
+  const type = firstText(item?.type, item?.entityType).toLowerCase();
+  const url = firstText(item?.url, item?.targetUrl);
   const id = item?.id || item?.target_id || item?.entityId;
 
   if (type === 'feed' || url.includes('/feed/')) {

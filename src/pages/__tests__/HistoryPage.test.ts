@@ -54,13 +54,13 @@ const userItem = {
   dateline: 1786022084,
 };
 
-async function mountPage() {
+async function mountPage(historyData: any[] = [feedItem, userItem]) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const authStore = useAuthStore(pinia);
   authStore.isLoggedIn = true;
   authStore.user = { uid: '123456', username: '测试用户', userAvatar: '' };
-  mocks.getHitHistory.mockResolvedValue({ code: 200, data: [feedItem, userItem] });
+  mocks.getHitHistory.mockResolvedValue({ code: 200, data: historyData });
   mocks.getRecentHistory.mockResolvedValue({ code: 200, data: [] });
   mocks.router.push.mockClear();
   mocks.openUrl.mockClear();
@@ -112,5 +112,18 @@ describe('HistoryPage 点击行为', () => {
     await items[1].trigger('click');
     expect(appStore.feedDetailContexts).toEqual({});
     expect(mocks.router.push).toHaveBeenCalledWith('/user/123456');
+  });
+
+  it('历史接口字段为非字符串时仍能正常渲染', async () => {
+    const nonStringItems = [
+      { id: 1, title: 123, description: '', logo: '', url: '/feed/1', type: {}, entityType: {}, target_type: [], dateline: 1786022084 },
+      { id: 2, title: '测试动态', description: '', logo: '', url: { path: '/feed/2' }, type: 'feed', dateline: 1786022084 },
+    ];
+    const { wrapper } = await mountPage(nonStringItems);
+
+    expect(wrapper.findAll('.history-item')).toHaveLength(2);
+    await wrapper.findAll('.filter-btn')[1].trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('.history-item')).toHaveLength(2);
   });
 });
