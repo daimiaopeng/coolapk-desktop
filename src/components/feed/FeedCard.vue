@@ -222,6 +222,7 @@ import { preloadUserProfile, reactiveUserProfileMap } from '../../utils/userProf
 import { renderCoolapkRichText } from '../../utils/richText';
 import { generateTextDiffHtml, getDiffSummary } from '../../utils/textDiff';
 import { getReplyData, mergeReplies } from '../../utils/commentList';
+import { useAppStore } from '../../stores/app';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { showToast } from '../../utils/toast';
@@ -238,6 +239,7 @@ import {
 } from '../../utils/feedRelations';
 
 const settingsStore = useSettingsStore();
+const appStore = useAppStore();
 const router = useRouter();
 const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
 
@@ -626,6 +628,7 @@ const comments = ref<any[]>([]);
 const commentsLoading = ref(false);
 const commentsError = ref('');
 let commentsRequestVersion = 0;
+const hasBlockingOverlay = computed(() => Boolean(appStore.activeImageViewer || appStore.isSearchOpen || appStore.isPublishOpen || authStore.isLoginModalOpen || forwardOpen.value || historyDialogOpen.value || collectionPickerOpen.value || moreMenuOpen.value));
 
 async function toggleFav() {
   if (!authStore.isLoggedIn) {
@@ -781,7 +784,7 @@ const isCommentsFloatingVisible = ref(false);
 const floatingCollapseStyle = ref<{ bottom: string; right: string }>({ bottom: '32px', right: '32px' });
 
 function updateFloatingCollapse() {
-  if (!showComments.value || props.detailMode || !cardRef.value || !comments.value.length) {
+  if (hasBlockingOverlay.value || !showComments.value || props.detailMode || !cardRef.value || !comments.value.length) {
     isCommentsFloatingVisible.value = false;
     return;
   }
@@ -821,6 +824,38 @@ function unbindScrollListener() {
   window.removeEventListener('resize', updateFloatingCollapse);
 }
 
+function findScrollContainer(element: HTMLElement): HTMLElement | null {
+  let parent = element.parentElement;
+  while (parent) {
+    if (parent.classList.contains('feed-scroll-container')) return parent;
+    const overflowY = window.getComputedStyle(parent).overflowY;
+    if (/(auto|scroll|overlay)/.test(overflowY) && parent.scrollHeight > parent.clientHeight) return parent;
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
+function keepCollapsedCardVisible(card: HTMLElement, scrollContainer: HTMLElement | null) {
+  const cardRect = card.getBoundingClientRect();
+  const viewportTop = scrollContainer ? scrollContainer.getBoundingClientRect().top : 0;
+  const viewportBottom = viewportTop + (scrollContainer ? scrollContainer.clientHeight : window.innerHeight);
+  if (cardRect.bottom > viewportTop && cardRect.top < viewportBottom) return;
+
+  const currentScrollTop = scrollContainer ? scrollContainer.scrollTop : (window.scrollY || document.documentElement.scrollTop || document.body.scrollTop);
+  const targetScrollTop = cardRect.bottom <= viewportTop
+    ? currentScrollTop + cardRect.bottom - viewportBottom
+    : currentScrollTop + cardRect.top - viewportTop;
+  if (scrollContainer) {
+    const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+    scrollContainer.scrollTop = Math.max(0, Math.min(targetScrollTop, maxScrollTop));
+    return;
+  }
+
+  const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+  const maxScrollTop = Math.max(0, documentHeight - window.innerHeight);
+  window.scrollTo({ top: Math.max(0, Math.min(targetScrollTop, maxScrollTop)), behavior: 'auto' });
+}
+
 async function toggleComments() {
   if (showComments.value) {
     showComments.value = false;
@@ -830,11 +865,14 @@ async function toggleComments() {
 }
 
 function handleCollapseComments() {
+  // 收起只改变当前动态的展开状态，保持用户当前视口，下一条动态自然露出。
+  const card = cardRef.value;
+  const scrollContainer = card ? findScrollContainer(card) : null;
   showComments.value = false;
   isCommentsFloatingVisible.value = false;
   unbindScrollListener();
-  if (!props.detailMode && cardRef.value) {
-    cardRef.value.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (card) {
+    void nextTick(() => keepCollapsedCardVisible(card, scrollContainer));
   }
 }
 
@@ -851,6 +889,14 @@ watch(
   },
   { immediate: true }
 );
+
+watch(hasBlockingOverlay, (isBlocked) => {
+  if (isBlocked) {
+    isCommentsFloatingVisible.value = false;
+  } else if (showComments.value) {
+    void nextTick(updateFloatingCollapse);
+  }
+});
 
 onUnmounted(() => {
   unbindScrollListener();
@@ -1183,7 +1229,7 @@ function formatRichText(text: string) {
 /* 全局固定悬浮收起按钮（Fixed 定位在视口右下角，评论滚动时静止不动） */
 .global-floating-comment-collapse {
   position: fixed;
-  z-index: 9999;
+  z-index: 900;
   pointer-events: auto;
 }
 

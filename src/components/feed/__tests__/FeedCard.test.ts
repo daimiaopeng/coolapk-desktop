@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import { nextTick } from 'vue';
 
 const mocks = vi.hoisted(() => ({
   getFeedChangeHistory: vi.fn(),
@@ -255,5 +256,94 @@ describe('动态关联和视频内容', () => {
 
     expect(wrapper.findAll('.feed-target-chip')).toHaveLength(3);
     expect(wrapper.find('.stub-video-card').exists()).toBe(true);
+  });
+});
+
+describe('评论区收起定位', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getHotReplies.mockResolvedValue({ data: [] });
+    mocks.getFeedReplies.mockResolvedValue({
+      data: [{ id: 'comment-1', username: '评论用户', message: '评论内容' }],
+    });
+    setActivePinia(createPinia());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('当前动态被评论区挤出视口时，收起后回到当前动态而不是下一条', async () => {
+    const host = document.createElement('div');
+    host.className = 'feed-scroll-container';
+    Object.defineProperties(host, {
+      clientHeight: { configurable: true, value: 600 },
+      scrollHeight: { configurable: true, value: 5000 },
+      scrollTop: { configurable: true, writable: true, value: 4500 },
+    });
+    document.body.appendChild(host);
+
+    let collapsed = false;
+    const makeRect = (top: number, bottom: number): DOMRect => ({
+      x: 0,
+      y: top,
+      width: 800,
+      height: bottom - top,
+      top,
+      right: 800,
+      bottom,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function(this: HTMLElement) {
+      if (this.classList.contains('feed-scroll-container')) return makeRect(0, 600);
+      if (this.classList.contains('feed-card')) return collapsed ? makeRect(-1200, -600) : makeRect(100, 500);
+      return makeRect(0, 0);
+    });
+
+    const wrapper = mount(FeedCard, {
+      attachTo: host,
+      props: {
+        feed: { id: 'collapse-feed', uid: '456', username: '动态作者', message: '动态正文' },
+      },
+      global: {
+        stubs: {
+          FeedHeader: true,
+          FeedContent: true,
+          VoteCard: true,
+          FeedImageGrid: true,
+          FeedVideoCard: true,
+          FeedActionBar: {
+            template: '<button class="stub-open-comments" @click="$emit(\'open-comment\')">评论</button>',
+          },
+          FeedCommentSection: {
+            props: ['comments'],
+            template: '<div class="stub-comments">{{ comments.length }}</div>',
+          },
+          ForwardDialog: true,
+          LoadingState: true,
+          AppDialog: true,
+          AppImage: true,
+          FeedCollectionPickerDialog: true,
+        },
+      },
+    });
+
+    await wrapper.find('.stub-open-comments').trigger('click');
+    await flushPromises();
+    window.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    const collapseButton = document.body.querySelector<HTMLButtonElement>('.btn-floating-collapse');
+    expect(collapseButton).not.toBeNull();
+
+    collapsed = true;
+    collapseButton?.click();
+    await nextTick();
+    await nextTick();
+
+    expect(host.scrollTop).toBe(3300);
+    expect(wrapper.find('.stub-comments').exists()).toBe(false);
+    wrapper.unmount();
+    host.remove();
   });
 });
