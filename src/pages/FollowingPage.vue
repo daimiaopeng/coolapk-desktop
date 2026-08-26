@@ -1,29 +1,5 @@
 <template>
   <div class="page-container custom-scrollbar">
-    <!-- 头部区域 -->
-    <div class="page-header">
-      <div class="header-main">
-        <div class="header-titles">
-          <h2 class="page-title">
-            <i class="fas fa-user-group icon"></i> 我关注的
-          </h2>
-          <span class="page-subtitle">已关注酷友与粉丝的最新动态列表</span>
-        </div>
-
-        <div v-if="authStore.isLoggedIn" class="header-actions">
-          <AppButton
-            variant="secondary"
-            size="sm"
-            icon="fas fa-sync-alt"
-            :loading="loading"
-            @click="loadFollowingFeeds(true)"
-          >
-            刷新动态
-          </AppButton>
-        </div>
-      </div>
-    </div>
-
     <!-- 未登录引导视图 -->
     <div v-if="!authStore.isLoggedIn" class="empty-wrapper login-guide-wrapper">
       <div class="login-guide-card">
@@ -448,48 +424,9 @@ onUnmounted(() => {
   max-width: 100%;
   height: 100%;
   overflow-y: auto;
-  padding: var(--space-5);
+  padding: 0;
   margin: 0;
-}
-
-.page-header {
-  margin-bottom: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.header-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-
-.header-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.page-title {
-  font-size: var(--font-size-title-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.page-title .icon {
-  color: var(--brand-primary);
-}
-
-.page-subtitle {
-  font-size: var(--font-size-sub);
-  color: var(--text-tertiary);
+  background-color: var(--surface);
 }
 
 .following-layout {

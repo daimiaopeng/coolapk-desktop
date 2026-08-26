@@ -526,7 +526,9 @@ async function toggleWish() {
       productDetail.value.userAction = {
         ...(productDetail.value.userAction || {}),
         wish: target ? 1 : 0,
+        follow: target ? 1 : 0,
       };
+      window.dispatchEvent(new CustomEvent('coolapk-product-event', { detail: { productId: productId.value, wished: target, wish: target ? 1 : 0, follow: target ? 1 : 0, userAction: productDetail.value.userAction } }));
     }
     showToast(target ? '已加入想要清单' : '已从想要清单移除', 'success');
   } catch (err) {

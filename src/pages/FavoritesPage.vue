@@ -1,42 +1,19 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <div class="page-header">
-      <div class="header-main">
-        <div class="header-titles">
-          <h2 class="page-title">
-            <i class="far fa-bookmark icon"></i> 我的收藏
-          </h2>
-          <span class="page-subtitle">同步自酷安账号的真实收藏</span>
-        </div>
-
-        <div v-if="authStore.isLoggedIn" class="header-actions">
-          <AppButton
-            variant="secondary"
-            size="sm"
-            icon="fas fa-sync-alt"
-            :loading="loading"
-            @click="fetchCloudFavorites(true)"
-          >
-            刷新收藏
-          </AppButton>
-        </div>
-      </div>
-
-      <!-- 分类快捷标签栏 -->
-      <div v-if="authStore.isLoggedIn" class="category-tabs">
-        <button
-          :class="['cat-tab', { active: activeSubTab === 'all' }]"
-          @click="switchSubTab('all')"
-        >
-          <i class="far fa-bookmark"></i> 全部收藏
-        </button>
-        <button
-          :class="['cat-tab', { active: activeSubTab === 'collections' }]"
-          @click="switchSubTab('collections')"
-        >
-          <i class="fas fa-folder-open"></i> 收藏单
-        </button>
-      </div>
+    <!-- 分类快捷标签栏 -->
+    <div v-if="authStore.isLoggedIn" class="category-tabs">
+      <button
+        :class="['cat-tab', { active: activeSubTab === 'all' }]"
+        @click="switchSubTab('all')"
+      >
+        <i class="far fa-bookmark"></i> 全部收藏
+      </button>
+      <button
+        :class="['cat-tab', { active: activeSubTab === 'collections' }]"
+        @click="switchSubTab('collections')"
+      >
+        <i class="fas fa-folder-open"></i> 收藏单
+      </button>
     </div>
 
     <!-- 云端收藏：酷安账号真实收藏 -->
@@ -555,52 +532,6 @@ onMounted(() => {
   overflow-y: auto;
   padding: var(--space-5);
   margin: 0;
-}
-
-.page-header {
-  margin-bottom: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.header-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-
-.header-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.page-title {
-  font-size: var(--font-size-title-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.page-title .icon {
-  color: var(--brand-primary);
-}
-
-.page-subtitle {
-  font-size: var(--font-size-sub);
-  color: var(--text-tertiary);
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .category-tabs {

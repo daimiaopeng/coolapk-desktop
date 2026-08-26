@@ -16,6 +16,33 @@ function firstString(...values: unknown[]): string {
   return '';
 }
 
+function firstImageString(...values: unknown[]): string {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const nested = firstImageString(...value);
+      if (nested) return nested;
+      continue;
+    }
+    if (value && typeof value === 'object') {
+      const object = value as Record<string, unknown>;
+      const nested = firstImageString(object.url, object.src, object.uri, object.path, object.image, object.value);
+      if (nested) return nested;
+      continue;
+    }
+    const text = asString(value).trim();
+    if (!text) continue;
+    const parts = /^(?:data|blob):/i.test(text) ? [text] : text.split(',');
+    const candidate = parts.map((item) => item.trim()).find((item) => item && !['0', 'null', 'undefined', 'none', '-'].includes(item.toLowerCase()));
+    if (candidate) return candidate;
+  }
+  return '';
+}
+
+function entityCursor(entity: DiscoveryEntity | undefined): string {
+  if (!entity) return '';
+  return firstString(entity.entityId, entity.entity_id, entity.id);
+}
+
 function parseExtraData(entity: DiscoveryEntity): Record<string, unknown> {
   const value = entity.extraData ?? entity.extra_data ?? entity.extraDataArr ?? entity.extra_data_arr;
   if (value && typeof value === 'object') return value as Record<string, unknown>;
@@ -132,8 +159,8 @@ export function parseDiscoveryPage(response: unknown, page: number): DiscoveryPa
     return true;
   });
   const config = configCard ? parseExtraData(configCard) : {};
-  const firstItem = firstString(root.firstItem, root.first_item, meta.firstItem, meta.first_item, config.firstItem, config.first_item);
-  const lastItem = firstString(root.lastItem, root.last_item, meta.lastItem, meta.last_item, config.lastItem, config.last_item);
+  const firstItem = firstString(root.firstItem, root.first_item, meta.firstItem, meta.first_item, config.firstItem, config.first_item, entityCursor(items[0]));
+  const lastItem = firstString(root.lastItem, root.last_item, meta.lastItem, meta.last_item, config.lastItem, config.last_item, entityCursor(items[items.length - 1]));
   const total = Number(root.total ?? meta.total ?? config.total ?? 0);
   const current = Number(root.current ?? meta.current ?? config.current ?? page);
   const explicitMore = root.hasMore ?? root.has_more ?? meta.hasMore ?? meta.has_more
@@ -162,25 +189,75 @@ export function decodeDiscoveryRouteSegment(value: string): string {
 }
 
 export function getEntityImage(entity: DiscoveryEntity): string {
+  const extra = parseExtraData(entity);
   return firstString(
-    entity.productGoodsLogo,
-    entity.product_goods_cover,
-    entity.goodsCover,
-    entity.goods_cover,
-    entity.goodsPic,
-    entity.goods_pic,
-    entity.pic,
-    entity.logo,
-    entity.icon,
-    entity.image,
-    entity.banner,
-    entity.userAvatar,
-    entity.cover,
-    entity.coverUrl,
-    entity.cover_url,
-    entity.picUrl,
-    entity.pic_url,
+    firstImageString(
+      entity.productGoodsLogo,
+      entity.product_goods_logo,
+      entity.product_goods_cover,
+      entity.goodsCover,
+      entity.goods_cover,
+      entity.goodsPic,
+      entity.goods_pic,
+      entity.pic,
+      entity.picArr,
+      entity.pics,
+      entity.logo,
+      entity.logoUrl,
+      entity.logo_url,
+      entity.icon,
+      entity.iconUrl,
+      entity.icon_url,
+      entity.image,
+      entity.imageUrl,
+      entity.image_url,
+      entity.banner,
+      entity.userAvatar,
+      entity.cover,
+      entity.coverArr,
+      entity.cover_arr,
+      entity.coverUrl,
+      entity.cover_url,
+      entity.picUrl,
+      entity.pic_url,
+      extra.productGoodsLogo,
+      extra.product_goods_logo,
+      extra.product_goods_cover,
+      extra.goodsCover,
+      extra.goods_cover,
+      extra.goodsPic,
+      extra.goods_pic,
+      extra.pic,
+      extra.logo,
+      extra.logoUrl,
+      extra.logo_url,
+      extra.icon,
+      extra.iconUrl,
+      extra.icon_url,
+      extra.image,
+      extra.imageUrl,
+      extra.image_url,
+      extra.cover,
+      extra.coverUrl,
+      extra.cover_url,
+    ),
   );
+}
+
+/** 服务端实体没有图片时，按实体语义提供可识别的本地图标。 */
+export function getEntityFallbackIcon(entity: DiscoveryEntity): string {
+  const type = `${asString(entity.entityType)} ${asString(entity.entityTemplate)}`.toLowerCase();
+  const title = firstString(entity.title, entity.name, entity.label, entity.buttonText, entity.button_text).toLowerCase();
+  if (title === '热度' || title.includes('热门') || title.includes('热榜') || type.includes('hot')) return 'fas fa-fire';
+  if (title.includes('评分') || title.includes('得分') || type.includes('rating') || type.includes('score')) return 'fas fa-star';
+  if (title.includes('最新') || title.includes('时间') || type.includes('latest') || type.includes('new')) return 'fas fa-clock';
+  if (title === '全部') return 'fas fa-th-large';
+  if (type.includes('productseries') || type.includes('series') || title.includes('系列')) return 'fas fa-layer-group';
+  if (type.includes('productbrand') || type.includes('brand')) return 'fas fa-tags';
+  if (type.includes('category')) return 'fas fa-layer-group';
+  if (type.includes('page')) return 'fas fa-list';
+  if (type.includes('product')) return 'fas fa-mobile-alt';
+  return 'fas fa-link';
 }
 
 export function isGoodsEntity(entity: DiscoveryEntity): boolean {
@@ -194,10 +271,14 @@ export function getEntityText(entity: DiscoveryEntity): string {
 
 export function resolveDiscoveryRoute(entity: DiscoveryEntity): DiscoveryRoute | null {
   const extra = parseExtraData(entity);
+  const type = `${asString(entity.entityType)} ${asString(entity.entityTemplate)}`.toLowerCase();
   const entityUrl = asString(entity.url);
-  const target = /^https?:\/\//i.test(entityUrl)
+  const productId = entity.productId ?? entity.product_id;
+  const isProductEntity = type.includes('product') || productId !== undefined && productId !== null && productId !== '';
+  const explicitTarget = /^https?:\/\//i.test(entityUrl)
     ? entityUrl
     : firstString(entity.webUrl, entity.web_url, extra.webUrl, extra.web_url, entityUrl, entity.targetUrl, entity.target_url);
+  const target = explicitTarget || (isProductEntity && (productId || entity.id || entity.entityId) ? `/product/${asString(productId ?? entity.id ?? entity.entityId)}` : '');
   if (!target) return null;
   if (/^https?:\/\//i.test(target)) return { kind: 'web', target, title: asString(entity.title) };
   const apkDetail = target.match(/^\/?apk\/detail\?(?:[^#]*&)?packageName=([^&#]+)/i);
@@ -208,16 +289,15 @@ export function resolveDiscoveryRoute(entity: DiscoveryEntity): DiscoveryRoute |
   if (productDetail) {
     return { kind: 'native', target: `/product/${decodeURIComponent(productDetail[1])}`, title: asString(entity.title) };
   }
-  if (/^\/page\?url=/i.test(target) || /^#\//.test(target) || /^\/(apk|main|feed|product|topic)\//i.test(target)) {
-    return { kind: 'data-list', target, title: asString(entity.title) };
-  }
   if (/^\/(user|dyh)\/\d+/i.test(target) || /^\/(feed|product)\/\d+/i.test(target)) {
     return { kind: 'native', target, title: asString(entity.title) };
+  }
+  if (/^\/page\?url=/i.test(target) || /^#\//.test(target) || /^\/(apk|main|topic)\//i.test(target)) {
+    return { kind: 'data-list', target, title: asString(entity.title) };
   }
   if (/^V11_FIND_(GOOD_GOODS_HOME|DYH)$/i.test(target)) {
     return { kind: 'native', target, title: asString(entity.title) };
   }
-  const type = asString(entity.entityType).toLowerCase();
   if (type.includes('feed') && (entity.id || entity.entityId)) {
     return { kind: 'native', target: `/feed/${asString(entity.id ?? entity.entityId)}`, title: asString(entity.title) };
   }
@@ -227,8 +307,8 @@ export function resolveDiscoveryRoute(entity: DiscoveryEntity): DiscoveryRoute |
   if ((type.includes('apk') || type.includes('app')) && (entity.packageName || entity.package_name)) {
     return { kind: 'native', target: `/apk/${asString(entity.packageName ?? entity.package_name)}`, title: asString(entity.title) };
   }
-  if (type.includes('product') && (entity.productId || entity.product_id || entity.id)) {
-    return { kind: 'native', target: `/product/${asString(entity.productId ?? entity.product_id ?? entity.id)}`, title: asString(entity.title) };
+  if (isProductEntity && (productId || entity.id || entity.entityId)) {
+    return { kind: 'native', target: `/product/${asString(entity.productId ?? entity.product_id ?? entity.id ?? entity.entityId)}`, title: asString(entity.title) };
   }
   if (type.includes('topic') && (entity.tag || entity.title)) {
     return { kind: 'native', target: `/topic/${encodeURIComponent(asString(entity.tag ?? entity.title))}`, title: asString(entity.title) };

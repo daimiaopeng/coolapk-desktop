@@ -207,8 +207,9 @@ function adjustFontSize(delta: number) {
 
 const navItems = [
   { key: 'home', label: '首页', icon: 'fas fa-home' },
-  { key: 'topics', label: '话题', icon: 'fas fa-hashtag' },
   { key: 'discover', label: '发现', icon: 'fas fa-compass' },
+  { key: 'topics', label: '话题', icon: 'fas fa-hashtag' },
+  { key: 'digital', label: '数码', icon: 'fas fa-microchip' },
   { key: 'pictures', label: '酷图', icon: 'far fa-images' },
   { key: 'apps', label: '应用', icon: 'fas fa-cubes' },
   { key: 'more', label: '更多服务', icon: 'fas fa-shapes' },

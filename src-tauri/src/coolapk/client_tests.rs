@@ -769,6 +769,15 @@ fn test_extract_product_entity_list_preserves_brands() {
                 "entityType": "brand"
             },
             {
+                "entityTemplate": "productGroupTitle",
+                "title": "Mate 系列"
+            },
+            {
+                "entityTemplate": "productGroupMore",
+                "title": "查看更多",
+                "url": "/product/more"
+            },
+            {
                 "entityType": "header",
                 "title": "热门品牌"
             }
@@ -776,7 +785,7 @@ fn test_extract_product_entity_list_preserves_brands() {
     });
 
     let list = CoolapkClient::extract_product_entity_list(&raw);
-    assert_eq!(list.len(), 2, "品牌实体不能被丢弃，卡片/标题占位应被过滤");
+    assert_eq!(list.len(), 4, "品牌实体和产品组结构卡不能被丢弃，普通占位应被过滤");
 
     let apple = &list[0];
     assert_eq!(apple["title"], "Apple");
@@ -785,6 +794,8 @@ fn test_extract_product_entity_list_preserves_brands() {
     let huawei = &list[1];
     assert_eq!(huawei["name"], "华为");
     assert_eq!(huawei["series_num"], 88);
+    assert_eq!(list[2]["entityTemplate"], "productGroupTitle");
+    assert_eq!(list[3]["entityTemplate"], "productGroupMore");
 }
 
 #[test]
@@ -796,7 +807,7 @@ fn test_extract_product_entity_list_flattens_nested_entities() {
                 "title": "分类组",
                 "entities": [
                     { "id": "c1", "title": "手机" },
-                    { "id": "c2", "title": "平板" }
+                    { "entities": [{ "id": "c2", "title": "平板" }] }
                 ]
             }
         ]
@@ -806,6 +817,37 @@ fn test_extract_product_entity_list_flattens_nested_entities() {
     assert_eq!(list.len(), 2, "嵌套 entities 应被摊平");
     assert_eq!(list[0]["id"], "c1");
     assert_eq!(list[1]["id"], "c2");
+}
+
+#[test]
+fn test_discovery_request_args_filters_reserved_and_unsafe_values() {
+    let args = parse_discovery_request_args(
+        r#"{"type":"phone","sort":"hot","page":99,"bad key":"x","nested":{"mode":"new"},"empty":null,"line":"a\n b"}"#,
+    );
+    assert_eq!(args.len(), 3);
+    assert!(args.contains(&("type".to_string(), "phone".to_string())));
+    assert!(args.contains(&("sort".to_string(), "hot".to_string())));
+    assert!(args.contains(&("nested".to_string(), r#"{"mode":"new"}"#.to_string())));
+    assert!(!args.iter().any(|(key, _)| key == "page" || key == "bad key" || key == "empty" || key == "line"));
+}
+
+#[test]
+fn test_product_entity_page_response_keeps_pagination_metadata() {
+    let raw = serde_json::json!({
+        "data": [{ "id": 1, "title": "手机", "entityType": "product" }],
+        "firstItem": "1",
+        "lastItem": "1",
+        "hasMore": true,
+        "total": 42,
+        "pagination": { "current": 1 }
+    });
+    let response = CoolapkClient::product_entity_page_response(&raw);
+    assert_eq!(response["data"].as_array().map(|items| items.len()), Some(1));
+    assert_eq!(response["firstItem"], "1");
+    assert_eq!(response["lastItem"], "1");
+    assert_eq!(response["hasMore"], true);
+    assert_eq!(response["total"], 42);
+    assert_eq!(response["pagination"]["current"], 1);
 }
 
 /// 模拟 Webview 登录脚本捕获到的真实 Cookie 形态（含中文/换行等脏字符），

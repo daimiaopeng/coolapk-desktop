@@ -267,16 +267,6 @@ const hubCategories: HubCategory[] = [
         tags: ['数码', '设备', '装备'],
       },
       {
-        id: 'digital_category',
-        title: '数码分类库',
-        shortDesc: '全品类数码',
-        desc: '手机、平板、笔记本、摄影与穿戴设备全景库',
-        icon: 'fas fa-microchip',
-        colorClass: 'bg-indigo',
-        path: '/digital',
-        tags: ['数码', '分类', '手机', '平板', '电脑'],
-      },
-      {
         id: 'product_compare',
         title: '机型多维对比',
         shortDesc: '参数对比',

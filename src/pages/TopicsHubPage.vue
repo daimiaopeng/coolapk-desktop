@@ -1,49 +1,52 @@
 <template>
-  <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <!-- 顶栏工具条：动态栏目与刷新按钮 -->
-    <div class="topics-toolbar-bar">
-      <div class="topics-tabs-wrapper">
-        <button
-          v-for="cat in categories"
-          :key="cat.key"
-          type="button"
-          :class="['cat-tab', { active: activeCategoryUrl === cat.url }]"
-          @click="switchCategory(cat)"
-        >
-          {{ cat.title }}
-        </button>
+  <div class="topics-page">
+    <div class="topics-main-column">
+      <!-- 顶栏工具条：动态栏目与刷新按钮 -->
+      <div class="topics-toolbar-bar">
+        <div class="topics-tabs-wrapper">
+          <button
+            v-for="cat in categories"
+            :key="cat.key"
+            type="button"
+            :class="['cat-tab', { active: activeCategoryUrl === cat.url }]"
+            @click="switchCategory(cat)"
+          >
+            {{ cat.title }}
+          </button>
+        </div>
       </div>
 
-    </div>
+      <div class="topics-scroll-container custom-scrollbar" @scroll="handleScroll">
+        <!-- 加载中状态 -->
+        <div v-if="loading && page === 1" class="loading-wrapper">
+          <LoadingState text="正在加载话题列表..." />
+        </div>
 
-    <!-- 加载中状态 -->
-    <div v-if="loading && page === 1" class="loading-wrapper">
-      <LoadingState text="正在加载话题列表..." />
-    </div>
+        <!-- 空数据状态 -->
+        <div v-else-if="rawTopicItems.length === 0" class="empty-wrapper">
+          <EmptyState
+            title="暂无相关话题"
+            description="未能找到相关话题，可尝试切换上方分类标签或刷新"
+          />
+        </div>
 
-    <!-- 空数据状态 -->
-    <div v-else-if="rawTopicItems.length === 0" class="empty-wrapper">
-      <EmptyState
-        title="暂无相关话题"
-        description="未能找到相关话题，可尝试切换上方分类标签或刷新"
-      />
-    </div>
+        <!-- 多列话题卡片：保持桌面端之前的网格排列，同时继续支持到底部加载更多 -->
+        <div v-else class="topics-grid">
+          <TopicCard
+            v-for="(topic, idx) in rawTopicItems"
+            :key="topic.id || topic.tag || topic.title || idx"
+            :topic="topic"
+          />
+        </div>
 
-    <!-- 多列话题卡片：保持桌面端之前的网格排列，同时继续支持到底部加载更多 -->
-    <div v-else class="topics-grid">
-      <TopicCard
-        v-for="(topic, idx) in rawTopicItems"
-        :key="topic.id || topic.tag || topic.title || idx"
-        :topic="topic"
-      />
-    </div>
-
-    <!-- 底部加载状态 -->
-    <div class="pagination-footer" v-if="rawTopicItems.length > 0">
-      <div v-if="loading && page > 1" class="loading-more-footer">
-        <i class="fas fa-circle-notch fa-spin"></i> 加载更多话题...
+        <!-- 底部加载状态 -->
+        <div class="pagination-footer" v-if="rawTopicItems.length > 0">
+          <div v-if="loading && page > 1" class="loading-more-footer">
+            <i class="fas fa-circle-notch fa-spin"></i> 加载更多话题...
+          </div>
+          <div v-else-if="noMore" class="no-more-footer">已加载完毕所有话题</div>
+        </div>
       </div>
-      <div v-else-if="noMore" class="no-more-footer">已加载完毕所有话题</div>
     </div>
   </div>
 </template>
@@ -230,14 +233,9 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-container {
-  width: 100%;
-  max-width: 100%;
-  height: 100%;
-  overflow-y: auto;
-  padding: var(--space-5);
-  margin: 0;
-}
+.topics-page { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--background); }
+.topics-main-column { display: flex; flex: 1; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--surface); }
+.topics-scroll-container { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 16px 0 48px; background: var(--background-secondary); }
 
 .topics-toolbar-bar {
   display: flex;
@@ -247,7 +245,8 @@ onMounted(() => {
   height: auto;
   min-height: 48px;
   padding: 0;
-  margin-bottom: 12px;
+  flex: 0 0 auto;
+  margin-bottom: 0;
   border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
   background-color: var(--surface);
 }
@@ -322,6 +321,7 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: var(--space-4, 16px);
+  padding: 0 16px;
 }
 
 .cat-tab-icon {

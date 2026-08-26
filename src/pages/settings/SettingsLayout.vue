@@ -44,8 +44,9 @@ const settingsMenu = [
 .settings-page-container {
   width: 100%;
   height: 100%;
-  padding: var(--space-4);
+  padding: 0;
   display: flex;
+  background-color: var(--surface);
 }
 
 .settings-layout-card {
@@ -53,15 +54,15 @@ const settingsMenu = [
   min-width: 0;
   height: 100%;
   background-color: var(--surface);
-  border-radius: var(--radius-card);
-  border: 1px solid var(--border);
+  border-radius: 0;
+  border: none;
   display: flex;
   overflow: hidden;
 }
 
 .settings-sidebar {
   width: 170px;
-  background-color: var(--background);
+  background-color: var(--surface);
   border-right: 1px solid var(--border);
   padding: var(--space-4) var(--space-3);
   display: flex;

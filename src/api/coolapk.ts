@@ -112,8 +112,9 @@ export class CoolapkTauriAPI {
     firstItem?: string;
     lastItem?: string;
     pageContext?: string;
+    requestArgs?: Record<string, unknown>;
   }) {
-    return await invokeNative('get_discovery_page_data', {
+    const args: Record<string, unknown> = {
       url: options.url,
       title: options.title || '',
       subTitle: options.subTitle || '',
@@ -121,7 +122,9 @@ export class CoolapkTauriAPI {
       firstItem: options.firstItem || '',
       lastItem: options.lastItem || '',
       pageContext: options.pageContext || '',
-    }, { retry: true, kind: 'feed' });
+    };
+    if (options.requestArgs && Object.keys(options.requestArgs).length > 0) args.requestArgsJson = JSON.stringify(options.requestArgs);
+    return await invokeNative('get_discovery_page_data', args, { retry: true, kind: 'feed' });
   }
 
   // 1.2 搜索候选词（输入联想）
@@ -170,12 +173,18 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_product_category_list');
   }
 
-  static async getProductList(url: string, title: string = '', subTitle: string = '', page: number = 1) {
-    return await invokeNative('get_product_list', { url, title, subTitle, page });
+  static async getProductList(url: string, title: string = '', subTitle: string = '', page: number = 1, options: { firstItem?: string; lastItem?: string } = {}) {
+    const args: Record<string, unknown> = { url, title, subTitle, page };
+    if (options.firstItem) args.firstItem = options.firstItem;
+    if (options.lastItem) args.lastItem = options.lastItem;
+    return await invokeNative('get_product_list', args);
   }
 
-  static async getProductBrandProducts(brandId: string, brandType: string = 'recommend', page: number = 1) {
-    return await invokeNative('get_product_brand_products', { brandId, brandType, page });
+  static async getProductBrandProducts(brandId: string, brandType: string = 'recommend', page: number = 1, options: { firstItem?: string; lastItem?: string } = {}) {
+    const args: Record<string, unknown> = { brandId, brandType, page };
+    if (options.firstItem) args.firstItem = options.firstItem;
+    if (options.lastItem) args.lastItem = options.lastItem;
+    return await invokeNative('get_product_brand_products', args);
   }
 
   // 1.4.3 产品媒体库
@@ -824,12 +833,18 @@ export class CoolapkTauriAPI {
     );
   }
 
-  static async getHitHistory(page: number = 1, type: string = '') {
-    return await invokeNative('get_hit_history', { page, historyType: type });
+  static async getHitHistory(page: number = 1, type: string = '', firstItem?: string, lastItem?: string) {
+    const args: Record<string, unknown> = { page, historyType: type };
+    if (firstItem) args.firstItem = firstItem;
+    if (lastItem) args.lastItem = lastItem;
+    return await invokeNative('get_hit_history', args);
   }
 
-  static async getRecentHistory(page: number = 1) {
-    return await invokeNative('get_recent_history', { page });
+  static async getRecentHistory(page: number = 1, firstItem?: string, lastItem?: string) {
+    const args: Record<string, unknown> = { page };
+    if (firstItem) args.firstItem = firstItem;
+    if (lastItem) args.lastItem = lastItem;
+    return await invokeNative('get_recent_history', args);
   }
 
   static async getSpamFeedList(page: number = 1) {

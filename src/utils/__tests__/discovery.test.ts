@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   decodeDiscoveryRouteSegment,
+  getEntityFallbackIcon,
   getEntityImage,
   getEntityKey,
   isGoodsEntity,
@@ -55,6 +56,12 @@ describe('discovery dynamic configuration', () => {
     expect(result.hasMore).toBe(true);
   });
 
+  it('falls back to the first and last entity ids when the server omits cursors', () => {
+    const result = parseDiscoveryPage({ data: [{ entityId: 'first' }, { id: 42 }] }, 1);
+    expect(result.firstItem).toBe('first');
+    expect(result.lastItem).toBe('42');
+  });
+
   it('resolves web, native and data-list routes', () => {
     expect(resolveDiscoveryRoute({ url: 'https://www.coolapk.com/page' })?.kind).toBe('web');
     expect(resolveDiscoveryRoute({ url: '/user/123' })?.kind).toBe('native');
@@ -62,6 +69,8 @@ describe('discovery dynamic configuration', () => {
     expect(resolveDiscoveryRoute({ url: 'V11_FIND_COOLPIC' })?.kind).toBe('data-list');
     expect(resolveDiscoveryRoute({ url: '#/feed/digestList' })?.kind).toBe('data-list');
     expect(resolveDiscoveryRoute({ url: '/apk/detail?packageName=com.example.app' })?.target).toBe('/apk/com.example.app');
+    expect(resolveDiscoveryRoute({ entityType: 'Product', id: 2967 })?.target).toBe('/product/2967');
+    expect(resolveDiscoveryRoute({ product_id: 2968 })?.target).toBe('/product/2968');
   });
 
   it('decodes discovery route segments only once', () => {
@@ -80,6 +89,14 @@ describe('discovery dynamic configuration', () => {
     expect(getEntityImage({ entityType: 'goodsListItem', product_goods_cover: 'https://img.example/goods.jpg', pic: 'a,b' })).toBe('https://img.example/goods.jpg');
     expect(isGoodsEntity({ entityType: 'goodsListItem' })).toBe(true);
     expect(isGoodsEntity({ entityTemplate: 'merchantGoodsCard' })).toBe(true);
+  });
+
+  it('ignores server image placeholders and provides semantic icons for digital navigation', () => {
+    expect(getEntityImage({ entityType: 'page', pic: ',' })).toBe('');
+    expect(getEntityFallbackIcon({ entityType: 'productSeries', title: 'MIX系列' })).toBe('fas fa-layer-group');
+    expect(getEntityFallbackIcon({ entityType: 'page', title: '热度' })).toBe('fas fa-fire');
+    expect(getEntityFallbackIcon({ entityType: 'page', title: '评分' })).toBe('fas fa-star');
+    expect(getEntityFallbackIcon({ entityType: 'page', title: '最新' })).toBe('fas fa-clock');
   });
 
   it('does not render config cards as page content', () => {

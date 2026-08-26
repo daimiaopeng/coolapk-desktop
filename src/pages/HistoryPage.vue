@@ -1,27 +1,5 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <!-- 头部区域 -->
-    <div class="page-header">
-      <div class="header-main">
-        <div class="header-titles">
-          <h2 class="page-title"><i class="fas fa-history icon"></i> 浏览历史与足迹</h2>
-          <span class="page-subtitle">左侧历史浏览时间轴，右侧常逛酷友与最近访问记录</span>
-        </div>
-
-        <div v-if="authStore.isLoggedIn" class="header-actions">
-          <AppButton
-            variant="secondary"
-            size="sm"
-            icon="fas fa-sync-alt"
-            :loading="loading || recentLoading"
-            @click="refreshAll"
-          >
-            刷新
-          </AppButton>
-        </div>
-      </div>
-    </div>
-
     <!-- 未登录引导 -->
     <div v-if="!authStore.isLoggedIn" class="empty-wrapper">
       <EmptyState title="登录后查看浏览历史" description="登录酷安账号后，此处将同步展示您在酷安上真实的浏览历史与最近访问记录" />
@@ -35,9 +13,7 @@
       <!-- 左侧：历史时间轴 (Main Timeline Stream) -->
       <main class="history-main-timeline">
         <div class="section-title-row">
-          <span class="section-title"><i class="far fa-clock icon"></i> 浏览历史记录</span>
-
-          <!-- 筛选胶囊按钮组 -->
+          <!-- 首页样式筛选标签 -->
           <div class="filter-pills">
             <button
               :class="['filter-btn', { active: selectedFilter === 'all' }]"
@@ -49,37 +25,37 @@
               :class="['filter-btn', { active: selectedFilter === 'feed' }]"
               @click="selectedFilter = 'feed'"
             >
-              <i class="far fa-comment-alt"></i> 动态
+              动态
             </button>
             <button
               :class="['filter-btn', { active: selectedFilter === 'user' }]"
               @click="selectedFilter = 'user'"
             >
-              <i class="far fa-user"></i> 用户
+              用户
             </button>
             <button
               :class="['filter-btn', { active: selectedFilter === 'topic' }]"
               @click="selectedFilter = 'topic'"
             >
-              <i class="fas fa-hashtag"></i> 话题
+              话题
             </button>
             <button
               :class="['filter-btn', { active: selectedFilter === 'apk' }]"
               @click="selectedFilter = 'apk'"
             >
-              <i class="fas fa-cubes"></i> 应用
+              应用
             </button>
             <button
               :class="['filter-btn', { active: selectedFilter === 'reply' }]"
               @click="selectedFilter = 'reply'"
             >
-              <i class="far fa-comment-dots"></i> 赞过回复
+              赞过回复
             </button>
             <button
               :class="['filter-btn', { active: selectedFilter === 'album' }]"
               @click="selectedFilter = 'album'"
             >
-              <i class="fas fa-images"></i> 赞过图集
+              赞过图集
             </button>
           </div>
         </div>
@@ -210,11 +186,6 @@ const recentItems = ref<any[]>([]);
 const recentPage = ref(1);
 const recentError = ref('');
 
-function refreshAll() {
-  void fetchHistory(true);
-  void fetchRecent(true);
-}
-
 function recentKey(item: any): string {
   return `${item.id || item.entityId || ''}-${item.type || item.entityType || ''}`;
 }
@@ -231,6 +202,31 @@ function firstText(...values: unknown[]): string {
     if (text) return text;
   }
   return '';
+}
+
+function isMainHistoryItem(item: any, includeTypedHistory = false): boolean {
+  const entityType = firstText(item?.entityType, item?.entity_type).toLowerCase();
+  return !entityType || entityType === 'history' || (includeTypedHistory && ['feed', 'reply', 'album'].includes(entityType));
+}
+
+function isRecentHistoryItem(item: any): boolean {
+  const entityType = firstText(item?.entityType, item?.entity_type).toLowerCase();
+  return !entityType || entityType === 'recenthistory';
+}
+
+function entityId(item: any): string {
+  return firstText(item?.id, item?.entityId, item?.entity_id);
+}
+
+function historyCursor(): { firstItem?: string; lastItem?: string } {
+  const first = feeds.value[0];
+  const last = feeds.value[feeds.value.length - 1];
+  return { firstItem: entityId(first) || undefined, lastItem: entityId(last) || undefined };
+}
+
+function recentHistoryCursor(): { firstItem?: string; lastItem?: string } {
+  const last = recentItems.value[recentItems.value.length - 1];
+  return { lastItem: firstText(last?.entityId, last?.entity_id, last?.id) || undefined };
 }
 
 function getItemType(item: any): 'feed' | 'user' | 'topic' | 'apk' {
@@ -268,16 +264,20 @@ function richDescription(item: any): string {
   return '';
 }
 
-function getDateLabel(timestamp: number | string): string {
-  if (!timestamp) return '更早之前';
-  const ts = typeof timestamp === 'string' && /^\d+$/.test(timestamp)
-    ? parseInt(timestamp, 10)
-    : typeof timestamp === 'number'
-      ? timestamp
+function timestampToDate(value: unknown): Date | null {
+  const ts = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim()
+      ? Number(value.trim())
       : 0;
-
-  if (!ts) return '更早之前';
+  if (!Number.isFinite(ts) || ts <= 0) return null;
   const date = new Date(ts > 9999999999 ? ts : ts * 1000);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getDateLabel(timestamp: unknown): string {
+  const date = timestampToDate(timestamp);
+  if (!date) return '更早之前';
   const now = new Date();
 
   const isToday =
@@ -308,21 +308,14 @@ function getDateLabel(timestamp: number | string): string {
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-function formatTimeExact(dateline: any): string {
-  if (!dateline) return '';
-  const ts = typeof dateline === 'string' && /^\d+$/.test(dateline)
-    ? parseInt(dateline, 10)
-    : typeof dateline === 'number'
-      ? dateline
-      : 0;
-
-  if (ts > 0) {
-    const date = new Date(ts > 9999999999 ? ts : ts * 1000);
+function formatTimeExact(dateline: unknown): string {
+  const date = timestampToDate(dateline);
+  if (date) {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
   }
-  return String(dateline);
+  return asText(dateline);
 }
 
 function visitCountNumber(item: any): number {
@@ -339,6 +332,24 @@ function historyItemKey(item: any): string {
   let idStr = String(rawId);
   if (idStr.includes(':')) idStr = idStr.split(':').pop() || '';
   return `${idStr}-${getItemType(item)}`;
+}
+
+function historyRowKey(item: any): string {
+  const id = entityId(item);
+  if (!id) return '';
+  const type = firstText(item?.historyType, item?.type, item?.entityType).toLowerCase();
+  return `${type}:${id}`;
+}
+
+function deduplicateHistoryItems(items: any[]): any[] {
+  const seen = new Set<string>();
+  return items.filter(item => {
+    const key = historyRowKey(item);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 // 侧边栏列表：除了动态以外的用户、话题与应用 (基于频次降序)
@@ -379,9 +390,11 @@ const sidebarItems = computed(() => {
 
 // 左侧主列表精准筛选算法
 const filteredMainTimelineItems = computed(() => {
-  if (selectedFilter.value === 'all') return feeds.value;
-  if (selectedFilter.value === 'reply' || selectedFilter.value === 'album') return feeds.value;
-  return feeds.value.filter(item => getItemType(item) === selectedFilter.value);
+  const includeTypedHistory = ['feed', 'reply', 'album'].includes(selectedFilter.value);
+  const historyItems = feeds.value.filter(item => isMainHistoryItem(item, includeTypedHistory));
+  if (selectedFilter.value === 'all') return historyItems;
+  if (selectedFilter.value === 'reply' || selectedFilter.value === 'album') return historyItems;
+  return historyItems.filter(item => getItemType(item) === selectedFilter.value);
 });
 
 const groupedFilteredTimeline = computed(() => {
@@ -484,18 +497,33 @@ async function fetchHistory(isRefresh = false) {
 
   try {
     const apiType = ['feed', 'reply', 'album'].includes(selectedFilter.value) ? selectedFilter.value : '';
-    const res = await CoolapkTauriAPI.getHitHistory(page.value, apiType);
-    const newFeeds = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    const cursor = isRefresh ? {} : historyCursor();
+    const res = await CoolapkTauriAPI.getHitHistory(page.value, apiType, cursor.firstItem, cursor.lastItem);
+    const acceptsTypedHistory = apiType !== '';
+    const newFeeds = (res && res.data && Array.isArray(res.data))
+      ? deduplicateHistoryItems(res.data.filter((item: any) => isMainHistoryItem(item, acceptsTypedHistory)))
+      : [];
     if (newFeeds.length === 0) {
       noMore.value = true;
     } else {
       if (isRefresh) {
         feeds.value = newFeeds;
       } else {
-        const existingIds = new Set(feeds.value.map(i => i.id));
-        feeds.value.push(...newFeeds.filter((i: any) => !existingIds.has(i.id)));
+        const existingKeys = new Set(feeds.value.map(historyRowKey).filter(Boolean));
+        const appendedFeeds = newFeeds.filter((item: any) => {
+          const key = historyRowKey(item);
+          if (!key) return true;
+          if (existingKeys.has(key)) return false;
+          existingKeys.add(key);
+          return true;
+        });
+        if (appendedFeeds.length === 0) {
+          noMore.value = true;
+        } else {
+          feeds.value.push(...appendedFeeds);
+        }
       }
-      page.value++;
+      if (!noMore.value) page.value++;
     }
   } catch (err: any) {
     error.value = err?.message || '加载失败，请检查网络';
@@ -520,8 +548,9 @@ async function fetchRecent(isRefresh = false) {
   recentError.value = '';
 
   try {
-    const res = await CoolapkTauriAPI.getRecentHistory(recentPage.value);
-    const newItems = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    const cursor = isRefresh ? {} : recentHistoryCursor();
+    const res = await CoolapkTauriAPI.getRecentHistory(recentPage.value, cursor.firstItem, cursor.lastItem);
+    const newItems = (res && res.data && Array.isArray(res.data)) ? res.data.filter(isRecentHistoryItem) : [];
     if (newItems.length === 0) {
       recentNoMore.value = true;
     } else {
@@ -529,9 +558,14 @@ async function fetchRecent(isRefresh = false) {
         recentItems.value = newItems;
       } else {
         const existingKeys = new Set(recentItems.value.map(i => `${i.id || i.entityId}-${i.type || i.entityType}`));
-        recentItems.value.push(...newItems.filter((i: any) => !existingKeys.has(`${i.id || i.entityId}-${i.type || i.entityType}`)));
+        const appendedItems = newItems.filter((i: any) => !existingKeys.has(`${i.id || i.entityId}-${i.type || i.entityType}`));
+        if (appendedItems.length === 0) {
+          recentNoMore.value = true;
+        } else {
+          recentItems.value.push(...appendedItems);
+        }
       }
-      recentPage.value++;
+      if (!recentNoMore.value) recentPage.value++;
     }
   } catch (err: any) {
     recentError.value = err?.message || '加载失败，请检查网络';
@@ -585,45 +619,9 @@ onMounted(() => {
   max-width: 100%;
   height: 100%;
   overflow-y: auto;
-  padding: var(--space-5);
+  padding: 0;
   margin: 0;
-}
-
-.page-header {
-  margin-bottom: var(--space-5);
-}
-
-.header-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-
-.header-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.page-title {
-  font-size: var(--font-size-title-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-primary);
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.page-title .icon {
-  color: var(--brand-primary);
-}
-
-.page-subtitle {
-  font-size: var(--font-size-sub);
-  color: var(--text-tertiary);
+  background-color: var(--background-secondary);
 }
 
 .history-two-columns {
@@ -638,63 +636,74 @@ onMounted(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
 }
 
 .section-title-row {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 4px;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 48px;
+  background-color: var(--surface);
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
 }
 
 .filter-pills {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+  gap: 16px;
+  padding: 0 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.filter-pills::-webkit-scrollbar {
+  display: none;
 }
 
 .filter-btn {
-  display: flex;
+  position: relative;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   gap: 6px;
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  background-color: var(--surface);
-  border: 1px solid var(--border);
-  font-size: 13px;
+  padding: 8px 6px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  font-size: 15px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all var(--duration-fast);
+  transition: color var(--duration-fast), font-size var(--duration-fast);
 }
 
 .filter-btn:hover {
-  background-color: var(--surface-hover);
+  background: transparent;
   color: var(--text-primary);
 }
 
 .filter-btn.active {
-  background-color: var(--brand-soft);
-  color: var(--brand-primary);
-  border-color: var(--brand-primary);
-  font-weight: 600;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 700;
+  background: transparent;
   color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
 }
 
-.section-title .icon {
-  color: var(--brand-primary);
+.filter-btn.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 22px;
+  height: 3.5px;
+  transform: translateX(-50%);
+  border-radius: 4px;
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
 }
 
 .history-sidebar {

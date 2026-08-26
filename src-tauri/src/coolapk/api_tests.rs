@@ -5,6 +5,39 @@ fn clip(body: &str, n: usize) -> String {
     body.chars().take(n).collect()
 }
 
+fn collect_digital_page_names(value: &Value, pages: &mut Vec<String>) {
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                collect_digital_page_names(item, pages);
+            }
+        }
+        Value::Object(object) => {
+            let page_name = object
+                .get("pageName")
+                .or_else(|| object.get("page_name"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim();
+            let url = object.get("url").and_then(Value::as_str).unwrap_or("");
+            let title = object.get("title").and_then(Value::as_str).unwrap_or("");
+            if !page_name.is_empty()
+                && (page_name.to_ascii_uppercase().contains("DIGITAL")
+                    || page_name.to_ascii_uppercase().contains("CHANNEL_")
+                    || title.contains("数码")
+                    || url.contains("/product/"))
+                && !pages.iter().any(|item| item == page_name)
+            {
+                pages.push(page_name.to_string());
+            }
+            for child in object.values() {
+                collect_digital_page_names(child, pages);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// 全体写接口请求方式探测
 /// 酷安 v6 API 的写接口必须使用 GET（POST 返回 404 "请求方式错误"）。
 /// 未登录时 GET 返回 401 "你还没有登录"，说明接口可达、方法正确。
@@ -2936,4 +2969,46 @@ async fn probe_dyh_square_endpoints() {
             Err(e) => println!("  [网络错误] {name}: {e}"),
         }
     }
+}
+
+/// 在线接口探测：只覆盖发现页新增的数码栏目配置、页面列表和产品分类链路。
+#[tokio::test]
+#[ignore]
+async fn probe_digital_discovery_endpoints_contract() {
+    let client = CoolapkClient::new();
+    let config = client
+        .get_discovery_config()
+        .await
+        .expect("数码栏目配置接口应能返回 JSON");
+    let config_data = config.get("data").unwrap_or(&config);
+    assert!(config_data.is_object() || config_data.is_array(), "配置响应必须是对象或数组");
+    let mut configured_pages = Vec::new();
+    collect_digital_page_names(config_data, &mut configured_pages);
+    assert!(!configured_pages.is_empty(), "服务端配置必须包含数码 ConfigPage");
+    println!("[digital config] pages={:?}", configured_pages);
+
+    for page_name in configured_pages.iter().take(6) {
+        let response = client
+            .get_discovery_page_data(page_name, "数码", "", 1, "", "", "desktop-digital", "")
+            .await
+            .unwrap_or_else(|error| panic!("{page_name}接口失败: {error}"));
+        let items = response.get("data").and_then(|value| value.as_array()).expect("数码页面 data 必须是数组");
+        assert!(items.iter().all(Value::is_object), "{page_name} data 必须由实体对象组成");
+        println!("[digital page] {page_name} count={}", items.len());
+    }
+
+    let category_response = client.get_product_category_list().await.expect("数码分类接口应能返回 JSON");
+    let categories = category_response.get("data").and_then(|value| value.as_array()).expect("数码分类 data 必须是数组");
+    println!("[digital category] count={}", categories.len());
+    if let Some(category) = categories.iter().find(|item| item.get("url").and_then(Value::as_str).map(|value| !value.is_empty()).unwrap_or(false)) {
+        let url = category.get("url").and_then(Value::as_str).unwrap_or_default();
+        let title = category.get("title").and_then(Value::as_str).unwrap_or_default();
+        let products = client.get_product_list(url, title, "", 1, "", "").await.expect("数码分类产品接口应能返回 JSON");
+        assert!(products.get("data").and_then(|value| value.as_array()).is_some(), "分类产品 data 必须是数组");
+        println!("[digital category products] url={} count={}", url, products["data"].as_array().map(|items| items.len()).unwrap_or(0));
+    }
+
+    let brand_response = client.get_product_brand_list().await.expect("数码品牌接口应能返回 JSON");
+    assert!(brand_response.get("data").and_then(|value| value.as_array()).is_some(), "数码品牌 data 必须是数组");
+    println!("[digital brand] count={}", brand_response["data"].as_array().map(|items| items.len()).unwrap_or(0));
 }

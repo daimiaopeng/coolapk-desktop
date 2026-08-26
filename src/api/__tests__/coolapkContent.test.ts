@@ -80,6 +80,29 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
     });
   });
 
+  it('数码服务端栏目把动态请求参数和分页游标传入 dataList', async () => {
+    await CoolapkTauriAPI.getDiscoveryPageData({
+      url: 'V10_DIGITAL_PHONE',
+      title: '手机',
+      subTitle: '手机产品',
+      page: 2,
+      firstItem: '101',
+      lastItem: '120',
+      pageContext: '{"source":"desktop-digital"}',
+      requestArgs: { type: 'phone', sort: 'hot' },
+    });
+    expect(invoke).toHaveBeenCalledWith('get_discovery_page_data', {
+      url: 'V10_DIGITAL_PHONE',
+      title: '手机',
+      subTitle: '手机产品',
+      page: 2,
+      firstItem: '101',
+      lastItem: '120',
+      pageContext: '{"source":"desktop-digital"}',
+      requestArgsJson: JSON.stringify({ type: 'phone', sort: 'hot' }),
+    });
+  });
+
   it('品牌产品列表沿用 APK 的品牌 ID 与类型参数', async () => {
     await CoolapkTauriAPI.getProductBrandProducts('1016', 'recommend', 2);
     expect(invoke).toHaveBeenCalledWith('get_product_brand_products', {

@@ -1728,42 +1728,75 @@ impl CoolapkClient {
     /// 会被当作「无真实发帖人」的无效动态整条丢弃，导致「数码分类」左侧列表为空。
     fn clean_product_entity(item: &Value) -> Option<Value> {
         let obj = item.as_object()?;
-        let entity_type = obj.get("entityType").and_then(|v| v.as_str()).unwrap_or("");
-        if entity_type == "card"
-            || entity_type == "header"
-            || entity_type == "card_title"
-            || entity_type == "banner"
-        {
+        let entity_type = obj.get("entityType").or_else(|| obj.get("entity_type")).and_then(|v| v.as_str()).unwrap_or("");
+        let entity_template = obj.get("entityTemplate").or_else(|| obj.get("entity_template")).and_then(|v| v.as_str()).unwrap_or("");
+        if ["card", "header", "card_title", "banner"].iter().any(|value| entity_type.eq_ignore_ascii_case(value)) {
             return None;
         }
+        let is_product_structure = ["productgrouptitle", "productgroupmore", "series_title", "series_more", "series-title", "series-more"]
+            .iter()
+            .any(|template| entity_template.eq_ignore_ascii_case(template) || entity_type.eq_ignore_ascii_case(template));
         let has_id = obj
             .get("id")
             .map_or(false, |v| !v.is_null())
             || obj
                 .get("entityId")
+                .or_else(|| obj.get("entity_id"))
+                .map_or(false, |v| !v.is_null())
+            || obj
+                .get("productId")
+                .or_else(|| obj.get("product_id"))
                 .map_or(false, |v| !v.is_null());
-        if !has_id {
+        if !has_id && !is_product_structure {
             return None;
         }
         Some(item.clone())
+    }
+
+    fn product_entity_page_response(json_data: &Value) -> Value {
+        let mut response = json!({ "code": 200, "data": Self::extract_product_entity_list(json_data) });
+        if let Some(output) = response.as_object_mut() {
+            for key in [
+                "firstItem",
+                "first_item",
+                "lastItem",
+                "last_item",
+                "hasMore",
+                "has_more",
+                "total",
+                "current",
+                "pagination",
+                "pageInfo",
+                "page_info",
+            ] {
+                if let Some(value) = json_data.get(key) {
+                    output.insert(key.to_string(), value.clone());
+                }
+            }
+        }
+        response
     }
 
     fn extract_product_entity_list(json_data: &Value) -> Vec<Value> {
         let mut result = Vec::new();
         if let Some(data_arr) = json_data.get("data").and_then(|v| v.as_array()) {
             for item in data_arr.iter() {
-                if let Some(entities) = item.get("entities").and_then(|v| v.as_array()) {
-                    for sub in entities.iter() {
-                        if let Some(cleaned) = Self::clean_product_entity(sub) {
-                            result.push(cleaned);
-                        }
-                    }
-                } else if let Some(cleaned) = Self::clean_product_entity(item) {
-                    result.push(cleaned);
-                }
+                Self::append_product_entities(item, &mut result);
             }
         }
         result
+    }
+
+    fn append_product_entities(item: &Value, result: &mut Vec<Value>) {
+        if let Some(entities) = item.get("entities").and_then(|v| v.as_array()) {
+            for sub in entities {
+                Self::append_product_entities(sub, result);
+            }
+            return;
+        }
+        if let Some(cleaned) = Self::clean_product_entity(item) {
+            result.push(cleaned);
+        }
     }
 
     /// 用户浏览历史 / 最近访问专用提取：保留 history / recentHistory 实体原始结构，
@@ -3986,11 +4019,14 @@ impl CoolapkClient {
     }
 
     /// 用户浏览历史
-    /// 数据来源: GET /v6/user/hitHistoryList?page={page}
-    pub async fn get_hit_history(&self, page: u32, history_type: &str) -> Result<Value, String> {
-        let mut query = vec![("page", page.to_string())];
-        if !history_type.is_empty() && history_type != "all" {
-            query.push(("type", history_type.to_string()));
+    /// 数据来源: GET /v6/user/hitHistoryList?type={type}&page={page}&firstItem={firstItem}&lastItem={lastItem}
+    pub async fn get_hit_history(&self, page: u32, history_type: &str, first_item: Option<&str>, last_item: Option<&str>) -> Result<Value, String> {
+        let mut query = vec![("type", history_type.to_string()), ("page", page.to_string())];
+        if let Some(first_item) = first_item.filter(|value| !value.trim().is_empty()) {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if let Some(last_item) = last_item.filter(|value| !value.trim().is_empty()) {
+            query.push(("lastItem", last_item.to_string()));
         }
         let raw = self
             .api_get("/v6/user/hitHistoryList", &query)
@@ -4037,10 +4073,17 @@ impl CoolapkClient {
     }
 
     /// 用户最近历史（访问过的用户/话题等）
-    /// 数据来源: GET /v6/user/recentHistoryList?page={page}
-    pub async fn get_recent_history(&self, page: u32) -> Result<Value, String> {
+    /// 数据来源: GET /v6/user/recentHistoryList?page={page}&firstItem={firstItem}&lastItem={lastItem}
+    pub async fn get_recent_history(&self, page: u32, first_item: Option<&str>, last_item: Option<&str>) -> Result<Value, String> {
+        let mut query = vec![("page", page.to_string())];
+        if let Some(first_item) = first_item.filter(|value| !value.trim().is_empty()) {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if let Some(last_item) = last_item.filter(|value| !value.trim().is_empty()) {
+            query.push(("lastItem", last_item.to_string()));
+        }
         let raw = self
-            .api_get("/v6/user/recentHistoryList", &[("page", page.to_string())])
+            .api_get("/v6/user/recentHistoryList", &query)
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_history_list(&raw) }))
     }
@@ -5676,6 +5719,7 @@ impl CoolapkClient {
         first_item: &str,
         last_item: &str,
         page_context: &str,
+        request_args_json: &str,
     ) -> Result<Value, String> {
         if !is_safe_discovery_page_url(url) {
             return Err("发现页地址不受信任，已拒绝请求".to_string());
@@ -5696,6 +5740,10 @@ impl CoolapkClient {
         }
         if !page_context.trim().is_empty() {
             query.push(("pageContext", page_context.to_string()));
+        }
+        let extra_query = parse_discovery_request_args(request_args_json);
+        for (key, value) in &extra_query {
+            query.push((key.as_str(), value.clone()));
         }
 
         wrap_api_data(self.api_get("/v6/page/dataList", &query).await?)
@@ -5792,14 +5840,14 @@ impl CoolapkClient {
     /// 数据来源: GET /v6/product/brandList
     pub async fn get_product_brand_list(&self) -> Result<Value, String> {
         let raw = self.api_get("/v6/product/brandList", &[]).await?;
-        Ok(json!({ "code": 200, "data": Self::extract_product_entity_list(&raw) }))
+        Ok(Self::product_entity_page_response(&raw))
     }
 
     /// 数码产品分类列表
     /// 数据来源: GET /v6/product/categoryList
     pub async fn get_product_category_list(&self) -> Result<Value, String> {
         let raw = self.api_get("/v6/product/categoryList", &[]).await?;
-        Ok(json!({ "code": 200, "data": Self::extract_product_entity_list(&raw) }))
+        Ok(Self::product_entity_page_response(&raw))
     }
 
     /// 读取品牌/分类下的系列与产品列表。
@@ -5813,6 +5861,8 @@ impl CoolapkClient {
         title: &str,
         sub_title: &str,
         page: u32,
+        first_item: &str,
+        last_item: &str,
     ) -> Result<Value, String> {
         let mut query = vec![("url", url.to_string()), ("page", page.max(1).to_string())];
         if !title.trim().is_empty() {
@@ -5821,8 +5871,14 @@ impl CoolapkClient {
         if !sub_title.trim().is_empty() {
             query.push(("subTitle", sub_title.to_string()));
         }
+        if !first_item.trim().is_empty() {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.to_string()));
+        }
         let raw = self.api_get("/v6/page/dataList", &query).await?;
-        Ok(json!({ "code": 200, "data": Self::extract_product_entity_list(&raw) }))
+        Ok(Self::product_entity_page_response(&raw))
     }
 
     /// 读取品牌下的系列与产品列表，保持 APK 的 product/productList 调用链。
@@ -5832,18 +5888,18 @@ impl CoolapkClient {
         brand_id: &str,
         brand_type: &str,
         page: u32,
+        first_item: &str,
+        last_item: &str,
     ) -> Result<Value, String> {
-        let raw = self
-            .api_get(
-                "/v6/product/productList",
-                &[
-                    ("id", brand_id.to_string()),
-                    ("type", brand_type.to_string()),
-                    ("page", page.max(1).to_string()),
-                ],
-            )
-            .await?;
-        Ok(json!({ "code": 200, "data": Self::extract_product_entity_list(&raw) }))
+        let mut query = vec![("id", brand_id.to_string()), ("type", brand_type.to_string()), ("page", page.max(1).to_string())];
+        if !first_item.trim().is_empty() {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.to_string()));
+        }
+        let raw = self.api_get("/v6/product/productList", &query).await?;
+        Ok(Self::product_entity_page_response(&raw))
     }
 
     /// 产品媒体/图集列表（图片/视频）
@@ -7136,6 +7192,33 @@ fn wrap_api_data(response: Value) -> Result<Value, String> {
 
     let data = response.get("data").cloned().unwrap_or(response);
     Ok(json!({ "code": 200, "data": data }))
+}
+
+/// 将服务端配置中的额外请求参数安全地转成 dataList 查询参数。
+/// 仅允许简单键名和标量值，且不允许覆盖分页、地址和上下文参数。
+fn parse_discovery_request_args(raw: &str) -> Vec<(String, String)> {
+    let Ok(Value::Object(args)) = serde_json::from_str::<Value>(raw) else {
+        return Vec::new();
+    };
+    let reserved = ["url", "title", "subTitle", "sub_title", "page", "firstItem", "first_item", "lastItem", "last_item", "pageContext", "page_context"];
+    args.into_iter()
+        .filter_map(|(key, value)| {
+            if key.is_empty() || key.len() > 64 || reserved.iter().any(|item| *item == key) || !key.chars().all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-') {
+                return None;
+            }
+            let text = match value {
+                Value::String(value) => value,
+                Value::Number(value) => value.to_string(),
+                Value::Bool(value) => value.to_string(),
+                Value::Array(_) | Value::Object(_) => serde_json::to_string(&value).ok()?,
+                Value::Null => return None,
+            };
+            if text.len() > 4096 || text.chars().any(|ch| ch.is_control()) {
+                return None;
+            }
+            Some((key, text))
+        })
+        .collect()
 }
 
 fn is_safe_discovery_page_url(value: &str) -> bool {

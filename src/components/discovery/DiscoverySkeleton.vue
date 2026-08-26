@@ -48,8 +48,8 @@ defineOptions({ name: 'DiscoverySkeleton' });
 
 <style scoped>
 .discovery-skeleton {
-  max-width: 1280px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;

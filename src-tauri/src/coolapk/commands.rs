@@ -69,6 +69,7 @@ pub async fn get_discovery_page_data(
     first_item: String,
     last_item: String,
     page_context: String,
+    request_args_json: Option<String>,
 ) -> Result<Value, String> {
     state
         .client
@@ -80,6 +81,7 @@ pub async fn get_discovery_page_data(
             &first_item,
             &last_item,
             &page_context,
+            request_args_json.as_deref().unwrap_or(""),
         )
         .await
 }
@@ -159,10 +161,12 @@ pub async fn get_product_list(
     title: String,
     sub_title: String,
     page: u32,
+    first_item: Option<String>,
+    last_item: Option<String>,
 ) -> Result<Value, String> {
     state
         .client
-        .get_product_list(&url, &title, &sub_title, page)
+        .get_product_list(&url, &title, &sub_title, page, first_item.as_deref().unwrap_or(""), last_item.as_deref().unwrap_or(""))
         .await
 }
 
@@ -172,10 +176,12 @@ pub async fn get_product_brand_products(
     brand_id: String,
     brand_type: String,
     page: u32,
+    first_item: Option<String>,
+    last_item: Option<String>,
 ) -> Result<Value, String> {
     state
         .client
-        .get_product_brand_products(&brand_id, &brand_type, page)
+        .get_product_brand_products(&brand_id, &brand_type, page, first_item.as_deref().unwrap_or(""), last_item.as_deref().unwrap_or(""))
         .await
 }
 
@@ -673,13 +679,15 @@ pub async fn get_hit_history(
     state: State<'_, AppState>,
     page: u32,
     history_type: String,
+    first_item: Option<String>,
+    last_item: Option<String>,
 ) -> Result<Value, String> {
-    state.client.get_hit_history(page, &history_type).await
+    state.client.get_hit_history(page, &history_type, first_item.as_deref(), last_item.as_deref()).await
 }
 
 #[tauri::command]
-pub async fn get_recent_history(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
-    state.client.get_recent_history(page).await
+pub async fn get_recent_history(state: State<'_, AppState>, page: u32, first_item: Option<String>, last_item: Option<String>) -> Result<Value, String> {
+    state.client.get_recent_history(page, first_item.as_deref(), last_item.as_deref()).await
 }
 
 #[tauri::command]

@@ -126,4 +126,20 @@ describe('HistoryPage 点击行为', () => {
     await flushPromises();
     expect(wrapper.findAll('.history-item')).toHaveLength(2);
   });
+
+  it('按历史接口的 dateline 将不同日期分成不同时间线', async () => {
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const historyData = [
+      { ...feedItem, id: 'feed:today', dateline: Math.floor(today.getTime() / 1000) },
+      { ...userItem, id: 'user:yesterday', dateline: Math.floor(yesterday.getTime() / 1000) },
+    ];
+
+    const { wrapper } = await mountPage(historyData);
+
+    expect(wrapper.findAll('.timeline-group')).toHaveLength(2);
+    expect(wrapper.findAll('.date-title').map(node => node.text())).toEqual(['今天', '昨天']);
+  });
 });

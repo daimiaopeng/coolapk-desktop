@@ -42,7 +42,7 @@ import ProductSelectorPage from '../pages/ProductSelectorPage.vue';
 import GoodsPage from '../pages/GoodsPage.vue';
 import GoodsListDetailPage from '../pages/GoodsListDetailPage.vue';
 import GoodsRankingDetailPage from '../pages/GoodsRankingDetailPage.vue';
-import ProductCategoryPage from '../pages/ProductCategoryPage.vue';
+import DigitalPage from '../pages/DigitalPage.vue';
 import MyProductsPage from '../pages/MyProductsPage.vue';
 import ProductComparePage from '../pages/ProductComparePage.vue';
 import MorePage from '../pages/MorePage.vue';
@@ -103,7 +103,8 @@ const routes = [
   { path: '/goods/ranking', redirect: '/goods?tab=ranking' },
   { path: '/goods/lists/:feedId', name: 'GoodsListDetail', component: GoodsListDetailPage },
   { path: '/goods/ranking/:feedId', name: 'GoodsRankingDetail', component: GoodsRankingDetailPage },
-  { path: '/digital', name: 'Digital', component: ProductCategoryPage },
+  { path: '/digital', name: 'Digital', component: DigitalPage },
+  { path: '/digital-library', name: 'DigitalLibrary', redirect: '/digital' },
   { path: '/my-products', name: 'MyProducts', component: MyProductsPage },
   { path: '/product-compare', name: 'ProductCompare', component: ProductComparePage },
   { path: '/search', name: 'Search', component: SearchPage },

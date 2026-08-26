@@ -144,17 +144,18 @@ const isDark = computed(() => {
 // 主侧边栏精简保留核心主干
 const allPrimaryNavs = [
   { key: 'home', path: '/', label: '首页', icon: 'fas fa-home' },
-  { key: 'topics', path: '/topics', label: '话题', icon: 'fas fa-hashtag' },
+  { key: 'digital', path: '/digital', label: '数码', icon: 'fas fa-microchip' },
   { key: 'discover', path: '/discover', label: '发现', icon: 'fas fa-compass' },
+  { key: 'topics', path: '/topics', label: '话题', icon: 'fas fa-hashtag' },
   { key: 'pictures', path: '/pictures', label: '酷图', icon: 'far fa-images' },
   { key: 'apps', path: '/apps', label: '应用', icon: 'fas fa-cubes' },
 ];
 
 const allSecondaryNavs = [
   { key: 'notifications', path: '/notifications', label: '通知', icon: 'far fa-bell' },
-  { key: 'favorites', path: '/favorites', label: '收藏', icon: 'far fa-bookmark' },
-  { key: 'history', path: '/history', label: '历史', icon: 'far fa-clock' },
   { key: 'messages', path: '/messages', label: '消息', icon: 'far fa-comment-alt' },
+  { key: 'history', path: '/history', label: '历史', icon: 'far fa-clock' },
+  { key: 'favorites', path: '/favorites', label: '收藏', icon: 'far fa-bookmark' },
   { key: 'following', path: '/following', label: '我关注的', icon: 'fas fa-user-group' },
 ];
 
@@ -181,6 +182,7 @@ const moreSubPaths = [
   '/secondhand',
   '/reviews',
   '/digital',
+  '/digital-library',
   '/games',
   '/events',
   '/event',

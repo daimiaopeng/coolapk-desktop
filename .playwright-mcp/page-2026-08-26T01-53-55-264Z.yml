@@ -1,0 +1,86 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - img "Coolapk Logo" [ref=e6]
+        - generic [ref=e7]: 酷安
+      - generic [ref=e8]:
+        - generic "页面导航" [ref=e9]:
+          - button "后退" [disabled]
+          - button "前进" [disabled]
+          - button "刷新当前页面" [ref=e10] [cursor=pointer]
+        - generic [ref=e12] [cursor=pointer]:
+          - generic [ref=e14]: 搜索应用、动态、用户、话题
+          - generic [ref=e15]: Ctrl K
+      - generic [ref=e16]:
+        - button "发布动态" [ref=e17] [cursor=pointer]
+        - button "通知" [ref=e20] [cursor=pointer]
+        - button "私信" [ref=e23] [cursor=pointer]
+        - generic "点击登录酷安" [ref=e26] [cursor=pointer]:
+          - img "avatar" [ref=e30]
+    - generic [ref=e31]:
+      - complementary [ref=e32]:
+        - button "收起侧边栏" [ref=e33] [cursor=pointer]
+        - navigation [ref=e37]:
+          - generic [ref=e38]:
+            - link "首页" [ref=e39] [cursor=pointer]:
+              - /url: "#/"
+            - link "数码" [ref=e42] [cursor=pointer]:
+              - /url: "#/digital"
+            - link "发现" [ref=e45] [cursor=pointer]:
+              - /url: "#/discover"
+            - link "话题" [ref=e48] [cursor=pointer]:
+              - /url: "#/topics"
+            - link "酷图" [ref=e51] [cursor=pointer]:
+              - /url: "#/pictures"
+            - link "应用" [ref=e54] [cursor=pointer]:
+              - /url: "#/apps"
+            - link "更多" [ref=e57] [cursor=pointer]:
+              - /url: "#/more"
+          - generic [ref=e61]:
+            - link "通知" [ref=e62] [cursor=pointer]:
+              - /url: "#/notifications"
+            - link "消息" [ref=e65] [cursor=pointer]:
+              - /url: "#/messages"
+            - link "历史" [ref=e68] [cursor=pointer]:
+              - /url: "#/history"
+            - link "收藏" [ref=e71] [cursor=pointer]:
+              - /url: "#/favorites"
+            - link "我关注的" [ref=e74] [cursor=pointer]:
+              - /url: "#/following"
+          - link "我的" [ref=e77] [cursor=pointer]:
+            - /url: "#/my"
+          - generic [ref=e81]:
+            - link "设置" [ref=e82] [cursor=pointer]:
+              - /url: "#/settings"
+            - button "夜间模式" [ref=e85] [cursor=pointer]
+            - button "登录账号" [ref=e88] [cursor=pointer]
+        - generic [ref=e92]:
+          - generic [ref=e93]:
+            - generic [ref=e94]: 酷安桌面版
+            - generic [ref=e95]: v1.11.0
+          - button "更新" [ref=e96] [cursor=pointer]
+      - main [ref=e99]:
+        - generic [ref=e100]:
+          - generic [ref=e101]:
+            - generic [ref=e102]:
+              - button "频道管理与排序" [ref=e105] [cursor=pointer]
+              - group "信息流布局" [ref=e107]:
+                - button "单列" [pressed] [ref=e108] [cursor=pointer]
+                - button "双列" [ref=e111] [cursor=pointer]
+            - generic [ref=e117]:
+              - heading "加载动态失败" [level=4] [ref=e120]
+              - paragraph [ref=e121]: Cannot read properties of undefined (reading 'invoke')
+              - button "重试" [ref=e122] [cursor=pointer]
+          - complementary [ref=e124]:
+            - generic [ref=e125]:
+              - generic [ref=e126]:
+                - heading "本月热榜" [level=3] [ref=e127]
+                - button "刷新本月热榜" [ref=e128] [cursor=pointer]
+              - heading "暂无热榜" [level=4] [ref=e135]
+            - generic [ref=e136]:
+              - generic [ref=e137]:
+                - heading "热门话题" [level=3] [ref=e138]
+                - button "换一换" [ref=e139] [cursor=pointer]
+              - heading "暂无话题" [level=4] [ref=e146]
+  - generic [ref=e147]: "[全局错误] Cannot read properties of undefined (reading 'transformCallback')"

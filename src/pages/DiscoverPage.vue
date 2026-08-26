@@ -1,58 +1,52 @@
 <template>
-  <div class="discover-page custom-scrollbar" @scroll.passive="handleScroll">
-    <div v-if="configError && !tabs.length" class="config-error">
-      <strong>发现频道配置加载失败</strong>
-      <span>{{ configError }}</span>
-      <button type="button" @click="loadConfig">重试</button>
-    </div>
-
-    <nav v-if="tabs.length" class="discover-tabs" aria-label="发现栏目">
-      <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        type="button"
-        :class="['discover-tab', { active: selectedKey === tab.key }]"
-        @click="selectTab(tab.key)"
-      >
-        <span>{{ tab.title }}</span>
-        <small v-if="tab.subTitle">{{ tab.subTitle }}</small>
-        <i v-if="selectedKey === tab.key" class="tab-indicator"></i>
-      </button>
-    </nav>
-
-    <section v-if="currentState.webUrl" class="web-route-card">
-      <i class="fas fa-globe"></i>
-      <div>
-        <strong>该栏目由网页内容提供</strong>
-        <span>{{ currentState.webUrl }}</span>
+  <div class="discover-page">
+    <div class="discover-main-column">
+      <div class="discover-toolbar-row">
+        <FeedTabs v-if="tabs.length" :active-key="selectedKey" :tabs="feedTabs" :show-manage="false" @update:active-key="selectTab" />
       </div>
-      <button type="button" @click="openWeb(currentState.webUrl)">打开页面</button>
-    </section>
 
-    <!-- 加载中状态：渲染与真实发现页 1:1 对齐的高保真流光骨架屏 -->
-    <DiscoverySkeleton v-else-if="isPageLoading && !currentState.items.length" />
+      <div class="discover-scroll-container custom-scrollbar" @scroll.passive="handleScroll">
+        <div v-if="configError && !tabs.length" class="config-error">
+          <strong>发现频道配置加载失败</strong>
+          <span>{{ configError }}</span>
+          <button type="button" @click="loadConfig">重试</button>
+        </div>
 
-    <!-- 错误状态：居中提示并提供重试按钮 -->
-    <div v-else-if="currentState.error && !currentState.items.length" class="state-container">
-      <ErrorState title="发现内容加载失败" :message="currentState.error" @retry="refresh" />
+        <section v-if="currentState.webUrl" class="web-route-card">
+          <i class="fas fa-globe"></i>
+          <div>
+            <strong>该栏目由网页内容提供</strong>
+            <span>{{ currentState.webUrl }}</span>
+          </div>
+          <button type="button" @click="openWeb(currentState.webUrl)">打开页面</button>
+        </section>
+
+        <!-- 加载中状态：渲染与真实发现页 1:1 对齐的高保真流光骨架屏 -->
+        <DiscoverySkeleton v-else-if="isPageLoading && !currentState.items.length" />
+
+        <!-- 错误状态：居中提示并提供重试按钮 -->
+        <div v-else-if="currentState.error && !currentState.items.length" class="state-container">
+          <ErrorState title="发现内容加载失败" :message="currentState.error" @retry="refresh" />
+        </div>
+
+        <!-- 空内容状态：居中提示 -->
+        <div v-else-if="!currentState.items.length && !isPageLoading" class="state-container">
+          <EmptyState title="暂无发现内容" description="服务端暂时没有返回可展示的内容" />
+        </div>
+
+        <!-- 发现内容数据流 -->
+        <section v-else :class="['discover-content', { 'has-goods-grid': isGoodsPage, 'has-dyh-grid': isDyhPage }]">
+          <DiscoveryEntityCard
+            v-for="(entity, index) in currentState.items"
+            :key="getEntityKey(entity, index)"
+            :entity="entity"
+            @open="openEntity"
+          />
+          <div v-if="currentState.loading" class="loading-more"><LoadingState text="正在加载更多..." /></div>
+          <div v-else-if="!currentState.hasMore" class="no-more">没有更多内容了</div>
+        </section>
+      </div>
     </div>
-
-    <!-- 空内容状态：居中提示 -->
-    <div v-else-if="!currentState.items.length && !isPageLoading" class="state-container">
-      <EmptyState title="暂无发现内容" description="服务端暂时没有返回可展示的内容" />
-    </div>
-
-    <!-- 发现内容数据流 -->
-    <section v-else :class="['discover-content', { 'has-goods-grid': isGoodsPage, 'has-dyh-grid': isDyhPage }]">
-      <DiscoveryEntityCard
-        v-for="(entity, index) in currentState.items"
-        :key="getEntityKey(entity, index)"
-        :entity="entity"
-        @open="openEntity"
-      />
-      <div v-if="currentState.loading" class="loading-more"><LoadingState text="正在加载更多..." /></div>
-      <div v-else-if="!currentState.hasMore" class="no-more">没有更多内容了</div>
-    </section>
   </div>
 </template>
 
@@ -62,10 +56,11 @@ import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import DiscoveryEntityCard from '../components/discovery/DiscoveryEntityCard.vue';
 import DiscoverySkeleton from '../components/discovery/DiscoverySkeleton.vue';
-import AppImage from '../components/common/AppImage.vue';
+import FeedTabs from '../components/feed/FeedTabs.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import LoadingState from '../components/common/LoadingState.vue';
+import type { ConfigPageTab } from '../types/settings';
 import type { DiscoveryEntity, DiscoveryPageResult, DiscoveryTab } from '../types/discovery';
 import {
   decodeDiscoveryRouteSegment,
@@ -89,6 +84,8 @@ const selectedKey = ref('');
 const configLoading = ref(true);
 const configError = ref('');
 const states = reactive<Record<string, PageState>>({});
+const feedTabs = computed<ConfigPageTab[]>(() => tabs.value.map((tab) => ({ id: tab.key, title: tab.title, page_name: tab.key, url: tab.url, subTitle: tab.subTitle })));
+const selectedTabStorageKey = 'coolapk.discovery.selectedTab.v3';
 
 const fallbackTabs: DiscoveryTab[] = [
   fallbackTab('发现', '#/feed/digestList'),
@@ -103,10 +100,10 @@ try {
   const cached = JSON.parse(localStorage.getItem('coolapk.discovery.tabs.v2') || '[]');
   if (Array.isArray(cached) && cached.length) {
     tabs.value = cached;
-    const savedSelected = localStorage.getItem('coolapk.discovery.selectedTab.v2');
+    const savedSelected = localStorage.getItem(selectedTabStorageKey);
     selectedKey.value = tabs.value.some((tab) => tab.key === savedSelected)
       ? String(savedSelected)
-      : tabs.value[0]?.key || '';
+      : tabs.value.find((tab) => tab.title.trim() === '生活')?.key || tabs.value[0]?.key || '';
   }
 } catch {
   tabs.value = fallbackTabs;
@@ -161,11 +158,11 @@ async function loadConfig() {
       localStorage.setItem('coolapk.discovery.tabs.v2', JSON.stringify(parsed));
     }
     const serverSelected = parseDiscoverySelectedKey(response, tabs.value);
-    const savedSelected = localStorage.getItem('coolapk.discovery.selectedTab.v2');
+    const savedSelected = localStorage.getItem(selectedTabStorageKey);
     if (!selectedKey.value || !tabs.value.some((t) => t.key === selectedKey.value)) {
       selectedKey.value = tabs.value.some((tab) => tab.key === savedSelected)
         ? String(savedSelected)
-        : serverSelected || tabs.value[0]?.key || '';
+        : tabs.value.find((tab) => tab.title.trim() === '生活')?.key || serverSelected || tabs.value[0]?.key || '';
     }
   } catch (error: any) {
     configError.value = error?.message || '无法获取服务端发现配置';
@@ -234,7 +231,7 @@ async function loadSelected(reset = false) {
 
 function selectTab(key: string) {
   selectedKey.value = key;
-  localStorage.setItem('coolapk.discovery.selectedTab.v2', key);
+  localStorage.setItem(selectedTabStorageKey, key);
   const tab = selectedTab.value;
   if (!tab) return;
   if (tab.openNewActivity && tab.nativeKind !== 'dyh') {
@@ -327,15 +324,12 @@ onMounted(() => { void loadConfig(); });
 </script>
 
 <style scoped>
-.discover-page { flex: 1; width: 100%; min-width: 0; height: 100%; overflow-y: auto; padding: 20px clamp(20px, 3vw, 48px) 48px; background: var(--background); }
-.discover-tabs { max-width: 1280px; width: 100%; margin: 0 auto 16px; display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 8px; scrollbar-width: none; }
-.discover-tabs::-webkit-scrollbar { display: none; }
-.discover-tab { position: relative; min-width: max-content; display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--text-secondary); padding: 8px 14px 12px; cursor: pointer; font-size: 15px; font-weight: 500; transition: color .15s ease; }
-.discover-tab:hover { color: var(--text-primary); }
-.discover-tab.active { color: var(--brand-primary); font-weight: 700; }
-.discover-tab small { color: var(--text-tertiary); font-size: 11px; }
-.tab-indicator { position: absolute; left: 50%; bottom: 2px; width: 24px; height: 3px; transform: translateX(-50%); border-radius: 4px; background: var(--brand-primary); }
-.web-route-card, .config-error { max-width: 1280px; width: 100%; margin: 0 auto 16px; background: var(--surface); border: 1px solid var(--border-light, rgba(0,0,0,.08)); border-radius: var(--radius-card, 12px); }
+.discover-page { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--background); }
+.discover-main-column { display: flex; flex: 1; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--surface); }
+.discover-toolbar-row { display: flex; flex: 0 0 auto; align-items: stretch; min-width: 0; background: var(--surface); }
+.discover-toolbar-row :deep(.feed-tabs-wrapper) { flex: 1 1 auto; min-width: 0; }
+.discover-scroll-container { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 16px 0 48px; background: var(--background-secondary); }
+.web-route-card, .config-error { max-width: none; width: 100%; margin: 0 0 16px; background: var(--surface); border: 1px solid var(--border-light, rgba(0,0,0,.08)); border-radius: var(--radius-card, 12px); box-sizing: border-box; }
 .web-route-card, .config-error { display: flex; align-items: center; gap: 14px; padding: 18px; }
 .web-route-card > i { color: var(--brand-primary); font-size: 24px; }
 .web-route-card div, .config-error { min-width: 0; }
@@ -344,8 +338,8 @@ onMounted(() => { void loadConfig(); });
 .web-route-card button, .config-error button { border: 0; border-radius: 8px; padding: 8px 16px; background: var(--brand-primary); color: white; cursor: pointer; font-weight: 500; }
 .config-error { flex-wrap: wrap; color: var(--text-primary); }
 .config-error span { flex: 1 1 100%; }
-.state-container { max-width: 1280px; width: 100%; margin: 30px auto 0; min-height: 360px; display: flex; justify-content: center; align-items: center; }
-.discover-content { max-width: 1280px; width: 100%; margin: 0 auto; display: grid; gap: 16px; }
+.state-container { max-width: none; width: 100%; margin: 30px 0 0; min-height: 360px; display: flex; justify-content: center; align-items: center; }
+.discover-content { max-width: none; width: 100%; margin: 0; display: grid; gap: 16px; }
 .discover-content.has-goods-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; }
 .discover-content.has-dyh-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .loading-more, .no-more { padding: 16px; text-align: center; color: var(--text-tertiary); font-size: 13px; }
@@ -353,7 +347,7 @@ onMounted(() => { void loadConfig(); });
   .discover-content.has-goods-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
-  .discover-page { padding-inline: 14px; }
+  .discover-scroll-container { padding-top: 12px; }
   .discover-content.has-dyh-grid { grid-template-columns: 1fr; }
   .discover-content.has-goods-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
