@@ -33,6 +33,7 @@ const props = defineProps<{
   message?: string;
   username?: string;
   forceExpanded?: boolean;
+  maxLines?: number;
 }>();
 
 const settingsStore = useSettingsStore();
@@ -46,7 +47,12 @@ const fullMessage = ref('');
 
 const currentMessage = computed(() => fullMessage.value || props.message || '');
 const needsRemoteFullText = computed(() => hasFeedMoreSuffix(props.message || ''));
-const collapseLines = computed(() => settingsStore.settings.collapseLines || 0);
+const collapseLines = computed(() => {
+  if (typeof props.maxLines === 'number' && props.maxLines > 0) {
+    return props.maxLines;
+  }
+  return settingsStore.settings.collapseLines || 0;
+});
 
 function checkOverflow() {
   if (needsRemoteFullText.value) {

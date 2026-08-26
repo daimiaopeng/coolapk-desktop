@@ -44,7 +44,7 @@
           <nav v-else class="digital-side-list" aria-label="数码品牌或分类">
             <button v-for="item in filteredSideItems" :key="sideItemKey(item)" type="button" :class="['digital-side-item', { active: selectedId === sideItemKey(item) }]" @click="selectSide(item)">
               <span v-if="isHotSideItem(item)" class="digital-side-logo-fallback digital-side-hot-logo"><i class="fas fa-fire" aria-hidden="true"></i></span>
-              <AppImage v-else-if="sideLogo(item)" :src="sideLogo(item)" fit="contain" image-class="digital-side-logo" />
+              <AppImage v-else-if="sideLogo(item)" :src="sideLogo(item)" fit="contain" class="digital-side-logo" image-class="digital-side-logo-img" />
               <span v-else class="digital-side-logo-fallback"><i class="fas fa-microchip"></i></span>
               <span class="digital-side-name">{{ item.title || item.name || '未命名' }}</span>
               <span v-if="productCount(item)" class="digital-side-count">{{ formatCount(productCount(item)) }}</span>
@@ -55,7 +55,7 @@
           <div v-if="filteredDynamicCategoryItems.length === 0" class="digital-state"><EmptyState title="暂无数码栏目" description="当前数码页面没有可展示的分类入口" /></div>
           <nav v-else class="digital-side-list" aria-label="数码服务端栏目">
             <button v-for="(item, index) in filteredDynamicCategoryItems" :key="dynamicCategoryItemKey(item, index)" type="button" :class="['digital-side-item', { active: dynamicCategorySelectedKey === dynamicCategoryItemKey(item, index) }]" @click="selectDynamicCategory(item)">
-              <AppImage v-if="getEntityImage(item)" :src="getEntityImage(item)" fit="contain" image-class="digital-side-logo" />
+              <AppImage v-if="getEntityImage(item)" :src="getEntityImage(item)" fit="contain" class="digital-side-logo" image-class="digital-side-logo-img" />
               <span v-else class="digital-side-logo-fallback"><i :class="getEntityFallbackIcon(item)"></i></span>
               <span class="digital-side-name">{{ entityTitle(item) || '未命名栏目' }}</span>
             </button>
@@ -67,6 +67,24 @@
         <template v-if="isCategoryTab">
           <div v-if="!selected" class="digital-content-empty"><i class="fas fa-arrow-left"></i><span>从左侧选择服务端品牌或分类</span></div>
           <template v-else>
+            <div class="digital-content-toolbar">
+              <div class="toolbar-left">
+                <span class="toolbar-title">{{ selectedCategoryTitle }}</span>
+                <span v-if="selectedCategoryCount" class="toolbar-count">共 {{ selectedCategoryCount }} 款产品</span>
+              </div>
+              <div class="toolbar-right">
+                <div class="view-switcher" role="group" aria-label="视图模式切换">
+                  <button type="button" :class="['view-btn', { active: displayMode === 'grid' }]" title="网格视图" @click="setDisplayMode('grid')">
+                    <i class="fas fa-grip"></i>
+                    <span>网格</span>
+                  </button>
+                  <button type="button" :class="['view-btn', { active: displayMode === 'vertical' }]" title="列表视图" @click="setDisplayMode('vertical')">
+                    <i class="fas fa-list"></i>
+                    <span>列表</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             <div v-if="productLoading && products.length === 0" class="digital-result-state"><DiscoverySkeleton /></div>
             <div v-else-if="productError && products.length === 0" class="digital-result-state"><ErrorState title="数码页面加载失败" :message="productError" @retry="loadProducts" /></div>
             <div v-else-if="products.length === 0" class="digital-result-state"><EmptyState title="服务端暂未返回内容" description="该品牌或分类当前没有可展示的数码内容" /></div>
@@ -74,11 +92,19 @@
               <template v-for="(block, index) in displayBlocks" :key="blockKey(block, index)">
                 <DigitalSeriesTitle v-if="block.kind === 'title'" :title="block.title || ''" />
                 <DigitalSeriesMore v-else-if="block.kind === 'more' && block.entity" :label="entityTitle(block.entity)" @open="openEntity(block.entity)" />
-                <div v-else-if="block.kind === 'products'" :class="['series-products', displayMode === 'horizontal' ? 'horizontal' : 'vertical']">
-                  <template v-if="displayMode === 'vertical'">
-                    <DigitalProductCard v-for="(product, productIndex) in block.items" :key="getEntityKey(product, productIndex)" :product="product" layout="vertical" @open="openEntity" />
+                <div v-else-if="block.kind === 'products'" :class="['series-products', displayMode]">
+                  <template v-if="displayMode === 'horizontal'">
+                    <DigitalProductRow :products="block.items" :more="block.more" @open="openEntity" />
                   </template>
-                  <DigitalProductRow v-else :products="block.items" :more="block.more" @open="openEntity" />
+                  <template v-else>
+                    <DigitalProductCard
+                      v-for="(product, productIndex) in block.items"
+                      :key="getEntityKey(product, productIndex)"
+                      :product="product"
+                      :layout="displayMode === 'grid' ? 'grid' : 'vertical'"
+                      @open="openEntity"
+                    />
+                  </template>
                 </div>
                 <DiscoveryEntityCard v-else-if="block.entity" :entity="block.entity" @open="openEntity" />
               </template>
@@ -91,6 +117,23 @@
           </template>
         </template>
         <template v-else>
+          <div v-if="dynamicCategorySelected" class="digital-content-toolbar">
+            <div class="toolbar-left">
+              <span class="toolbar-title">{{ selectedCategoryTitle }}</span>
+            </div>
+            <div class="toolbar-right">
+              <div class="view-switcher" role="group" aria-label="视图模式切换">
+                <button type="button" :class="['view-btn', { active: displayMode === 'grid' }]" title="网格视图" @click="setDisplayMode('grid')">
+                  <i class="fas fa-grip"></i>
+                  <span>网格</span>
+                </button>
+                <button type="button" :class="['view-btn', { active: displayMode === 'vertical' }]" title="列表视图" @click="setDisplayMode('vertical')">
+                  <i class="fas fa-list"></i>
+                  <span>列表</span>
+                </button>
+              </div>
+            </div>
+          </div>
           <div v-if="dynamicCategoryLoading && dynamicCategoryItems.length === 0" class="digital-result-state"><DiscoverySkeleton /></div>
           <div v-else-if="dynamicCategoryError && dynamicCategoryItems.length === 0" class="digital-result-state"><ErrorState title="数码栏目加载失败" :message="dynamicCategoryError" @retry="loadDynamicCategory" /></div>
           <div v-else-if="dynamicCategoryItems.length === 0" class="digital-result-state"><EmptyState title="服务端暂未返回内容" description="该数码栏目当前没有可展示的内容" /></div>
@@ -98,8 +141,14 @@
             <template v-for="(block, index) in dynamicCategoryBlocks" :key="`dynamic-category-${blockKey(block, index)}`">
               <DigitalSeriesTitle v-if="block.kind === 'title'" :title="block.title || ''" />
               <DigitalSeriesMore v-else-if="block.kind === 'more' && block.entity" :label="entityTitle(block.entity)" @open="openEntity(block.entity)" />
-              <div v-else-if="block.kind === 'products'" class="series-products vertical">
-                <DigitalProductCard v-for="(product, productIndex) in block.items" :key="getEntityKey(product, productIndex)" :product="product" layout="vertical" @open="openEntity" />
+              <div v-else-if="block.kind === 'products'" :class="['series-products', displayMode]">
+                <DigitalProductCard
+                  v-for="(product, productIndex) in block.items"
+                  :key="getEntityKey(product, productIndex)"
+                  :product="product"
+                  :layout="displayMode === 'grid' ? 'grid' : 'vertical'"
+                  @open="openEntity"
+                />
               </div>
               <DiscoveryEntityCard v-else-if="block.entity" :entity="block.entity" @open="openEntity" />
             </template>
@@ -115,6 +164,23 @@
     </template>
 
     <main ref="tabScrollContainer" v-else class="digital-server-content" @scroll.passive="handleTabScroll">
+      <div v-if="tabItems.length > 0" class="digital-content-toolbar">
+        <div class="toolbar-left">
+          <span class="toolbar-title">{{ selectedTabTitle }}</span>
+        </div>
+        <div class="toolbar-right">
+          <div class="view-switcher" role="group" aria-label="视图模式切换">
+            <button type="button" :class="['view-btn', { active: displayMode === 'grid' }]" title="网格视图" @click="setDisplayMode('grid')">
+              <i class="fas fa-grip"></i>
+              <span>网格</span>
+            </button>
+            <button type="button" :class="['view-btn', { active: displayMode === 'vertical' }]" title="列表视图" @click="setDisplayMode('vertical')">
+              <i class="fas fa-list"></i>
+              <span>列表</span>
+            </button>
+          </div>
+        </div>
+      </div>
       <div v-if="tabLoading && tabItems.length === 0" class="digital-result-state"><DiscoverySkeleton /></div>
       <div v-else-if="tabError && tabItems.length === 0" class="digital-result-state"><ErrorState title="数码页面加载失败" :message="tabError" @retry="loadTabItems" /></div>
       <div v-else-if="tabItems.length === 0" class="digital-result-state"><EmptyState title="服务端暂未返回内容" description="该数码栏目当前没有可展示的内容" /></div>
@@ -122,8 +188,14 @@
         <template v-for="(block, index) in tabDisplayBlocks" :key="`tab-${blockKey(block, index)}`">
           <DigitalSeriesTitle v-if="block.kind === 'title'" :title="block.title || ''" />
           <DigitalSeriesMore v-else-if="block.kind === 'more' && block.entity" :label="entityTitle(block.entity)" @open="openEntity(block.entity)" />
-          <div v-else-if="block.kind === 'products'" class="digital-server-products">
-            <DigitalProductCard v-for="(product, productIndex) in block.items" :key="getEntityKey(product, productIndex)" :product="product" layout="vertical" @open="openEntity" />
+          <div v-else-if="block.kind === 'products'" :class="['digital-server-products', displayMode]">
+            <DigitalProductCard
+              v-for="(product, productIndex) in block.items"
+              :key="getEntityKey(product, productIndex)"
+              :product="product"
+              :layout="displayMode === 'grid' ? 'grid' : 'vertical'"
+              @open="openEntity"
+            />
           </div>
           <DiscoveryEntityCard v-else-if="block.entity" :entity="block.entity" @open="openEntity" />
         </template>
@@ -161,7 +233,7 @@ import { getFallbackDigitalTabs, parseDigitalConfig, removeRedundantFirstDigital
 import type { DigitalTab } from '../utils/digitalTabs';
 
 type DigitalMode = 'brand' | 'category';
-type DisplayMode = 'vertical' | 'horizontal';
+type DisplayMode = 'grid' | 'vertical' | 'horizontal';
 type DigitalBlock = { kind: 'title' | 'more' | 'products' | 'entity'; title?: string; items: DiscoveryEntity[]; entity?: DiscoveryEntity; more?: DiscoveryEntity };
 
 const router = useRouter();
@@ -170,7 +242,14 @@ const modes: Array<{ key: DigitalMode; label: string; icon: string }> = [
   { key: 'category', label: '分类', icon: 'fas fa-layer-group' },
 ];
 const activeMode = ref<DigitalMode>('brand');
-const displayMode = ref<DisplayMode>('vertical');
+const displayMode = ref<DisplayMode>((localStorage.getItem('coolapk.digital.display_mode') as DisplayMode) || 'grid');
+
+function setDisplayMode(mode: DisplayMode) {
+  displayMode.value = mode;
+  try {
+    localStorage.setItem('coolapk.digital.display_mode', mode);
+  } catch {}
+}
 const digitalTabs = ref<DigitalTab[]>([]);
 const selectedTabKey = ref('');
 const selectedSubtabKey = ref('');
@@ -246,6 +325,19 @@ const selectedTabWebUrl = computed(() => {
   return normalizeDigitalTarget(selectedTab.value?.webUrl);
 });
 const selectedRequestArgs = computed<Record<string, unknown>>(() => getDigitalRequestArgs(selectedSubtab.value || selectedTab.value?.raw));
+
+const selectedCategoryTitle = computed(() => {
+  if (selected.value) return String(selected.value.title || selected.value.name || '数码库');
+  if (dynamicCategorySelected.value) return entityTitle(dynamicCategorySelected.value) || '数码分类';
+  return selectedTabTitle.value || '数码';
+});
+const selectedCategoryCount = computed(() => {
+  if (selected.value) {
+    const count = productCount(selected.value);
+    return count ? formatCount(count) : '';
+  }
+  return '';
+});
 
 const filteredSideItems = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase();
@@ -371,12 +463,11 @@ function buildBlocks(items: DiscoveryEntity[], mode: DisplayMode): DigitalBlock[
       flushProducts();
       blocks.push({ kind: 'title', title: entityTitle(item), items: [] });
     } else if (isDigitalProduct(item)) {
-      if (mode === 'vertical') {
-        flushProducts();
-        blocks.push({ kind: 'products', items: [item] });
-      } else {
+      if (mode === 'horizontal') {
         pending.push(item);
         if (pending.length === 3) flushProducts();
+      } else {
+        pending.push(item);
       }
     } else if (isDigitalSeriesMore(item)) {
       if (mode === 'horizontal') {
@@ -396,8 +487,8 @@ function buildBlocks(items: DiscoveryEntity[], mode: DisplayMode): DigitalBlock[
 }
 
 const displayBlocks = computed(() => buildBlocks(products.value, displayMode.value));
-const tabDisplayBlocks = computed(() => buildBlocks(tabItems.value, 'vertical'));
-const dynamicCategoryBlocks = computed(() => buildBlocks(dynamicCategoryItems.value, 'vertical'));
+const tabDisplayBlocks = computed(() => buildBlocks(tabItems.value, displayMode.value));
+const dynamicCategoryBlocks = computed(() => buildBlocks(dynamicCategoryItems.value, displayMode.value));
 
 function blockKey(block: DigitalBlock, index: number): string {
   if (block.entity) return `entity-${getEntityKey(block.entity, index)}`;
@@ -439,7 +530,6 @@ async function loadDigitalConfig() {
   searchQuery.value = '';
   clearDynamicCategoryView();
   if (nextTab.category) activeMode.value = 'category';
-  else displayMode.value = 'vertical';
   resetProducts();
   resetTabItems();
   if (nextTab.category) await loadSide(true);
@@ -457,7 +547,6 @@ function selectDigitalTab(tab: DigitalTab) {
   searchQuery.value = '';
   clearDynamicCategoryView();
   if (tab.category) activeMode.value = 'category';
-  else displayMode.value = 'vertical';
   resetProducts();
   resetTabItems();
   if (tab.category) void loadSide(true);
@@ -823,9 +912,39 @@ onBeforeUnmount(() => { productObserver?.disconnect(); dynamicCategoryObserver?.
 .digital-side-item { display: flex; align-items: center; gap: 11px; min-height: 58px; width: 100%; padding: 8px 10px; border: 0; border-left: 3px solid transparent; border-radius: 8px; background: transparent; color: var(--text-primary); cursor: pointer; font: inherit; text-align: left; }
 .digital-side-item:hover { background: var(--surface-hover); }
 .digital-side-item.active { border-left-color: var(--brand-primary); background: var(--brand-soft, rgba(16, 185, 129, .1)); color: var(--brand-primary); }
-.digital-side-logo, .digital-side-logo-fallback { flex: 0 0 38px; width: 38px; height: 38px; border-radius: 8px; overflow: hidden; }
-.digital-side-logo :deep(img) { width: 100%; height: 100%; object-fit: contain; }
-.digital-side-logo-fallback { display: grid; place-items: center; background: var(--surface-hover); color: var(--text-tertiary); }
+.digital-side-logo,
+.digital-side-logo-fallback {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent !important;
+}
+.digital-side-logo :deep(.app-image-container),
+.digital-side-logo.app-image-container {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+.digital-side-logo :deep(img),
+.digital-side-logo-img {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  object-fit: contain;
+  background: transparent !important;
+}
+:root:not([data-theme='dark']) .digital-side-logo :deep(img),
+:root:not([data-theme='dark']) .digital-side-logo-img {
+  mix-blend-mode: multiply;
+}
+.digital-side-logo-fallback {
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-tertiary);
+}
 .digital-side-hot-logo { color: var(--warning, #f59e0b); font-size: 20px; }
 .digital-side-item.active .digital-side-hot-logo { color: var(--brand-primary); }
 .digital-side-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
@@ -834,14 +953,69 @@ onBeforeUnmount(() => { productObserver?.disconnect(); dynamicCategoryObserver?.
 .digital-content, .digital-server-content { min-width: 0; min-height: 0; height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; background: var(--surface-hover); }
 .digital-server-content { flex: 1 1 0; }
 .digital-server-list { display: flex; flex-direction: column; gap: 14px; max-width: 1280px; padding: 16px 22px 28px; margin: 0 auto; }
-.digital-server-products { display: grid; gap: 12px; }
+.digital-content-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 22px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.toolbar-left {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.toolbar-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.toolbar-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.view-switcher {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--surface-hover);
+  border-radius: 8px;
+  gap: 2px;
+}
+.view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.view-btn:hover {
+  color: var(--text-primary);
+}
+.view-btn.active {
+  background: var(--surface);
+  color: var(--brand-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+.digital-server-products { display: grid; gap: 14px; }
 .digital-result-list { display: flex; flex-direction: column; gap: 14px; max-width: 1280px; padding: 16px 22px 28px; margin: 0 auto; }
 .series-title { padding: 4px 3px 0; }
 .series-title h3 { margin: 0; color: var(--text-primary); font-size: 17px; }
 .series-more { display: inline-flex; align-items: center; justify-content: space-between; gap: 9px; min-height: 34px; align-self: flex-start; padding: 0 3px; border: 0; background: transparent; color: var(--brand-primary); cursor: pointer; font: inherit; font-size: 12px; }
 .series-more.inline { align-self: center; padding: 0 10px; }
-.series-products { display: grid; gap: 12px; }
-.series-products.vertical { grid-template-columns: minmax(0, 1fr); }
+.series-products { display: grid; gap: 14px; }
+.series-products.grid, .digital-server-products.grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.series-products.vertical, .digital-server-products.vertical { grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .series-products.horizontal { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
 .series-products.horizontal .series-more { grid-column: 1 / -1; justify-self: end; }
 .digital-pagination { min-height: 44px; display: grid; place-items: center; color: var(--text-tertiary); font-size: 12px; }

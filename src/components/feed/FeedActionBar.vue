@@ -135,26 +135,36 @@ function shareFeed() {
 .feed-action-bar {
   display: flex;
   align-items: center;
-  justify-content: space-around;
+  justify-content: space-between;
   border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
   padding-top: 8px;
   margin-top: 10px;
+  width: 100%;
 }
 
 .action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 5px;
   color: var(--text-tertiary);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  padding: 6px 16px;
+  padding: 6px 6px;
   border-radius: 18px;
   background: transparent;
   border: none;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.2s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.action-btn span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .action-btn:hover {

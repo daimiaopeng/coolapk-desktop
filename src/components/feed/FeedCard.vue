@@ -48,6 +48,7 @@
       :message="feed.message || feed.message_raw_output"
       :username="feed.username || feed.userInfo?.username"
       :force-expanded="detailMode"
+      :max-lines="maxLines"
     />
 
     <VoteCard v-if="feed.vote" :feed-id="feed.id" :vote="feed.vote" />
@@ -250,6 +251,7 @@ const props = defineProps<{
   detailMode?: boolean;
   autoOpenComments?: boolean;
   cloudFavorite?: boolean;
+  maxLines?: number;
 }>();
 
 const authorUid = computed(() => {

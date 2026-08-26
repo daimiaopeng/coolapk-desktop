@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDigitalProductHot, getDigitalProductPrice, isDigitalProduct, isDigitalProductWished, isDigitalSeriesMore, isDigitalSeriesTitle } from '../digitalProduct';
+import { getDigitalProductHot, getDigitalProductPrice, getDigitalProductSpecs, getDigitalProductSubtitle, isDigitalProduct, isDigitalProductWished, isDigitalSeriesMore, isDigitalSeriesTitle } from '../digitalProduct';
 import { parseDigitalConfig, parseDigitalTabs, removeRedundantFirstDigitalTab, resolveDefaultDigitalTabKey } from '../digitalTabs';
 
 describe('数码服务端配置和产品字段', () => {
@@ -24,9 +24,28 @@ describe('数码服务端配置和产品字段', () => {
     expect(isDigitalSeriesMore({ entityTemplate: 'productGroupMore', title: '查看更多' })).toBe(true);
     expect(isDigitalProduct({ entityTemplate: 'vertical_product', id: 1, title: '设备' })).toBe(true);
     expect(isDigitalProduct({ product_id: 2, title: '兼容产品卡' })).toBe(true);
+    expect(isDigitalProduct({ entityType: 'card', entityTemplate: 'productTimelineListCard', title: '上市新品', entities: [{ entityTemplate: 'productTimeline', id: 1, title: '新设备' }] })).toBe(false);
     expect(getDigitalProductPrice({ price_currency: '¥', price_min: 1999, price_max: 2999 })).toBe('¥1999-2999');
     expect(getDigitalProductHot({ hot_num: 12000 })).toBe('1.2万');
     expect(isDigitalProductWished({ userAction: { follow: 1 } })).toBe(true);
+  });
+
+  it('智能拆分规格参数并在副标题与规格重复时进行去重', () => {
+    const productWithDup = {
+      title: '联想AI平板拯救者Y700无极',
+      sub_title: '骁龙8至尊版 · 8.4英寸 · OLED · 165Hz',
+      product_specs: '骁龙8至尊版|8.4英寸|OLED|165Hz',
+    };
+    expect(getDigitalProductSpecs(productWithDup)).toEqual(['骁龙8至尊版', '8.4英寸', 'OLED', '165Hz']);
+    expect(getDigitalProductSubtitle(productWithDup)).toBe('');
+
+    const productWithUniqueSubtitle = {
+      title: '旗舰平板',
+      sub_title: '全新一代电竞小平板',
+      product_specs: ['骁龙8至尊版', '8.4英寸', '165Hz'],
+    };
+    expect(getDigitalProductSpecs(productWithUniqueSubtitle)).toEqual(['骁龙8至尊版', '8.4英寸', '165Hz']);
+    expect(getDigitalProductSubtitle(productWithUniqueSubtitle)).toBe('全新一代电竞小平板');
   });
 
   it('保留服务端选中页、可见性、网页地址和子栏目实体', () => {

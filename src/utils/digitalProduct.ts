@@ -49,6 +49,8 @@ export function isDigitalSeriesMore(entity: DiscoveryEntity): boolean {
 export function isDigitalProduct(entity: DiscoveryEntity): boolean {
   const template = getDigitalEntityTemplate(entity);
   if (isDigitalSeriesTitle(entity) || isDigitalSeriesMore(entity)) return false;
+  // 服务端的 productTimelineListCard 是商品集合，真实商品放在 entities 中，不能把外层卡片当成单个商品渲染。
+  if (Array.isArray(entity.entities) && entity.entities.length > 0) return false;
   return template === 'product' || template.includes('vertical_product') || template.includes('horizon_product') || template.includes('product_') || template.includes('product') || Boolean(entity.productId ?? entity.product_id);
 }
 
@@ -69,14 +71,23 @@ export function getDigitalProductImage(entity: DiscoveryEntity): string {
 
 export function getDigitalProductSpecs(entity: DiscoveryEntity): string[] {
   const rawSpecs = firstValue(entity, ['productSpecs', 'product_specs', 'tagArr', 'tag_arr']);
-  if (Array.isArray(rawSpecs)) return rawSpecs.map((item) => String(item).trim()).filter(Boolean).slice(0, 4);
-  if (typeof rawSpecs === 'string') return rawSpecs.split(/[|,，、]/).map((item) => item.trim()).filter(Boolean).slice(0, 4);
+  if (Array.isArray(rawSpecs)) return rawSpecs.map((item) => String(item).trim()).filter(Boolean).slice(0, 6);
+  if (typeof rawSpecs === 'string') return rawSpecs.split(/[|,，、·]/).map((item) => item.trim()).filter(Boolean).slice(0, 6);
   return [];
 }
 
 export function getDigitalProductSubtitle(entity: DiscoveryEntity): string {
   const subtitle = textValue(entity, ['subTitle', 'sub_title', 'description', 'configName', 'config_name', 'categoryName', 'category_name', 'secondCategoryName', 'second_category_name']);
-  return subtitle || getDigitalProductSpecs(entity).join(' · ');
+  if (!subtitle) return '';
+  const specs = getDigitalProductSpecs(entity);
+  if (specs.length > 0) {
+    const normSub = subtitle.replace(/\s+/g, '').toLowerCase();
+    const normSpecs = specs.join('').replace(/\s+/g, '').toLowerCase();
+    if (normSub === normSpecs || (specs.length >= 2 && specs.every((s) => normSub.includes(s.replace(/\s+/g, '').toLowerCase())))) {
+      return '';
+    }
+  }
+  return subtitle;
 }
 
 export function getDigitalProductRating(entity: DiscoveryEntity): string {

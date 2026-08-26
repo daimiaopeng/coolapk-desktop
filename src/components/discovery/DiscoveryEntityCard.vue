@@ -1,5 +1,7 @@
 <template>
-  <FeedCard v-if="isFeed" :feed="entity as any" />
+  <div v-if="isFeed" :class="['discovery-feed-card-wrapper', { 'is-compact': compact }]">
+    <FeedCard :feed="entity as any" :max-lines="compact ? 6 : undefined" />
+  </div>
 
   <article v-else-if="isCarousel" :class="['discovery-carousel-card', { 'is-compact': compact }]">
     <div class="carousel-viewport">
@@ -14,7 +16,7 @@
         <span v-for="(_, index) in carouselItems" :key="index" :class="{ active: index === carouselIndex }"></span>
       </div>
     </div>
-    <div class="discovery-card-copy" @click="emitOpen">
+    <div v-if="title || carouselTitle || subtitle || text" class="discovery-card-copy" @click="emitOpen">
       <strong>{{ title || carouselTitle || '精选内容' }}</strong>
       <span v-if="subtitle || text">{{ subtitle || text }}</span>
     </div>
@@ -51,29 +53,45 @@
         v-for="(child, index) in entity.entities"
         :key="getEntityKey(child, index)"
         type="button"
-        class="discovery-pill-btn"
-        @click="$emit('open', child)"
+        :class="['discovery-pill-btn', { 'is-active': isPillActive(child, index) }]"
+        @click="handlePillClick(child, index)"
       >
         <AppImage v-if="getEntityImage(child)" :src="getEntityImage(child)" fit="cover" image-class="discovery-pill-image" />
-        <span v-else class="discovery-pill-fallback"><i :class="getEntityFallbackIcon(child)"></i></span>
         <span>{{ child.title || child.productGoodsTitle || child.product_goods_title || child.goodsTitle || child.goods_title || child.name || child.label || child.buttonText || child.button_text || child.text || child.subTitle || '内容' }}</span>
       </button>
     </div>
   </section>
 
   <section v-else-if="isIconGrid" class="discovery-icon-grid">
-    <header v-if="title || subtitle" class="discovery-group-header">
+    <header v-if="title || subtitle || canExpandIconGrid" class="discovery-group-header">
       <div>
         <h3 v-if="title">{{ title }}</h3>
         <p v-if="subtitle">{{ subtitle }}</p>
       </div>
-      <button v-if="route" type="button" @click="emitOpen">更多 <i class="fas fa-chevron-right"></i></button>
+      <div class="discovery-header-actions">
+        <button v-if="canExpandIconGrid" type="button" class="discovery-expand-btn" @click="isIconGridExpanded = !isIconGridExpanded">
+          <span>{{ isIconGridExpanded ? '收起' : `展开全部 (${props.entity.entities?.length || 0})` }}</span>
+          <i :class="isIconGridExpanded ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+        </button>
+        <button v-if="route" type="button" @click="emitOpen">更多 <i class="fas fa-chevron-right"></i></button>
+      </div>
     </header>
-    <div class="discovery-icon-grid-items">
-      <button v-for="(child, index) in entity.entities" :key="getEntityKey(child, index)" type="button" class="discovery-icon-grid-item" @click="$emit('open', child)">
-        <AppImage v-if="getEntityImage(child)" :src="getEntityImage(child)" fit="contain" image-class="discovery-icon-grid-image" />
-        <span v-else :class="['discovery-icon-grid-fallback', { 'is-derived': getEntityFallbackIcon(child) !== 'fas fa-link' }]"><i :class="getEntityFallbackIcon(child)"></i></span>
-        <span>{{ child.title || child.name || child.label || child.buttonText || child.button_text || '栏目' }}</span>
+    <div :class="['discovery-icon-grid-items', { 'is-category-grid': !isBrandWall }]">
+      <button
+        v-for="(child, index) in displayedIconGridEntities"
+        :key="getEntityKey(child, index)"
+        type="button"
+        :class="['discovery-icon-grid-item', { 'is-selected': isChildSelected(child), 'is-category-item': !isBrandWall }]"
+        :title="getBrandName(child)"
+        :aria-label="getBrandName(child)"
+        @click="$emit('open', child)"
+      >
+        <div class="discovery-icon-inner">
+          <AppImage v-if="getEntityImage(child)" :src="getEntityImage(child)" fit="contain" image-class="discovery-icon-grid-image" />
+          <span v-else :class="['discovery-icon-grid-fallback', { 'is-derived': getEntityFallbackIcon(child) !== 'fas fa-link' }]"><i :class="getEntityFallbackIcon(child)"></i></span>
+        </div>
+        <span v-if="!isBrandWall" class="discovery-category-label">{{ getBrandName(child) }}</span>
+        <span v-else class="discovery-brand-tooltip">{{ getBrandName(child) }}</span>
       </button>
     </div>
   </section>
@@ -87,7 +105,7 @@
       <button v-if="route" type="button" @click="emitOpen">更多 <i class="fas fa-chevron-right"></i></button>
     </header>
     <div class="discovery-product-group-items">
-      <DigitalProductCard v-for="(child, index) in entity.entities" :key="getEntityKey(child, index)" :product="child" layout="compact" @open="$emit('open', $event)" />
+      <DigitalProductCard v-for="(child, index) in entity.entities" :key="getEntityKey(child, index)" :product="child" layout="grid" @open="$emit('open', $event)" />
     </div>
   </section>
 
@@ -96,7 +114,23 @@
     <button v-if="route" type="button" @click="emitOpen">更多 <i class="fas fa-chevron-right"></i></button>
   </section>
 
-  <section v-else-if="hasChildren" :class="['discovery-entity-group', { 'is-grid': isGrid, 'is-compact-grid': isCompactGrid, 'is-sort-group': isSortGroup, 'is-review-group': isReviewGroup }]">
+  <!-- 紧凑胶囊分段排序条 (如: 热度 / 评分 / 最新) -->
+  <div v-else-if="isSortGroup" class="discovery-sort-bar-wrapper">
+    <div class="discovery-sort-pill-bar" role="group" aria-label="排序规则">
+      <button
+        v-for="(child, index) in entity.entities"
+        :key="getEntityKey(child, index)"
+        type="button"
+        :class="['sort-pill-btn', { 'is-active': isSortItemActive(child, index) }]"
+        @click="handleSortClick(child, index)"
+      >
+        <i :class="getSortIcon(child)"></i>
+        <span>{{ child.title || child.name || child.label || '排序' }}</span>
+      </button>
+    </div>
+  </div>
+
+  <section v-else-if="hasChildren" :class="['discovery-entity-group', { 'is-grid': isGrid, 'is-compact-grid': isCompactGrid, 'is-review-group': isReviewGroup }]">
     <header v-if="title || subtitle" class="discovery-group-header">
       <div>
         <h3 v-if="title">{{ title }}</h3>
@@ -224,6 +258,39 @@ const isGrid = computed(() => isGridCard(props.entity) || (Array.isArray(props.e
 const templateName = computed(() => `${String(props.entity.entityTemplate || '').toLowerCase()} ${String(props.entity.entityType || '').toLowerCase()}`.trim());
 const isSelectorLinks = computed(() => hasChildren.value && templateName.value.includes('selectorlink'));
 const isIconGrid = computed(() => hasChildren.value && (templateName.value.includes('iconlinkgrid') || templateName.value.includes('icongrid') || templateName.value.includes('icontablinkgrid') || templateName.value.includes('tablinkgrid')));
+const isIconGridExpanded = ref(false);
+const iconGridThreshold = 20;
+const canExpandIconGrid = computed(() => isIconGrid.value && Array.isArray(props.entity.entities) && props.entity.entities.length > iconGridThreshold);
+const displayedIconGridEntities = computed(() => {
+  if (!Array.isArray(props.entity.entities)) return [];
+  if (canExpandIconGrid.value && !isIconGridExpanded.value) {
+    return props.entity.entities.slice(0, iconGridThreshold);
+  }
+  return props.entity.entities;
+});
+
+function getBrandName(child: DiscoveryEntity): string {
+  return String(child.title || child.name || child.label || child.buttonText || child.button_text || '').trim() || '品牌';
+}
+
+function isChildSelected(child: DiscoveryEntity): boolean {
+  return Boolean(child.selected === 1 || child.selected === true || child.selected === '1');
+}
+
+/** 判断当前 IconGrid 是否为纯品牌墙（否则为品类导航入口） */
+const isBrandWall = computed(() => {
+  if (!isIconGrid.value) return false;
+  const parentText = `${title.value} ${subtitle.value} ${templateName.value}`.toLowerCase();
+  if (parentText.includes('brand') || parentText.includes('品牌')) return true;
+  const children = props.entity.entities;
+  if (!Array.isArray(children) || children.length === 0) return false;
+  const brandCount = children.filter((child) => {
+    const type = `${String(child.entityType || '')} ${String(child.entityTemplate || '')}`.toLowerCase();
+    const url = String(child.url || '').toLowerCase();
+    return type.includes('brand') || url.includes('/brand') || url.includes('brand_id');
+  }).length;
+  return brandCount >= Math.min(children.length, 3);
+});
 const isTitleCard = computed(() => {
   const template = templateName.value;
   return !hasChildren.value && (template === 'title' || template.includes('sectiontitle') || template.includes('cardtitle') || template.includes('simpletitle') || template.includes('productgrouptitle') || template.includes('product_group_title') || template.includes('series_title') || template.includes('seriestitle'));
@@ -239,6 +306,46 @@ const isCompactGrid = computed(() => isGrid.value && (
   || templateName.value.includes('topicgrid')
 ));
 const isSortGroup = computed(() => title.value.trim() === '排序规则' || templateName.value.includes('sort'));
+const activeSortIndex = ref(0);
+
+function isSortItemActive(child: DiscoveryEntity, index: number): boolean {
+  if (child.selected === 1 || child.selected === true || child.selected === '1') return true;
+  return activeSortIndex.value === index;
+}
+
+function getSortIcon(entity: DiscoveryEntity): string {
+  const itemTitle = String(entity.title || entity.name || entity.label || '').trim();
+  if (itemTitle.includes('热度') || itemTitle.includes('最热')) return 'fas fa-fire';
+  if (itemTitle.includes('评分') || itemTitle.includes('好评')) return 'fas fa-star';
+  if (itemTitle.includes('最新') || itemTitle.includes('发布') || itemTitle.includes('时间')) return 'fas fa-clock';
+  if (itemTitle.includes('价格') || itemTitle.includes('从低到高') || itemTitle.includes('从高到低')) return 'fas fa-tag';
+  return getEntityFallbackIcon(entity) || 'fas fa-arrow-down-short-wide';
+}
+
+function handleSortClick(child: DiscoveryEntity, index: number) {
+  activeSortIndex.value = index;
+  emit('open', child);
+}
+
+const activePillIndex = ref(0);
+
+function isPillActive(child: DiscoveryEntity, index: number): boolean {
+  if (child.selected === 1 || child.selected === true || child.selected === '1') return true;
+  return activePillIndex.value === index;
+}
+
+function handlePillClick(child: DiscoveryEntity, index: number) {
+  activePillIndex.value = index;
+  emit('open', child);
+}
+
+function handleHorizontalScroll(event: WheelEvent) {
+  const target = event.currentTarget as HTMLElement;
+  if (target && event.deltaY) {
+    target.scrollLeft += event.deltaY;
+  }
+}
+
 const isReviewGroup = computed(() => {
   const groupTitle = title.value.trim();
   return groupTitle.includes('酷友点评') || groupTitle.includes('酷友评论') || templateName.value.includes('review');
@@ -316,38 +423,126 @@ async function toggleDyhFollow() {
 
 .discovery-group-header h3,
 .discovery-group-header p { margin: 0; }
-.discovery-group-header h3 { color: var(--text-primary); font-size: 17px; font-weight: 700; }
+.discovery-group-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 700;
+}
+.discovery-group-header h3::before {
+  content: '';
+  display: inline-block;
+  width: 3.5px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--brand-primary, #10b981);
+}
 .discovery-group-header p { color: var(--text-tertiary); font-size: 13px; margin-top: 3px; }
 .discovery-group-header button { border: 0; background: none; color: var(--brand-primary); cursor: pointer; font-size: 13.5px; font-weight: 500; }
 .discovery-group-header button:hover { text-decoration: underline; }
 
 .discovery-group-items {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  padding: 4px 14px 14px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  padding: 4px 14px 16px;
+  align-items: stretch;
 }
-.discovery-product-group-items { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 4px 14px 14px; }
+.discovery-product-group-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding: 4px 14px 14px; }
 .discovery-entity-group.is-grid .discovery-group-items {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 .discovery-entity-group.is-compact-grid .discovery-group-items { gap: 10px; }
-.goods-collection-items { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 4px 14px 14px; }
+.goods-collection-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; padding: 4px 14px 14px; }
 
-.discovery-entity-group.is-sort-group { position: relative; padding-bottom: 4px; border-color: rgba(16, 185, 129, .16); background: linear-gradient(180deg, rgba(16, 185, 129, .045), var(--surface) 58%); box-shadow: 0 6px 18px rgba(16, 80, 58, .04); }
-.discovery-entity-group.is-sort-group .discovery-group-header { padding: 16px 16px 11px; }
-.discovery-entity-group.is-sort-group .discovery-group-header h3 { display: flex; align-items: center; gap: 9px; font-size: 16px; letter-spacing: .01em; }
-.discovery-entity-group.is-sort-group .discovery-group-header h3::before { width: 4px; height: 18px; border-radius: 4px; background: linear-gradient(180deg, #34d399, #059669); content: ''; }
-.discovery-entity-group.is-sort-group .discovery-group-items { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 0 14px 12px; }
-.discovery-entity-group.is-sort-group .discovery-generic-card { min-height: 72px; padding: 11px 12px; border-color: rgba(16, 185, 129, .12); border-radius: 12px; background: var(--surface-elevated, var(--surface)); box-shadow: 0 2px 7px rgba(15, 23, 42, .045); transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background-color .18s ease; }
-.discovery-entity-group.is-sort-group .discovery-generic-card:hover { transform: translateY(-2px); border-color: rgba(16, 185, 129, .42); background: var(--surface); box-shadow: 0 8px 18px rgba(16, 100, 73, .1); }
-.discovery-entity-group.is-sort-group .discovery-generic-icon { width: 36px; height: 36px; flex-basis: 36px; border-radius: 10px; font-size: 16px; }
-.discovery-entity-group.is-sort-group .discovery-generic-card:nth-child(1) .discovery-generic-icon { background: rgba(249, 115, 22, .12); color: #f97316; }
-.discovery-entity-group.is-sort-group .discovery-generic-card:nth-child(2) .discovery-generic-icon { background: rgba(234, 179, 8, .14); color: #d69e00; }
-.discovery-entity-group.is-sort-group .discovery-generic-card:nth-child(3) .discovery-generic-icon { background: rgba(59, 130, 246, .12); color: #3b82f6; }
-.discovery-entity-group.is-sort-group .discovery-generic-copy { gap: 0; }
-.discovery-entity-group.is-sort-group .discovery-generic-copy strong { font-size: 14px; font-weight: 700; }
-.discovery-entity-group.is-sort-group .discovery-card-arrow { display: grid; place-items: center; width: 22px; height: 22px; margin-left: auto; border-radius: 50%; background: var(--surface-hover); color: var(--text-tertiary); font-size: 10px; }
+/* 资讯群组等高卡片与超长展开控制 */
+.discovery-feed-card-wrapper {
+  width: 100%;
+  position: relative;
+}
+.discovery-feed-card-wrapper.is-compact {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.discovery-feed-card-wrapper.is-compact :deep(.feed-card) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 14px 16px 8px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  box-sizing: border-box;
+}
+.discovery-feed-card-wrapper.is-compact :deep(.feed-image-grid) {
+  max-height: 160px;
+  overflow: hidden;
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+.discovery-feed-card-wrapper.is-compact :deep(.feed-image-grid .grid-item) {
+  max-height: 160px;
+}
+.discovery-feed-card-wrapper.is-compact :deep(.feed-image-grid .grid-img) {
+  max-height: 160px;
+  object-fit: cover;
+}
+.discovery-feed-card-wrapper.is-compact :deep(.feed-action-bar) {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.discovery-sort-bar-wrapper {
+  display: flex;
+  align-items: center;
+  margin: 2px 0 6px;
+  padding: 0 2px;
+}
+
+.discovery-sort-pill-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background-color: var(--background-secondary, var(--surface-hover));
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-pill, 16px);
+}
+
+.sort-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-pill, 14px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.sort-pill-btn i {
+  font-size: 11px;
+}
+
+.sort-pill-btn:hover {
+  color: var(--text-primary);
+}
+
+.sort-pill-btn.is-active {
+  background-color: var(--surface);
+  color: var(--brand-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
 
 .discovery-entity-group.is-review-group { position: relative; padding-bottom: 4px; border-color: rgba(16, 185, 129, .14); background: linear-gradient(180deg, rgba(16, 185, 129, .035), var(--surface) 42%); box-shadow: 0 7px 20px rgba(15, 82, 61, .045); }
 .discovery-entity-group.is-review-group .discovery-group-header { padding: 16px 16px 12px; }
@@ -369,64 +564,308 @@ async function toggleDyhFollow() {
   padding: 4px 16px 14px;
 }
 .discovery-icon-grid {
-  padding-bottom: 14px;
+  padding-bottom: 8px;
   background: var(--surface);
   border: 1px solid var(--border-light, rgba(0, 0, 0, .08));
   border-radius: var(--radius-card, 12px);
 }
-.discovery-icon-grid-items { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; padding: 4px 14px 0; }
-.discovery-icon-grid-item { display: flex; align-items: center; flex-direction: column; gap: 7px; min-width: 0; padding: 8px 5px; border: 0; border-radius: 9px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; }
-.discovery-icon-grid-item:hover { background: var(--surface-hover); color: var(--brand-primary); }
-.discovery-icon-grid-image, .discovery-icon-grid-fallback { width: 42px; height: 42px; border-radius: 10px; overflow: hidden; }
-.discovery-icon-grid-image :deep(img) { width: 100%; height: 100%; object-fit: contain; }
-.discovery-icon-grid-fallback { display: grid; place-items: center; background: var(--surface-hover); color: var(--text-tertiary); }
-.discovery-icon-grid-fallback.is-derived { background: var(--brand-soft, rgba(16, 185, 129, .1)); color: var(--brand-primary); }
-.discovery-icon-grid-item > span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.discovery-section-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 34px; padding: 4px 3px; }
-.discovery-section-title h3 { margin: 0; color: var(--text-primary); font-size: 17px; }
+.discovery-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.discovery-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: var(--surface-hover);
+  color: var(--brand-primary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+.discovery-expand-btn:hover {
+  background: var(--brand-soft, rgba(16, 185, 129, 0.12));
+}
+.discovery-icon-grid-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 8px;
+  padding: 4px 14px 12px;
+}
+.discovery-icon-grid-items.is-category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 10px;
+  padding: 8px 14px 16px;
+  align-items: stretch;
+}
+.discovery-icon-grid-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 44px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  transition: all 0.18s ease;
+}
+.discovery-icon-grid-item.is-category-item {
+  width: 100%;
+  max-width: none;
+  height: auto;
+  min-height: 72px;
+  padding: 6px 4px 4px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  border-radius: 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  box-sizing: border-box;
+}
+.discovery-icon-grid-item.is-category-item:hover {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.discovery-icon-grid-item.is-category-item .discovery-icon-inner {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1);
+}
+.discovery-icon-grid-item.is-category-item .discovery-icon-grid-image :deep(img) {
+  width: 48px;
+  height: 48px;
+  max-width: 48px;
+  max-height: 48px;
+  object-fit: cover;
+  border-radius: 11px;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.2s ease;
+}
+.discovery-category-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+.discovery-icon-grid-item.is-category-item:hover .discovery-category-label {
+  color: var(--brand-primary);
+}
+.discovery-icon-grid-item.is-category-item:hover .discovery-icon-grid-image :deep(img) {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+}
+.discovery-icon-grid-item:hover {
+  background: var(--surface-hover);
+  z-index: 10;
+}
+.discovery-icon-grid-item.is-selected {
+  background: var(--brand-soft, rgba(16, 185, 129, 0.12));
+}
+.discovery-icon-inner {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.18s ease;
+}
+.discovery-icon-grid-item:hover .discovery-icon-inner {
+  transform: scale(1.08);
+}
+.discovery-icon-grid-image, .discovery-icon-grid-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.discovery-icon-grid-image :deep(img) {
+  max-width: 48px;
+  max-height: 26px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.discovery-icon-grid-fallback {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--surface-hover);
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+.discovery-icon-grid-fallback.is-derived {
+  background: var(--brand-soft, rgba(16, 185, 129, 0.1));
+  color: var(--brand-primary);
+}
+.discovery-brand-tooltip {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  padding: 4px 9px;
+  border-radius: 5px;
+  background: rgba(23, 25, 28, 0.92);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s ease;
+  z-index: 30;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.discovery-brand-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: rgba(23, 25, 28, 0.92) transparent transparent transparent;
+}
+.discovery-icon-grid-item:hover .discovery-brand-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+.discovery-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 32px;
+  padding: 6px 4px;
+  margin-top: 2px;
+}
+.discovery-section-title h3 {
+  position: relative;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.discovery-section-title h3::before {
+  content: '';
+  display: inline-block;
+  width: 3.5px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--brand-primary, #10b981);
+}
 .discovery-section-title button { border: 0; background: transparent; color: var(--brand-primary); cursor: pointer; font: inherit; font-size: 12px; }
+.discovery-selector-card {
+  padding: 2px 0 6px;
+  background: transparent;
+}
 .discovery-selector-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 10px;
+  gap: 6px 8px;
   align-items: center;
-  padding-top: 4px;
 }
 .discovery-pill-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 16px;
-  border: 1px solid var(--border-light, rgba(0, 0, 0, .08));
-  border-radius: var(--radius-pill, 9999px);
-  background: var(--background-secondary, #f5f7f8);
-  color: var(--text-secondary);
-  font-size: 13.5px;
+  justify-content: center;
+  height: 30px;
+  padding: 0 13px;
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  border-radius: 15px;
+  background: var(--background-secondary, rgba(0, 0, 0, 0.045));
+  color: var(--text-primary);
+  font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: all .15s ease;
+  transition: all 0.15s ease;
   user-select: none;
   white-space: nowrap;
 }
 .discovery-pill-btn:hover {
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-  background: var(--brand-soft, #eaf8f0);
+  border-color: var(--brand-primary, #10b981);
+  color: var(--brand-primary, #10b981);
+  background: var(--brand-soft, rgba(16, 185, 129, 0.08));
+}
+.discovery-pill-btn.is-active {
+  background: var(--brand-primary, #10b981);
+  color: #ffffff;
+  font-weight: 600;
+  border-color: var(--brand-primary, #10b981);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 .discovery-pill-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.discovery-pill-image { width: 18px; height: 18px; flex: 0 0 18px; border-radius: 4px; object-fit: cover; }
-.discovery-pill-fallback { display: inline-grid; place-items: center; width: 18px; height: 18px; flex: 0 0 18px; color: var(--brand-primary); font-size: 13px; }
+.discovery-pill-image { width: 15px; height: 15px; flex: 0 0 15px; border-radius: 3px; object-fit: cover; margin-right: 5px; }
 
 .discovery-image-card { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease; }
-.discovery-carousel-card { overflow: hidden; }
-.carousel-viewport { position: relative; height: clamp(140px, 14vw, 220px); background: var(--surface-muted, #f5f6f7); }
+.discovery-carousel-card { overflow: hidden; border-radius: 12px; }
+.carousel-viewport {
+  position: relative;
+  height: clamp(120px, 12vw, 160px);
+  background: var(--surface-muted, #f5f6f7);
+  border-radius: 12px;
+  overflow: hidden;
+}
 .discovery-carousel-image { width: 100%; height: 100%; object-fit: cover; }
 .discovery-carousel-image :deep(img) { width: 100%; height: 100%; object-fit: cover; }
-.carousel-control { position: absolute; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border: 0; border-radius: 50%; background: rgba(0,0,0,.42); color: white; cursor: pointer; }
-.carousel-control.previous { left: 10px; }
-.carousel-control.next { right: 10px; }
-.carousel-dots { position: absolute; bottom: 10px; left: 50%; display: flex; gap: 5px; transform: translateX(-50%); }
-.carousel-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.6); }
+.carousel-control {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  color: white;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, background-color 0.15s ease;
+  z-index: 10;
+}
+.discovery-carousel-card:hover .carousel-control {
+  opacity: 1;
+  pointer-events: auto;
+}
+.carousel-control:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+.carousel-control.previous { left: 12px; }
+.carousel-control.next { right: 12px; }
+.carousel-dots { position: absolute; bottom: 10px; left: 50%; display: flex; gap: 5px; transform: translateX(-50%); z-index: 10; }
+.carousel-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.6); transition: all 0.2s ease; }
 .carousel-dots span.active { width: 16px; border-radius: 4px; background: white; }
 .discovery-image-card:hover,
 .discovery-generic-card:hover,
