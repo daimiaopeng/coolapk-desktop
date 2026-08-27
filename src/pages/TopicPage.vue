@@ -80,7 +80,9 @@
         <button
           v-for="opt in sortOptions"
           :key="opt.key"
+          type="button"
           :class="['filter-btn', { active: currentSort === opt.key }]"
+          :aria-pressed="currentSort === opt.key"
           @click="changeSort(opt.key)"
         >
           {{ opt.label }}
@@ -174,10 +176,11 @@ const followPending = ref(false);
 const currentSort = ref('default');
 const FALLBACK_SORT_OPTIONS: TopicSortOption[] = [
   { key: 'default', label: '默认', listType: '', url: '' },
-  { key: 'latest', label: '最新', listType: 'lastupdate_desc', url: '' },
-  { key: 'hot', label: '热度', listType: 'hot', url: '' },
+  { key: 'latest', label: '最新', listType: 'dateline_desc', url: '' },
+  { key: 'hot', label: '热度', listType: 'popular', url: '' },
 ];
 const sortOptions = ref<TopicSortOption[]>([...FALLBACK_SORT_OPTIONS]);
+let feedRequestId = 0;
 
 const activeTopicTab = computed(() => {
   return topicTabs.value.find((tab) => tab.key === activeTopicTabKey.value) || topicTabs.value[0] || null;
@@ -266,7 +269,7 @@ function normalizeSortOptions(rawOptions: unknown): TopicSortOption[] {
       const label = String(rawOption?.title || rawOption?.name || '').trim();
       const url = String(rawOption?.url || rawOption?.link || rawOption?.requestArg || rawOption?.request_arg || '').trim();
       const listType = readQueryParameter(url, 'listType') || (
-        /最新回复/.test(label) ? 'dateline_desc' : /最新/.test(label) ? 'lastupdate_desc' : /热度|热门/.test(label) ? 'hot' : ''
+        /最新回复|最新/.test(label) ? 'dateline_desc' : /热度|热门/.test(label) ? 'popular' : ''
       );
       return { key: normalizeSortKey(label, listType, index), label, listType, url };
     })
@@ -483,8 +486,9 @@ async function fetchTopicHeader() {
 }
 
 async function fetchFeeds(isLoadMore = false) {
-  if (!tag.value || feedsLoading.value || noMore.value) return;
-  
+  if (!tag.value || (isLoadMore && (feedsLoading.value || noMore.value))) return;
+
+  const requestId = ++feedRequestId;
   feedsLoading.value = true;
   try {
     const sortOption = sortOptions.value.find((option) => option.key === currentSort.value) || FALLBACK_SORT_OPTIONS[0];
@@ -509,6 +513,7 @@ async function fetchFeeds(isLoadMore = false) {
         lastItem,
         pageContext: JSON.stringify({ source: 'desktop-topic', tag: tag.value, tab: tab.pageName || tab.key }),
       });
+    if (requestId !== feedRequestId) return;
     applyServerSortOptions(res);
     const newFeeds = extractTopicRows(res);
     
@@ -533,9 +538,9 @@ async function fetchFeeds(isLoadMore = false) {
       if (itemsToAdd.length === 0) noMore.value = true;
     }
   } catch (err) {
-    console.warn('获取话题动态失败', err);
+    if (requestId === feedRequestId) console.warn('获取话题动态失败', err);
   } finally {
-    feedsLoading.value = false;
+    if (requestId === feedRequestId) feedsLoading.value = false;
   }
 }
 
