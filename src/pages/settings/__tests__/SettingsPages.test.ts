@@ -42,10 +42,13 @@ import SettingsLayout from '../SettingsLayout.vue';
 import ShortcutSettingsPage from '../ShortcutSettingsPage.vue';
 import { useSettingsStore } from '../../../stores/settings';
 
+const RouterViewStub = { template: '<div><slot :Component="null" /></div>' };
+const RouterLinkStub = { props: ['to'], template: '<a><slot /></a>' };
+
 function mountPage(component: Parameters<typeof mount>[0]) {
   const pinia = createPinia();
   setActivePinia(pinia);
-  const wrapper = mount(component, { global: { plugins: [pinia] } });
+  const wrapper = mount(component, { global: { plugins: [pinia], stubs: { 'router-link': RouterLinkStub, 'router-view': RouterViewStub } } });
   return { wrapper, settings: useSettingsStore(pinia) };
 }
 

@@ -18,7 +18,11 @@
       </aside>
 
       <section class="settings-content custom-scrollbar">
-        <router-view></router-view>
+        <router-view v-slot="{ Component }">
+          <Transition v-if="Component" name="page" mode="out-in" appear>
+            <component :is="Component" />
+          </Transition>
+        </router-view>
       </section>
     </div>
   </div>

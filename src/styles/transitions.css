@@ -9,6 +9,18 @@
   opacity: 0;
 }
 
+/* 页面切换使用短距离位移配合淡入淡出，降低首次加载数据时的视觉撕裂感。 */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity var(--duration-normal) var(--ease-default), transform var(--duration-normal) var(--ease-default);
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
 .slide-drawer-enter-active,
 .slide-drawer-leave-active {
   transition: transform var(--duration-slow) var(--ease-default), opacity var(--duration-slow) var(--ease-default);

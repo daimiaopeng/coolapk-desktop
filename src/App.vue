@@ -7,9 +7,12 @@
         大多数页面使用包含参数和查询条件的完整路径作为缓存标识，让不同详情拥有独立实例。
         私信页的 uid 只表示当前会话，不能据此重建整页，否则每次点会话都会重新加载列表。
       -->
-      <keep-alive>
-        <component :is="Component" :key="route.name === 'Messages' ? route.path : route.fullPath" />
-      </keep-alive>
+      <!-- 路由页面先退出再进入，避免首次请求触发大块 DOM 更新时出现画面撕裂。 -->
+      <Transition name="page" mode="out-in" appear>
+        <keep-alive>
+          <component :is="Component" :key="route.name === 'Messages' ? route.path : route.fullPath" />
+        </keep-alive>
+      </Transition>
     </router-view>
 
     <!-- 全局交互浮层 -->
