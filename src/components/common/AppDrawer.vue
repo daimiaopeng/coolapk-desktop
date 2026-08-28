@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
+import { onActivated, onDeactivated, onMounted, onUnmounted } from 'vue';
 
 const props = withDefaults(
   defineProps<{
@@ -56,13 +56,18 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => {
+function bindGlobalListeners() {
   window.addEventListener('keydown', handleKeydown);
-});
+}
 
-onUnmounted(() => {
+function unbindGlobalListeners() {
   window.removeEventListener('keydown', handleKeydown);
-});
+}
+
+onMounted(bindGlobalListeners);
+onActivated(bindGlobalListeners);
+onDeactivated(unbindGlobalListeners);
+onUnmounted(unbindGlobalListeners);
 </script>
 
 <style scoped>
