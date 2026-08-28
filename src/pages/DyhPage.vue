@@ -1,14 +1,5 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <div class="top-nav-bar">
-      <div class="nav-title-box">
-        <span class="nav-title">{{ dyhTitle }}</span>
-      </div>
-      <div class="nav-right-actions">
-        <i class="fas fa-search action-btn" @click="focusSearch" title="搜索看看号动态"></i>
-      </div>
-    </div>
-
     <div v-if="headerLoading" class="dyh-header-card skeleton-header">
       <LoadingState text="正在加载看看号信息..." />
     </div>
@@ -72,6 +63,17 @@
       </button>
     </div>
 
+    <EntityFilterBar
+      v-model:search-keyword="searchKeyword"
+      :target-title="dyhTitle"
+      scope-type="tag"
+      :scope-param="dyhTitle"
+      :show-sort="false"
+      :auto-navigate-search="false"
+      @search="handleDyhSearch"
+      @clear="handleDyhClear"
+    />
+
     <div v-if="feedsLoading && page === 1" class="loading-wrapper">
       <LoadingState text="正在获取看看号动态..." />
     </div>
@@ -85,7 +87,7 @@
     </div>
 
     <div v-else class="feed-list">
-      <FeedCard v-for="item in dyhFeeds" :key="item.id || item.ttype + item.uid" :feed="item" @deleted="handleFeedDeleted" />
+      <FeedCard v-for="item in dyhFeeds" :key="item.id || item.ttype + item.uid" :feed="item" :highlight-keyword="searchKeyword" @deleted="handleFeedDeleted" />
 
       <div class="pagination-footer">
         <LoadingState v-if="feedsLoading && page > 1" text="加载更多中..." />
@@ -105,6 +107,7 @@ import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+import EntityFilterBar from '../components/common/EntityFilterBar.vue';
 import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
@@ -207,14 +210,49 @@ async function toggleFollow() {
   }
 }
 
+const searchKeyword = ref('');
+
+function handleDyhSearch(payload: { keyword: string }) {
+  searchKeyword.value = payload.keyword.trim();
+  resetFeeds();
+  void fetchFeeds(false);
+}
+
+function handleDyhClear() {
+  if (!searchKeyword.value) return;
+  searchKeyword.value = '';
+  resetFeeds();
+  void fetchFeeds(false);
+}
+
 async function fetchFeeds(isLoadMore = false) {
   if (!dyhId.value || feedsLoading.value || noMore.value) return;
 
   feedsLoading.value = true;
   if (!isLoadMore) feedsError.value = false;
   try {
-    const res = await CoolapkTauriAPI.getDyhFeeds(dyhId.value, activeFeedTab.value, page.value);
-    const newFeeds = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    const kw = searchKeyword.value.trim();
+    let res: any;
+    if (kw) {
+      res = await CoolapkTauriAPI.searchByType({
+        searchType: 'feed',
+        query: kw,
+        page: page.value,
+        pageType: 'tag',
+        pageParam: dyhTitle.value || dyhId.value,
+        feedType: 'all',
+      });
+    } else {
+      res = await CoolapkTauriAPI.getDyhFeeds(dyhId.value, activeFeedTab.value, page.value);
+    }
+    const data = res?.data;
+    const newFeeds = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.entities)
+        ? data.entities
+        : Array.isArray(data?.rows)
+          ? data.rows
+          : [];
 
     if (newFeeds.length === 0) {
       noMore.value = true;
@@ -296,31 +334,6 @@ watch(dyhId, () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.top-nav-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-  margin-bottom: 2px;
-}
-
-.nav-title-box {
-  flex: 1;
-  text-align: center;
-}
-
-.nav-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--brand-primary, #10b981);
-}
-
-.action-btn {
-  font-size: 16px;
-  color: var(--text-secondary);
-  cursor: pointer;
 }
 
 .dyh-header-card {

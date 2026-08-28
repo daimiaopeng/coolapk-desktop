@@ -49,6 +49,7 @@
       :username="feed.username || feed.userInfo?.username"
       :force-expanded="detailMode"
       :max-lines="maxLines"
+      :highlight-keyword="highlightKeyword"
     />
 
     <VoteCard v-if="feed.vote" :feed-id="feed.id" :vote="feed.vote" />
@@ -203,7 +204,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, nextTick, onUnmounted } from 'vue';
+import { computed, ref, watch, onMounted, nextTick, onUnmounted, onActivated, onDeactivated } from 'vue';
 import { useRouter } from 'vue-router';
 import type { FeedItem } from '../../types/feed';
 import FeedHeader from './FeedHeader.vue';
@@ -239,6 +240,7 @@ import {
   getFeedRelationType,
 } from '../../utils/feedRelations';
 import { getUserUid } from '../../utils/userRoute';
+import { hasActiveTextSelection } from '../../utils/selection';
 
 const settingsStore = useSettingsStore();
 const appStore = useAppStore();
@@ -252,6 +254,7 @@ const props = defineProps<{
   autoOpenComments?: boolean;
   cloudFavorite?: boolean;
   maxLines?: number;
+  highlightKeyword?: string;
 }>();
 
 const authorUid = computed(() => {
@@ -793,11 +796,22 @@ const isCommentsFloatingVisible = ref(false);
 const floatingCollapseStyle = ref<{ bottom: string; right: string }>({ bottom: '32px', right: '32px' });
 
 function updateFloatingCollapse() {
-  if (hasBlockingOverlay.value || !showComments.value || props.detailMode || !cardRef.value || !comments.value.length) {
+  if (
+    hasBlockingOverlay.value ||
+    !showComments.value ||
+    props.detailMode ||
+    !cardRef.value ||
+    !cardRef.value.isConnected ||
+    !comments.value.length
+  ) {
     isCommentsFloatingVisible.value = false;
     return;
   }
   const rect = cardRef.value.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) {
+    isCommentsFloatingVisible.value = false;
+    return;
+  }
   const windowHeight = window.innerHeight;
   const windowWidth = window.innerWidth;
 
@@ -907,7 +921,31 @@ watch(hasBlockingOverlay, (isBlocked) => {
   }
 });
 
+watch(
+  () => router?.currentRoute?.value?.fullPath,
+  () => {
+    // 路由切换时立即隐藏浮动收起按钮
+    isCommentsFloatingVisible.value = false;
+    unbindScrollListener();
+  }
+);
+
+onDeactivated(() => {
+  // 页面离开 / 被 keep-alive 缓存休眠时隐藏
+  isCommentsFloatingVisible.value = false;
+  unbindScrollListener();
+});
+
+onActivated(() => {
+  // 页面重新恢复显示时如果评论仍然打开则重新计算
+  if (showComments.value && !props.detailMode) {
+    bindScrollListener();
+    void nextTick(updateFloatingCollapse);
+  }
+});
+
 onUnmounted(() => {
+  isCommentsFloatingVisible.value = false;
   unbindScrollListener();
 });
 
@@ -934,6 +972,8 @@ watch(
 
 function handleCardClick(e: MouseEvent) {
   if (props.detailMode) return;
+  // 选中文本准备复制时，不触发卡片点击（如展开/收起评论）
+  if (hasActiveTextSelection()) return;
   const target = e.target as HTMLElement;
   if (target.closest('a') || target.closest('button') || target.closest('.grid-item') || target.closest('.feed-video-card') || target.closest('.inline-comment-wrapper')) {
     return;

@@ -183,7 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue';
 
 defineOptions({
   name: 'MessagesPage'
@@ -233,6 +233,7 @@ let historyRequestSequence = 0;
 const MESSAGE_POLL_INTERVAL_MS = 10_000;
 let messagePollTimer: number | null = null;
 let messagePollingActive = false;
+let isMessagesPageActive = false;
 
 const inputText = ref('');
 const draftSaved = ref(false);
@@ -710,6 +711,21 @@ function handleMessageCountIncrease() {
   if (authStore.isLoggedIn) void loadSessions();
 }
 
+function activateMessagesPage() {
+  if (isMessagesPageActive) return;
+  isMessagesPageActive = true;
+  window.addEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
+  if (!sessions.value.length) void loadSessions();
+  startMessagePolling();
+}
+
+function deactivateMessagesPage() {
+  if (!isMessagesPageActive) return;
+  isMessagesPageActive = false;
+  window.removeEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
+  stopMessagePolling();
+}
+
 watch(
   () => `${getRouteTargetUid()}|${String(route.query.open || '')}`,
   (value, previousValue) => {
@@ -720,16 +736,27 @@ watch(
   },
 );
 
-onActivated(() => {
-  window.addEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
-  void loadSessions();
-  startMessagePolling();
-});
+// 页面由侧边栏宿主保持挂载，使用路由状态代替 keep-alive 的激活/停用生命周期。
+watch(
+  () => route.path,
+  (path) => {
+    if (path === '/messages') activateMessagesPage();
+    else deactivateMessagesPage();
+  },
+);
 
-onDeactivated(() => {
-  window.removeEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
-  stopMessagePolling();
-});
+watch(
+  () => authStore.user?.uid,
+  () => {
+    if (!authStore.isLoggedIn) {
+      sessions.value = [];
+      currentSession.value = null;
+      chatHistory.value = [];
+      return;
+    }
+    void loadSessions();
+  },
+);
 
 // --- 交互事件 ---
 const handleKeydown = (e: KeyboardEvent) => {
@@ -942,14 +969,17 @@ const sendMessage = async () => {
 onMounted(() => {
   restoreSessionsCache();
   window.addEventListener('coolapk-context-delete-message', handleDeleteMessageContext);
-  window.addEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
-  void loadSessions();
-  startMessagePolling();
+  if (route.path === '/messages') {
+    activateMessagesPage();
+  } else {
+    // 隐藏的私信页也读取会话列表，进入栏目时直接复用已准备好的内容。
+    void loadSessions();
+  }
 });
 
 onUnmounted(() => {
   window.removeEventListener('coolapk-context-delete-message', handleDeleteMessageContext);
-  window.removeEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
+  deactivateMessagesPage();
   stopMessagePolling();
   saveCurrentDraft();
 });

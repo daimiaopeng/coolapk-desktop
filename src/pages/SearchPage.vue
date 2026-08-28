@@ -3,14 +3,10 @@
     <div class="search-main-column">
       <div class="search-toolbar">
         <div class="search-toolbar-content">
-          <div class="page-header">
-            <h2 class="page-title">{{ queryStr ? `搜索结果：${queryStr}` : '搜索' }}</h2>
-          </div>
-
           <div ref="searchAreaRef" class="search-input-area">
             <div class="search-input-wrapper">
               <i class="fas fa-search search-input-icon"></i>
-              <input v-model="searchQuery" type="text" class="search-field" placeholder="搜索应用、动态、用户、话题..." @keydown.enter="doSearch(searchQuery)" @focus="onInputFocus" />
+              <input v-model="searchQuery" type="text" class="search-field" :placeholder="searchPlaceholder" @keydown.enter="doSearch(searchQuery)" @focus="onInputFocus" />
               <button v-if="searchQuery" type="button" class="clear-btn" aria-label="清空搜索" @click="clearSearch"><i class="fas fa-times"></i></button>
             </div>
             <div v-if="showHistory && !searchQuery.trim() && searchHistory.length" class="search-history-dropdown">
@@ -27,7 +23,7 @@
           </div>
         </div>
 
-        <div v-if="queryStr" class="search-tabs custom-scrollbar">
+        <div v-if="queryStr && !isTopicScopedSearch" class="search-tabs custom-scrollbar">
           <button v-for="tab in searchTabs" :key="tab.key" type="button" :class="['search-tab-item', { active: activeTab === tab.key }]" @click="switchTab(tab.key)">
             <i v-if="tab.icon" :class="tab.icon"></i><span>{{ tab.label }}</span>
           </button>
@@ -41,7 +37,7 @@
             <div v-else-if="activeState.error && !activeState.items.length" class="empty-wrapper"><EmptyState title="搜索失败" :description="activeState.error" /><button type="button" class="retry-button" @click="fetchTab(activeTab)">重试</button></div>
             <div v-else-if="!activeState.items.length" class="empty-wrapper"><EmptyState title="未搜索到相关结果" description="请尝试输入其他关键字重新搜索" /></div>
             <div v-else class="search-result-list">
-              <SearchResultItem v-for="(item, index) in activeState.items" :key="entityKey(item, index)" :entity="item" :show-follow="activeTab === 'user' || activeTab === 'users'" :followed="isUserFollowed(item)" @deleted="removeEntity" @search="doSearch" @toggle-follow="toggleFollow" />
+              <SearchResultItem v-for="(item, index) in activeState.items" :key="entityKey(item, index)" :entity="item" :highlight-keyword="queryStr" :show-follow="activeTab === 'user' || activeTab === 'users'" :followed="isUserFollowed(item)" @deleted="removeEntity" @search="doSearch" @toggle-follow="toggleFollow" />
               <div class="pagination-footer">
                 <LoadingState v-if="activeState.loadingMore" text="加载更多中..." />
                 <div v-else-if="activeState.cursor.noMore" class="no-more">没有更多结果了</div>
@@ -51,9 +47,12 @@
         </template>
 
         <section v-else class="search-welcome">
-          <p class="search-welcome-hint">输入关键词，搜索酷安的应用、游戏、动态、用户和话题</p>
-          <SearchHotListCard v-for="(item, index) in hotItems" :key="entityKey(item, index)" :entity="item" @search="doSearch" />
-          <EmptyState v-if="!hotItems.length" title="开始搜索" description="热门搜索由酷安接口动态提供" />
+          <p class="search-welcome-hint">{{ searchWelcomeHint }}</p>
+          <template v-if="!isTopicScopedSearch">
+            <SearchHotListCard v-for="(item, index) in hotItems" :key="entityKey(item, index)" :entity="item" @search="doSearch" />
+            <EmptyState v-if="!hotItems.length" title="开始搜索" description="热门搜索由酷安接口动态提供" />
+          </template>
+          <EmptyState v-else title="搜索话题帖子" description="输入关键词，搜索当前话题里的帖子" />
         </section>
       </div>
     </div>
@@ -77,10 +76,18 @@ import { extractSearchEntities, extractSearchTabs, getSearchEntityId, getSearchE
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const queryStr = ref(String(route.query.q || '').trim());
+
+function readQueryString(value: unknown): string {
+  return Array.isArray(value) ? String(value[0] ?? '').trim() : String(value ?? '').trim();
+}
+
+const initialPageType = readQueryString(route.query.pageType);
+const initialPageParam = readQueryString(route.query.pageParam);
+const initialTopicSearch = initialPageType === 'tag' && initialPageParam ? initialPageParam : '';
+const queryStr = ref(readQueryString(route.query.q));
 const searchQuery = ref(queryStr.value);
 const searchTabs = ref<SearchTabDefinition[]>(DEFAULT_SEARCH_TABS);
-const activeTab = ref(String(route.query.tab || 'all'));
+const activeTab = ref(initialTopicSearch ? 'feed' : readQueryString(route.query.tab) || 'all');
 const hotItems = ref<SearchEntity[]>([]);
 const tabStates = reactive<Record<string, SearchTabState>>({});
 const showSuggestions = ref(false);
@@ -90,6 +97,24 @@ const searchAreaRef = ref<HTMLElement | null>(null);
 let suggestTimer: ReturnType<typeof setTimeout> | null = null;
 let searchSequence = 0;
 let configLoaded = false;
+
+const scopedTopicTag = computed(() => {
+  return readQueryString(route.query.pageType) === 'tag' ? readQueryString(route.query.pageParam) : '';
+});
+
+const isTopicScopedSearch = computed(() => Boolean(scopedTopicTag.value));
+
+const searchPlaceholder = computed(() => {
+  return isTopicScopedSearch.value
+    ? (scopedTopicTag.value ? `搜索“${scopedTopicTag.value}”话题的内容` : '搜索此话题的内容')
+    : '搜索应用、动态、用户、话题...';
+});
+
+const searchWelcomeHint = computed(() => {
+  return isTopicScopedSearch.value
+    ? `输入关键词，搜索“${scopedTopicTag.value}”吧里的帖子`
+    : '输入关键词，搜索酷安的应用、游戏、动态、用户和话题';
+});
 
 function newTabState(): SearchTabState {
   return { items: [], loading: false, loadingMore: false, error: '', cursor: { page: 1, firstItem: '', lastItem: '', noMore: false }, requestVersion: 0 };
@@ -112,10 +137,22 @@ function resetTabStates() {
 }
 
 function syncActiveTab(requested: string) {
+  if (isTopicScopedSearch.value) {
+    activeTab.value = 'feed';
+    return;
+  }
   activeTab.value = searchTabs.value.some((tab) => tab.key === requested) ? requested : (searchTabs.value[0]?.key || 'all');
 }
 
 async function loadSearchConfig() {
+  if (isTopicScopedSearch.value) {
+    searchTabs.value = DEFAULT_SEARCH_TABS.filter((tab) => tab.searchType === 'feed');
+    configLoaded = true;
+    activeTab.value = 'feed';
+    resetTabStates();
+    if (queryStr.value) void fetchTab('feed');
+    return;
+  }
   try {
     const response = await CoolapkTauriAPI.getTabConfig();
     searchTabs.value = extractSearchTabs(response);
@@ -145,7 +182,10 @@ function responseFlag(value: unknown): boolean {
 
 async function fetchTab(tabKey: string, loadMore = false) {
   if (!queryStr.value) return;
-  const tab = searchTabs.value.find((item) => item.key === tabKey) || DEFAULT_SEARCH_TABS.find((item) => item.key === tabKey);
+  const scoped = isTopicScopedSearch.value;
+  const tab = scoped
+    ? DEFAULT_SEARCH_TABS.find((item) => item.searchType === 'feed')
+    : searchTabs.value.find((item) => item.key === tabKey) || DEFAULT_SEARCH_TABS.find((item) => item.key === tabKey);
   if (!tab) return;
   const state = ensureTabState(tab.key);
   if (loadMore && (state.loading || state.loadingMore || state.cursor.noMore)) return;
@@ -161,7 +201,8 @@ async function fetchTab(tabKey: string, loadMore = false) {
       page: loadMore ? state.cursor.page : 1,
       firstItem: loadMore ? state.cursor.firstItem : '',
       lastItem: loadMore ? state.cursor.lastItem : '',
-      pageType: tab.searchType === 'feed' ? 'search' : '',
+      pageType: scoped ? 'tag' : tab.searchType === 'feed' ? 'search' : '',
+      pageParam: scoped ? scopedTopicTag.value : '',
       feedType: tab.searchType === 'feed' ? 'all' : '',
       sort: tab.searchType === 'feed' ? 'default' : '',
     });
@@ -229,10 +270,19 @@ function doSearch(value: string) {
   showSuggestions.value = false;
   showHistory.value = false;
   addSearchHistory(trimmed);
-  void router.push({ path: '/search', query: { q: trimmed, tab: activeTab.value } });
+  const query: Record<string, string> = { q: trimmed };
+  if (isTopicScopedSearch.value) {
+    query.tab = 'feed';
+    query.pageType = 'tag';
+    query.pageParam = scopedTopicTag.value;
+  } else {
+    query.tab = activeTab.value;
+  }
+  void router.push({ path: '/search', query });
 }
 
 function switchTab(key: string) {
+  if (isTopicScopedSearch.value) return;
   if (activeTab.value === key) return;
   activeTab.value = key;
   void router.push({ path: '/search', query: { q: queryStr.value, tab: key } });
@@ -292,11 +342,20 @@ watch(searchQuery, (value) => {
   suggestTimer = setTimeout(() => void fetchSuggestions(value), 300);
 });
 
-watch(() => [String(route.query.q || ''), String(route.query.tab || '')], ([nextQuery, nextTab]) => {
-  const normalizedQuery = nextQuery.trim();
+watch(() => [
+  readQueryString(route.query.q),
+  readQueryString(route.query.tab),
+  readQueryString(route.query.pageType),
+  readQueryString(route.query.pageParam),
+], ([nextQuery, nextTab]) => {
+  const normalizedQuery = nextQuery;
   queryStr.value = normalizedQuery;
   searchQuery.value = normalizedQuery;
-  if (configLoaded) syncActiveTab(nextTab || activeTab.value || 'all');
+  if (isTopicScopedSearch.value) {
+    activeTab.value = 'feed';
+  } else if (configLoaded) {
+    syncActiveTab(nextTab || activeTab.value || 'all');
+  }
   resetTabStates();
   if (normalizedQuery) void fetchTab(activeTab.value);
 }, { immediate: true });
@@ -318,9 +377,7 @@ onUnmounted(() => {
 .search-page-layout { container-type: inline-size; container-name: search-layout; display: flex; width: 100%; height: 100%; overflow: hidden; }
 .search-main-column { display: flex; flex: 1; flex-direction: column; min-width: 0; height: 100%; overflow: hidden; background: var(--surface); }
 .search-toolbar { position: relative; z-index: 2; flex: 0 0 auto; background: var(--surface); border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, .06)); }
-.search-toolbar-content { padding: 18px 20px 14px; }
-.page-header { display: flex; align-items: center; margin-bottom: 14px; }
-.page-title { margin: 0; color: var(--text-primary); font-size: clamp(20px, 2vw, 26px); font-weight: var(--font-weight-bold); line-height: 1.25; }
+.search-toolbar-content { padding: 14px 20px 12px; }
 .search-input-area { position: relative; margin: 0; }
 .search-input-wrapper { display: flex; align-items: center; gap: 12px; height: 46px; box-sizing: border-box; padding: 0 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; transition: border-color var(--duration-fast) var(--ease-default), box-shadow var(--duration-fast) var(--ease-default); }
 .search-input-wrapper:focus-within { border-color: var(--brand-primary); box-shadow: 0 0 0 3px var(--brand-soft); }

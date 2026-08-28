@@ -112,11 +112,12 @@ pub async fn get_product_feeds(
     state: State<'_, AppState>,
     product_id: String,
     feed_type: String,
+    list_type: String,
     page: u32,
 ) -> Result<Value, String> {
     state
         .client
-        .get_product_feeds(&product_id, &feed_type, page)
+        .get_product_feeds(&product_id, &feed_type, &list_type, page)
         .await
 }
 
@@ -829,6 +830,7 @@ pub async fn search_by_type(
     page_param: String,
     feed_type: String,
     sort: String,
+    is_strict: u32,
     category: String,
     page_context: String,
 ) -> Result<Value, String> {
@@ -844,6 +846,7 @@ pub async fn search_by_type(
             &page_param,
             &feed_type,
             &sort,
+            is_strict,
             &category,
             &page_context,
         )

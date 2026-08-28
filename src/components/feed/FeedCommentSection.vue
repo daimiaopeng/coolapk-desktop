@@ -325,7 +325,7 @@
               :data-context-comment-id="sub.id"
               :data-comment-username="sub.username || sub.fromUserName || '酷友'"
               :data-comment-text="getCommentText(sub)"
-              @click="setReplyTarget(sub.username || sub.fromUserName, sub.id || c.id)"
+              @click="handleSubReplyClick($event, sub, c)"
             >
               <!-- 子回复头像 -->
               <UserHoverCard
@@ -465,6 +465,7 @@ import { getErrorMessage } from '../../utils/errors';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { reactiveUserProfileMap, getCachedUserProfileSync } from '../../utils/userProfilePreloader';
 import { verifyWithCaptcha, extractCaptchaParamsFromResponse } from '../../utils/neteaseCaptcha';
+import { hasActiveTextSelection } from '../../utils/selection';
 import {
   COMMENT_SORT_OPTIONS,
   DEFAULT_COMMENT_SORT_MODE,
@@ -1140,12 +1141,22 @@ onUnmounted(() => {
 });
 
 function handleCommentTextClick(e: MouseEvent, c: any) {
+  // 选中文本准备复制时，不触发点击回复
+  if (hasActiveTextSelection()) return;
   // 点中了评论内的链接则交给统一链接处理，否则视为点击评论（设置为回复对象）
   if ((e.target as HTMLElement).closest('a')) {
     handleAnchorClick(e);
     return;
   }
   setReplyTarget(c.username || c.userInfo?.username, c.id);
+}
+
+function handleSubReplyClick(e: MouseEvent, sub: any, floor: any) {
+  // 选中文本准备复制时，不触发点击回复
+  if (hasActiveTextSelection()) return;
+  const target = e.target as HTMLElement;
+  if (target.closest('a') || target.closest('button') || target.closest('.comment-image-grid')) return;
+  setReplyTarget(sub.username || sub.fromUserName, sub.id || floor.id);
 }
 
 /**

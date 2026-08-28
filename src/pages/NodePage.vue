@@ -1,14 +1,5 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <div class="top-nav-bar">
-      <div class="nav-title-box">
-        <span class="nav-title">{{ pageTitle }}</span>
-      </div>
-      <div class="nav-right-actions">
-        <i class="fas fa-search action-btn" @click="focusSearch" title="搜索版块动态"></i>
-      </div>
-    </div>
-
     <!-- 节点头部 -->
     <div v-if="headerLoading" class="node-header-card skeleton-header">
       <LoadingState text="正在加载节点信息..." />
@@ -294,31 +285,6 @@ watch(() => [route.params.nodeType, route.params.nodeId], () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.top-nav-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-  margin-bottom: 2px;
-}
-
-.nav-title-box {
-  flex: 1;
-  text-align: center;
-}
-
-.nav-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--brand-primary, #10b981);
-}
-
-.action-btn {
-  font-size: 16px;
-  color: var(--text-secondary);
-  cursor: pointer;
 }
 
 .node-header-card {

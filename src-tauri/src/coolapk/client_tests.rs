@@ -67,6 +67,41 @@ fn test_product_rating_list_query_matches_apk_contract() {
     );
 }
 
+#[test]
+fn test_collection_list_query_includes_default_collection() {
+    assert_eq!(
+        build_collection_list_query("12345", 1),
+        vec![
+            ("uid", "12345".to_string()),
+            ("showDefault", "1".to_string()),
+            ("page", "1".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn test_product_feeds_query_includes_sort_only_when_selected() {
+    assert_eq!(
+        build_product_feeds_query("5573", "feed", "", 1),
+        vec![
+            ("url", "/page?url=/product/feedList".to_string()),
+            ("id", "5573".to_string()),
+            ("type", "feed".to_string()),
+            ("page", "1".to_string()),
+        ]
+    );
+    assert_eq!(
+        build_product_feeds_query("5573", "feed", " rank_score ", 1),
+        vec![
+            ("url", "/page?url=/product/feedList".to_string()),
+            ("id", "5573".to_string()),
+            ("type", "feed".to_string()),
+            ("listType", "rank_score".to_string()),
+            ("page", "1".to_string()),
+        ]
+    );
+}
+
 /// 在线接口探测：需要网络，默认测试集不执行。
 #[tokio::test]
 #[ignore]

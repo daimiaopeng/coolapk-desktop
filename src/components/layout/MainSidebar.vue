@@ -14,7 +14,7 @@
       </svg>
     </button>
 
-    <nav class="sidebar-nav custom-scrollbar">
+    <nav class="sidebar-nav custom-scrollbar" @click="handleNavClick">
       <div class="nav-group">
         <router-link
           v-for="item in primaryNavs"
@@ -124,12 +124,21 @@ import { useSettingsStore } from '../../stores/settings';
 import { useAuthStore } from '../../stores/auth';
 import { useNotificationStore } from '../../stores/notifications';
 import { APP_VERSION } from '../../constants/version';
+import { triggerSidebarTransition } from '../../utils/routeTransition';
 
 const route = useRoute();
 const settingsStore = useSettingsStore();
 const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
 const appVersion = APP_VERSION;
+
+function handleNavClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null;
+  const link = target?.closest('.nav-item:not(.action-item)');
+  if (link) {
+    triggerSidebarTransition();
+  }
+}
 
 function requestUpdateCheck() {
   window.dispatchEvent(new Event('check-for-update'));

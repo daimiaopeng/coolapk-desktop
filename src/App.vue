@@ -1,19 +1,34 @@
 <template>
   <AppShell>
-    <router-view v-slot="{ Component, route }">
-      <!--
-        桌面端通过路由切换维护页面栈。缓存所有路由页面，进入详情页时不销毁下面的页面，
-        从而保留已加载数据、滚动位置、筛选条件、草稿和其他局部状态。
-        大多数页面使用包含参数和查询条件的完整路径作为缓存标识，让不同详情拥有独立实例。
-        私信页的 uid 只表示当前会话，不能据此重建整页，否则每次点会话都会重新加载列表。
-      -->
-      <!-- 路由页面先退出再进入，避免首次请求触发大块 DOM 更新时出现画面撕裂。 -->
-      <Transition name="page" mode="out-in" appear>
-        <keep-alive>
-          <component :is="Component" :key="route.name === 'Messages' ? route.path : route.fullPath" />
-        </keep-alive>
-      </Transition>
-    </router-view>
+    <SidebarPageHost />
+
+    <!-- 详情页和设置页仍由 RouterView 管理；左侧固定栏目由 SidebarPageHost 保持单实例。 -->
+    <div :class="['router-page-fallback', { 'is-hidden': isSidebarRoute }]">
+      <router-view v-slot="{ Component, route }">
+        <!--
+          桌面端通过路由切换维护页面栈。缓存所有路由页面，进入详情页时不销毁下面的页面，
+          从而保留已加载数据、滚动位置、筛选条件、草稿和其他局部状态。
+          大多数页面使用包含参数和查询条件的完整路径作为缓存标识，让不同详情拥有独立实例。
+          私信页的 uid 只表示当前会话，不能据此重建整页，否则每次点会话都会重新加载列表。
+        -->
+        <!-- 仅在侧边栏主栏目导航时启用平滑过渡动效，详情页进入和返回等内部跳转即时呈现。 -->
+        <Transition
+          :name="isSidebarTransitionActive ? 'page' : undefined"
+          :mode="isSidebarTransitionActive ? 'out-in' : undefined"
+          appear
+          @after-enter="resetSidebarTransition"
+        >
+          <keep-alive>
+            <component
+              :is="isSidebarPreloadPath(route.path) ? SidebarRoutePlaceholder : Component"
+              :key="isSidebarPreloadPath(route.path)
+                ? 'sidebar-route-placeholder'
+                : route.name === 'Messages' ? route.path : route.fullPath"
+            />
+          </keep-alive>
+        </Transition>
+      </router-view>
+    </div>
 
     <!-- 全局交互浮层 -->
     <PublishDialog />
@@ -97,9 +112,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { listen } from '@tauri-apps/api/event';
 import AppShell from './components/layout/AppShell.vue';
+import SidebarPageHost from './components/layout/SidebarPageHost.vue';
+import SidebarRoutePlaceholder from './components/layout/SidebarRoutePlaceholder.vue';
 import PublishDialog from './components/overlays/PublishDialog.vue';
 import ImageViewer from './components/overlays/ImageViewer.vue';
 import SearchCommand from './components/overlays/SearchCommand.vue';
@@ -117,6 +135,13 @@ import { desktopNotify } from './utils/desktopNotify';
 import { registerGlobalHotkeys } from './utils/hotkeys';
 import { CoolapkTauriAPI } from './api/coolapk';
 import { clearResourceCache } from './utils/resourceCache';
+import { useSidebarTransition } from './utils/routeTransition';
+import { registerGlobalSelectionClear } from './utils/selection';
+import { isSidebarPreloadPath } from './utils/sidebarPreload';
+
+const { isSidebarTransitionActive, resetSidebarTransition } = useSidebarTransition();
+const route = useRoute();
+const isSidebarRoute = computed(() => isSidebarPreloadPath(route.path));
 
 const PENDING_UPDATE_KEY = 'coolapk_pending_update';
 
@@ -135,6 +160,7 @@ const downloadError = ref<string | null>(null);
 const installingUpdate = ref(false);
 const isWindows = navigator.userAgent.includes('Windows');
 let unregisterHotkeys: (() => void) | null = null;
+let unregisterSelectionClear: (() => void) | null = null;
 let updateDownloadInFlight = false;
 
 function formatBytes(bytes: number) {
@@ -348,6 +374,7 @@ onMounted(() => {
   authStore.initAuth();
   window.addEventListener('resize', settingsStore.refreshAutoZoom);
   unregisterHotkeys = registerGlobalHotkeys();
+  unregisterSelectionClear = registerGlobalSelectionClear();
 
   // 本地调试（vite dev）跳过自动更新检查，避免误弹更新提示或静默下载安装包；
   // 设置页的"立即检查更新"手动触发不受影响
@@ -385,6 +412,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', settingsStore.refreshAutoZoom);
   unregisterHotkeys?.();
+  unregisterSelectionClear?.();
 });
 </script>
 
@@ -403,6 +431,20 @@ html, body {
   padding: 0;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+.router-page-fallback {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.router-page-fallback.is-hidden {
+  display: none;
 }
 
 .startup-update-version {

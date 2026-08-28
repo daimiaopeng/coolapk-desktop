@@ -461,9 +461,9 @@ TS 方法：`getVoteComments(fid, page)`
 | - | - | - | - |
 | `GET /v6/product/detail` | ✅ 可用 | 🆕 `getProductDetail` | id（产品 ID） |
 | `GET /v6/product/detail?name=` | ✅ 可用 | 🆕 `getProductDetailByName` | name（产品名称） |
-| `GET /v6/page/dataList?url=/page?url=/product/feedList` | ✅ 可用 | 🆕 `getProductFeeds` | id, type, page |
+| `GET /v6/page/dataList?url=/page?url=/product/feedList` | ✅ 可用 | 🆕 `getProductFeeds` | id, type, listType, page |
 
-`getProductFeeds` 参数：type 取 `feed`（讨论）/ `answer`（问答）/ `article`（图文）/ `video`（视频）/ `trade`（交易）。
+`getProductFeeds` 参数：type 取 `feed`（讨论）/ `answer`（问答）/ `article`（图文）/ `video`（视频）/ `trade`（交易）；`listType` 可传 `dateline_desc`（最新）或 `rank_score`（热度），默认留空。
 测试用真实产品 ID：`5573`（三星 Galaxy Z Fold8）。
 
 ---
@@ -476,7 +476,8 @@ TS 方法：`getVoteComments(fid, page)`
 
 | 参数 | 类型 | 必要性 | 说明 |
 | - | - | - | - |
-| uid | num | 必要 | 用户 ID |
+| uid | num | 可选 | “我的收藏单”按 APK 传空值，使用当前登录会话；传用户 ID 时只返回该用户创建的收藏单 |
+| showDefault | num | 固定 | 桌面端传 `1`，让当前会话的默认收藏单一并返回 |
 | page | num | 必要 | 页数，从 1 起 |
 
 Rust 方法：`get_collection_list(uid, page)`

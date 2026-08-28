@@ -1,5 +1,5 @@
 <template>
-  <FeedCard v-if="!isSponsor && kind === 'feed' && entityId" :feed="entity as any" @deleted="$emit('deleted', $event)" />
+  <FeedCard v-if="!isSponsor && kind === 'feed' && entityId" :feed="entity as any" :highlight-keyword="highlightKeyword" @deleted="$emit('deleted', $event)" />
   <SearchHotListCard v-else-if="!isSponsor && kind === 'hot'" :entity="entity" @search="$emit('search', $event)" />
   <article v-else-if="!isSponsor" class="search-entity-card" role="button" tabindex="0" @click="openEntity" @keydown.enter.prevent="openEntity">
     <AppAvatar v-if="kind === 'user'" :src="image" :alt="title" size="md" />
@@ -46,7 +46,7 @@ import {
   navigateSearchEntity,
 } from '../../utils/searchEntities';
 
-const props = withDefaults(defineProps<{ entity: SearchEntity; showFollow?: boolean; followed?: boolean }>(), { showFollow: false, followed: false });
+const props = withDefaults(defineProps<{ entity: SearchEntity; showFollow?: boolean; followed?: boolean; highlightKeyword?: string }>(), { showFollow: false, followed: false, highlightKeyword: '' });
 defineEmits<{
   (event: 'deleted', id: string | number): void;
   (event: 'search', value: string): void;

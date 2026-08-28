@@ -41,13 +41,13 @@ const feedId = computed(() => String(props.feedId || ''));
 function normalizeContextFeed(item: any): any {
   if (!item) return null;
   const candidates = [item.feedInfo, item.targetRow, item.targetFeed, item];
-  return candidates.find((candidate) => candidate && typeof candidate === 'object' && (
-    candidate.message
-    || candidate.message_raw_output
-    || candidate.message_title
-    || candidate.title
-    || candidate.note
-  )) || null;
+  return candidates.find((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return false;
+    // 必须有真实正文与发帖人信息，避免仅携带标题的历史记录外壳导致残缺首屏闪烁
+    const hasMessage = Boolean(candidate.message || candidate.message_raw_output || candidate.note);
+    const hasUser = Boolean(candidate.username || candidate.userInfo?.username || candidate.uid || candidate.userAvatar);
+    return hasMessage && hasUser;
+  }) || null;
 }
 
 const feedDetail = ref<any>(normalizeContextFeed(appStore.getFeedDetailContext(feedId.value)));

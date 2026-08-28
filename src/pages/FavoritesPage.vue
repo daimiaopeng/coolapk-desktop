@@ -28,10 +28,6 @@
 
         <!-- 收藏单内容视图 -->
         <div v-if="activeSubTab === 'collections' && activeCollectionId" class="collection-detail">
-          <div class="collection-detail-header">
-            <span class="collection-detail-title">{{ activeCollectionTitle }}</span>
-          </div>
-
           <div class="collection-detail-info">
             <AppImage
               v-if="collectionDetail.cover"
@@ -263,7 +259,9 @@ async function fetchCollections() {
   if (!uid) return;
   collectionsLoading.value = true;
   try {
-    const res = await CoolapkTauriAPI.getCollectionList(String(uid), 1);
+    // 酷安 APK 的“我的收藏单”调用使用空 uid，让服务端按当前会话返回默认收藏单。
+    // 显式传当前 uid 会只返回用户创建的收藏单，即使 showDefault=1 也不会带默认单。
+    const res = await CoolapkTauriAPI.getCollectionList('', 1);
     collections.value = (res && res.data && Array.isArray(res.data)) ? res.data : [];
   } catch (err) {
     console.warn('获取收藏单失败', err);
@@ -628,22 +626,6 @@ onMounted(() => {
 .collection-meta {
   font-size: 12px;
   color: var(--text-tertiary);
-}
-
-.collection-detail-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: var(--space-4);
-}
-
-.collection-detail-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .collection-detail-info {

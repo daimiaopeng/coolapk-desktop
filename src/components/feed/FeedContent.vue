@@ -34,6 +34,7 @@ const props = defineProps<{
   username?: string;
   forceExpanded?: boolean;
   maxLines?: number;
+  highlightKeyword?: string;
 }>();
 
 const settingsStore = useSettingsStore();
@@ -122,8 +123,8 @@ const shouldShowTitle = computed(() => {
 
 const formattedMessage = computed(() => {
   if (!currentMessage.value) return '';
-  // 统一渲染：先安全化（去标签/防注入/换行），再渲染酷安表情
-  return renderCoolapkRichText(stripFeedMoreSuffix(currentMessage.value));
+  // 统一渲染：先安全化（去标签/防注入/换行），高亮关键词，再渲染酷安表情
+  return renderCoolapkRichText(stripFeedMoreSuffix(currentMessage.value), props.highlightKeyword);
 });
 
 let resizeObserver: ResizeObserver | null = null;
@@ -257,5 +258,21 @@ watch(
 
 .expand-btn:hover {
   background: rgba(16, 185, 129, 0.16);
+}
+
+.feed-body :deep(mark.search-highlight),
+.feed-body :deep(.search-highlight) {
+  background-color: rgba(245, 158, 11, 0.22);
+  color: #d97706;
+  font-weight: 700;
+  border-radius: 3px;
+  padding: 1px 3px;
+  margin: 0 1px;
+}
+
+[data-theme='dark'] .feed-body :deep(mark.search-highlight),
+[data-theme='dark'] .feed-body :deep(.search-highlight) {
+  background-color: rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
 }
 </style>

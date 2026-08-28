@@ -91,24 +91,43 @@
                 class="feed-history-card history-item"
                 @click="openItem(item)"
               >
-                <div class="feed-card-top">
-                  <AppAvatar :src="item.logo" size="md" :alt="item.title" />
-                  <div class="feed-author-meta">
-                    <div class="card-name-line">
-                      <span class="feed-author-name">{{ item.title || '历史记录' }}</span>
-                      <span v-if="typeLabel(item)" class="type-badge">{{ typeLabel(item) }}</span>
+                <div class="card-main-layout">
+                  <div class="card-avatar-col">
+                    <AppAvatar v-if="itemAvatar(item)" :src="itemAvatar(item)" size="md" :alt="itemAuthorName(item)" />
+                    <div v-else :class="['item-type-avatar', `type-${getItemType(item)}`]">
+                      <i :class="itemTypeIcon(item)"></i>
                     </div>
-                    <span class="feed-time-text"><i class="far fa-clock"></i> {{ formatTimeExact(item.dateline) }}</span>
                   </div>
-                  <i class="fas fa-chevron-right arrow-icon"></i>
-                </div>
 
-                <div
-                  v-if="richDescription(item)"
-                  class="feed-text-content history-desc"
-                  v-html="richDescription(item)"
-                  @click.stop="handleDescClick($event, item)"
-                ></div>
+                  <div class="card-left-info">
+                    <div class="feed-card-top">
+                      <div class="feed-author-meta">
+                        <div class="card-name-line">
+                          <span class="feed-author-name">{{ itemAuthorName(item) }}</span>
+                          <span v-if="typeLabel(item)" :class="['type-badge', `type-${getItemType(item)}`]">
+                            {{ typeLabel(item) }}
+                          </span>
+                        </div>
+                        <span class="feed-time-text"><i class="far fa-clock"></i> {{ formatTimeExact(item.dateline) }}</span>
+                      </div>
+                    </div>
+
+                    <div
+                      v-if="richDescription(item)"
+                      class="feed-text-content history-desc"
+                      v-html="richDescription(item)"
+                      @click.stop="handleDescClick($event, item)"
+                    ></div>
+                  </div>
+
+                  <div v-if="itemCoverPic(item)" class="card-thumb-wrap" @click.stop="openItem(item)">
+                    <AppImage :src="itemCoverPic(item)" class="card-thumb-img" fit="cover" />
+                  </div>
+
+                  <div class="card-arrow-wrap">
+                    <i class="fas fa-chevron-right arrow-icon"></i>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -136,7 +155,10 @@
               class="sidebar-row-item"
               @click="openItem(item)"
             >
-              <AppAvatar :src="item.logo" size="sm" :alt="item.title" />
+              <AppAvatar v-if="itemAvatar(item)" :src="itemAvatar(item)" size="sm" :alt="item.title" />
+              <div v-else :class="['item-type-avatar-sm', `type-${getItemType(item)}`]">
+                <i :class="itemTypeIcon(item)"></i>
+              </div>
               <div class="row-info">
                 <div class="row-title-line">
                   <span class="row-name">{{ item.title || '快捷访问' }}</span>
@@ -161,6 +183,7 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
+import AppImage from '../components/common/AppImage.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { renderCoolapkRichText } from '../utils/richText';
 import { useAuthStore } from '../stores/auth';
@@ -256,10 +279,70 @@ function typeLabel(item: any): string {
   return '';
 }
 
+function itemAuthorName(item: any): string {
+  const title = asText(item?.title || '').trim();
+  if (!title) return '历史记录';
+  // 如果形如 "刘唐亡命天涯的动态" -> 优化为 "刘唐亡命天涯"
+  if (title.endsWith('的动态')) {
+    return title.replace(/的动态$/, '').trim() || title;
+  }
+  return title;
+}
+
+function itemAvatar(item: any): string {
+  const raw = item?.userAvatar || item?.user_avatar || item?.avatar || item?.userInfo?.userAvatar || item?.authorAvatar || item?.logo;
+  if (typeof raw === 'string' && raw.trim() && raw.length > 5) {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('//')) return `https:${trimmed}`;
+    if (trimmed.startsWith('http')) return trimmed;
+    if (!trimmed.startsWith('/')) return `https://image.coolapk.com/${trimmed}`;
+    return trimmed;
+  }
+  return '';
+}
+
+function itemTypeIcon(item: any): string {
+  const type = getItemType(item);
+  if (type === 'user') return 'fas fa-user';
+  if (type === 'topic') return 'fas fa-hashtag';
+  if (type === 'apk') return 'fas fa-cube';
+  return 'fas fa-align-left';
+}
+
+function cleanDescriptionText(raw: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  let text = raw.trim();
+  if (text === 'feed' || text === 'null' || text === 'undefined') return '';
+
+  // 去除纯图片占位标记如 [图片]、[视频]、[查看图片]
+  text = text.replace(/\[\s*(?:图片|视频|查看图片)\s*\]/gi, '');
+
+  // 将连续 2 个以上的换行符折叠为单个换行，防止换行挤占整行高度导致半截文字
+  text = text.replace(/\n\s*\n+/g, '\n');
+
+  return text.trim();
+}
+
 function richDescription(item: any): string {
-  const desc = item?.description || item?.entityTemplate || '';
-  if (typeof desc === 'string' && desc.trim() && desc.trim() !== 'feed') {
-    return renderCoolapkRichText(desc.trim());
+  // 严格只获取真实正文内容，绝不获取模板字段如 entityTemplate (避免出现 'feedCover' 等字样)
+  const desc = item?.description || item?.message || item?.digest || item?.subTitle || '';
+  const cleaned = cleanDescriptionText(desc);
+  if (
+    cleaned &&
+    !['feedcover', 'feed', 'feedarticle', 'feedreply', 'user', 'topic', 'apk', 'history'].includes(cleaned.toLowerCase())
+  ) {
+    return renderCoolapkRichText(cleaned);
+  }
+  return '';
+}
+
+function itemCoverPic(item: any): string {
+  const pic = item?.pic || item?.cover || item?.extra_pic || item?.smallPic || item?.image;
+  if (typeof pic === 'string' && pic.trim() && !pic.includes('avatar') && !pic.includes('default') && pic.length > 8) {
+    return pic.trim();
+  }
+  if (Array.isArray(item?.pics) && item.pics.length > 0 && typeof item.pics[0] === 'string' && item.pics[0].length > 8) {
+    return item.pics[0].trim();
   }
   return '';
 }
@@ -776,6 +859,34 @@ onMounted(() => {
   background-color: var(--surface-hover);
 }
 
+.item-type-avatar-sm {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--brand-soft, rgba(16, 185, 129, 0.12));
+  color: var(--brand-primary, #10b981);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.item-type-avatar-sm.type-user {
+  background-color: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+}
+
+.item-type-avatar-sm.type-topic {
+  background-color: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.item-type-avatar-sm.type-apk {
+  background-color: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+}
+
 .row-info {
   flex: 1;
   min-width: 0;
@@ -896,20 +1007,68 @@ onMounted(() => {
 
 .feed-history-card {
   background-color: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
+  border-radius: var(--radius-card, 12px);
   padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
   cursor: pointer;
-  transition: all var(--duration-fast);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .feed-history-card:hover {
-  border-color: var(--brand-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+  border-color: var(--brand-primary, #10b981);
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.08);
+}
+
+.card-main-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+}
+
+.card-avatar-col {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-type-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--brand-soft, rgba(16, 185, 129, 0.12));
+  color: var(--brand-primary, #10b981);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  transition: all 0.2s ease;
+}
+
+.item-type-avatar.type-user {
+  background-color: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+}
+
+.item-type-avatar.type-topic {
+  background-color: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+}
+
+.item-type-avatar.type-apk {
+  background-color: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+}
+
+.card-left-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .feed-card-top {
@@ -933,12 +1092,28 @@ onMounted(() => {
 }
 
 .type-badge {
-  font-size: 10px;
-  color: var(--brand-primary);
-  background-color: var(--brand-soft);
-  padding: 0 5px;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--brand-primary, #10b981);
+  background-color: var(--brand-soft, rgba(16, 185, 129, 0.1));
+  padding: 1px 6px;
   border-radius: 4px;
   flex-shrink: 0;
+}
+
+.type-badge.type-user {
+  color: #3b82f6;
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+.type-badge.type-topic {
+  color: #f59e0b;
+  background-color: rgba(245, 158, 11, 0.1);
+}
+
+.type-badge.type-apk {
+  color: #8b5cf6;
+  background-color: rgba(139, 92, 246, 0.1);
 }
 
 .feed-author-name {
@@ -951,39 +1126,82 @@ onMounted(() => {
 }
 
 .feed-time-text {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .arrow-icon {
   font-size: 12px;
   color: var(--text-tertiary);
-  opacity: 0.5;
-  transition: transform 0.15s ease;
+  opacity: 0.4;
+  transition: all 0.2s ease;
 }
 
 .feed-history-card:hover .arrow-icon {
-  transform: translateX(2px);
+  transform: translateX(3px);
   opacity: 1;
   color: var(--brand-primary);
 }
 
 .feed-text-content {
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 13.5px;
+  line-height: 1.6;
   color: var(--text-secondary);
-  background-color: var(--background);
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
 }
 
 .feed-text-content :deep(a) {
-  color: var(--brand-primary);
+  color: var(--brand-primary, #10b981);
+  font-weight: 500;
+  text-decoration: none;
+  padding: 0 2px;
+}
+
+.feed-text-content :deep(a):hover {
+  text-decoration: underline;
+}
+
+.feed-text-content :deep(.coolapk-emoji) {
+  display: inline-block;
+  vertical-align: -3px;
+  width: 18px;
+  height: 18px;
+  margin: 0 2px;
+}
+
+.card-thumb-wrap {
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  max-width: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--background-secondary);
+  border: 1px solid var(--border-light);
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.card-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-arrow-wrap {
+  align-self: center;
+  padding-left: 2px;
 }
 
 .login-hint {

@@ -10,7 +10,42 @@
 
 const SAFE_LINK_RE = /^(https?:)?\/\//i;
 
-export function sanitizeCoolapkHtml(text: string): string {
+function highlightTextNodes(root: Node, keyword: string, doc: Document) {
+  const kw = keyword.trim();
+  if (!kw) return;
+  const escapedKw = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escapedKw})`, 'gi');
+
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const textNodes: Text[] = [];
+  let currentNode = walker.nextNode();
+  while (currentNode) {
+    if (currentNode.parentElement?.tagName.toLowerCase() !== 'mark') {
+      textNodes.push(currentNode as Text);
+    }
+    currentNode = walker.nextNode();
+  }
+
+  for (const node of textNodes) {
+    const text = node.nodeValue || '';
+    if (!regex.test(text)) continue;
+    const parts = text.split(regex);
+    const frag = doc.createDocumentFragment();
+    for (const part of parts) {
+      if (part.toLowerCase() === kw.toLowerCase()) {
+        const mark = doc.createElement('mark');
+        mark.classList.add('search-highlight');
+        mark.textContent = part;
+        frag.appendChild(mark);
+      } else if (part) {
+        frag.appendChild(doc.createTextNode(part));
+      }
+    }
+    node.parentNode?.replaceChild(frag, node);
+  }
+}
+
+export function sanitizeCoolapkHtml(text: string, keyword?: string): string {
   if (!text) return '';
   const doc = new DOMParser().parseFromString(text.replace(/\n/g, '<br/>'), 'text/html');
 
@@ -23,6 +58,23 @@ export function sanitizeCoolapkHtml(text: string): string {
     const tag = el.tagName.toLowerCase();
 
     if (tag === 'br') return doc.createElement('br');
+
+    if (tag === 'mark') {
+      const mark = doc.createElement('mark');
+      mark.classList.add('search-highlight');
+      el.childNodes.forEach((c) => mark.appendChild(convert(c)));
+      return mark;
+    }
+
+    if (tag === 'font' || tag === 'span') {
+      const hasHighlight = el.classList.contains('highlight') || el.classList.contains('hit') || el.getAttribute('color') || (el as HTMLElement).style?.color;
+      if (hasHighlight) {
+        const mark = doc.createElement('mark');
+        mark.classList.add('search-highlight');
+        el.childNodes.forEach((c) => mark.appendChild(convert(c)));
+        return mark;
+      }
+    }
 
     if (tag === 'a') {
       const href = el.getAttribute('href') || '';
@@ -48,6 +100,11 @@ export function sanitizeCoolapkHtml(text: string): string {
   doc.body.childNodes.forEach((c) => frag.appendChild(convert(c)));
   doc.body.innerHTML = '';
   doc.body.appendChild(frag);
+
+  if (keyword && keyword.trim()) {
+    highlightTextNodes(doc.body, keyword.trim(), doc);
+  }
+
   return doc.body.innerHTML;
 }
 

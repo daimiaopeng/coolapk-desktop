@@ -1,14 +1,5 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <div class="top-nav-bar">
-      <div class="nav-title-box">
-        <span class="nav-title">{{ productTitle }}</span>
-      </div>
-      <div class="nav-right-actions">
-        <i class="fas fa-search action-btn" @click="focusSearch" title="搜索产品动态"></i>
-      </div>
-    </div>
-
     <div v-if="headerLoading" class="product-header-card skeleton-header">
       <LoadingState text="正在加载产品信息..." />
     </div>
@@ -87,6 +78,24 @@
 
     <!-- ===== 动态 Tab ===== -->
     <template v-if="isFeedTab">
+      <EntityFilterBar
+        v-model:sort="currentSort"
+        v-model:search-keyword="searchKeyword"
+        :sort-options="sortOptions"
+        :search-sort-options="FEED_SEARCH_SORT_OPTIONS"
+        :feed-type="searchFeedType"
+        :feed-type-options="PRODUCT_FEED_TYPE_OPTIONS"
+        show-feed-type
+        :target-title="productTitle"
+        scope-type="product_phone"
+        :scope-param="productId"
+        :auto-navigate-search="false"
+        @change="handleSortChange"
+        @search="handleProductSearch"
+        @clear="handleProductClear"
+        @change-feed-type="handleProductFeedTypeChange"
+      />
+
       <div v-if="feedsLoading && page === 1" class="loading-wrapper">
         <LoadingState text="正在获取产品动态..." />
       </div>
@@ -100,7 +109,7 @@
       </div>
 
       <div v-else class="feed-list">
-        <FeedCard v-for="item in productFeeds" :key="item.id || item.ttype + item.uid" :feed="item" @deleted="handleFeedDeleted" />
+        <FeedCard v-for="item in productFeeds" :key="item.id || item.ttype + item.uid" :feed="item" :highlight-keyword="searchKeyword" @deleted="handleFeedDeleted" />
 
         <div class="pagination-footer">
           <LoadingState v-if="feedsLoading && page > 1" text="加载更多中..." />
@@ -355,12 +364,18 @@ import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ProductConfigTable from '../components/product/ProductConfigTable.vue';
 import RatingChart from '../components/product/RatingChart.vue';
+import EntityFilterBar, { type SortOptionItem } from '../components/common/EntityFilterBar.vue';
 import { useAppStore } from '../stores/app';
 import { useAuthStore } from '../stores/auth';
 import { showToast } from '../utils/toast';
 import { getErrorMessage } from '../utils/errors';
 import { getHdImageUrl } from '../utils/image';
 import type { ProductConfig, ProductMedia, RatingChartPeriods } from '../types/product';
+import {
+  FEED_SEARCH_SORT_OPTIONS,
+  PRODUCT_FEED_TYPE_OPTIONS,
+  resolveFeedSearchSort,
+} from '../utils/coolapkFeedSearch';
 
 const route = useRoute();
 const router = useRouter();
@@ -405,6 +420,20 @@ function getRequestedTab(value: unknown): string {
 
 const activeTab = ref(getRequestedTab(route.query.tab));
 const isFeedTab = computed(() => FEED_TAB_KEYS.has(activeTab.value));
+
+const currentSort = ref('default');
+const sortOptions: SortOptionItem[] = [
+  { key: 'default', label: '默认', listType: '' },
+  { key: 'latest', label: '最新', listType: 'dateline_desc' },
+  { key: 'hot', label: '热度', listType: 'rank_score' },
+];
+const searchFeedType = ref('all');
+
+function handleSortChange(key: string) {
+  currentSort.value = key;
+  resetFeeds();
+  void fetchFeeds(false);
+}
 
 function selectTab(key: string) {
   activeTab.value = key;
@@ -467,14 +496,76 @@ async function fetchProductHeader() {
   }
 }
 
+const searchKeyword = ref('');
+
+function handleProductSearch(payload: { keyword: string }) {
+  const keyword = payload.keyword.trim();
+  if (!FEED_SEARCH_SORT_OPTIONS.some((option) => option.key === currentSort.value)) {
+    currentSort.value = 'default';
+  }
+  searchKeyword.value = keyword;
+  if (!keyword) searchFeedType.value = 'all';
+  resetFeeds();
+  void fetchFeeds(false);
+}
+
+function handleProductClear() {
+  searchKeyword.value = '';
+  currentSort.value = 'default';
+  searchFeedType.value = 'all';
+  resetFeeds();
+  void fetchFeeds(false);
+}
+
+function handleProductFeedTypeChange(feedType: string) {
+  searchFeedType.value = feedType;
+  if (!searchKeyword.value.trim()) return;
+  resetFeeds();
+  void fetchFeeds(false);
+}
+
+function readFeedCursor(feed: any): string {
+  const value = feed?.id ?? feed?.feedId ?? feed?.feed_id ?? feed?.entityId ?? '';
+  return value === null || value === undefined ? '' : String(value);
+}
+
 async function fetchFeeds(isLoadMore = false) {
   if (!productId.value || feedsLoading.value || noMore.value) return;
 
   feedsLoading.value = true;
   if (!isLoadMore) feedsError.value = false;
   try {
-    const res = await CoolapkTauriAPI.getProductFeeds(productId.value, activeTab.value, page.value);
-    const newFeeds = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    const sortOption = sortOptions.find((option) => option.key === currentSort.value) || sortOptions[0];
+    const listType = sortOption?.listType || '';
+    const kw = searchKeyword.value.trim();
+    const firstItem = isLoadMore && productFeeds.value.length > 0 ? readFeedCursor(productFeeds.value[0]) : '';
+    const lastItem = isLoadMore && productFeeds.value.length > 0 ? readFeedCursor(productFeeds.value[productFeeds.value.length - 1]) : '';
+    let res: any;
+    if (kw) {
+      const searchSort = resolveFeedSearchSort(currentSort.value);
+      res = await CoolapkTauriAPI.searchByType({
+        searchType: 'feed',
+        query: kw,
+        page: page.value,
+        firstItem,
+        lastItem,
+        pageType: 'product_phone',
+        pageParam: productId.value,
+        feedType: searchFeedType.value,
+        sort: searchSort.sort,
+        isStrict: searchSort.isStrict,
+      });
+    } else {
+      res = await CoolapkTauriAPI.getProductFeeds(productId.value, activeTab.value, page.value, listType);
+    }
+    const data = res?.data;
+    const newFeeds = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.entities)
+        ? data.entities
+        : Array.isArray(data?.rows)
+          ? data.rows
+          : [];
 
     if (newFeeds.length === 0) {
       noMore.value = true;
@@ -924,31 +1015,6 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.top-nav-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-  margin-bottom: 2px;
-}
-
-.nav-title-box {
-  flex: 1;
-  text-align: center;
-}
-
-.nav-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--brand-primary, #10b981);
-}
-
-.action-btn {
-  font-size: 16px;
-  color: var(--text-secondary);
-  cursor: pointer;
 }
 
 .product-header-card {

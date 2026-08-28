@@ -386,6 +386,32 @@ fn get_str_by_keys(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> Optio
     None
 }
 
+fn build_collection_list_query(uid: &str, page: u32) -> Vec<(&'static str, String)> {
+    vec![
+        ("uid", uid.to_string()),
+        ("showDefault", "1".to_string()),
+        ("page", page.to_string()),
+    ]
+}
+
+fn build_product_feeds_query(
+    product_id: &str,
+    feed_type: &str,
+    list_type: &str,
+    page: u32,
+) -> Vec<(&'static str, String)> {
+    let mut query = vec![
+        ("url", "/page?url=/product/feedList".to_string()),
+        ("id", product_id.to_string()),
+        ("type", feed_type.to_string()),
+    ];
+    if !list_type.trim().is_empty() {
+        query.push(("listType", list_type.trim().to_string()));
+    }
+    query.push(("page", page.to_string()));
+    query
+}
+
 fn topic_hub_cursor(value: &Value) -> String {
     value
         .as_object()
@@ -2337,6 +2363,7 @@ impl CoolapkClient {
         page_param: &str,
         feed_type: &str,
         sort: &str,
+        is_strict: u32,
         category: &str,
         page_context: &str,
     ) -> Result<Value, String> {
@@ -2388,7 +2415,7 @@ impl CoolapkClient {
             if !page_param.is_empty() {
                 params.push(("pageParam", page_param.to_string()));
             }
-            params.push(("isStrict", "0".to_string()));
+            params.push(("isStrict", is_strict.to_string()));
             params.push(("showAnonymous", "-1".to_string()));
         } else {
             if search_type == "apk" || search_type == "game" {
@@ -3690,12 +3717,13 @@ impl CoolapkClient {
     }
 
     /// 收藏单（收藏夹）列表
-    /// 数据来源: GET /v6/collection/list?uid={uid}
+    /// 数据来源: GET /v6/collection/list?uid={uid}&showDefault=1
+    /// `showDefault=1` 用于把账号的系统默认收藏单一并返回；否则接口只返回用户创建的收藏单。
     pub async fn get_collection_list(&self, uid: &str, page: u32) -> Result<Value, String> {
         let raw = self
             .api_get(
                 "/v6/collection/list",
-                &[("uid", uid.to_string()), ("page", page.to_string())],
+                &build_collection_list_query(uid, page),
             )
             .await?;
         let mut collections = Vec::new();
@@ -5780,22 +5808,18 @@ impl CoolapkClient {
     }
 
     /// 产品（数码）所属动态列表（讨论/问答/图文/视频/交易）
-    /// 数据来源: GET /v6/page/dataList?url=/page?url=/product/feedList
+    /// 数据来源: GET /v6/page/dataList?url=/page?url=/product/feedList&id={id}&type={type}&listType={list_type}
     pub async fn get_product_feeds(
         &self,
         product_id: &str,
         feed_type: &str,
+        list_type: &str,
         page: u32,
     ) -> Result<Value, String> {
         let raw = self
             .api_get(
                 "/v6/page/dataList",
-                &[
-                    ("url", "/page?url=/product/feedList".to_string()),
-                    ("id", product_id.to_string()),
-                    ("type", feed_type.to_string()),
-                    ("page", page.to_string()),
-                ],
+                &build_product_feeds_query(product_id, feed_type, list_type, page),
             )
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))

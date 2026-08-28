@@ -1,15 +1,5 @@
 <template>
   <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <!-- 顶部导航栏 -->
-    <div class="top-nav-bar">
-      <div class="nav-title-box">
-        <span class="nav-title">{{ tag }}</span>
-      </div>
-      <div class="nav-right-actions">
-        <i class="fas fa-search action-btn" @click="focusSearch" title="搜索话题动态"></i>
-      </div>
-    </div>
-
     <!-- 1. 话题头部卡片 (依照截图 1 还原) -->
     <div v-if="topicDetail" class="topic-header-card">
       <div class="header-content">
@@ -73,22 +63,25 @@
       </button>
     </div>
 
-    <!-- 4. 排序筛选工具条 [全部讨论: 默认 / 最新 / 热度] -->
-    <div v-if="isDiscussionTab(activeTopicTab)" class="topic-filter-bar">
-      <span class="filter-label">全部讨论</span>
-      <div class="filter-options">
-        <button
-          v-for="opt in sortOptions"
-          :key="opt.key"
-          type="button"
-          :class="['filter-btn', { active: currentSort === opt.key }]"
-          :aria-pressed="currentSort === opt.key"
-          @click="changeSort(opt.key)"
-        >
-          {{ opt.label }}
-        </button>
-      </div>
-    </div>
+    <!-- 4. 排序筛选与搜索工具条 -->
+    <EntityFilterBar
+      v-if="isDiscussionTab(activeTopicTab)"
+      v-model:sort="currentSort"
+      v-model:search-keyword="searchKeyword"
+      :sort-options="sortOptions"
+      :search-sort-options="FEED_SEARCH_SORT_OPTIONS"
+      :feed-type="searchFeedType"
+      :feed-type-options="TOPIC_FEED_TYPE_OPTIONS"
+      show-feed-type
+      :target-title="tag"
+      scope-type="tag"
+      :scope-param="tag"
+      :auto-navigate-search="false"
+      @change="changeSort"
+      @search="handleTopicSearch"
+      @clear="handleTopicClear"
+      @change-feed-type="handleTopicFeedTypeChange"
+    />
 
     <!-- 5. Feed 动态列表 -->
     <div v-if="feedsLoading && page === 1" class="loading-wrapper">
@@ -101,7 +94,7 @@
 
     <div v-else class="feed-list">
       <template v-for="(item, index) in topicFeeds" :key="topicItemKey(item, index)">
-        <FeedCard v-if="isTopicFeedItem(item)" :feed="item" @deleted="handleFeedDeleted" />
+        <FeedCard v-if="isTopicFeedItem(item)" :feed="item" :highlight-keyword="searchKeyword" @deleted="handleFeedDeleted" />
         <DiscoveryEntityCard v-else :entity="item" @open="openTopicEntity" />
       </template>
       
@@ -123,9 +116,15 @@ import DiscoveryEntityCard from '../components/discovery/DiscoveryEntityCard.vue
 import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+import EntityFilterBar from '../components/common/EntityFilterBar.vue';
 import { showToast } from '../utils/toast';
 import { normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../utils/coolapkRoute';
 import { resolveDiscoveryRoute } from '../utils/discovery';
+import {
+  FEED_SEARCH_SORT_OPTIONS,
+  TOPIC_FEED_TYPE_OPTIONS,
+  resolveFeedSearchSort,
+} from '../utils/coolapkFeedSearch';
 
 interface TopicSortOption {
   key: string;
@@ -161,6 +160,8 @@ const topicDetail = ref<any>(null);
 const headerLoading = ref(false);
 const topicTabs = ref<TopicTab[]>([]);
 const activeTopicTabKey = ref('feed');
+const searchKeyword = ref('');
+const searchFeedType = ref('all');
 
 const topicFeeds = ref<any[]>([]);
 
@@ -495,26 +496,46 @@ async function fetchFeeds(isLoadMore = false) {
     const firstItem = isLoadMore && topicFeeds.value.length > 0 ? readFeedCursor(topicFeeds.value[0]) : '';
     const lastItem = isLoadMore && topicFeeds.value.length > 0 ? readFeedCursor(topicFeeds.value[topicFeeds.value.length - 1]) : '';
     const tab = activeTopicTab.value;
-    const res = !tab || isDiscussionTab(tab)
-      ? await CoolapkTauriAPI.getTopicFeeds(tag.value, page.value, {
-        listType: sortOption.listType,
-        firstItem,
-        lastItem,
-        blockStatus: 1,
-      })
-      : tab.kind === 'device'
-        ? await CoolapkTauriAPI.getDeviceFeedList(tag.value, page.value, { firstItem, lastItem })
-      : await CoolapkTauriAPI.getTopicTabData({
-        url: getTopicTabUrl(tab),
-        title: tab.label,
-        subTitle: tab.subTitle,
+    const kw = searchKeyword.value.trim();
+
+    let res: any;
+    if (kw) {
+      const searchSort = resolveFeedSearchSort(currentSort.value);
+      res = await CoolapkTauriAPI.searchByType({
+        searchType: 'feed',
+        query: kw,
         page: page.value,
         firstItem,
         lastItem,
-        pageContext: JSON.stringify({ source: 'desktop-topic', tag: tag.value, tab: tab.pageName || tab.key }),
+        pageType: 'tag',
+        pageParam: tag.value,
+        feedType: searchFeedType.value,
+        sort: searchSort.sort,
+        isStrict: searchSort.isStrict,
       });
+    } else {
+      res = !tab || isDiscussionTab(tab)
+        ? await CoolapkTauriAPI.getTopicFeeds(tag.value, page.value, {
+          listType: sortOption.listType,
+          firstItem,
+          lastItem,
+          blockStatus: 1,
+        })
+        : tab.kind === 'device'
+          ? await CoolapkTauriAPI.getDeviceFeedList(tag.value, page.value, { firstItem, lastItem })
+        : await CoolapkTauriAPI.getTopicTabData({
+          url: getTopicTabUrl(tab),
+          title: tab.label,
+          subTitle: tab.subTitle,
+          page: page.value,
+          firstItem,
+          lastItem,
+          pageContext: JSON.stringify({ source: 'desktop-topic', tag: tag.value, tab: tab.pageName || tab.key }),
+        });
+    }
+
     if (requestId !== feedRequestId) return;
-    applyServerSortOptions(res);
+    if (!kw) applyServerSortOptions(res);
     const newFeeds = extractTopicRows(res);
     
     if (newFeeds.length === 0) {
@@ -544,9 +565,40 @@ async function fetchFeeds(isLoadMore = false) {
   }
 }
 
+function handleTopicSearch(payload: { keyword: string }) {
+  const keyword = payload.keyword.trim();
+  if (!FEED_SEARCH_SORT_OPTIONS.some((option) => option.key === currentSort.value)) {
+    currentSort.value = 'default';
+  }
+  searchKeyword.value = keyword;
+  if (!keyword) searchFeedType.value = 'all';
+  page.value = 1;
+  noMore.value = false;
+  topicFeeds.value = [];
+  void fetchFeeds(false);
+}
+
+function handleTopicClear() {
+  searchKeyword.value = '';
+  currentSort.value = 'default';
+  searchFeedType.value = 'all';
+  page.value = 1;
+  noMore.value = false;
+  topicFeeds.value = [];
+  void fetchFeeds(false);
+}
+
+function handleTopicFeedTypeChange(feedType: string) {
+  searchFeedType.value = feedType;
+  if (!searchKeyword.value.trim()) return;
+  page.value = 1;
+  noMore.value = false;
+  topicFeeds.value = [];
+  void fetchFeeds(false);
+}
+
 
 function changeSort(sortKey: string) {
-  if (currentSort.value === sortKey) return;
   currentSort.value = sortKey;
   page.value = 1;
   noMore.value = false;
@@ -558,6 +610,7 @@ function changeTopicTab(tabKey: string) {
   if (activeTopicTabKey.value === tabKey) return;
   activeTopicTabKey.value = tabKey;
   currentSort.value = 'default';
+  searchFeedType.value = 'all';
   sortOptions.value = [...FALLBACK_SORT_OPTIONS];
   page.value = 1;
   noMore.value = false;
@@ -605,7 +658,15 @@ async function toggleFollow() {
 }
 
 function focusSearch() {
-  router.push({ path: '/search', query: { q: tag.value } });
+  const kw = searchKeyword.value.trim();
+  if (!tag.value) return;
+  const query: Record<string, string> = {
+    tab: 'feed',
+    pageType: 'tag',
+    pageParam: tag.value,
+  };
+  if (kw) query.q = kw;
+  void router.push({ path: '/search', query });
 }
 
 async function initializeTopic() {
@@ -622,11 +683,13 @@ watch(() => route.params.tag, (newTag) => {
     tag.value = decodeTopicTag(String(newTag));
     page.value = 1;
     noMore.value = false;
+    searchKeyword.value = '';
     topicFeeds.value = [];
     topicDetail.value = null;
     topicTabs.value = [];
     activeTopicTabKey.value = 'feed';
     currentSort.value = 'default';
+    searchFeedType.value = 'all';
     sortOptions.value = [...FALLBACK_SORT_OPTIONS];
     isFollowed.value = false;
     followPending.value = false;
@@ -646,31 +709,6 @@ watch(() => route.params.tag, (newTag) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.top-nav-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-  margin-bottom: 2px;
-}
-
-.nav-title-box {
-  flex: 1;
-  text-align: center;
-}
-
-.nav-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--brand-primary, #10b981);
-}
-
-.action-btn {
-  font-size: 16px;
-  color: var(--text-secondary);
-  cursor: pointer;
 }
 
 /* 1. 话题 Header */
@@ -885,44 +923,6 @@ watch(() => route.params.tag, (newTag) => {
 .highlight {
   color: #db2777;
   font-weight: 700;
-}
-
-/* 4. 排序筛选工具条 */
-.topic-filter-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 2px;
-}
-
-.filter-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.filter-options {
-  display: flex;
-  background: var(--background-secondary);
-  border-radius: 14px;
-  padding: 2px;
-}
-
-.filter-btn {
-  border: none;
-  background: transparent;
-  padding: 3px 10px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-radius: 12px;
-}
-
-.filter-btn.active {
-  background: var(--surface);
-  color: var(--text-primary);
-  font-weight: 700;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
 .feed-list {

@@ -36,8 +36,23 @@ function checkScroll(e?: Event) {
   showButton.value = scrollTop > 300;
 }
 
+function isVisibleElement(element: HTMLElement | Window): boolean {
+  if (element === window) return true;
+  let current: HTMLElement | null = element as HTMLElement;
+  while (current && current !== document.documentElement) {
+    const style = window.getComputedStyle(current);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    current = current.parentElement;
+  }
+  return true;
+}
+
 function scrollToTop() {
-  if (activeScrollTarget && 'scrollTo' in activeScrollTarget) {
+  if (
+    activeScrollTarget &&
+    'scrollTo' in activeScrollTarget &&
+    isVisibleElement(activeScrollTarget)
+  ) {
     activeScrollTarget.scrollTo({
       top: 0,
       behavior: 'smooth'
@@ -47,7 +62,8 @@ function scrollToTop() {
       top: 0,
       behavior: 'smooth'
     });
-    const scrollables = document.querySelectorAll('.custom-scrollbar, .feed-scroll-container, .page-container, .user-page-wrapper');
+    const scrollables = Array.from(document.querySelectorAll<HTMLElement>('.custom-scrollbar, .feed-scroll-container, .page-container, .user-page-wrapper'))
+      .filter(isVisibleElement);
     scrollables.forEach(el => {
       el.scrollTo({ top: 0, behavior: 'smooth' });
     });

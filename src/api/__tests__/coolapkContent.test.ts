@@ -70,6 +70,38 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
     expect(invoke).toHaveBeenCalledWith('get_node_feeds', { nodeType: 'topic', nodeId: '数码', page: 1 });
   });
 
+  it('产品动态把排序参数传入 get_product_feeds', async () => {
+    await CoolapkTauriAPI.getProductFeeds('5573', 'feed', 2, 'rank_score');
+    expect(invoke).toHaveBeenCalledWith('get_product_feeds', {
+      productId: '5573',
+      feedType: 'feed',
+      listType: 'rank_score',
+      page: 2,
+    });
+  });
+
+  it('动态搜索把 APK 的精确筛选参数传入原生命令', async () => {
+    await CoolapkTauriAPI.searchByType({
+      searchType: 'feed',
+      query: '小米',
+      page: 1,
+      pageType: 'product_phone',
+      pageParam: '5573',
+      feedType: 'comment',
+      sort: '',
+      isStrict: 1,
+    });
+    expect(invoke).toHaveBeenCalledWith('search_by_type', expect.objectContaining({
+      searchType: 'feed',
+      query: '小米',
+      pageType: 'product_phone',
+      pageParam: '5573',
+      feedType: 'comment',
+      sort: '',
+      isStrict: 1,
+    }));
+  });
+
   it('数码分类产品列表保留服务端下发的页面上下文', async () => {
     await CoolapkTauriAPI.getProductList('#/product/categoryList?type=tablet', '平板', '平板电脑', 2);
     expect(invoke).toHaveBeenCalledWith('get_product_list', {

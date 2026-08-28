@@ -147,8 +147,8 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_product_detail', { productId });
   }
 
-  static async getProductFeeds(productId: string, feedType: string = 'feed', page: number = 1) {
-    return await invokeNative('get_product_feeds', { productId, feedType, page });
+  static async getProductFeeds(productId: string, feedType: string = 'feed', page: number = 1, listType: string = '') {
+    return await invokeNative('get_product_feeds', { productId, feedType, listType, page });
   }
 
   // 1.4.1 产品配置与对比
@@ -379,6 +379,7 @@ export class CoolapkTauriAPI {
     pageParam?: string;
     feedType?: string;
     sort?: string;
+    isStrict?: number;
     category?: string;
     pageContext?: string;
   }) {
@@ -392,6 +393,7 @@ export class CoolapkTauriAPI {
       pageParam: options.pageParam || '',
       feedType: options.feedType || '',
       sort: options.sort || '',
+      isStrict: options.isStrict ?? 0,
       category: options.category || '',
       pageContext: options.pageContext || '',
     }, { retry: true, kind: 'feed' });
