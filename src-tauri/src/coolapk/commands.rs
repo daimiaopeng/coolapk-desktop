@@ -2426,6 +2426,7 @@ pub fn install_update(installer_path: String) -> Result<(), String> {
 /// 退出整个应用（用于更新前关闭窗口）
 #[tauri::command]
 pub fn quit_app(app: tauri::AppHandle) {
+    crate::persist_current_window_geometry(&app);
     app.exit(0);
 }
 

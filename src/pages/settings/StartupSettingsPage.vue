@@ -116,7 +116,7 @@
       <div class="setting-row">
         <div class="row-info">
           <span class="row-label">记忆窗口大小与位置</span>
-          <span class="row-sub">重启应用后恢复上次的窗口位置与大小</span>
+          <span class="row-sub">重启应用后恢复上次的窗口位置与大小（默认开启）</span>
         </div>
         <AppSwitch v-model="settingsStore.settings.rememberWindowState" />
       </div>

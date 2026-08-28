@@ -60,10 +60,10 @@ use tauri::{Manager, WindowEvent};
 
 static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(false);
 static START_MINIMIZED: AtomicBool = AtomicBool::new(false);
-static REMEMBER_WINDOW_STATE: AtomicBool = AtomicBool::new(false);
+static REMEMBER_WINDOW_STATE: AtomicBool = AtomicBool::new(true);
 static ALWAYS_ON_TOP: AtomicBool = AtomicBool::new(false);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct WindowState {
     x: i32,
     y: i32,
@@ -72,10 +72,11 @@ struct WindowState {
 }
 
 static WINDOW_STATE: Mutex<Option<WindowState>> = Mutex::new(None);
+static STARTUP_STATE_LOCK: Mutex<()> = Mutex::new(());
 
 const STARTUP_STATE_FILE: &str = "startup_state.json";
-const MIN_WINDOW_W: f64 = 800.0;
-const MIN_WINDOW_H: f64 = 600.0;
+const MIN_WINDOW_W: u32 = 800;
+const MIN_WINDOW_H: u32 = 600;
 
 fn startup_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     let dir = app.path().app_data_dir().ok()?;
@@ -84,26 +85,94 @@ fn startup_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
 
 /// 合并写入窗口几何信息，保留已有的启动参数（静默启动/记忆窗口/置顶）
 fn persist_window_geometry(app: &tauri::AppHandle, state: WindowState) {
+    let _lock = STARTUP_STATE_LOCK.lock().ok();
     let path = match startup_state_path(app) {
         Some(p) => p,
         None => return,
     };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
     let mut flags: serde_json::Value = std::fs::read_to_string(&path)
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_else(|| {
             serde_json::json!({
-                "start_minimized": false,
-                "remember_window_state": false,
-                "always_on_top": false
+                "start_minimized": START_MINIMIZED.load(Ordering::SeqCst),
+                "remember_window_state": REMEMBER_WINDOW_STATE.load(Ordering::SeqCst),
+                "always_on_top": ALWAYS_ON_TOP.load(Ordering::SeqCst)
             })
         });
+    if !flags.is_object() {
+        flags = serde_json::json!({});
+    }
     flags["x"] = serde_json::json!(state.x);
     flags["y"] = serde_json::json!(state.y);
     flags["w"] = serde_json::json!(state.w);
     flags["h"] = serde_json::json!(state.h);
     if let Ok(raw) = serde_json::to_string_pretty(&flags) {
         let _ = std::fs::write(&path, raw);
+    }
+}
+
+fn cached_window_state() -> Option<WindowState> {
+    WINDOW_STATE
+        .lock()
+        .ok()
+        .and_then(|guard| *guard)
+        .filter(|state| state.w >= MIN_WINDOW_W && state.h >= MIN_WINDOW_H)
+}
+
+fn parse_saved_window_state(flags: &serde_json::Value) -> Option<WindowState> {
+    let x: i32 = flags.get("x")?.as_i64()?.try_into().ok()?;
+    let y: i32 = flags.get("y")?.as_i64()?.try_into().ok()?;
+    let w: u32 = flags.get("w")?.as_u64()?.try_into().ok()?;
+    let h: u32 = flags.get("h")?.as_u64()?.try_into().ok()?;
+    if w < MIN_WINDOW_W || h < MIN_WINDOW_H {
+        return None;
+    }
+    Some(WindowState { x, y, w, h })
+}
+
+pub(crate) fn persist_current_window_geometry(app: &tauri::AppHandle) {
+    if !REMEMBER_WINDOW_STATE.load(Ordering::SeqCst) {
+        return;
+    }
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let state = match (window.outer_position(), window.inner_size()) {
+        (Ok(pos), Ok(size)) if size.width >= MIN_WINDOW_W && size.height >= MIN_WINDOW_H => {
+            Some(WindowState {
+                x: pos.x,
+                y: pos.y,
+                w: size.width,
+                h: size.height,
+            })
+        }
+        _ => cached_window_state(),
+    };
+    if let Some(state) = state {
+        persist_window_geometry(app, state);
+    }
+}
+
+#[cfg(test)]
+mod window_state_tests {
+    use super::{MIN_WINDOW_H, MIN_WINDOW_W, WindowState, parse_saved_window_state};
+
+    #[test]
+    fn parses_valid_window_geometry() {
+        let value = serde_json::json!({"x": -120, "y": 45, "w": 1200, "h": 700});
+        assert_eq!(parse_saved_window_state(&value), Some(WindowState { x: -120, y: 45, w: 1200, h: 700 }));
+    }
+
+    #[test]
+    fn rejects_invalid_or_too_small_window_geometry() {
+        let too_small = serde_json::json!({"x": 0, "y": 0, "w": MIN_WINDOW_W - 1, "h": MIN_WINDOW_H});
+        let wrong_type = serde_json::json!({"x": 0.5, "y": 0, "w": MIN_WINDOW_W, "h": MIN_WINDOW_H});
+        assert!(parse_saved_window_state(&too_small).is_none());
+        assert!(parse_saved_window_state(&wrong_type).is_none());
     }
 }
 
@@ -231,6 +300,9 @@ fn set_startup_flags(
     remember_window_state: bool,
     always_on_top: bool,
 ) -> Result<(), String> {
+    let _lock = STARTUP_STATE_LOCK
+        .lock()
+        .map_err(|_| "启动状态锁已损坏".to_string())?;
     START_MINIMIZED.store(start_minimized, Ordering::SeqCst);
     REMEMBER_WINDOW_STATE.store(remember_window_state, Ordering::SeqCst);
     ALWAYS_ON_TOP.store(always_on_top, Ordering::SeqCst);
@@ -243,6 +315,9 @@ fn set_startup_flags(
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_else(|| serde_json::json!({}));
+    if !flags.is_object() {
+        flags = serde_json::json!({});
+    }
     flags["start_minimized"] = serde_json::json!(start_minimized);
     flags["remember_window_state"] = serde_json::json!(remember_window_state);
     flags["always_on_top"] = serde_json::json!(always_on_top);
@@ -312,22 +387,17 @@ pub fn run() {
                                 ALWAYS_ON_TOP.store(true, Ordering::SeqCst);
                                 let _ = w.set_always_on_top(true);
                             }
-                            if flags["remember_window_state"].as_bool().unwrap_or(false) {
-                                REMEMBER_WINDOW_STATE.store(true, Ordering::SeqCst);
-                                let (x, y, ww, hh) = (
-                                    flags["x"].as_f64(),
-                                    flags["y"].as_f64(),
-                                    flags["w"].as_f64(),
-                                    flags["h"].as_f64(),
-                                );
-                                if let (Some(x), Some(y), Some(ww), Some(hh)) = (x, y, ww, hh) {
-                                    if ww >= MIN_WINDOW_W && hh >= MIN_WINDOW_H {
-                                        let _ = w.set_position(tauri::PhysicalPosition::new(
-                                            x as i32, y as i32,
-                                        ));
-                                        let _ = w.set_size(tauri::PhysicalSize::new(
-                                            ww as u32, hh as u32,
-                                        ));
+                            let remember_window_state =
+                                flags["remember_window_state"].as_bool().unwrap_or(true);
+                            REMEMBER_WINDOW_STATE.store(remember_window_state, Ordering::SeqCst);
+                            if remember_window_state {
+                                if let Some(state) = parse_saved_window_state(&flags) {
+                                    // set_size 使用内容区尺寸，因此保存时也必须读取 inner_size。
+                                    let _ = w.set_size(tauri::PhysicalSize::new(state.w, state.h));
+                                    // 先调整尺寸再恢复位置，避免窗口管理器按旧尺寸裁剪坐标。
+                                    let _ = w.set_position(tauri::PhysicalPosition::new(state.x, state.y));
+                                    if let Ok(mut guard) = WINDOW_STATE.lock() {
+                                        *guard = Some(state);
                                     }
                                 }
                             }
@@ -335,6 +405,23 @@ pub fn run() {
                                 START_MINIMIZED.store(true, Ordering::SeqCst);
                                 let _ = w.hide();
                             }
+                        }
+                    }
+                }
+            }
+
+            // 即使启动时没有发生移动/缩放事件，也缓存一次真实几何信息，
+            // 供关闭或 app.exit() 时的持久化兜底使用。
+            if let Some(w) = app.get_webview_window("main") {
+                if let (Ok(pos), Ok(size)) = (w.outer_position(), w.inner_size()) {
+                    if size.width >= MIN_WINDOW_W && size.height >= MIN_WINDOW_H {
+                        if let Ok(mut guard) = WINDOW_STATE.lock() {
+                            *guard = Some(WindowState {
+                                x: pos.x,
+                                y: pos.y,
+                                w: size.width,
+                                h: size.height,
+                            });
                         }
                     }
                 }
@@ -372,23 +459,7 @@ pub fn run() {
                         }
                         "quit" => {
                             // 退出前持久化窗口几何信息（托盘退出不触发 CloseRequested）
-                            if REMEMBER_WINDOW_STATE.load(Ordering::SeqCst) {
-                                if let Some(w) = app.get_webview_window("main") {
-                                    if let (Ok(pos), Ok(size)) =
-                                        (w.outer_position(), w.outer_size())
-                                    {
-                                        persist_window_geometry(
-                                            app,
-                                            WindowState {
-                                                x: pos.x,
-                                                y: pos.y,
-                                                w: size.width,
-                                                h: size.height,
-                                            },
-                                        );
-                                    }
-                                }
-                            }
+                            persist_current_window_geometry(app);
                             app.exit(0)
                         }
                         _ => {}
@@ -444,17 +515,19 @@ pub fn run() {
                     }
                 }
                 WindowEvent::CloseRequested { api, .. } => {
+                    // 记忆窗口状态：先在隐藏/关闭前读取真实几何信息，避免托盘模式下查询失败。
+                    persist_current_window_geometry(&window.app_handle());
                     // 关闭到托盘：仅主窗口点击关闭时隐藏而非退出，其余窗口（如外部链接窗口）正常关闭
                     if CLOSE_TO_TRAY.load(Ordering::SeqCst) {
                         api.prevent_close();
                         let _ = window.hide();
                     }
-                    // 记忆窗口状态：关闭（含隐藏到托盘）时持久化当前几何信息
+                }
+                WindowEvent::Destroyed => {
+                    // 兼容其他 app.exit() 调用：窗口已销毁后只能使用最近一次缓存。
                     if REMEMBER_WINDOW_STATE.load(Ordering::SeqCst) {
-                        if let Ok(guard) = WINDOW_STATE.lock() {
-                            if let Some(state) = guard.as_ref() {
-                                persist_window_geometry(&window.app_handle(), *state);
-                            }
+                        if let Some(state) = cached_window_state() {
+                            persist_window_geometry(&window.app_handle(), state);
                         }
                     }
                 }

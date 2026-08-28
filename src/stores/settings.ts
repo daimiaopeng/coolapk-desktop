@@ -126,7 +126,8 @@ const defaultSettings: AppSettings = {
   autostart: false,
   startMinimized: false,
   alwaysOnTop: false,
-  rememberWindowState: false,
+  // 窗口几何默认自动记忆；用户可在“启动与行为”中关闭。
+  rememberWindowState: true,
   notifyReplies: true,
   notifyAt: true,
   notifyPm: true,

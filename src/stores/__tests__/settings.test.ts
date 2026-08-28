@@ -49,6 +49,7 @@ describe('settings store', () => {
     expect(store.settings.imageQuality).toBe(defaults.imageQuality);
     expect(store.settings.navVisibility?.albums).toBe(true);
     expect(store.settings.navVisibility?.pictures).toBe(true);
+    expect(store.settings.rememberWindowState).toBe(true);
   });
 
   it('normalizes malformed values and preserves valid nested settings', () => {
@@ -71,6 +72,7 @@ describe('settings store', () => {
     expect(normalized.navVisibility?.pictures).toBe(true);
     expect(normalized.deviceFingerprint.customFingerprint).toBe(true);
     expect(normalized.deviceFingerprint.darkMode).toBe('1');
+    expect(normalizeSettings({ rememberWindowState: false }).rememberWindowState).toBe(false);
   });
 
   it('falls back to legacy localStorage when the JSON store cannot load', async () => {
