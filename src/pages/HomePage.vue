@@ -895,7 +895,7 @@ async function loadFeeds(isRefresh: boolean = false) {
       feeds.value.push(...uniqueNew);
     }
 
-    if (settingsStore.settings.infiniteScroll && !isHeadlineTab.value) {
+    if (!isHeadlineTab.value) {
       setTimeout(() => {
         prefetchNextPage();
       }, 200);
@@ -912,7 +912,6 @@ async function loadFeeds(isRefresh: boolean = false) {
 function handleScroll(e: Event) {
   const el = e.target as HTMLElement;
   if (!el) return;
-  if (!settingsStore.settings.infiniteScroll) return;
   if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) {
     if (!loading.value && !loadingMore.value && !noMore.value) {
       loadFeeds(false);

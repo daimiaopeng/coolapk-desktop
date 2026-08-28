@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getImageUrlByQuality, isAnimatedImageUrl, isPortraitLongImage } from '../image';
+import { getImageUrlByQuality, isAnimatedImageUrl, isLivePhotoUrl, isPortraitLongImage } from '../image';
 
 describe('动图地址判断', () => {
   it('识别 GIF、GIFV 以及带参数的地址', () => {
@@ -15,6 +15,12 @@ describe('动图地址判断', () => {
 
   it('高清处理不会破坏 GIF 原地址', () => {
     const url = 'https://image.coolapk.com/a/demo.gif';
+    expect(getImageUrlByQuality(url, 'hd')).toBe(url);
+  });
+
+  it('识别酷安 Live Photo 封面并保留原始地址', () => {
+    const url = 'https://image.coolapk.com/feed/livepic@1080x1920.jpg?token=1';
+    expect(isLivePhotoUrl(url)).toBe(true);
     expect(getImageUrlByQuality(url, 'hd')).toBe(url);
   });
 });

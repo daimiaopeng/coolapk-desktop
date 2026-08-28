@@ -41,7 +41,7 @@ describe('MainSidebar', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('点击非路由导航的操作按钮时不触发 triggerSidebarTransition', async () => {
+  it('点击底部操作按钮（如反馈/更新）时不触发 triggerSidebarTransition', async () => {
     const spy = vi.spyOn(routeTransition, 'triggerSidebarTransition');
     const wrapper = mount(MainSidebar, {
       global: {
@@ -51,10 +51,28 @@ describe('MainSidebar', () => {
       },
     });
 
-    const themeButton = wrapper.find('.action-item');
-    expect(themeButton.exists()).toBe(true);
+    const feedbackButton = wrapper.find('.feedback-btn');
+    expect(feedbackButton.exists()).toBe(true);
 
-    await themeButton.trigger('click');
+    await feedbackButton.trigger('click');
     expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('存在一键反馈与更新按钮并正常展示', async () => {
+    const wrapper = mount(MainSidebar, {
+      global: {
+        stubs: {
+          'router-link': RouterLinkStub,
+        },
+      },
+    });
+
+    const feedbackButton = wrapper.find('.feedback-btn');
+    expect(feedbackButton.exists()).toBe(true);
+    expect(feedbackButton.text()).toContain('反馈');
+
+    const updateButton = wrapper.find('.check-update-btn');
+    expect(updateButton.exists()).toBe(true);
+    expect(updateButton.text()).toContain('更新');
   });
 });

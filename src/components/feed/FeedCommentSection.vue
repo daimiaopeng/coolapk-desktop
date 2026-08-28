@@ -280,6 +280,8 @@
             v-if="getCommentImages(c).length"
             class="comment-image-grid"
             :images="getCommentImages(c)"
+            :content-id="c.id"
+            content-type="reply"
             variant="comment"
           />
 
@@ -395,6 +397,8 @@
                   v-if="getCommentImages(sub).length"
                   class="comment-image-grid sub-comment-images"
                   :images="getCommentImages(sub)"
+                  :content-id="sub.id"
+                  content-type="reply"
                   variant="comment"
                 />
                 <div class="sub-reply-actions">

@@ -4,7 +4,20 @@
       <div v-if="viewerData" class="image-viewer-backdrop" @click="handleBackdropClick">
         <!-- 顶部工具栏 -->
         <div class="viewer-topbar">
-          <span class="counter-text">{{ currentIndex + 1 }} / {{ totalCount }}</span>
+          <div class="topbar-left">
+            <span class="counter-text">{{ currentIndex + 1 }} / {{ totalCount }}</span>
+            <button
+              v-if="currentItem?.isLivePhoto"
+              type="button"
+              class="topbar-live-badge"
+              :class="{ 'is-playing': liveVideoPlaying }"
+              :title="liveVideoPlaying ? '点击暂停实况' : '点击播放实况'"
+              @click.stop="toggleLivePlayback"
+            >
+              <span>Live</span>
+              <span v-if="liveResolving" class="viewer-live-loading"><i class="fas fa-circle-notch fa-spin"></i></span>
+            </button>
+          </div>
           <div class="topbar-actions">
             <button class="viewer-btn" title="缩小" @click="zoomOut"><i class="fas fa-search-minus"></i></button>
             <span class="zoom-text">{{ Math.round(scale * 100) }}%</span>
@@ -49,35 +62,80 @@
             :src="displaySrc"
             alt="Viewer Image"
             class="viewer-img"
-            :style="{
-              transform: `translate(${translateX}px, ${translateY}px) scale(${scale}) rotate(${rotation}deg)`,
-              cursor: isDragging ? 'grabbing' : 'grab'
-            }"
+            :style="mediaTransformStyle"
             @load="onImageLoaded"
             @dragstart.prevent
           />
-          <div v-else class="viewer-loading">
+          <video
+            v-if="currentItem?.isLivePhoto && liveVideoUrl"
+            ref="liveVideoRef"
+            :key="liveVideoUrl"
+            class="viewer-live-video"
+            :src="liveVideoUrl"
+            :poster="displaySrc || undefined"
+            :muted="!liveSoundEnabled"
+            loop
+            playsinline
+            preload="auto"
+            :style="{ ...mediaTransformStyle, opacity: liveVideoPlaying ? 1 : 0 }"
+            aria-label="Live Photo 实况视频"
+            @canplay="handleLiveCanPlay"
+            @playing="liveVideoPlaying = true"
+            @pause="liveVideoPlaying = false"
+            @error="handleLiveVideoError"
+          ></video>
+          <div v-if="!displaySrc" class="viewer-loading">
             <i class="fas fa-spinner fa-spin"></i>
             <span>正在载入高清大图...</span>
           </div>
         </div>
 
-        <!-- 底部“查看原图”控制栏 -->
+        <!-- 底部一体化灵动毛玻璃控制岛 -->
         <div class="viewer-bottombar" @click.stop>
-          <button
-            class="raw-image-btn"
-            :class="{ 'is-loaded': isCurrentOriginalLoaded, 'is-loading': isCurrentOriginalLoading }"
-            :disabled="isCurrentOriginalLoading || isCurrentOriginalLoaded"
-            @click.stop="loadOriginal"
-          >
-            <i :class="[
-              isCurrentOriginalLoading ? 'fas fa-circle-notch fa-spin' :
-              isCurrentOriginalLoaded ? 'fas fa-check-circle' : 'fas fa-file-image'
-            ]"></i>
-            <span>
-              {{ isCurrentOriginalLoading ? '正在加载原图...' : (isCurrentOriginalLoaded ? '已加载原图' : '查看原图') }}
-            </span>
-          </button>
+          <div class="viewer-control-island">
+            <template v-if="currentItem?.isLivePhoto">
+              <button
+                type="button"
+                class="island-btn live-play-btn"
+                :class="{ 'is-active': liveVideoPlaying }"
+                :disabled="!liveVideoUrl || liveResolving"
+                :title="liveVideoError ? '重新解析并播放实况' : (liveVideoPlaying ? '暂停实况' : '播放实况')"
+                @click.stop="toggleLivePlayback"
+              >
+                <i :class="liveVideoPlaying ? 'fas fa-pause' : 'fas fa-play'"></i>
+                <span>{{ liveResolving ? '加载中' : (liveVideoError ? '重试' : (liveVideoPlaying ? '实况' : '播放')) }}</span>
+              </button>
+
+              <button
+                type="button"
+                class="island-btn live-sound-btn"
+                :class="{ 'is-active': liveSoundEnabled }"
+                :disabled="!liveVideoUrl || liveResolving"
+                :title="liveSoundEnabled ? '关闭声音' : '开启原声'"
+                @click.stop="toggleLiveSound"
+              >
+                <i :class="liveSoundEnabled ? 'fas fa-volume-high' : 'fas fa-volume-xmark'"></i>
+                <span>{{ liveSoundEnabled ? '原声' : '静音' }}</span>
+              </button>
+
+              <div class="island-divider"></div>
+            </template>
+
+            <button
+              class="island-btn raw-image-btn"
+              :class="{ 'is-loaded': isCurrentOriginalLoaded, 'is-loading': isCurrentOriginalLoading }"
+              :disabled="isCurrentOriginalLoading || isCurrentOriginalLoaded"
+              @click.stop="loadOriginal"
+            >
+              <i :class="[
+                isCurrentOriginalLoading ? 'fas fa-circle-notch fa-spin' :
+                isCurrentOriginalLoaded ? 'fas fa-check-circle' : 'fas fa-file-image'
+              ]"></i>
+              <span>
+                {{ isCurrentOriginalLoading ? '正在加载原图...' : (isCurrentOriginalLoaded ? '已加载原图' : '查看原图') }}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
     </Transition>
@@ -85,14 +143,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { getHdImageUrl, getOriginalImageUrl } from '../../utils/image';
-import { loadImageResource } from '../../utils/resourceCache';
+import { loadImageResource, normalizeResourceUrl } from '../../utils/resourceCache';
 import { getErrorMessage } from '../../utils/errors';
 import { showToast } from '../../utils/toast';
+import { normalizeFeedImageItems, resolveLivePhotoVideo } from '../../utils/livePhoto';
 
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
@@ -109,25 +168,46 @@ const savingOriginal = ref(false);
 const displaySrc = ref<string>('');
 let resolveSequence = 0;
 
+const liveVideoRef = ref<HTMLVideoElement | null>(null);
+const liveVideoUrl = ref('');
+const liveResolving = ref(false);
+const liveVideoPlaying = ref(false);
+const liveSoundEnabled = ref(false);
+const liveVideoError = ref(false);
+const liveVideoSource = ref<'metadata' | 'resolver' | 'none'>('none');
+const liveVideoFallbackAttempted = ref(false);
+let liveResolveSequence = 0;
+
 const originalLoadedMap = ref<Record<number, boolean>>({});
 const originalLoadingMap = ref<Record<number, boolean>>({});
 
 let startX = 0;
 let startY = 0;
 
-const totalCount = computed(() => viewerData.value?.urls.length || 0);
-const rawUrl = computed(() => viewerData.value?.urls[currentIndex.value] || '');
+const imageItems = computed(() => normalizeFeedImageItems(viewerData.value?.urls || []));
+const currentItem = computed(() => imageItems.value[currentIndex.value] || null);
+const totalCount = computed(() => imageItems.value.length);
+const rawUrl = computed(() => currentItem.value?.sourceUrl || '');
+const mediaTransformStyle = computed(() => ({
+  transform: `translate(${translateX.value}px, ${translateY.value}px) scale(${scale.value}) rotate(${rotation.value}deg)`,
+  cursor: isDragging.value ? 'grabbing' : 'grab',
+}));
 
 const currentUrl = computed(() => {
-  if (!rawUrl.value) return '';
+  const item = currentItem.value;
+  if (!item) return '';
+  const coverUrl = item.coverUrl || item.sourceUrl;
   // 私信图片等走 API 接口的图片（showImage）不做缩略图后缀处理
-  if (rawUrl.value.includes('/v6/message/showImage') || rawUrl.value.includes('api.coolapk.com')) {
-    return rawUrl.value;
+  if (coverUrl.includes('/v6/message/showImage') || coverUrl.includes('api.coolapk.com')) {
+    return coverUrl;
+  }
+  if (item.isLivePhoto) {
+    return normalizeResourceUrl(rawUrl.value || coverUrl);
   }
   if (originalLoadedMap.value[currentIndex.value]) {
     return getOriginalImageUrl(rawUrl.value);
   }
-  return getHdImageUrl(rawUrl.value);
+  return getHdImageUrl(coverUrl);
 });
 
 const originalUrl = computed(() => {
@@ -142,49 +222,209 @@ const originalUrl = computed(() => {
 const isCurrentOriginalLoaded = computed(() => Boolean(originalLoadedMap.value[currentIndex.value]));
 const isCurrentOriginalLoading = computed(() => Boolean(originalLoadingMap.value[currentIndex.value]));
 
-async function resolveImageData(url: string) {
+async function resolveImageData(url: string): Promise<boolean> {
   const sequence = ++resolveSequence;
   if (!url) {
     displaySrc.value = '';
-    return;
+    return false;
   }
   if (url.startsWith('data:') || url.startsWith('blob:')) {
     displaySrc.value = url;
-    return;
+    return true;
   }
   displaySrc.value = '';
   try {
     const dataUrl = await loadImageResource(url, CoolapkTauriAPI.getImageDataUrl);
-    if (sequence !== resolveSequence) return;
+    if (sequence !== resolveSequence) return false;
     displaySrc.value = dataUrl;
+    return true;
   } catch (err) {
-    if (sequence !== resolveSequence) return;
+    if (sequence !== resolveSequence) return false;
     console.warn('看图器加载图片失败:', err);
     displaySrc.value = url; // 备用回退直接使用原 url
+    return false;
   }
 }
 
-watch(currentUrl, (newUrl) => {
-  if (newUrl) {
-    resolveImageData(newUrl);
+function resetLiveState() {
+  liveResolveSequence += 1;
+  liveResolving.value = false;
+  liveVideoPlaying.value = false;
+  liveSoundEnabled.value = settingsStore.settings.autoPlayLivePhotoSound;
+  liveVideoError.value = false;
+  liveVideoFallbackAttempted.value = false;
+  liveVideoSource.value = currentItem.value?.liveVideoUrl ? 'metadata' : 'none';
+  const video = liveVideoRef.value;
+  if (video) {
+    video.pause();
+    try {
+      video.currentTime = 0;
+    } catch {
+      // 切图时旧视频还没有元数据时无需处理。
+    }
   }
-}, { immediate: true });
+  liveVideoUrl.value = currentItem.value?.liveVideoUrl || '';
+}
+
+async function playLiveVideo(): Promise<boolean> {
+  const video = liveVideoRef.value;
+  if (!video || !liveVideoUrl.value || liveVideoError.value) return false;
+  video.loop = true;
+  video.muted = !liveSoundEnabled.value;
+  try {
+    await video.play();
+    liveVideoPlaying.value = true;
+    return true;
+  } catch {
+    liveVideoPlaying.value = false;
+    // 自动播放策略拒绝时保留静态封面，用户点击播放按钮仍可重试。
+    return false;
+  }
+}
+
+async function resolveCurrentLiveVideo(force = false) {
+  const item = currentItem.value;
+  const sequence = ++liveResolveSequence;
+  if (!item?.isLivePhoto) return;
+
+  if (item.liveVideoUrl && !force) {
+    liveVideoSource.value = 'metadata';
+    await nextTick();
+    if (sequence === liveResolveSequence) await playLiveVideo();
+    return;
+  }
+
+  liveResolving.value = true;
+  try {
+    const videoUrl = await resolveLivePhotoVideo(
+      item,
+      viewerData.value?.contentId,
+      viewerData.value?.contentType || 'feed',
+      { force },
+    );
+    if (sequence !== liveResolveSequence) return;
+    if (!videoUrl) {
+      liveVideoError.value = true;
+      return;
+    }
+    liveVideoSource.value = 'resolver';
+    liveVideoUrl.value = videoUrl;
+    await nextTick();
+    await playLiveVideo();
+  } catch (error) {
+    if (sequence === liveResolveSequence) {
+      liveVideoError.value = true;
+      console.warn('Live Photo 查看器加载失败：', error);
+    }
+  } finally {
+    if (sequence === liveResolveSequence) liveResolving.value = false;
+  }
+}
+
+function handleLiveCanPlay() {
+  void playLiveVideo();
+}
+
+async function retryLiveVideoThroughResolver() {
+  const item = currentItem.value;
+  if (!item?.isLivePhoto || liveVideoFallbackAttempted.value || !item.sourceUrl) return;
+
+  liveVideoFallbackAttempted.value = true;
+  liveVideoError.value = false;
+  liveVideoPlaying.value = false;
+  liveVideoSource.value = 'none';
+  liveVideoUrl.value = '';
+  await nextTick();
+  await resolveCurrentLiveVideo(true);
+}
+
+function handleLiveVideoError(event: Event) {
+  // 切换地址时旧 video 节点可能晚到一步派发 error，不能覆盖新解析结果。
+  if (event.target !== liveVideoRef.value) return;
+  liveVideoError.value = true;
+  liveVideoPlaying.value = false;
+  // imageUriList 里的 liveVideoUrl 可能是旧的直链；失败后按 APK 重新解析一次。
+  if (liveVideoSource.value === 'metadata') {
+    void retryLiveVideoThroughResolver();
+  }
+}
+
+async function toggleLivePlayback() {
+  const video = liveVideoRef.value;
+  if (!video || !liveVideoUrl.value) return;
+  if (video.paused) {
+    if (liveVideoError.value && liveVideoSource.value === 'metadata') {
+      await retryLiveVideoThroughResolver();
+      return;
+    }
+    liveVideoError.value = false;
+    video.load();
+    await playLiveVideo();
+  } else {
+    video.pause();
+    liveVideoPlaying.value = false;
+  }
+}
+
+async function toggleLiveSound() {
+  if (!liveVideoUrl.value) return;
+  liveSoundEnabled.value = !liveSoundEnabled.value;
+  const video = liveVideoRef.value;
+  if (!video) return;
+  video.muted = !liveSoundEnabled.value;
+  if (liveSoundEnabled.value && video.paused) await playLiveVideo();
+}
 
 watch(viewerData, (val) => {
   if (val) {
-    currentIndex.value = val.currentIndex;
+    currentIndex.value = Math.min(Math.max(val.currentIndex, 0), Math.max(imageItems.value.length - 1, 0));
     originalLoadedMap.value = {};
     originalLoadingMap.value = {};
     resetTransform();
+  } else {
+    liveResolveSequence += 1;
+    liveVideoUrl.value = '';
+    liveVideoPlaying.value = false;
   }
 });
 
-function loadOriginal() {
+watch(currentItem, () => {
+  resetTransform();
+  resetLiveState();
+  if (settingsStore.settings.autoLoadOriginalImage) {
+    void loadOriginal();
+  } else if (currentUrl.value) {
+    void resolveImageData(currentUrl.value);
+  }
+  void resolveCurrentLiveVideo();
+}, { immediate: true });
+
+async function loadOriginal() {
   const idx = currentIndex.value;
   if (originalLoadedMap.value[idx] || originalLoadingMap.value[idx]) return;
 
+  const itemSourceUrl = rawUrl.value;
+  const url = originalUrl.value;
+  if (!itemSourceUrl || !url) return;
+
   originalLoadingMap.value = { ...originalLoadingMap.value, [idx]: true };
-  originalLoadedMap.value = { ...originalLoadedMap.value, [idx]: true };
+  try {
+    const loaded = await resolveImageData(url);
+    if (
+      loaded
+      && idx === currentIndex.value
+      && currentItem.value?.sourceUrl === itemSourceUrl
+    ) {
+      originalLoadedMap.value = { ...originalLoadedMap.value, [idx]: true };
+    }
+  } finally {
+    if (
+      idx === currentIndex.value
+      && currentItem.value?.sourceUrl === itemSourceUrl
+    ) {
+      originalLoadingMap.value = { ...originalLoadingMap.value, [idx]: false };
+    }
+  }
 }
 
 function onImageLoaded() {
@@ -349,9 +589,54 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
   z-index: 3002;
 }
 
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .counter-text {
   font-size: var(--font-size-sub, 14px);
   font-weight: var(--font-weight-medium, 500);
+}
+
+.topbar-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 4px;
+  border: none;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.topbar-live-badge:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.topbar-live-badge.is-playing {
+  background: rgba(16, 185, 129, 0.8);
+  color: #ffffff;
+}
+
+.live-badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  transition: all 0.2s ease;
+}
+
+.topbar-live-badge.is-playing .live-badge-dot {
+  background: #ffffff;
+  transform: scale(1.2);
 }
 
 .topbar-actions {
@@ -442,6 +727,105 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
   pointer-events: auto;
 }
 
+.viewer-live-video {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  max-width: 90vw;
+  max-height: 88vh;
+  margin: auto;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.viewer-live-badge {
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.55);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.viewer-live-badge:hover {
+  background: rgba(15, 23, 42, 0.75);
+  border-color: rgba(255, 255, 255, 0.45);
+  transform: scale(1.04);
+}
+
+.viewer-live-badge.is-playing {
+  background: rgba(16, 185, 129, 0.75);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.45);
+}
+
+.live-badge-rings,
+.live-badge-rings::before,
+.live-badge-rings::after,
+.live-badge-rings span {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.live-badge-rings {
+  position: relative;
+  flex: 0 0 9px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.4);
+}
+
+.viewer-live-badge.is-playing .live-badge-rings {
+  background: #ffffff;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.6);
+}
+
+.live-badge-rings::before,
+.live-badge-rings::after,
+.live-badge-rings span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  content: '';
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  transform: translate(-50%, -50%) scale(0.6);
+  animation: live-viewer-ring-pulse 1.8s ease-out infinite;
+}
+
+.live-badge-rings::after {
+  animation-delay: 0.6s;
+}
+
+.live-badge-rings span {
+  animation-delay: 1.2s;
+}
+
+.viewer-live-loading {
+  margin-left: 2px;
+  font-size: 10px;
+}
+
 .viewer-loading {
   display: flex;
   flex-direction: column;
@@ -464,36 +848,98 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
   z-index: 3002;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  justify-content: center;
 }
 
-.raw-image-btn {
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #ffffff;
-  padding: 6px 16px;
-  border-radius: var(--radius-pill, 9999px);
-  font-size: 13px;
-  font-weight: 500;
-  display: flex;
+.viewer-control-island {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  cursor: pointer;
+  padding: 4px 6px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   transition: all 0.2s ease;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
-.raw-image-btn:hover:not(:disabled) {
-  background: rgba(16, 185, 102, 0.85);
-  border-color: rgba(16, 185, 102, 1);
-  transform: translateY(-1px);
+.island-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.island-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.island-btn.is-active {
+  background: rgba(16, 185, 129, 0.28);
+  color: #10b981;
+  font-weight: 600;
+}
+
+.island-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.live-play-btn i {
+  font-size: 11px;
+}
+
+.live-sound-btn i {
+  font-size: 12px;
+}
+
+.island-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.16);
+  margin: 0 2px;
+}
+
+.raw-image-btn i {
+  font-size: 12px;
 }
 
 .raw-image-btn.is-loaded {
-  background: rgba(16, 185, 102, 0.25);
-  border-color: rgba(16, 185, 102, 0.5);
-  color: var(--brand-primary, #10b966);
+  color: #10b981;
   cursor: default;
+}
+
+@keyframes live-viewer-ring-pulse {
+  0% {
+    opacity: 0.84;
+    transform: translate(-50%, -50%) scale(0.55);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-badge-rings::before,
+  .live-badge-rings::after,
+  .live-badge-rings span,
+  .viewer-live-video {
+    animation: none;
+    transition: none;
+  }
 }
 </style>

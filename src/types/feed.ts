@@ -1,3 +1,5 @@
+import type { FeedImageInput } from '../utils/livePhoto';
+
 export interface FeedItem {
   id: string | number;
   entityId?: string | number;
@@ -24,6 +26,8 @@ export interface FeedItem {
   };
   pic?: string;
   picArr?: string[];
+  /** APK imageUriList：除封面 URL 外还可能携带 Live Photo 视频地址和开关。 */
+  imageUriList?: FeedImageInput[];
   video_url?: string;
   videoUrl?: string;
   videoPic?: string;

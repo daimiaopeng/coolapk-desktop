@@ -45,7 +45,11 @@
     </div>
 
     <!-- 点评配图 -->
-    <FeedImageGrid :images="feed.pics || feed.picArr || (feed.pic ? [feed.pic] : [])" />
+    <FeedImageGrid
+      :images="feedImages"
+      :content-id="feed.id"
+      content-type="feed"
+    />
 
     <!-- 关联的数码设备卡片盒子 -->
     <div class="target-device-card" v-if="targetProduct">
@@ -141,6 +145,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { showToast } from '../../utils/toast';
 import { getErrorMessage } from '../../utils/errors';
+import { extractFeedImageInputs } from '../../utils/livePhoto';
 
 const settingsStore = useSettingsStore();
 const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
@@ -148,6 +153,8 @@ const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
 const props = defineProps<{
   feed: any;
 }>();
+
+const feedImages = computed(() => extractFeedImageInputs(props.feed));
 
 const authStore = useAuthStore();
 

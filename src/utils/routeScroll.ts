@@ -14,14 +14,6 @@ function getScrollContainers(): HTMLElement[] {
   if (!root) return [];
 
   return [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))].filter((element) => {
-    // 侧边栏页面会在启动时全部挂载，隐藏页面的滚动容器不能参与当前路由的
-    // 位置快照，否则恢复详情页时会把位置写回到另一页的 DOM。
-    let ancestor: HTMLElement | null = element;
-    while (ancestor && ancestor !== root) {
-      const ancestorStyle = window.getComputedStyle(ancestor);
-      if (ancestorStyle.display === 'none' || ancestorStyle.visibility === 'hidden') return false;
-      ancestor = ancestor.parentElement;
-    }
     const style = window.getComputedStyle(element);
     const canScroll = /(auto|scroll)/.test(`${style.overflowX} ${style.overflowY}`);
     return canScroll || element.scrollTop !== 0 || element.scrollLeft !== 0;

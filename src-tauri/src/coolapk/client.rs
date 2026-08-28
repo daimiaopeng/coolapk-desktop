@@ -1,16 +1,19 @@
 use crate::coolapk::auth::CoolapkAuth;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use reqwest::header::{COOKIE, HeaderMap, HeaderValue, USER_AGENT};
+use reqwest::header::{COOKIE, HeaderMap, HeaderValue, LOCATION, USER_AGENT};
 use reqwest::{Client, Method};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// 接口路径需求：判断写接口需要哪些额外的风控令牌。
+/// 接口路径需求：记录服务端配置中声明的写接口风控要求。
+///
+/// `needs_ddid` 只用于保留服务端配置的可观测性；当前客户端明确不生成、
+/// 不追加、也不转发 `ddid`。
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PathRequirements {
-    /// 需要 Cookie 携带 `ddid`（数盟会话，任意 v4 UUID 即可）。
+    /// 服务端配置声明需要 `ddid`。客户端不会据此发送 `ddid`。
     pub needs_ddid: bool,
     /// 需要表单携带 `_v2_post_token`（网易易盾滑块验证 Token）。
     pub needs_post_token: bool,
@@ -29,6 +32,34 @@ const DDI_EVENT_PATHS: &[&str] = &[
 /// 酷安服务端下发的 `PostToken.List`（需网易易盾 `_v2_post_token`）。
 const POST_TOKEN_PATHS: &[&str] = &["/v6/feed/createFeed", "/v6/feed/reply"];
 
+fn cookie_without_ddid(cookie: &str) -> String {
+    cookie
+        .split(';')
+        .filter_map(|part| {
+            let part = part.trim();
+            if part.is_empty() {
+                return None;
+            }
+            let name = part
+                .split_once('=')
+                .map(|(name, _)| name.trim())
+                .unwrap_or(part);
+            if name.eq_ignore_ascii_case("ddid") {
+                None
+            } else {
+                Some(part)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+fn cookie_for_request(cookie: &str, _needs_ddid: bool) -> String {
+    // 保留参数是为了让调用点继续与服务端路径分类对齐，但无论路径如何，
+    // 当前兼容模式都只发送原有登录 Cookie。
+    cookie_without_ddid(cookie)
+}
+
 /// 根据请求路径自动判断需要哪些风控令牌。
 pub fn classify_path(path: &str) -> PathRequirements {
     PathRequirements {
@@ -39,6 +70,8 @@ pub fn classify_path(path: &str) -> PathRequirements {
 
 pub struct CoolapkClient {
     client: Client,
+    /// Live Photo 解析只需要拿到重定向地址，不能跟随重定向把视频正文提前下载掉。
+    redirect_client: Client,
     auth: RwLock<CoolapkAuth>,
     user_cookie: RwLock<Option<String>>,
     cookie_file: RwLock<Option<PathBuf>>,
@@ -345,6 +378,41 @@ fn is_coolapk_host(host: &str) -> bool {
     host == "coolapk.com" || host.ends_with(".coolapk.com")
 }
 
+fn parse_http_url(value: &Value) -> Option<String> {
+    let raw = value.as_str()?.trim();
+    let parsed = reqwest::Url::parse(raw).ok()?;
+    if parsed.scheme() == "http" || parsed.scheme() == "https" {
+        Some(raw.to_string())
+    } else {
+        None
+    }
+}
+
+/// 从 Live Photo 解析响应中兼容提取视频地址。
+/// 酷安不同接口版本可能返回单个 url、data.url 或 data.urlList。
+fn extract_live_photo_video_url(value: &Value) -> Option<String> {
+    match value {
+        Value::String(_) => parse_http_url(value),
+        Value::Array(items) => items.iter().find_map(extract_live_photo_video_url),
+        Value::Object(object) => {
+            for key in ["url", "videoUrl", "video_url", "finalUrl", "final_url"] {
+                if let Some(url) = object.get(key).and_then(parse_http_url) {
+                    return Some(url);
+                }
+            }
+            for key in ["urlList", "url_list", "data"] {
+                if let Some(value) = object.get(key) {
+                    if let Some(url) = extract_live_photo_video_url(value) {
+                        return Some(url);
+                    }
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 fn parse_u64_val(val: &Value) -> Option<u64> {
     if let Some(n) = val.as_u64() {
         return Some(n);
@@ -605,6 +673,46 @@ fn copy_first_field(cleaned: &mut Value, obj: &serde_json::Map<String, Value>, o
     }
 }
 
+fn normalize_coolapk_image_url(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed == "null" || trimmed == "undefined" {
+        return None;
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        Some(trimmed.to_string())
+    } else {
+        Some(format!(
+            "https://image.coolapk.com/{}",
+            trimmed.trim_start_matches('/')
+        ))
+    }
+}
+
+fn image_source_url(value: &Value) -> Option<String> {
+    if let Some(raw) = value.as_str() {
+        return normalize_coolapk_image_url(raw);
+    }
+    let object = value.as_object()?;
+    for key in [
+        "sourceUrl",
+        "source_url",
+        "inSource",
+        "in_source",
+        "url",
+        "pic",
+        "imageUrl",
+        "image_url",
+        "src",
+    ] {
+        if let Some(raw) = object.get(key).and_then(Value::as_str) {
+            if let Some(url) = normalize_coolapk_image_url(raw) {
+                return Some(url);
+            }
+        }
+    }
+    None
+}
+
 impl CoolapkClient {
     /// 设备码策略：
     /// - 未登录（游客态）：每台电脑首次启动随机生成一次并持久化，之后固定
@@ -629,12 +737,18 @@ impl CoolapkClient {
         headers.insert("X-Dark-Mode", HeaderValue::from_static("0"));
 
         let client = Client::builder()
+            .default_headers(headers.clone())
+            .build()
+            .unwrap_or_default();
+        let redirect_client = Client::builder()
             .default_headers(headers)
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap_or_default();
 
         Self {
             client,
+            redirect_client,
             auth: RwLock::new(CoolapkAuth::new(device_code.clone())),
             user_cookie: RwLock::new(None),
             cookie_file: RwLock::new(None),
@@ -682,43 +796,24 @@ impl CoolapkClient {
         })
     }
 
-    /// 账号绑定的固定设备码：按官方规范算法生成并绑定到当前账号。
-    /// - 账号已有且格式有效的 deviceCode：沿用记录值
-    /// - 无记录或历史旧格式：自动迁移生成符合官方规范的标准设备码并持久化。
+    /// 账号绑定的固定设备码：恢复 v1.9.1 及更早版本的 UID 派生算法。
+    ///
+    /// v1.10 曾把这里改成固定/数盟设备码并把 `deviceId` 写入请求身份，
+    /// 导致已有账号即使不发送 `ddid` 也会带着另一套 Token + 设备指纹。
+    /// 每次同步都重新按 UID 计算并持久化，顺便迁移已经保存的新版设备码。
     fn account_device_code(&self, uid: &str) -> String {
         let mut accounts = self.load_accounts();
+        let code = generate_device_code_for_id(uid);
         if let Some(pos) = accounts
             .iter()
             .position(|a| a.get("uid").and_then(|v| v.as_str()) == Some(uid))
         {
-            // 优先使用账号配置的独立数盟设备 ID（发动态需要真实注册的设备 ID）。
-            if let Some(dev_id) = accounts[pos]
-                .get("deviceId")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.trim().is_empty())
-            {
-                let code = generate_device_code_with_id(dev_id);
-                if let Some(obj) = accounts[pos].as_object_mut() {
-                    obj.insert("deviceCode".to_string(), json!(code.clone()));
-                }
-                self.save_accounts(&accounts);
-                return code;
-            }
-            if let Some(code) = accounts[pos]
-                .get("deviceCode")
-                .and_then(|v| v.as_str())
-                .filter(|c| is_valid_device_code(c))
-            {
-                return code.to_string();
-            }
-            let code = generate_device_code_for_id(uid);
             if let Some(obj) = accounts[pos].as_object_mut() {
                 obj.insert("deviceCode".to_string(), json!(code.clone()));
             }
             self.save_accounts(&accounts);
             return code;
         }
-        let code = generate_device_code_for_id(uid);
         accounts.push(json!({ "uid": uid, "cookie": "", "deviceCode": code.clone() }));
         self.save_accounts(&accounts);
         code
@@ -746,17 +841,25 @@ impl CoolapkClient {
         &self,
         request: reqwest::RequestBuilder,
     ) -> Result<reqwest::RequestBuilder, String> {
-        let profile = self
-            .device_profile
-            .read()
-            .map_err(|_| "failed to read device profile".to_string())?;
         let device_code = self
             .device_code
             .read()
             .map_err(|_| "failed to read device code".to_string())?
             .clone();
+        self.apply_device_profile_with_code(request, &device_code)
+    }
+
+    fn apply_device_profile_with_code(
+        &self,
+        request: reqwest::RequestBuilder,
+        device_code: &str,
+    ) -> Result<reqwest::RequestBuilder, String> {
+        let profile = self
+            .device_profile
+            .read()
+            .map_err(|_| "failed to read device profile".to_string())?;
         let mut request = request;
-        if let Ok(header_value) = HeaderValue::from_str(&device_code) {
+        if let Ok(header_value) = HeaderValue::from_str(device_code) {
             request = request.header("X-App-Device", header_value);
         }
         for (header_name, value) in [
@@ -1211,15 +1314,8 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            // 酷安 v6 写接口（feed/like、createFeed、reply 等）要求 Cookie 携带 ddid。
-            // 服务端只校验 ddid 是否为合法 v4 UUID 格式（实测任意 UUID 均通过），
-            // 因此按路径自动判断（`useDDIEventList`）后附加一个伪随机 v4 UUID。
             let req = classify_path(path);
-            let full_cookie = if req.needs_ddid {
-                format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid())
-            } else {
-                cookie
-            };
+            let full_cookie = cookie_for_request(&cookie, req.needs_ddid);
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -1298,11 +1394,7 @@ impl CoolapkClient {
             .clone();
         if let Some(cookie) = cookie {
             let requirements = classify_path(path);
-            let full_cookie = if requirements.needs_ddid {
-                format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid())
-            } else {
-                cookie
-            };
+            let full_cookie = cookie_for_request(&cookie, requirements.needs_ddid);
             if let Ok(header_val) = HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -1384,10 +1476,13 @@ impl CoolapkClient {
             .or_else(|| obj.get("entityTitle").and_then(|v| v.as_str()))
             .unwrap_or("");
 
-        let has_pics = obj
-            .get("picArr")
-            .and_then(|v| v.as_array())
-            .map_or(false, |a| !a.is_empty());
+        let has_pics = ["picArr", "imageUriList", "image_uri_list"]
+            .iter()
+            .any(|key| {
+                obj.get(*key)
+                    .and_then(|value| value.as_array())
+                    .map_or(false, |array| !array.is_empty())
+            });
         let single_pic = obj
             .get("pic")
             .and_then(|v| v.as_str())
@@ -1483,35 +1578,22 @@ impl CoolapkClient {
         };
 
         let mut pics = Vec::new();
-        if let Some(arr) = obj.get("picArr").and_then(|v| v.as_array()) {
-            for p in arr {
-                if let Some(p_str) = p.as_str() {
-                    let trimmed = p_str.trim();
-                    if trimmed.is_empty() || trimmed == "null" || trimmed == "undefined" {
-                        continue;
-                    }
-                    if trimmed.starts_with("http") {
-                        pics.push(trimmed.to_string());
-                    } else {
-                        pics.push(format!(
-                            "https://image.coolapk.com/{}",
-                            trimmed.trim_start_matches('/')
-                        ));
-                    }
+        let raw_image_list = ["imageUriList", "image_uri_list", "picArr"]
+            .iter()
+            .filter_map(|key| obj.get(*key))
+            .find(|value| {
+                value
+                    .as_array()
+                    .map_or_else(|| has_non_empty_json_value(value), |array| !array.is_empty())
+            });
+        if let Some(arr) = raw_image_list.and_then(|value| value.as_array()) {
+            for image in arr {
+                if let Some(url) = image_source_url(image) {
+                    pics.push(url);
                 }
             }
-        } else if let Some(p_str) = obj.get("pic").and_then(|v| v.as_str()) {
-            let trimmed = p_str.trim();
-            if trimmed.is_empty() || trimmed == "null" || trimmed == "undefined" {
-                // 空 pic 是评论/动态接口的常见占位值，不能生成无效图片地址。
-            } else if trimmed.starts_with("http") {
-                pics.push(trimmed.to_string());
-            } else {
-                pics.push(format!(
-                    "https://image.coolapk.com/{}",
-                    trimmed.trim_start_matches('/')
-                ));
-            }
+        } else if let Some(url) = obj.get("pic").and_then(|value| image_source_url(value)) {
+            pics.push(url);
         }
 
         let device_title = obj
@@ -1602,6 +1684,16 @@ impl CoolapkClient {
         copy_first_field(&mut cleaned, obj, "relationRows", &["relationRows", "relation_rows"]);
         copy_first_field(&mut cleaned, obj, "extraRows", &["extraRows", "extra_rows"]);
         copy_first_field(&mut cleaned, obj, "productRows", &["productRows", "product_rows"]);
+        copy_first_field(&mut cleaned, obj, "imageUriList", &["imageUriList", "image_uri_list"]);
+        if cleaned.get("imageUriList").is_none() {
+            if let Some(arr) = obj.get("picArr").and_then(|value| value.as_array()) {
+                if arr.iter().any(|value| value.is_object()) {
+                    if let Some(cleaned_obj) = cleaned.as_object_mut() {
+                        cleaned_obj.insert("imageUriList".to_string(), Value::Array(arr.clone()));
+                    }
+                }
+            }
+        }
         copy_first_field(&mut cleaned, obj, "videoUrl", &["videoUrl", "video_url", "videoURL", "videoSrc", "video_src"]);
         copy_first_field(&mut cleaned, obj, "videoPic", &["videoPic", "video_pic", "videoCover", "video_cover", "videoThumbnail", "video_thumbnail"]);
         copy_first_field(&mut cleaned, obj, "videoDuration", &["videoDuration", "video_duration"]);
@@ -3001,7 +3093,8 @@ impl CoolapkClient {
                 // 登录 Cookie 只允许发送给酷安官方域；第三方 CDN/图片地址不得携带，
                 // 否则发帖人可控的图片链接会把登录凭据送到攻击者服务器
                 if is_coolapk_host(&host) {
-                    req = req.header("Cookie", cookie_str);
+                    let cookie = cookie_without_ddid(cookie_str);
+                    req = req.header("Cookie", cookie);
                 }
             }
         }
@@ -3077,6 +3170,7 @@ impl CoolapkClient {
             // 仅当目标是酷安官方域时才附带登录 Cookie；
             // 抓取任意第三方网页时绝不携带凭据，防止恶意链接窃取登录态
             if is_coolapk_target {
+                let cookie = cookie_without_ddid(&cookie);
                 if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&cookie) {
                     request = request.header(COOKIE, header_val);
                 }
@@ -3154,6 +3248,121 @@ impl CoolapkClient {
             )
             .await?;
         wrap_api_data(raw)
+    }
+
+    /// 按 APK 的 Live Photo 链路获取实况视频最终地址。
+    ///
+    /// 酷安返回的图片是静态封面，`/v6/livePhoto/showVideo` 会将
+    /// `picUrl` 与 `feed_<id>`/`reply_<id>` 解析为一个可播放的视频重定向。
+    pub async fn resolve_live_photo_video(
+        &self,
+        image_url: &str,
+        content_id: &str,
+        content_type: &str,
+    ) -> Result<Value, String> {
+        let image_url = image_url.trim();
+        let parsed_image = reqwest::Url::parse(image_url)
+            .map_err(|e| format!("invalid Live Photo image URL: {e}"))?;
+        let image_host = parsed_image.host_str().unwrap_or_default();
+        if (parsed_image.scheme() != "http" && parsed_image.scheme() != "https")
+            || !is_coolapk_host(image_host)
+        {
+            return Err("Live Photo 图片地址必须来自酷安官方域名".to_string());
+        }
+
+        // APK 将接口返回的原始 image.coolapk.com HTTP 地址传给 showVideo。
+        // 图片渲染层可能已将它规范化为 HTTPS，但解析接口会校验该参数的
+        // 原始格式；对酷安 CDN 仅恢复协议，不改变路径或查询参数。
+        let resolver_image_url = if parsed_image.scheme() == "https"
+            && image_host.eq_ignore_ascii_case("image.coolapk.com")
+        {
+            let mut url = parsed_image.clone();
+            let _ = url.set_scheme("http");
+            url.to_string()
+        } else {
+            image_url.to_string()
+        };
+
+        let content_id = content_id.trim();
+        if content_id.is_empty() || content_id.len() > 128 || content_id.chars().any(|ch| ch.is_control()) {
+            return Err("Live Photo 内容 ID 无效".to_string());
+        }
+        let content_type = match content_type.trim() {
+            "reply" => "reply",
+            "article" => "article",
+            _ => "feed",
+        };
+
+        let mut wrapper_url = reqwest::Url::parse("https://api.coolapk.com/v6/livePhoto/showVideo")
+            .map_err(|e| format!("invalid Live Photo resolver URL: {e}"))?;
+        wrapper_url
+            .query_pairs_mut()
+            .append_pair("picUrl", &resolver_image_url)
+            .append_pair("id", &format!("{content_type}_{content_id}"));
+        let wrapper_url_text = wrapper_url.to_string();
+
+        let token = self.get_token()?;
+        let mut request = self.apply_device_profile(
+            self.redirect_client
+                .get(wrapper_url)
+                .header("X-App-Token", token)
+                .header("X-Requested-With", "XMLHttpRequest"),
+        )?;
+        let cookie = self
+            .user_cookie
+            .read()
+            .map_err(|_| "failed to read login state".to_string())?
+            .clone();
+        if let Some(cookie) = cookie {
+            let cookie = cookie_without_ddid(&cookie);
+            if let Ok(header_value) = HeaderValue::from_str(&cookie) {
+                request = request.header(COOKIE, header_value);
+            }
+        }
+
+        let response = request.send().await.map_err(|e| e.to_string())?;
+        let status = response.status();
+        let redirect_url = response
+            .headers()
+            .get(LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|location| {
+                response
+                    .url()
+                    .join(location)
+                    .map(|url| url.to_string())
+                    .map_err(|e| format!("酷安返回了无效的 Live Photo 视频地址: {e}"))
+            })
+            .transpose()?;
+        if status.is_redirection() {
+            if let Some(final_url) = redirect_url
+                .filter(|url| url != &wrapper_url_text)
+                .filter(|url| {
+                    reqwest::Url::parse(url)
+                        .map(|parsed| parsed.scheme() == "http" || parsed.scheme() == "https")
+                        .unwrap_or(false)
+                })
+            {
+                return Ok(json!({ "code": 200, "data": { "url": final_url } }));
+            }
+        }
+
+        let body = response
+            .text()
+            .await
+            .map_err(|e| format!("failed to read Live Photo response: {e}"))?;
+        if !status.is_success() {
+            let detail = body.chars().take(300).collect::<String>();
+            return Err(format!("酷安 Live Photo 解析失败：HTTP {status}: {detail}"));
+        }
+        if let Ok(value) = serde_json::from_str::<Value>(&body) {
+            if let Some(url) = extract_live_photo_video_url(&value) {
+                return Ok(json!({ "code": 200, "data": { "url": url } }));
+            }
+        }
+        Err("酷安未返回可播放的 Live Photo 视频地址".to_string())
     }
 
     /// 获取单条评论的完整元数据。
@@ -4581,12 +4790,30 @@ impl CoolapkClient {
     }
 
     /// 发送私信（需登录）
-    /// 酷安 v6 私信接口要求：POST + multipart/form-data（字段 message）+ X-Requested-With: XMLHttpRequest。
-    /// GET + query 方式服务端无法识别内容（报"私信内容不能为空"）。
+    ///
+    /// 私信沿用 v1.9.1 及更早版本的兼容签名：旧版 Token cost=10、当前
+    /// 账号 UID 派生设备码，并且 Cookie 明确移除 `ddid`。请求体仍按当前
+    /// APK 的 `message/send` 契约发送 multipart，并补齐 `quick_reply=1`、
+    /// 空图片和空扩展字段。
     pub async fn send_private_message(&self, uid: &str, message: &str) -> Result<Value, String> {
+        let uid = uid.trim();
+        if uid.is_empty() || !uid.chars().all(|ch| ch.is_ascii_digit()) {
+            return Err("目标用户 UID 格式无效".to_string());
+        }
+        if message.trim().is_empty() {
+            return Err("私信内容不能为空".to_string());
+        }
+
         let token = self.get_token()?;
-        let url = format!("https://api.coolapk.com/v6/message/send?uid={}", uid);
-        let form = reqwest::multipart::Form::new().text("message", message.to_string());
+        let mut url = reqwest::Url::parse("https://api.coolapk.com/v6/message/send")
+            .map_err(|e| format!("私信接口地址无效: {e}"))?;
+        url.query_pairs_mut()
+            .append_pair("uid", uid)
+            .append_pair("quick_reply", "1");
+        let form = reqwest::multipart::Form::new()
+            .text("message", message.to_string())
+            .text("message_pic", "")
+            .text("message_extra", "");
 
         let mut request = self.apply_device_profile(
             self.client
@@ -4602,7 +4829,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let full_cookie = format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid());
+            let full_cookie = cookie_for_request(&cookie, true);
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -4613,11 +4840,26 @@ impl CoolapkClient {
     }
 
     /// 发送图片私信（需登录）
-    /// 与 send_private_message 相同接口，multipart 字段为 message_pic
+    /// 与 send_private_message 相同接口，multipart 字段为 message_pic。
     pub async fn send_private_image(&self, uid: &str, message_pic: &str) -> Result<Value, String> {
+        let uid = uid.trim();
+        if uid.is_empty() || !uid.chars().all(|ch| ch.is_ascii_digit()) {
+            return Err("目标用户 UID 格式无效".to_string());
+        }
+        if message_pic.trim().is_empty() {
+            return Err("私信图片地址不能为空".to_string());
+        }
+
         let token = self.get_token()?;
-        let url = format!("https://api.coolapk.com/v6/message/send?uid={}", uid);
-        let form = reqwest::multipart::Form::new().text("message_pic", message_pic.to_string());
+        let mut url = reqwest::Url::parse("https://api.coolapk.com/v6/message/send")
+            .map_err(|e| format!("私信接口地址无效: {e}"))?;
+        url.query_pairs_mut()
+            .append_pair("uid", uid)
+            .append_pair("quick_reply", "1");
+        let form = reqwest::multipart::Form::new()
+            .text("message", "")
+            .text("message_pic", message_pic.to_string())
+            .text("message_extra", "");
 
         let mut request = self.apply_device_profile(
             self.client
@@ -4633,7 +4875,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let full_cookie = format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid());
+            let full_cookie = cookie_for_request(&cookie, true);
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -4706,7 +4948,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let full_cookie = format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid());
+            let full_cookie = cookie_for_request(&cookie, true);
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -5456,7 +5698,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let full_cookie = format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid());
+            let full_cookie = cookie_for_request(&cookie, true);
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -5520,7 +5762,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let full_cookie = format!("{cookie}; ddid={}", crate::coolapk::auth::random_v4_uuid());
+            let full_cookie = cookie_for_request(&cookie, true);
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -7013,33 +7255,22 @@ fn is_valid_device_code(code: &str) -> bool {
     false
 }
 
-/// 按照官方客户端 C11918.java:248 规则生成标准设备码：
-/// byte[] bytes = (android_id + "; ; ; ; " + manufacturer + "; " + brand + "; " + model + "; " + build_display + "; " + oaid).getBytes(Charsets.UTF_8);
-/// String strReplace = new Regex("\\r\\n|\\r|\\n|=").replace(new StringBuilder(strEncodeToString).reverse().toString(), "");
-/// 生成设备码（官方标准逆序 Base64 格式）。
+/// v1.9.1 及更早版本使用的账号设备码。
 ///
-/// 重要：设备码首字段必须是**真实注册的数盟（Shuzilm）设备 ID**。
-/// - 点赞等 DDI 写接口：只校验 `DUWX3-` 前缀，伪造后缀亦可；
-/// - 发动态（createFeed）/评论（reply）等：要求设备 ID **真实在数盟注册过**，
-///   否则返回 `err_request_need_upgrade_new_version`。
-///
-/// 因此这里默认使用一个已注册有效的数盟设备 ID（DUWX3-…，来自模拟器 SDK）。
-/// 如需每个账号各自独立的已注册设备 ID，可在 accounts.json 中为该账号配置
-/// `deviceId` 字段（数盟设备 ID），`account_device_code` 会优先采用。
-fn generate_device_code_for_id(_id: &str) -> String {
-    let raw = format!(
-        "DUWX3-wyzReiFlzBTpYKkLgysnkduUFakgg9; ; ; ; REDMI; REDMI; 25060RK16C; UQ1A.240205.08180011 release-keys; null"
-    );
-    let b64 = BASE64.encode(raw.as_bytes());
-    let mut rev: String = b64.chars().rev().collect();
-    rev.retain(|c| c != '=' && c != '\r' && c != '\n');
-    rev
-}
+/// 账号请求身份由 UID 派生 Android ID，再按官方客户端的逆序 Base64
+/// 格式生成。该兼容链路不需要数盟设备注册 ID，也不会生成或发送 `ddid`。
+fn generate_device_code_for_id(uid: &str) -> String {
+    use md5::{Digest, Md5};
 
-/// 用指定的数盟设备 ID 生成设备码（每账号独立注册设备 ID 时使用）。
-fn generate_device_code_with_id(device_id: &str) -> String {
+    let mut hasher = Md5::new();
+    hasher.update(uid.as_bytes());
+    let digest = hasher.finalize();
+    let android_id = format!(
+        "{:016x}",
+        u64::from_le_bytes(digest[..8].try_into().unwrap_or_default())
+    );
     let raw = format!(
-        "{device_id}; ; ; ; REDMI; REDMI; 25060RK16C; UQ1A.240205.08180011 release-keys; null"
+        "{android_id}; ; ; ; Xiaomi; Xiaomi; 23113RKC6C; UKQ1.230804.001; "
     );
     let b64 = BASE64.encode(raw.as_bytes());
     let mut rev: String = b64.chars().rev().collect();

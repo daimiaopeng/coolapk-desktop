@@ -56,7 +56,11 @@
 
     <FeedVideoCard :feed="feed" />
 
-    <FeedImageGrid :images="feedImages" />
+    <FeedImageGrid
+      :images="feedImages"
+      :content-id="feed.id"
+      content-type="feed"
+    />
 
     <!-- 1. 被回复/转发的原动态 -->
     <!-- 1. 被回复/转发的原动态 -->
@@ -72,9 +76,11 @@
         class="quoted-message"
         v-html="formattedQuotedMessage"
       ></div>
-      <FeedImageGrid 
-        v-if="quotedImages.length" 
-        :images="quotedImages" 
+      <FeedImageGrid
+        v-if="quotedImages.length"
+        :images="quotedImages"
+        :content-id="targetRow?.id || targetRow?.entityId"
+        :content-type="isTargetFeed ? 'feed' : 'reply'"
         variant="comment"
       />
     </div>
@@ -230,6 +236,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { showToast } from '../../utils/toast';
 import { requestConfirmation } from '../../utils/confirm';
 import { getErrorMessage } from '../../utils/errors';
+import { extractFeedImageInputs, type FeedImageInput } from '../../utils/livePhoto';
 import { normalizeCoolapkNativeRoute, normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../../utils/coolapkRoute';
 import {
   getFeedRelationImage,
@@ -283,19 +290,7 @@ watch(authorUid, (newUid) => {
   if (newUid) preloadUserProfile(newUid);
 });
 
-const feedImages = computed<string[]>(() => {
-  const raw = props.feed.pics || props.feed.picArr || (props.feed.pic ? [props.feed.pic] : []);
-  if (Array.isArray(raw)) return raw.filter((url): url is string => typeof url === 'string' && url.trim().length > 0);
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.filter((url): url is string => typeof url === 'string' && url.trim().length > 0) : [raw];
-    } catch {
-      return [raw];
-    }
-  }
-  return [];
-});
+const feedImages = computed<FeedImageInput[]>(() => extractFeedImageInputs(props.feed));
 
 const emit = defineEmits<{
   (e: 'deleted', id: string | number): void;
@@ -371,20 +366,10 @@ const formattedQuotedMessage = computed(() => {
   return renderCoolapkRichText(text);
 });
 
-const quotedImages = computed<string[]>(() => {
+const quotedImages = computed<FeedImageInput[]>(() => {
   const t = targetRow.value;
   if (!t) return [];
-  const raw = t.pics || t.picArr || (t.pic ? [t.pic] : []) || (t.xsPic ? [t.xsPic] : []);
-  const list = Array.isArray(raw) ? raw : (typeof raw === 'string' && raw.trim().length > 0 ? [raw] : []);
-  return list
-    .map((u: string) => {
-      if (typeof u !== 'string') return '';
-      const trimmed = u.trim();
-      if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return '';
-      if (trimmed.startsWith('http') || trimmed.startsWith('//') || trimmed.startsWith('data:')) return trimmed;
-      return `https://image.coolapk.com/${trimmed.replace(/^\/+/, '')}`;
-    })
-    .filter((u): u is string => Boolean(u && u.length > 5));
+  return extractFeedImageInputs(t);
 });
 
 function targetIconClass(target: any): string {

@@ -87,6 +87,49 @@ img.coolapk-emoji,
   object-fit: contain !important;
 }
 
+/* 列表中最后一条消息单行预览中的表情微型化紧凑规则 */
+.last-message img.coolapk-emoji,
+.last-message .coolapk-emoji {
+  width: 15px !important;
+  height: 15px !important;
+  max-width: 15px !important;
+  max-height: 15px !important;
+  min-width: 15px !important;
+  min-height: 15px !important;
+  vertical-align: -2px !important;
+  margin: 0 1px !important;
+}
+
+/* 全局极简浅灰细滚动条 */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 999px;
+  transition: background-color 0.2s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 /* 富文本可点击的外部链接按钮 */
 .cool-external-link {
   color: var(--brand-green, #10b966) !important;

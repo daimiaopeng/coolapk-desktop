@@ -13,15 +13,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useRoute } from 'vue-router';
 
+const route = useRoute();
 const showButton = ref(false);
 let activeScrollTarget: HTMLElement | Window | null = null;
 
+const isExcluded = computed(() => {
+  return route?.path?.startsWith('/messages');
+});
+
 function checkScroll(e?: Event) {
+  if (isExcluded.value) {
+    showButton.value = false;
+    return;
+  }
+
   let scrollTop = 0;
   if (e && e.target && (e.target as HTMLElement).scrollTop !== undefined) {
     const el = e.target as HTMLElement;
+    // 排除聊天区域内的内部滚动
+    if (el.closest?.('.messages-page') || el.classList?.contains('chat-area') || el.classList?.contains('session-list')) {
+      showButton.value = false;
+      return;
+    }
     scrollTop = el.scrollTop;
     if (scrollTop > 300) {
       activeScrollTarget = el;
@@ -36,23 +52,8 @@ function checkScroll(e?: Event) {
   showButton.value = scrollTop > 300;
 }
 
-function isVisibleElement(element: HTMLElement | Window): boolean {
-  if (element === window) return true;
-  let current: HTMLElement | null = element as HTMLElement;
-  while (current && current !== document.documentElement) {
-    const style = window.getComputedStyle(current);
-    if (style.display === 'none' || style.visibility === 'hidden') return false;
-    current = current.parentElement;
-  }
-  return true;
-}
-
 function scrollToTop() {
-  if (
-    activeScrollTarget &&
-    'scrollTo' in activeScrollTarget &&
-    isVisibleElement(activeScrollTarget)
-  ) {
+  if (activeScrollTarget && 'scrollTo' in activeScrollTarget) {
     activeScrollTarget.scrollTo({
       top: 0,
       behavior: 'smooth'
@@ -62,8 +63,7 @@ function scrollToTop() {
       top: 0,
       behavior: 'smooth'
     });
-    const scrollables = Array.from(document.querySelectorAll<HTMLElement>('.custom-scrollbar, .feed-scroll-container, .page-container, .user-page-wrapper'))
-      .filter(isVisibleElement);
+    const scrollables = document.querySelectorAll<HTMLElement>('.custom-scrollbar, .feed-scroll-container, .page-container, .user-page-wrapper');
     scrollables.forEach(el => {
       el.scrollTo({ top: 0, behavior: 'smooth' });
     });

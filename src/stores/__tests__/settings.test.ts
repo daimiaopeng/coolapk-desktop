@@ -36,8 +36,9 @@ describe('settings store', () => {
     accentColor: 'green',
     collapseLines: 12,
     commentSort: 'hot',
-    infiniteScroll: true,
     autoPlayGif: true,
+    autoPlayLivePhotoSound: false,
+    autoLoadOriginalImage: true,
     imageQuality: 'hd',
   };
 
@@ -47,6 +48,8 @@ describe('settings store', () => {
     expect(store.settings.fontSize).toBe(defaults.fontSize);
     expect(store.settings.accentColor).toBe(defaults.accentColor);
     expect(store.settings.imageQuality).toBe(defaults.imageQuality);
+    expect(store.settings.autoPlayLivePhotoSound).toBe(defaults.autoPlayLivePhotoSound);
+    expect(store.settings.autoLoadOriginalImage).toBe(defaults.autoLoadOriginalImage);
     expect(store.settings.navVisibility?.albums).toBe(true);
     expect(store.settings.navVisibility?.pictures).toBe(true);
     expect(store.settings.rememberWindowState).toBe(true);
@@ -62,6 +65,8 @@ describe('settings store', () => {
       blockedKeywords: ['广告', '', '广告', 123],
       navVisibility: { albums: false, pictures: 'false' },
       deviceFingerprint: { customFingerprint: true, darkMode: '1' },
+      autoPlayLivePhotoSound: true,
+      autoLoadOriginalImage: false,
     });
     expect(normalized.theme).toBe('system');
     expect(normalized.fontSize).toBe(20);
@@ -72,6 +77,8 @@ describe('settings store', () => {
     expect(normalized.navVisibility?.pictures).toBe(true);
     expect(normalized.deviceFingerprint.customFingerprint).toBe(true);
     expect(normalized.deviceFingerprint.darkMode).toBe('1');
+    expect(normalized.autoPlayLivePhotoSound).toBe(true);
+    expect(normalized.autoLoadOriginalImage).toBe(false);
     expect(normalizeSettings({ rememberWindowState: false }).rememberWindowState).toBe(false);
   });
 

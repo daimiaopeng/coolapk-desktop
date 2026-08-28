@@ -6,6 +6,10 @@ import App from './App.vue';
 import { router } from './router';
 import { CoolapkTauriAPI } from './api/coolapk';
 import { useSettingsStore } from './stores/settings';
+import { setupGlobalAlertProxy } from './utils/toast';
+
+// 启动全局原生 alert 代理拦截，统一呈现顶部高质感 Toast
+setupGlobalAlertProxy();
 
 const app = createApp(App);
 const pinia = createPinia();

@@ -68,4 +68,24 @@ describe('通知状态', () => {
     expect(store.messageCount).toBe(1);
     expect(store.unreadCount).toBe(1);
   });
+
+  it('扣除服务端误报的自己发送私信后，下一轮轮询不会恢复红点', () => {
+    const store = useNotificationStore();
+    store.applyServerResponse({ data: { badge: 1, message: 1 } });
+
+    expect(store.suppressMessageCount(1)).toBe(1);
+    expect(store.messageCount).toBe(0);
+    expect(store.unreadCount).toBe(0);
+
+    // 服务端暂时仍返回原来的数量，本地抵消状态继续生效。
+    store.applyServerResponse({ data: { badge: 1, message: 1 } });
+    expect(store.messageCount).toBe(0);
+    expect(store.unreadCount).toBe(0);
+
+    // 服务端真正清零后又出现新的真实私信时，应重新显示。
+    store.applyServerResponse({ data: { badge: 0, message: 0 } });
+    store.applyServerResponse({ data: { badge: 1, message: 1 } });
+    expect(store.messageCount).toBe(1);
+    expect(store.unreadCount).toBe(1);
+  });
 });

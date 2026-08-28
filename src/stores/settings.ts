@@ -106,8 +106,9 @@ const defaultSettings: AppSettings = {
   accentColor: 'green',
   collapseLines: 12,
   commentSort: 'hot',
-  infiniteScroll: true,
   autoPlayGif: true,
+  autoPlayLivePhotoSound: false,
+  autoLoadOriginalImage: true,
   showDeviceInfo: true,
   defaultHomeTab: 'digest',
   homeTabOrder: [...DEFAULT_HOME_TAB_ORDER],
@@ -136,7 +137,6 @@ const defaultSettings: AppSettings = {
   notificationPollInterval: 1,
   externalLinkMode: 'internal',
   timeDisplay: 'relative',
-  hideAdCards: false,
   blockedKeywords: [],
   publishDeviceSignature: true,
   deviceSignature: '',
@@ -214,8 +214,9 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.moreExpanded = readBoolean(source.moreExpanded, result.moreExpanded);
   result.reduceMotion = readBoolean(source.reduceMotion, result.reduceMotion);
   result.collapseLines = [0, 8, 12, 18].includes(Number(source.collapseLines)) ? Number(source.collapseLines) : result.collapseLines;
-  result.infiniteScroll = readBoolean(source.infiniteScroll, result.infiniteScroll);
   result.autoPlayGif = readBoolean(source.autoPlayGif, result.autoPlayGif);
+  result.autoPlayLivePhotoSound = readBoolean(source.autoPlayLivePhotoSound, result.autoPlayLivePhotoSound);
+  result.autoLoadOriginalImage = readBoolean(source.autoLoadOriginalImage, result.autoLoadOriginalImage);
   result.showDeviceInfo = readBoolean(source.showDeviceInfo, result.showDeviceInfo);
   result.downloadPath = readString(source.downloadPath, result.downloadPath);
   result.maxConcurrentDownloads = [1, 2, 3, 4, 5, 6, 8].includes(Number(source.maxConcurrentDownloads)) ? Number(source.maxConcurrentDownloads) : result.maxConcurrentDownloads;
@@ -237,7 +238,6 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.desktopNotifications = readBoolean(source.desktopNotifications, result.desktopNotifications);
   result.notificationSound = readBoolean(source.notificationSound, result.notificationSound);
   result.notificationPollInterval = [1, 5, 10, 30].includes(Number(source.notificationPollInterval)) ? Number(source.notificationPollInterval) : result.notificationPollInterval;
-  result.hideAdCards = readBoolean(source.hideAdCards, result.hideAdCards);
   result.blockedKeywords = Array.isArray(source.blockedKeywords) ? [...new Set(source.blockedKeywords.filter((item): item is string => typeof item === 'string' && item.trim().length > 0))] : result.blockedKeywords;
   result.publishDeviceSignature = readBoolean(source.publishDeviceSignature, result.publishDeviceSignature);
   result.deviceSignature = readString(source.deviceSignature, result.deviceSignature).slice(0, 40);

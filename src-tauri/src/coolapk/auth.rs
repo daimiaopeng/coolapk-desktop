@@ -93,7 +93,7 @@ impl CoolapkAuth {
         let salt: [u8; 16] = salt_bytes
             .try_into()
             .map_err(|bytes: Vec<u8>| format!("invalid bcrypt salt length: {}", bytes.len()))?;
-        let hash = hash_with_salt(password.as_bytes(), 4, salt)
+        let hash = hash_with_salt(password.as_bytes(), 10, salt)
             .map_err(|e| format!("bcrypt failed: {e}"))?
             .format_for_version(Version::TwoY);
 
@@ -124,42 +124,6 @@ fn shift_last_base64_char(value: &str, shift: i32) -> Result<String, String> {
     Ok(format!("{prefix}{}", STD_BASE64_ALPHABET[shifted] as char))
 }
 
-/// 生成任意 v4 UUID 用作 `ddid` 会话。
-///
-/// 实测酷安服务端对 `ddid` 只校验“是否为合法 v4 UUID 格式”，不校验内容来源，
-/// 因此可直接用时间+计数器派生伪随机 16 字节并套上 v4 的版本/变体位即可通过
-/// `useDDIEventList`（feed/like、createFeed、reply 等）检查。
-pub fn random_v4_uuid() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use md5::{Digest, Md5};
-
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos() as u64;
-    let mut seed = [0u8; 24];
-    seed[..8].copy_from_slice(&now.to_le_bytes());
-    seed[8..16].copy_from_slice(&(std::process::id() as u64).to_le_bytes());
-    seed[16..24].copy_from_slice(&COUNTER.fetch_add(1, Ordering::Relaxed).to_le_bytes());
-
-    let mut hasher = Md5::new();
-    hasher.update(seed);
-    let mut bytes = hasher.finalize().to_vec();
-    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
-    bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant
-
-    let hex_str = hex::encode(&bytes);
-    format!(
-        "{}-{}-{}-{}-{}",
-        &hex_str[0..8],
-        &hex_str[8..12],
-        &hex_str[12..16],
-        &hex_str[16..20],
-        &hex_str[20..32]
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::CoolapkAuth;
@@ -172,22 +136,5 @@ mod tests {
         assert_eq!(first, second);
         assert!(first.starts_with("v3"));
         assert!(first.len() > 70);
-    }
-
-    #[test]
-    fn random_v4_uuid_has_valid_format() {
-        use super::random_v4_uuid;
-        let uuid = random_v4_uuid();
-        let parts: Vec<&str> = uuid.split('-').collect();
-        assert_eq!(parts.len(), 5);
-        assert_eq!(parts[0].len(), 8);
-        assert_eq!(parts[1].len(), 4);
-        assert_eq!(parts[2].len(), 4);
-        assert_eq!(parts[3].len(), 4);
-        assert_eq!(parts[4].len(), 12);
-        // version nibble must be 4
-        assert!(parts[2].starts_with('4'));
-        // variant nibble must be 8/9/a/b
-        assert!(parts[3].starts_with(['8', '9', 'a', 'b']));
     }
 }

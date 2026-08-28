@@ -181,7 +181,20 @@ function collectImageValues(value: unknown, result: string[], depth = 0): void {
 
   if (typeof value === 'object') {
     const record = value as Record<string, unknown>;
-    for (const key of ['url', 'pic', 'image', 'imageUrl', 'image_url', 'source', 'src', 'cover', 'thumb', 'thumbnail']) {
+    for (const key of [
+      'url',
+      'pic',
+      'image',
+      'imageUrl',
+      'image_url',
+      'sourceUrl',
+      'source_url',
+      'source',
+      'src',
+      'cover',
+      'thumb',
+      'thumbnail',
+    ]) {
       collectImageValues(record[key], result, depth + 1);
     }
   }
@@ -189,7 +202,18 @@ function collectImageValues(value: unknown, result: string[], depth = 0): void {
 
 export function getCommentImages(item: any): string[] {
   const result: string[] = [];
-  for (const key of ['picArr', 'pics', 'pic', 'imageList', 'images', 'message_pic', 'imageUrl', 'image']) {
+  for (const key of [
+    'imageUriList',
+    'image_uri_list',
+    'picArr',
+    'pics',
+    'pic',
+    'imageList',
+    'images',
+    'message_pic',
+    'imageUrl',
+    'image',
+  ]) {
     collectImageValues(item?.[key], result);
   }
   return [...new Set(result)];

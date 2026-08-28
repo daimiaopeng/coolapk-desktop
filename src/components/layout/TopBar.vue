@@ -36,6 +36,14 @@
         <span class="placeholder-text">搜索应用、动态、用户、话题</span>
         <kbd class="shortcut-kbd">Ctrl K</kbd>
       </div>
+      <AppIconButton
+        :icon="isDark ? 'fas fa-sun' : 'fas fa-moon'"
+        :title="isDark ? '切换日间模式' : '切换夜间模式'"
+        :aria-label="isDark ? '切换日间模式' : '切换夜间模式'"
+        size="sm"
+        class="theme-toggle-icon-btn"
+        @click="toggleTheme"
+      />
     </div>
 
     <div class="top-bar-right">
@@ -290,6 +298,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { desktopNotify } from '../../utils/desktopNotify';
 import { hasNotificationCountIncreased, type NotificationCategory } from '../../utils/notificationCount';
+import { getMessageUnreadCount, getSelfMessageUnreadCount } from '../../utils/messageUnread';
 import { getNotificationActor } from '../../utils/notificationItem';
 import { getNotificationExternalUrl, getNotificationFeedId, resolveNotificationTargetRoute } from '../../utils/notificationNavigation';
 import { syncWindowsNotificationIcons } from '../../utils/taskbarNotificationDot';
@@ -311,6 +320,13 @@ const appStore = useAppStore();
 const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
 const settingsStore = useSettingsStore();
+
+const isDark = computed(() => settingsStore.settings.theme === 'dark');
+
+function toggleTheme() {
+  const nextTheme = settingsStore.settings.theme === 'dark' ? 'light' : 'dark';
+  settingsStore.setTheme(nextTheme);
+}
 
 // 由路由器维护桌面端页面栈。
 // 通过当前路由的变化触发计算，保证页面进入、替换和返回后按钮状态同步更新。
@@ -398,7 +414,29 @@ async function fetchNotificationCount(): Promise<boolean | null> {
   notificationRequestRunning = true;
   try {
     const res: any = await CoolapkTauriAPI.getNotificationCount();
-    const { previous, count, increasedCategories } = notificationStore.applyServerResponse(res);
+    const previousMessageCount = notificationStore.messageCount;
+    const applied = notificationStore.applyServerResponse(res);
+    let { previous, count, increasedCategories } = applied;
+
+    // checkCount 只返回数量，服务端偶尔会把自己发出的最后一条私信也算进去。
+    // 用会话列表中的发送者字段校正 message 分类后，再决定是否弹桌面提醒。
+    if (notificationStore.messageCount > 0) {
+      try {
+        const messageResponse = await CoolapkTauriAPI.listMessages(1);
+        const messageSessions = Array.isArray(messageResponse?.data) ? messageResponse.data : [];
+        notificationStore.suppressMessageCount(
+          getSelfMessageUnreadCount(messageSessions, authStore.user?.uid),
+        );
+        if (notificationStore.messageCount <= previousMessageCount) {
+          increasedCategories = increasedCategories.filter((category) => category !== 'message');
+        }
+        count = notificationStore.unreadCount;
+      } catch (error) {
+        // 会话列表失败时保留服务端原始计数，避免误把真实私信吞掉。
+        console.warn('校正私信未读方向失败:', error);
+      }
+    }
+
     const countIncreased = hasNotificationCountIncreased(previous, count);
     // 首次请求只建立基线；之后即使基线为零，第一条新通知也会触发提醒。
     if (
@@ -550,9 +588,7 @@ function getMessagePreviewTime(preview: MessagePreview): string {
 }
 
 function getMessagePreviewUnreadCount(item: any): number {
-  const count = Number(item?.unreadNum ?? item?.unread_num ?? item?.unreadCount ?? item?.unread_count);
-  if (Number.isFinite(count) && count > 0) return Math.floor(count);
-  return Number(item?.isnew ?? item?.isNew ?? 0) > 0 ? 1 : 0;
+  return getMessageUnreadCount(item, authStore.user?.uid);
 }
 
 async function fetchMessagePreviews(force = false) {
@@ -562,6 +598,9 @@ async function fetchMessagePreviews(force = false) {
   try {
     const response = await CoolapkTauriAPI.listMessages(1);
     const data = Array.isArray(response?.data) ? response.data : [];
+    notificationStore.suppressMessageCount(
+      getSelfMessageUnreadCount(data, authStore.user?.uid),
+    );
     const previews: MessagePreview[] = data
       .map((item: any, index: number): MessagePreview => ({
         key: String(item?.messageUid || item?.fromuid || item?.uid || item?.ukey || item?.id || index),
@@ -923,6 +962,17 @@ function handleUserClick() {
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-default);
   overflow: hidden;
+}
+
+.theme-toggle-icon-btn {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.theme-toggle-icon-btn:hover {
+  color: var(--brand-primary);
+  transform: rotate(15deg);
 }
 
 .top-bar-right .app-button {

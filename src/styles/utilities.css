@@ -17,18 +17,53 @@
   white-space: nowrap;
 }
 
+/* 全局现代极简浅灰细滚动条（替代系统粗重深黑滑块） */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border, rgba(0, 0, 0, 0.16));
+  border-radius: var(--radius-pill, 9999px);
+  transition: background-color 0.2s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary, rgba(0, 0, 0, 0.35));
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.16) transparent;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--border, rgba(0, 0, 0, 0.16));
   border-radius: var(--radius-pill);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
+  background: var(--text-tertiary, rgba(0, 0, 0, 0.35));
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -58,45 +93,79 @@ img.coolapk-emoji,
   display: inline-flex !important;
 }
 
-/* 全局轻量提示 Toast（转发/删除等操作反馈） */
-.app-toast {
+/* 全局高质感轻量提示 Toast 容器与胶囊卡片 */
+.app-toast-container {
   position: fixed;
-  top: 20px;
+  top: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--brand-primary, #10b768);
-  color: #fff;
-  padding: 10px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  z-index: 99999;
+  pointer-events: none;
+}
+
+.app-toast {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(16, 185, 129, 0.95);
+  color: #ffffff;
+  padding: 9px 20px;
   border-radius: var(--radius-pill, 9999px);
-  font-size: 14px;
-  font-weight: 600;
-  box-shadow: 0 6px 20px rgba(16, 183, 104, 0.35);
-  z-index: 9999;
-  animation: appToastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  font-size: 13.5px;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3), 0 2px 6px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  animation: appToastIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.22s ease;
+}
+
+.app-toast .toast-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.app-toast .toast-text {
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .app-toast.is-error {
-  background: var(--danger, #f04444);
-  box-shadow: 0 6px 20px rgba(240, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.95);
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.3), 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .app-toast.is-warning {
-  background: var(--warning, #d98b00);
-  box-shadow: 0 6px 20px rgba(217, 139, 0, 0.35);
+  background: rgba(245, 158, 11, 0.95);
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.3), 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .app-toast.is-info {
-  background: var(--info, #3478db);
-  box-shadow: 0 6px 20px rgba(52, 120, 219, 0.35);
+  background: rgba(59, 130, 246, 0.95);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3), 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.app-toast.is-leaving {
+  opacity: 0;
+  transform: translateY(-12px) scale(0.92);
 }
 
 @keyframes appToastIn {
-  from {
+  0% {
     opacity: 0;
-    transform: translate(-50%, -12px);
+    transform: translateY(-20px) scale(0.9);
   }
-  to {
+  70% {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translateY(2px) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }

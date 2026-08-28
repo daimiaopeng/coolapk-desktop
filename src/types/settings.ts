@@ -114,8 +114,9 @@ export interface AppSettings {
   accentColor: AccentColor;
   collapseLines: number;
   commentSort: CommentSort;
-  infiniteScroll: boolean;
   autoPlayGif: boolean;
+  autoPlayLivePhotoSound: boolean;
+  autoLoadOriginalImage: boolean;
   showDeviceInfo: boolean;
   defaultHomeTab: HomeTabKey;
   homeTabOrder: HomeTabKey[];
@@ -143,7 +144,6 @@ export interface AppSettings {
   notificationPollInterval: number;
   externalLinkMode: ExternalLinkMode;
   timeDisplay: TimeDisplayMode;
-  hideAdCards: boolean;
   blockedKeywords: string[];
   publishDeviceSignature: boolean;
   deviceSignature: string;

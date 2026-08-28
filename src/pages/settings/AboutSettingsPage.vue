@@ -57,6 +57,15 @@
       <h4 class="group-title">联系与支持</h4>
       <div class="setting-row">
         <div class="row-info">
+          <span class="row-label">一键私信反馈</span>
+          <span class="row-sub">直接向作者（oxygen的喵）私信反馈 Bug 或建议</span>
+        </div>
+        <AppButton variant="primary" size="sm" icon="fas fa-comment-dots" @click="handleFeedback">
+          私信反馈
+        </AppButton>
+      </div>
+      <div class="setting-row">
+        <div class="row-info">
           <span class="row-label">项目主页</span>
           <span class="row-sub">GitHub 仓库 · 源码与 Release</span>
         </div>
@@ -64,8 +73,8 @@
       </div>
       <div class="setting-row">
         <div class="row-info">
-          <span class="row-label">反馈问题</span>
-          <span class="row-sub">提交 Bug 或功能建议</span>
+          <span class="row-label">GitHub 反馈</span>
+          <span class="row-sub">提交 Issue 或功能建议</span>
         </div>
         <AppIconButton icon="fas fa-bug" size="sm" title="打开反馈页面" @click="open('https://github.com/daimiaopeng/coolapk-desktop/issues')" />
       </div>
@@ -92,20 +101,39 @@
       </div>
     </div>
 
+    <!-- 反馈说明指引 -->
+    <div class="setting-group feedback-guide-group">
+      <h4 class="group-title"><i class="fas fa-info-circle"></i> 反馈说明与建议</h4>
+      <div class="guide-content">
+        <p class="guide-item"><strong>📌 支持反馈内容：</strong>功能异常/报错（Bug）、界面样式显示问题、交互体验优化建议、希望新增的专区或功能。</p>
+        <p class="guide-item"><strong>💡 高效反馈技巧：</strong>建议附带<strong>具体操作步骤</strong>、<strong>复现条件</strong>或<strong>截图/报错信息</strong>，以便开发者快速定位并排查问题。</p>
+        <p class="guide-item"><strong>⚡ 自动附加信息：</strong>通过一键反馈跳转时，会自动预填当前客户端版本号与系统类型，无需手动输入。</p>
+      </div>
+    </div>
+
     <p class="copyright">© 2026 daimiaopeng · MIT License</p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { APP_VERSION } from '../../constants/version';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useSettingsStore } from '../../stores/settings';
+import { useAuthStore } from '../../stores/auth';
 import AppButton from '../../components/common/AppButton.vue';
 import AppIconButton from '../../components/common/AppIconButton.vue';
+import { openFeedbackMessage } from '../../utils/feedback';
 
+const router = useRouter();
+const authStore = useAuthStore();
 const appVersion = APP_VERSION;
 const settingsStore = useSettingsStore();
+
+function handleFeedback() {
+  openFeedbackMessage(router, authStore);
+}
 
 const channelLabel = settingsStore.settings.updateChannel === 'beta' ? '测试版渠道' : '稳定版';
 
@@ -312,6 +340,36 @@ onMounted(() => {
   border: 1px solid var(--border);
   padding: 2px 12px;
   border-radius: var(--radius-pill);
+}
+
+.feedback-guide-group {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(5, 150, 105, 0.02) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+}
+
+.feedback-guide-group .group-title {
+  color: var(--brand-primary, #10b981);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.guide-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.guide-item {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.guide-item strong {
+  color: var(--text-primary);
 }
 
 /* 链接行（与其他 setting-row 观感一致） */

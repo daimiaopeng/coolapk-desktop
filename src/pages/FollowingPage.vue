@@ -1,5 +1,5 @@
 <template>
-  <div ref="pageContainerRef" class="page-container custom-scrollbar">
+  <div class="page-container custom-scrollbar">
     <!-- 未登录引导视图 -->
     <div v-if="!authStore.isLoggedIn" class="empty-wrapper login-guide-wrapper">
       <div class="login-guide-card">
@@ -139,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
@@ -156,7 +156,6 @@ const route = useRoute();
 const initialTab = String(route.query.tab || '');
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
-const pageContainerRef = ref<HTMLElement | null>(null);
 
 const loading = ref(false);
 const usersLoading = ref(false);
@@ -212,7 +211,10 @@ async function selectUserFilter(uid: string | null) {
   selectedUid.value = uid;
 
   // 点击后立即瞬间重置到顶部（不带动画）
-  if (pageContainerRef.value) pageContainerRef.value.scrollTop = 0;
+  const container = document.querySelector('.page-container') as HTMLElement;
+  if (container) {
+    container.scrollTop = 0;
+  }
 
   await loadFollowingFeeds(true);
 }
@@ -374,7 +376,6 @@ function navigateToUser(uid: string | number) {
 }
 
 function onScrollEvent(e: Event) {
-  if (route.path !== '/following') return;
   const el = e.target as HTMLElement;
   let scrollDiff = 999;
   if (el && el.scrollHeight) {
@@ -392,7 +393,6 @@ function onScrollEvent(e: Event) {
 }
 
 const onRefreshFeeds = () => {
-  if (route.path !== '/following') return;
   if (!loading.value && !loadingMore.value) {
     loadFollowingFeeds(true);
   }
@@ -411,18 +411,6 @@ onMounted(() => {
   window.addEventListener('scroll', onScrollEvent, true);
   window.addEventListener('refresh-feeds', onRefreshFeeds);
 });
-
-// 侧边栏页面会在认证状态恢复前就挂载；认证完成后补一次首屏预加载，
-// 避免登录态恢复较慢时把请求推迟到用户点击“我关注的”之后。
-watch(
-  () => authStore.user?.uid,
-  (uid) => {
-    if (!uid || !authStore.isLoggedIn) return;
-    loadFollowUsers();
-    loadFollowingFeeds(true);
-    syncTabFromRoute();
-  },
-);
 
 onUnmounted(() => {
   window.removeEventListener('scroll', onScrollEvent, true);

@@ -121,6 +121,24 @@ export const useNotificationStore = defineStore('notifications', () => {
     return count;
   }
 
+  /**
+   * 服务端偶尔会把自己发出的最后一条私信也计入 message 未读。
+   * 仅扣除已由会话列表明确识别为“自己发送”的数量，并保留本地抵消量，
+   * 避免下一次 checkCount 在服务端尚未修正前再次显示红点。
+   */
+  function suppressMessageCount(count: number): number {
+    const requested = Number(count);
+    if (!Number.isFinite(requested) || requested <= 0) return 0;
+
+    const suppressed = Math.min(Math.floor(requested), categoryCounts.message);
+    if (suppressed <= 0) return 0;
+
+    categoryCounts.message -= suppressed;
+    locallyViewed.message += suppressed;
+    unreadCount.value = Math.max(0, unreadCount.value - suppressed);
+    return suppressed;
+  }
+
   /** 进入通知中心即视为已查看所有站内通知，私信未读保持不变。 */
   function markAllNotificationsViewed(): number {
     const count = notificationCount.value;
@@ -159,6 +177,7 @@ export const useNotificationStore = defineStore('notifications', () => {
     applyServerResponse,
     markViewed,
     markCategoryViewed,
+    suppressMessageCount,
     markAllNotificationsViewed,
     reset,
   };

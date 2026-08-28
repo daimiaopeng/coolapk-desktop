@@ -92,10 +92,9 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue';
+import { nextTick, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
-import { useAuthStore } from '../stores/auth';
 import { useNotificationStore } from '../stores/notifications';
 import type { NotificationCategory } from '../utils/notificationCount';
 import { getNotificationActor } from '../utils/notificationItem';
@@ -110,7 +109,6 @@ import ErrorState from '../components/common/ErrorState.vue';
 
 const router = useRouter();
 const route = useRoute();
-const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
 
 // 分类 Tabs（接口路径与官方 UWP 客户端一致）
@@ -129,33 +127,6 @@ const page = ref(1);
 const hasMore = ref(true);
 const notificationError = ref('');
 const pageContainerRef = ref<HTMLElement | null>(null);
-let isNotificationsPageActive = false;
-
-function activateNotificationsPage() {
-  if (isNotificationsPageActive) return;
-  isNotificationsPageActive = true;
-  window.addEventListener('coolapk-notification-count-increased', handleNotificationCountIncrease);
-  notificationStore.markAllNotificationsViewed();
-  void CoolapkTauriAPI.clearNotificationCount('feed').catch((err) => {
-    console.warn('清除服务端通知数失败', err);
-  });
-
-  const requestedTab = String(route.query.tab || '');
-  if (tabs.some((tab) => tab.value === requestedTab) && currentTab.value !== requestedTab) {
-    currentTab.value = requestedTab;
-    page.value = 1;
-    items.value = [];
-    hasMore.value = true;
-  }
-  // 预加载已经拿到数据时直接复用，进入栏目不再因为激活而重复请求。
-  if (!items.value.length && !loading.value) void refreshNotifications();
-}
-
-function deactivateNotificationsPage() {
-  if (!isNotificationsPageActive) return;
-  isNotificationsPageActive = false;
-  window.removeEventListener('coolapk-notification-count-increased', handleNotificationCountIncrease);
-}
 
 // 切换 Tab
 async function switchTab(tabValue: string) {
@@ -420,27 +391,20 @@ async function handleNotifyClick(e: Event, item: any) {
   if (!getNotificationProductName(notification)) handleAnchorClick(e);
 }
 
-// 页面由侧边栏宿主保持挂载，使用路由状态代替 keep-alive 的激活/停用生命周期。
-watch(
-  () => route.path,
-  (path) => {
-    if (path === '/notifications') activateNotificationsPage();
-    else deactivateNotificationsPage();
-  },
-);
+onActivated(() => {
+  window.addEventListener('coolapk-notification-count-increased', handleNotificationCountIncrease);
+  notificationStore.markAllNotificationsViewed();
+  void CoolapkTauriAPI.clearNotificationCount('feed').catch((err) => {
+    console.warn('清除服务端通知数失败', err);
+  });
+  const requestedTab = String(route.query.tab || '');
+  if (tabs.some((tab) => tab.value === requestedTab)) currentTab.value = requestedTab;
+  void refreshNotifications();
+});
 
-watch(
-  () => authStore.user?.uid,
-  () => {
-    if (!authStore.isLoggedIn) {
-      items.value = [];
-      page.value = 1;
-      hasMore.value = true;
-      return;
-    }
-    if (!items.value.length && !loading.value) void refreshNotifications();
-  },
-);
+onDeactivated(() => {
+  window.removeEventListener('coolapk-notification-count-increased', handleNotificationCountIncrease);
+});
 
 watch(
   () => route.query.tab,
@@ -450,14 +414,6 @@ watch(
   }
 );
 
-onMounted(() => {
-  if (route.path === '/notifications') {
-    activateNotificationsPage();
-  } else if (authStore.isLoggedIn) {
-    // 隐藏的通知页也在启动阶段读取首屏数据，但不执行“已读”副作用。
-    void refreshNotifications();
-  }
-});
 </script>
 
 <style scoped>

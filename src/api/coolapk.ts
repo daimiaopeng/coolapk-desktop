@@ -451,6 +451,19 @@ export class CoolapkTauriAPI {
     return await invokeNative('resolve_video_url', { requestParams }, { retry: true, kind: 'feed' });
   }
 
+  // APK Live Photo path: GET /v6/livePhoto/showVideo and read the final video redirect.
+  static async resolveLivePhotoVideo(
+    imageUrl: string,
+    contentId: string | number,
+    contentType: 'feed' | 'reply' | 'article' = 'feed',
+  ) {
+    return await invokeNative('resolve_live_photo_video', {
+      imageUrl,
+      contentId: String(contentId),
+      contentType,
+    }, { retry: true, kind: 'feed' });
+  }
+
   static async getHotReplies(feedId: string, page: number = 1) {
     return await invokeNative('get_hot_replies', { feedId, page }, { retry: true, kind: 'comment' });
   }

@@ -82,36 +82,25 @@
           <i class="fas fa-cog nav-icon"></i>
           <span v-if="!isCollapsed" class="nav-label">设置</span>
         </router-link>
-
-        <button class="nav-item action-item" :title="isDark ? '切换日间模式' : '切换夜间模式'" @click="toggleTheme">
-          <i :class="[isDark ? 'fas fa-sun' : 'fas fa-moon', 'nav-icon']"></i>
-          <span v-if="!isCollapsed" class="nav-label">
-            {{ isDark ? '日间模式' : '夜间模式' }}
-          </span>
-        </button>
-
-        <button v-if="!authStore.isLoggedIn" class="nav-item action-item primary-item" title="登录账号" @click="authStore.openLoginModal()">
-          <i class="fas fa-sign-in-alt nav-icon"></i>
-          <span v-if="!isCollapsed" class="nav-label">登录账号</span>
-        </button>
-
-        <button v-else class="nav-item action-item danger-item" title="退出登录" @click="handleLogout">
-          <i class="fas fa-sign-out-alt nav-icon"></i>
-          <span v-if="!isCollapsed" class="nav-label">退出登录</span>
-        </button>
       </div>
     </nav>
 
     <div v-if="!isCollapsed" class="sidebar-footer">
       <div class="app-info-card">
-        <div class="app-info-left">
+        <div class="app-info-top">
           <span class="app-name">酷安桌面版</span>
           <span class="version-badge">v{{ appVersion }}</span>
         </div>
-        <button class="check-update-btn" title="检查更新" @click="requestUpdateCheck">
-          <i class="fas fa-sync-alt update-icon"></i>
-          <span>更新</span>
-        </button>
+        <div class="app-info-actions">
+          <button class="footer-action-btn feedback-btn" title="一键反馈问题或建议" @click="handleFeedback">
+            <i class="fas fa-comment-dots action-icon"></i>
+            <span>反馈</span>
+          </button>
+          <button class="footer-action-btn check-update-btn" title="检查更新" @click="requestUpdateCheck">
+            <i class="fas fa-sync-alt update-icon"></i>
+            <span>更新</span>
+          </button>
+        </div>
       </div>
     </div>
   </aside>
@@ -119,18 +108,24 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useSettingsStore } from '../../stores/settings';
 import { useAuthStore } from '../../stores/auth';
 import { useNotificationStore } from '../../stores/notifications';
 import { APP_VERSION } from '../../constants/version';
 import { triggerSidebarTransition } from '../../utils/routeTransition';
+import { openFeedbackMessage } from '../../utils/feedback';
 
 const route = useRoute();
+const router = useRouter();
 const settingsStore = useSettingsStore();
 const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
 const appVersion = APP_VERSION;
+
+function handleFeedback() {
+  openFeedbackMessage(router, authStore);
+}
 
 function handleNavClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null;
@@ -504,39 +499,35 @@ function handleLogout() {
 }
 
 .sidebar-footer {
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
 }
 
 .app-info-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
+  flex-direction: column;
+  gap: 6px;
   background-color: var(--surface-elevated, rgba(0, 0, 0, 0.02));
   border: 1px solid var(--border-light, #e4e9ef);
   border-radius: var(--radius-control, 8px);
-  padding: 5px 8px;
+  padding: 7px 9px;
   transition: border-color 0.2s ease, background-color 0.2s ease;
-  overflow: hidden;
 }
 
 .app-info-card:hover {
   border-color: var(--border, rgba(0, 0, 0, 0.12));
 }
 
-.app-info-left {
+.app-info-top {
   display: flex;
   align-items: center;
-  gap: 4px;
-  min-width: 0;
-  flex-shrink: 1;
+  justify-content: space-between;
 }
 
 .app-name {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
   white-space: nowrap;
 }
 
@@ -545,28 +536,61 @@ function handleLogout() {
   font-weight: 600;
   color: var(--text-tertiary);
   background-color: var(--bg-hover, rgba(0, 0, 0, 0.04));
-  padding: 1px 3px;
+  padding: 1px 5px;
   border-radius: 4px;
   line-height: 1.2;
   white-space: nowrap;
 }
 
-.check-update-btn {
+.app-info-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.footer-action-btn {
+  flex: 1;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  justify-content: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 500;
-  color: var(--brand-primary);
-  background-color: var(--brand-soft, rgba(16, 185, 129, 0.1));
   border: none;
   border-radius: 5px;
-  padding: 3px 6px;
+  padding: 4px 6px;
   cursor: pointer;
   white-space: nowrap;
-  flex-shrink: 0;
   transition: all 0.2s ease;
   line-height: 1;
+}
+
+.feedback-btn {
+  color: var(--text-secondary);
+  background-color: var(--bg-hover, rgba(0, 0, 0, 0.05));
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.04));
+}
+
+.feedback-btn .action-icon {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.feedback-btn:hover {
+  color: var(--brand-primary);
+  background-color: var(--brand-soft, rgba(16, 185, 129, 0.12));
+  border-color: var(--brand-primary);
+}
+
+.feedback-btn:hover .action-icon {
+  color: var(--brand-primary);
+}
+
+.check-update-btn {
+  color: var(--brand-primary);
+  background-color: var(--brand-soft, rgba(16, 185, 129, 0.1));
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
 .check-update-btn .update-icon {
@@ -577,10 +601,15 @@ function handleLogout() {
 .check-update-btn:hover {
   color: #fff;
   background-color: var(--brand-primary);
+  border-color: var(--brand-primary);
 }
 
 .check-update-btn:hover .update-icon {
   transform: rotate(180deg);
+}
+
+.footer-action-btn:active {
+  transform: scale(0.96);
 }
 
 .check-update-btn:active {

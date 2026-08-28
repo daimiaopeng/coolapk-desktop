@@ -12,6 +12,12 @@ export function isAnimatedImageUrl(url: string): boolean {
   return /\.(?:gif|gifv)$/.test(path);
 }
 
+/** 判断是否为酷安 Live Photo 的静态封面地址。实况视频由独立地址提供。 */
+export function isLivePhotoUrl(url: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  return /https?:\/\/\S+livepic\S*@\d+x\d+\.(?:jpg|jpeg|png|gif|webp)(?:[?#].*)?$/i.test(url.trim());
+}
+
 /**
  * 根据系统设置或指定的图片质量参数获取处理后的图片 URL
  * - 'standard': 标准 (轻量缩略图 .s.jpg)
@@ -20,7 +26,7 @@ export function isAnimatedImageUrl(url: string): boolean {
  */
 export function getImageUrlByQuality(url: string, targetQuality?: ImageQualityMode): string {
   if (!url || typeof url !== 'string') return '';
-  if (isAnimatedImageUrl(url)) return url;
+  if (isAnimatedImageUrl(url) || isLivePhotoUrl(url)) return url;
   if (!url.startsWith('http')) return url;
 
   // 不给非 酷安 CDN 图片追加后缀

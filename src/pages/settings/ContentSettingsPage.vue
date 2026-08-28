@@ -17,13 +17,6 @@
         </select>
       </div>
 
-      <div class="setting-row">
-        <div class="row-info">
-          <span class="row-label">无限滚动</span>
-          <span class="row-sub">滚动到底部时自动加载下一页动态</span>
-        </div>
-        <AppSwitch v-model="settingsStore.settings.infiniteScroll" />
-      </div>
     </div>
 
     <div class="setting-group">
@@ -72,14 +65,6 @@
 
       <div class="setting-row">
         <div class="row-info">
-          <span class="row-label">隐藏广告卡片</span>
-          <span class="row-sub">过滤时间线中的推广与广告内容（推荐/头条等栏目）</span>
-        </div>
-        <AppSwitch v-model="settingsStore.settings.hideAdCards" />
-      </div>
-
-      <div class="setting-row">
-        <div class="row-info">
           <span class="row-label">时间显示格式</span>
           <span class="row-sub">动态时间展示为“X 分钟前”或完整日期时间</span>
         </div>
@@ -98,6 +83,22 @@
           <option value="internal">内置查看器 (推荐)</option>
           <option value="system">系统默认查看器</option>
         </select>
+      </div>
+
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">Live 图片自动播放声音</span>
+          <span class="row-sub">打开 Live 图片时自动播放原声；关闭后默认静音，可在查看器中手动开启</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.autoPlayLivePhotoSound" />
+      </div>
+
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">打开图片自动加载原图</span>
+          <span class="row-sub">进入内置图片查看器时直接加载原图，可能增加等待时间和流量消耗</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.autoLoadOriginalImage" />
       </div>
     </div>
 

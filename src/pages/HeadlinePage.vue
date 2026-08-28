@@ -151,7 +151,6 @@ function switchTab(key: string) {
 function handleScroll(e: Event) {
   const el = e.target as HTMLElement;
   if (!el) return;
-  if (!settingsStore.settings.infiniteScroll) return;
   if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) {
     if (!loading.value && !loadingMore.value && !noMore.value) {
       loadFeeds(false);

@@ -161,6 +161,12 @@ function handleError(event: Event) {
   position: relative;
 }
 
+.app-image-container img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .app-image-container.fit-contain {
   background-color: transparent;
 }

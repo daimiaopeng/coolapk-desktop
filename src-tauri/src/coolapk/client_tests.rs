@@ -37,6 +37,13 @@ fn test_classify_path_detects_requirements() {
 }
 
 #[test]
+fn test_ddid_is_not_sent_when_disabled() {
+    let cookie = "SESSID=session; uid=123; ddid=stale-ddid; sid=other";
+    assert_eq!(cookie_without_ddid(cookie), "SESSID=session; uid=123; sid=other");
+    assert!(!cookie_for_request(cookie, true).contains("ddid="));
+}
+
+#[test]
 fn test_product_rating_query_matches_apk_contract() {
     assert_eq!(
         build_product_rating_query("2967", 5),
@@ -99,6 +106,48 @@ fn test_product_feeds_query_includes_sort_only_when_selected() {
             ("listType", "rank_score".to_string()),
             ("page", "1".to_string()),
         ]
+    );
+}
+
+#[test]
+fn test_feed_cleaner_preserves_live_photo_metadata() {
+    let raw = serde_json::json!({
+        "id": "live-feed-1",
+        "entityType": "feed",
+        "username": "测试用户",
+        "message": "实况图",
+        "imageUriList": [{
+            "sourceUrl": "https://image.coolapk.com/feed/livepic@1080x1920.jpg",
+            "compressedUrl": "https://image.coolapk.com/feed/livepic-cover.jpg",
+            "liveVideoUrl": "https://video.coolapk.com/live/1.mp4",
+            "livePhotoEnable": 1,
+            "livePhotoSoundEnable": 0
+        }]
+    });
+
+    let cleaned = CoolapkClient::clean_single_feed(&raw, 0).expect("feed should be kept");
+    assert_eq!(cleaned["pics"][0], "https://image.coolapk.com/feed/livepic@1080x1920.jpg");
+    assert_eq!(
+        cleaned["imageUriList"][0]["liveVideoUrl"],
+        "https://video.coolapk.com/live/1.mp4"
+    );
+    assert_eq!(cleaned["imageUriList"][0]["livePhotoEnable"], 1);
+}
+
+#[test]
+fn test_live_photo_response_extracts_nested_url_list() {
+    let response = serde_json::json!({
+        "code": 200,
+        "data": {
+            "urlList": [
+                "not-a-url",
+                "https://video.coolapk.com/live/123.mp4"
+            ]
+        }
+    });
+    assert_eq!(
+        extract_live_photo_video_url(&response),
+        Some("https://video.coolapk.com/live/123.mp4".to_string())
     );
 }
 

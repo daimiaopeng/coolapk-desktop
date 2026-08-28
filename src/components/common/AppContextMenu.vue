@@ -480,17 +480,7 @@ function scrollToTop() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
-  const isVisibleElement = (element: HTMLElement): boolean => {
-    let current: HTMLElement | null = element;
-    while (current && current !== document.documentElement) {
-      const style = window.getComputedStyle(current);
-      if (style.display === 'none' || style.visibility === 'hidden') return false;
-      current = current.parentElement;
-    }
-    return true;
-  };
   const scrollables = Array.from(document.querySelectorAll<HTMLElement>('*')).filter((element) => (
-    isVisibleElement(element) &&
     element.scrollTop > 0 && element.scrollHeight > element.clientHeight
   ));
   scrollables.forEach((element) => element.scrollTo({ top: 0, behavior: 'smooth' }));
