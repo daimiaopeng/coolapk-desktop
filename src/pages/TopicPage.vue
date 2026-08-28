@@ -677,25 +677,6 @@ async function initializeTopic() {
 onMounted(() => {
   void initializeTopic();
 });
-
-watch(() => route.params.tag, (newTag) => {
-  if (newTag) {
-    tag.value = decodeTopicTag(String(newTag));
-    page.value = 1;
-    noMore.value = false;
-    searchKeyword.value = '';
-    topicFeeds.value = [];
-    topicDetail.value = null;
-    topicTabs.value = [];
-    activeTopicTabKey.value = 'feed';
-    currentSort.value = 'default';
-    searchFeedType.value = 'all';
-    sortOptions.value = [...FALLBACK_SORT_OPTIONS];
-    isFollowed.value = false;
-    followPending.value = false;
-    void initializeTopic();
-  }
-});
 </script>
 
 <style scoped>

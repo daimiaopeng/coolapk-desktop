@@ -14,7 +14,7 @@
       </svg>
     </button>
 
-    <nav class="sidebar-nav custom-scrollbar" @click="handleNavClick">
+    <nav class="sidebar-nav custom-scrollbar">
       <div class="nav-group">
         <router-link
           v-for="item in primaryNavs"
@@ -23,6 +23,7 @@
           class="nav-item"
           active-class="is-active"
           :title="item.label"
+          @click="triggerSidebarTransition()"
         >
           <i :class="[item.icon, 'nav-icon']"></i>
           <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
@@ -34,6 +35,7 @@
           class="nav-item"
           :class="{ 'is-active': isMoreActive }"
           title="更多服务与专区"
+          @click="triggerSidebarTransition()"
         >
           <i class="fas fa-shapes nav-icon"></i>
           <span v-if="!isCollapsed" class="nav-label">更多</span>
@@ -51,6 +53,7 @@
           class="nav-item"
           active-class="is-active"
           :title="getNavTitle(item)"
+          @click="triggerSidebarTransition()"
         >
           <i :class="[item.icon, 'nav-icon']"></i>
           <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
@@ -70,6 +73,7 @@
         :class="{ 'is-active': isMyActive }"
         active-class="is-active"
         title="我的"
+        @click="triggerSidebarTransition()"
       >
         <i class="fas fa-user nav-icon"></i>
         <span v-if="!isCollapsed" class="nav-label">我的</span>
@@ -78,7 +82,7 @@
       <div class="nav-divider"></div>
 
       <div class="nav-group">
-        <router-link to="/settings" class="nav-item" active-class="is-active" title="设置">
+        <router-link to="/settings" class="nav-item" active-class="is-active" title="设置" @click="triggerSidebarTransition()">
           <i class="fas fa-cog nav-icon"></i>
           <span v-if="!isCollapsed" class="nav-label">设置</span>
         </router-link>
@@ -499,7 +503,7 @@ function handleLogout() {
 }
 
 .sidebar-footer {
-  padding: 8px 10px;
+  padding: 8px 12px 10px;
   border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
 }
 
@@ -507,15 +511,10 @@ function handleLogout() {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  background-color: var(--surface-elevated, rgba(0, 0, 0, 0.02));
-  border: 1px solid var(--border-light, #e4e9ef);
-  border-radius: var(--radius-control, 8px);
-  padding: 7px 9px;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
-}
-
-.app-info-card:hover {
-  border-color: var(--border, rgba(0, 0, 0, 0.12));
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
 }
 
 .app-info-top {

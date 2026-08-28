@@ -4,6 +4,7 @@
     class="user-hover-trigger"
     @mouseenter="handleTriggerMouseEnter"
     @mouseleave="handleTriggerMouseLeave"
+    @click="handleTriggerClick"
   >
     <slot />
 
@@ -125,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, onDeactivated, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
@@ -398,9 +399,33 @@ async function toggleFollow() {
   }
 }
 
+function closeCardImmediately() {
+  if (showTimer) {
+    clearTimeout(showTimer);
+    showTimer = null;
+  }
+  if (hideTimer) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
+  visible.value = false;
+}
+
+function handleTriggerClick() {
+  closeCardImmediately();
+}
+
+// 路由改变时（例如点击头像进入个人主页）瞬间关闭悬浮卡片
+watch(() => router?.currentRoute?.value?.fullPath, () => {
+  closeCardImmediately();
+});
+
 onUnmounted(() => {
-  if (showTimer) clearTimeout(showTimer);
-  if (hideTimer) clearTimeout(hideTimer);
+  closeCardImmediately();
+});
+
+onDeactivated(() => {
+  closeCardImmediately();
 });
 </script>
 

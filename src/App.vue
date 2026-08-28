@@ -1,23 +1,14 @@
 <template>
   <AppShell>
     <router-view v-slot="{ Component, route }">
-      <!--
-        桌面端通过路由切换维护页面栈。缓存所有路由页面，进入详情页时不销毁下面的页面，
-        从而保留已加载数据、滚动位置、筛选条件、草稿和其他局部状态。
-        大多数页面使用包含参数和查询条件的完整路径作为缓存标识，让不同详情拥有独立实例。
-        私信页的 uid 只表示当前会话，不能据此重建整页，否则每次点会话都会重新加载列表。
-      -->
-      <!-- 仅在侧边栏主栏目导航时启用平滑过渡动效，详情页进入和返回等内部跳转即时呈现。 -->
-      <Transition
-        :name="isSidebarTransitionActive ? 'page' : undefined"
-        :mode="isSidebarTransitionActive ? 'out-in' : undefined"
-        appear
-        @after-enter="resetSidebarTransition"
-      >
-        <keep-alive>
-          <component :is="Component" :key="route.name === 'Messages' ? route.path : route.fullPath" />
-        </keep-alive>
-      </Transition>
+      <!-- 原生标准页面堆栈：以 route.fullPath 为唯一标识，每个页面独立实例入栈与复原，彻底杜绝数据丢失与重载 -->
+      <keep-alive>
+        <component
+          :is="Component"
+          :key="route.fullPath"
+          :class="{ 'sidebar-page-enter': isSidebarTransitionActive }"
+        />
+      </keep-alive>
     </router-view>
 
     <!-- 全局交互浮层 -->
@@ -29,29 +20,50 @@
     <BackToTop />
     <AppContextMenu />
 
-    <AppDialog :is-open="Boolean(updateInfo)" :title="updateInfo?.hasNew ? '发现新版本' : '检查更新'" :width="500" @close="updateInfo = null">
+    <AppDialog :is-open="Boolean(updateInfo)" :title="updateInfo?.hasNew ? '发现新版本' : '检查更新'" :width="540" @close="updateInfo = null">
       <div v-if="updateInfo" class="startup-update">
-        <p class="startup-update-version">
-          {{ updateInfo.hasNew ? `酷安桌面版 ${updateInfo.latestVersion}` : `当前已是最新版本 (v${APP_VERSION})` }}
-        </p>
-        <p v-if="updateInfo.publishedAt" class="startup-update-date">
-          <i class="far fa-clock"></i> 发版时间：{{ updateInfo.publishedAt }}
-        </p>
+        <div class="startup-update-header">
+          <div class="update-header-info">
+            <span class="update-app-title">酷安桌面版</span>
+            <span class="update-version-tag">{{ updateInfo.hasNew ? updateInfo.latestVersion : `v${APP_VERSION}` }}</span>
+          </div>
+          <span v-if="updateInfo.publishedAt" class="startup-update-date">
+            <i class="far fa-clock"></i> {{ updateInfo.publishedAt }}
+          </span>
+        </div>
+
         <div class="startup-update-notes-block">
-          <p class="startup-update-notes-label">{{ updateInfo.hasNew ? '更新内容：' : '当前版本更新日志：' }}</p>
+          <div class="startup-update-notes-header">
+            <i class="fas fa-sparkles text-brand"></i>
+            <span class="startup-update-notes-label">{{ updateInfo.hasNew ? '更新内容' : '当前版本更新日志' }}</span>
+          </div>
           <div
-            class="startup-update-notes"
+            class="startup-update-notes custom-scrollbar"
             v-html="renderReleaseMarkdown(updateInfo.releaseNotes || '')"
             @click="handleAnchorClick"
           ></div>
         </div>
+
         <div class="startup-update-actions">
-          <button v-if="!updateInfo.hasNew" class="startup-update-later" @click="openReleasePage">查看 Release 页面</button>
-          <button v-if="!updateInfo.hasNew" class="startup-update-later" @click="updateInfo = null">关闭</button>
-          <button v-if="updateInfo.hasNew" class="startup-update-later" @click="ignoreThisVersion">忽略此版本</button>
-          <button v-if="updateInfo.hasNew" class="startup-update-later" @click="ignoreAllUpdates">忽略所有更新</button>
-          <button v-if="updateInfo.hasNew && updateInfo.installerUrl && isWindows" class="startup-update-button" @click="startBackgroundDownload(updateInfo)">后台下载更新</button>
-          <button v-if="updateInfo.hasNew" class="startup-update-later" @click="openUpdate">前往下载更新</button>
+          <div v-if="updateInfo.hasNew" class="update-actions-left">
+            <button class="btn-text" title="本次不再提示此版本" @click="ignoreThisVersion">忽略此版本</button>
+            <button class="btn-text" title="永久关闭所有自动更新提示" @click="ignoreAllUpdates">忽略所有更新</button>
+          </div>
+          <div v-else class="update-actions-left">
+            <button class="btn-text" @click="openReleasePage">查看 Release 页面</button>
+          </div>
+
+          <div class="update-actions-right">
+            <button v-if="!updateInfo.hasNew" class="startup-update-later" @click="updateInfo = null">关闭</button>
+            <button v-if="updateInfo.hasNew" class="startup-update-later" @click="openUpdate">前往下载</button>
+            <button
+              v-if="updateInfo.hasNew && updateInfo.installerUrl && isWindows"
+              class="startup-update-button"
+              @click="startBackgroundDownload(updateInfo)"
+            >
+              <i class="fas fa-download"></i> 后台下载更新
+            </button>
+          </div>
         </div>
       </div>
     </AppDialog>
@@ -417,15 +429,36 @@ html, body {
   box-sizing: border-box;
 }
 
-.startup-update-version {
-  margin: 0 0 8px;
+.startup-update-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.update-header-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.update-app-title {
   color: var(--text-primary);
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.update-version-tag {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--brand-primary, #10b981);
+  background: var(--brand-soft, rgba(16, 185, 129, 0.12));
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
 }
 
 .startup-update-date {
-  margin: 0 0 12px;
   font-size: 12px;
   color: var(--text-tertiary, #888);
   display: flex;
@@ -435,30 +468,38 @@ html, body {
 
 .startup-update-date i {
   font-size: 11px;
-  color: var(--text-tertiary, #888);
 }
 
 .startup-update-notes-block {
-  margin: 10px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  background: var(--background-secondary, rgba(0, 0, 0, 0.02));
+  border: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.startup-update-notes-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .startup-update-notes-label {
   color: var(--text-primary);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .startup-update-notes {
   margin: 0;
-  max-height: 280px;
+  max-height: 240px;
   overflow-y: auto;
-  padding-right: 6px;
+  padding-right: 4px;
   color: var(--text-secondary);
   line-height: 1.6;
-  font-size: 14px;
+  font-size: 13px;
   word-break: break-word;
 }
 
@@ -466,31 +507,31 @@ html, body {
 .startup-update-notes :deep(h5),
 .startup-update-notes :deep(h6) {
   color: var(--text-primary);
-  margin: 10px 0 4px;
+  margin: 8px 0 4px;
   font-weight: 600;
   line-height: 1.4;
 }
 
 .startup-update-notes :deep(h4) {
-  font-size: 15px;
-}
-
-.startup-update-notes :deep(h5) {
   font-size: 14px;
 }
 
-.startup-update-notes :deep(h6) {
+.startup-update-notes :deep(h5) {
   font-size: 13px;
 }
 
+.startup-update-notes :deep(h6) {
+  font-size: 12.5px;
+}
+
 .startup-update-notes :deep(p) {
-  margin: 4px 0;
+  margin: 3px 0;
 }
 
 .startup-update-notes :deep(ul),
 .startup-update-notes :deep(ol) {
-  margin: 4px 0;
-  padding-left: 20px;
+  margin: 3px 0;
+  padding-left: 18px;
 }
 
 .startup-update-notes :deep(li) {
@@ -498,8 +539,8 @@ html, body {
 }
 
 .startup-update-notes :deep(blockquote) {
-  margin: 8px 0;
-  padding: 6px 12px;
+  margin: 6px 0;
+  padding: 4px 10px;
   background: var(--bg-hover, rgba(0, 0, 0, 0.04));
   border-left: 3px solid var(--brand-green, #10b981);
   border-radius: 4px;
@@ -509,23 +550,23 @@ html, body {
 .startup-update-notes :deep(hr) {
   border: none;
   border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
-  margin: 10px 0;
+  margin: 8px 0;
 }
 
 .startup-update-notes :deep(code) {
-  padding: 2px 6px;
+  padding: 1px 5px;
   border-radius: 4px;
   background: var(--bg-hover, rgba(0, 0, 0, 0.06));
   font-family: monospace;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .startup-update-notes :deep(pre) {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: 6px;
   background: var(--bg-hover, rgba(0, 0, 0, 0.06));
   overflow-x: auto;
-  margin: 8px 0;
+  margin: 6px 0;
 }
 
 .startup-update-notes :deep(a) {
@@ -540,17 +581,52 @@ html, body {
 
 .startup-update-actions {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin-top: 24px;
+  margin-top: 16px;
+  padding-top: 4px;
+}
+
+.update-actions-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.update-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-text {
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  color: var(--text-tertiary, #888);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.18s ease;
+}
+
+.btn-text:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
 }
 
 .startup-update-later,
 .startup-update-button {
-  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
   border-radius: 6px;
   cursor: pointer;
+  transition: all 0.18s ease;
 }
 
 .startup-update-later {
@@ -559,10 +635,22 @@ html, body {
   border: 1px solid var(--border);
 }
 
+.startup-update-later:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+  color: var(--text-primary);
+}
+
 .startup-update-button {
   color: white;
   background: var(--brand-green, #10b981);
   border: 1px solid var(--brand-green, #10b981);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.28);
+}
+
+.startup-update-button:hover {
+  background: #059669;
+  border-color: #059669;
+  transform: translateY(-1px);
 }
 
 .update-download-pill {

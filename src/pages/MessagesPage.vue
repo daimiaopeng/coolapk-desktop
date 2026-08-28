@@ -1002,9 +1002,6 @@ const loadSessions = async () => {
       const queryUid = getRouteTargetUid();
       if (queryUid && String(getSessionPartnerUid(currentSession.value)) !== queryUid) {
         await openTargetConversation(queryUid);
-      } else if (!currentSession.value && sessions.value.length > 0) {
-        // 默认进入最新一条会话
-        await selectSession(sessions.value[0]);
       }
     } else {
       throw new Error('会话列表返回格式不正确');

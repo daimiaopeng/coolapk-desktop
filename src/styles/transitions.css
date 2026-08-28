@@ -9,16 +9,38 @@
   opacity: 0;
 }
 
-/* 页面切换使用短距离位移配合淡入淡出，降低首次加载数据时的视觉撕裂感。 */
-.page-enter-active,
-.page-leave-active {
-  transition: opacity var(--duration-normal) var(--ease-default), transform var(--duration-normal) var(--ease-default);
+/* 页面切换使用短距离微位移配合平滑淡入淡出，带来原生般的平滑流畅体验 */
+.page-enter-active {
+  transition: opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1), transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.page-enter-from,
-.page-leave-to {
+.page-leave-active {
+  transition: opacity 0.14s cubic-bezier(0.4, 0, 1, 1), transform 0.14s cubic-bezier(0.4, 0, 1, 1);
+}
+
+.page-enter-from {
   opacity: 0;
   transform: translateY(6px);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@keyframes sidebarPageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sidebar-page-enter {
+  animation: sidebarPageEnter 0.18s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 .slide-drawer-enter-active,

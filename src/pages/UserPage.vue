@@ -555,7 +555,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch, computed, nextTick } from 'vue';
+import { ref, reactive, watch, computed, nextTick, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import AppAvatar from '../components/common/AppAvatar.vue';
@@ -1310,29 +1310,19 @@ async function copyShareLink() {
   }
 }
 
-watch(effectiveUid, (newUid) => {
-  isBlacklisted.value = false;
-  isIgnored.value = false;
-  if (newUid) {
-    // 1. 优先同步读取后台静默预加载的该用户资料（0 延迟秒开）
-    const cached = getCachedUserProfileSync(newUid);
-    if (cached) {
-      profile.value = asUserSpaceProfile(cached, newUid);
-      isBlacklisted.value = isFlag(cached.isBlackList ?? cached.isInBlackList);
-      isIgnored.value = isFlag(cached.isIgnoreList ?? cached.isInIgnoreList);
-      selectInitialTab(cached);
-    } else {
-      // 2. 若暂无预加载数据，立即将 profile 置空，严禁残留上一个用户的旧资料（避免“先闪现我的主页再变别人”）
-      profile.value = null;
-    }
-    resetTabStates();
-    void fetchUserProfile();
-    void fetchTabFeeds(true);
-  } else {
-    profile.value = null;
-    resetTabStates();
+onMounted(() => {
+  const uid = effectiveUid.value;
+  if (!uid) return;
+  const cached = getCachedUserProfileSync(uid);
+  if (cached) {
+    profile.value = asUserSpaceProfile(cached, uid);
+    isBlacklisted.value = isFlag(cached.isBlackList ?? cached.isInBlackList);
+    isIgnored.value = isFlag(cached.isIgnoreList ?? cached.isInIgnoreList);
+    selectInitialTab(cached);
   }
-}, { immediate: true });
+  void fetchUserProfile();
+  void fetchTabFeeds(true);
+});
 
 watch(activeTab, () => {
   const state = getTabState(activeTab.value);

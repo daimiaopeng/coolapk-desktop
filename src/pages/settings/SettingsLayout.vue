@@ -19,9 +19,7 @@
 
       <section class="settings-content custom-scrollbar">
         <router-view v-slot="{ Component }">
-          <Transition v-if="Component" name="page" mode="out-in" appear>
-            <component :is="Component" />
-          </Transition>
+          <component :is="Component" v-if="Component" />
         </router-view>
       </section>
     </div>
