@@ -221,7 +221,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, reactive, watch, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FeedTabs from '../components/feed/FeedTabs.vue';
 import FeedLayoutToggle from '../components/feed/FeedLayoutToggle.vue';
@@ -1079,19 +1079,26 @@ async function initializeHome() {
   await loadFeeds(true);
 }
 
-onMounted(() => {
-  void initializeHome();
-  void loadHotSearchKeywords();
+function bindGlobalListeners() {
   window.addEventListener('feed-nav-next', onNavNext);
   window.addEventListener('feed-nav-prev', onNavPrev);
   window.addEventListener('refresh-feeds', onRefreshFeeds);
-});
+}
 
-onUnmounted(() => {
+function unbindGlobalListeners() {
   window.removeEventListener('feed-nav-next', onNavNext);
   window.removeEventListener('feed-nav-prev', onNavPrev);
   window.removeEventListener('refresh-feeds', onRefreshFeeds);
+}
+
+onMounted(() => {
+  void initializeHome();
+  void loadHotSearchKeywords();
 });
+
+onActivated(bindGlobalListeners);
+onDeactivated(unbindGlobalListeners);
+onUnmounted(unbindGlobalListeners);
 </script>
 
 <style scoped>

@@ -452,7 +452,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated, nextTick } from 'vue';
 import AppAvatar from '../common/AppAvatar.vue';
 import UserHoverCard from '../user/UserHoverCard.vue';
 import Button from '../ui/Button.vue';
@@ -1121,9 +1121,18 @@ function handleContextReplyComment(event: Event) {
   setReplyTarget(detail?.username || '酷友', detail?.commentId);
 }
 
-onMounted(() => {
+function bindGlobalListeners() {
   window.addEventListener('click', handleClickOutside);
   window.addEventListener('coolapk-context-reply-comment', handleContextReplyComment);
+}
+
+function unbindGlobalListeners() {
+  window.removeEventListener('click', handleClickOutside);
+  window.removeEventListener('coolapk-context-reply-comment', handleContextReplyComment);
+}
+
+onMounted(() => {
+  bindGlobalListeners();
   if (inputRef.value) {
     Object.defineProperty(inputRef.value, 'value', {
       get() {
@@ -1139,10 +1148,9 @@ onMounted(() => {
   void restoreDraft();
 });
 
-onUnmounted(() => {
-  window.removeEventListener('click', handleClickOutside);
-  window.removeEventListener('coolapk-context-reply-comment', handleContextReplyComment);
-});
+onActivated(bindGlobalListeners);
+onDeactivated(unbindGlobalListeners);
+onUnmounted(unbindGlobalListeners);
 
 function handleCommentTextClick(e: MouseEvent, c: any) {
   // 选中文本准备复制时，不触发点击回复

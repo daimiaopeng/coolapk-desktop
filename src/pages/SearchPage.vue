@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, onActivated, onDeactivated, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import EmptyState from '../components/common/EmptyState.vue';
@@ -360,16 +360,25 @@ watch(() => [
   if (normalizedQuery) void fetchTab(activeTab.value);
 }, { immediate: true });
 
+function bindGlobalListeners() {
+  document.addEventListener('click', handleClickOutside);
+}
+
+function unbindGlobalListeners() {
+  document.removeEventListener('click', handleClickOutside);
+}
+
 onMounted(() => {
   void loadSearchHistory();
   void loadHotItems();
   void loadSearchConfig();
-  document.addEventListener('click', handleClickOutside);
 });
 
+onActivated(bindGlobalListeners);
+onDeactivated(unbindGlobalListeners);
 onUnmounted(() => {
   if (suggestTimer) clearTimeout(suggestTimer);
-  document.removeEventListener('click', handleClickOutside);
+  unbindGlobalListeners();
 });
 </script>
 

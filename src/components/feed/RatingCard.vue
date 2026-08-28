@@ -130,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
+import { ref, computed, watch, nextTick, onUnmounted, onDeactivated } from 'vue';
 import FeedHeader from './FeedHeader.vue';
 import FeedImageGrid from './FeedImageGrid.vue';
 import FeedActionBar from './FeedActionBar.vue';
@@ -394,6 +394,7 @@ watch(
   { immediate: true }
 );
 
+onDeactivated(unbindScrollListener);
 onUnmounted(() => {
   unbindScrollListener();
 });

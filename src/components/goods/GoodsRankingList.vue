@@ -113,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, onActivated, onDeactivated, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import AppButton from '../common/AppButton.vue';
@@ -295,15 +295,22 @@ function onScrollEvent(e: Event) {
   }
 }
 
+function bindGlobalListeners() {
+  window.addEventListener('scroll', onScrollEvent, true);
+}
+
+function unbindGlobalListeners() {
+  window.removeEventListener('scroll', onScrollEvent, true);
+}
+
 onMounted(() => {
   void loadTypes();
   void load(true);
-  window.addEventListener('scroll', onScrollEvent, true);
 });
 
-onUnmounted(() => {
-  window.removeEventListener('scroll', onScrollEvent, true);
-});
+onActivated(bindGlobalListeners);
+onDeactivated(unbindGlobalListeners);
+onUnmounted(unbindGlobalListeners);
 </script>
 
 <style scoped>

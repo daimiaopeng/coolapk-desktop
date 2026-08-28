@@ -121,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue';
 import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import AppButton from '../components/common/AppButton.vue';
@@ -290,16 +290,23 @@ watch(
   },
 );
 
+function bindGlobalListeners() {
+  window.addEventListener('scroll', handleScroll, true);
+}
+
+function unbindGlobalListeners() {
+  window.removeEventListener('scroll', handleScroll, true);
+}
+
 onMounted(() => {
   if (authStore.isLoggedIn) {
     void load(true);
   }
-  window.addEventListener('scroll', handleScroll, true);
 });
 
-onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll, true);
-});
+onActivated(bindGlobalListeners);
+onDeactivated(unbindGlobalListeners);
+onUnmounted(unbindGlobalListeners);
 </script>
 
 <style scoped>

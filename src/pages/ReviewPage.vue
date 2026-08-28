@@ -112,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue';
 import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import FeedCard from '../components/feed/FeedCard.vue';
@@ -299,14 +299,21 @@ function onScrollEvent(e: Event) {
   }
 }
 
+function bindGlobalListeners() {
+  window.addEventListener('scroll', onScrollEvent, true);
+}
+
+function unbindGlobalListeners() {
+  window.removeEventListener('scroll', onScrollEvent, true);
+}
+
 onMounted(() => {
   loadFeeds(true);
-  window.addEventListener('scroll', onScrollEvent, true);
 });
 
-onUnmounted(() => {
-  window.removeEventListener('scroll', onScrollEvent, true);
-});
+onActivated(bindGlobalListeners);
+onDeactivated(unbindGlobalListeners);
+onUnmounted(unbindGlobalListeners);
 </script>
 
 <style scoped>

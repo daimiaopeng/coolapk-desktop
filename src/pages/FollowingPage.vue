@@ -139,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
@@ -402,20 +402,27 @@ function handleFeedDeleted(id: string | number) {
   feeds.value = feeds.value.filter((f: any) => String(f.id) !== String(id));
 }
 
+function bindGlobalListeners() {
+  window.addEventListener('scroll', onScrollEvent, true);
+  window.addEventListener('refresh-feeds', onRefreshFeeds);
+}
+
+function unbindGlobalListeners() {
+  window.removeEventListener('scroll', onScrollEvent, true);
+  window.removeEventListener('refresh-feeds', onRefreshFeeds);
+}
+
 onMounted(() => {
   if (authStore.isLoggedIn) {
     loadFollowUsers();
     loadFollowingFeeds(true);
     syncTabFromRoute();
   }
-  window.addEventListener('scroll', onScrollEvent, true);
-  window.addEventListener('refresh-feeds', onRefreshFeeds);
 });
 
-onUnmounted(() => {
-  window.removeEventListener('scroll', onScrollEvent, true);
-  window.removeEventListener('refresh-feeds', onRefreshFeeds);
-});
+onActivated(bindGlobalListeners);
+onDeactivated(unbindGlobalListeners);
+onUnmounted(unbindGlobalListeners);
 </script>
 
 <style scoped>

@@ -1233,13 +1233,13 @@ watch(
 );
 
 onActivated(() => {
-  window.addEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
+  bindGlobalListeners();
   void loadSessions();
   startMessagePolling();
 });
 
 onDeactivated(() => {
-  window.removeEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
+  unbindGlobalListeners();
   stopMessagePolling();
 });
 
@@ -1476,23 +1476,28 @@ const sendMessage = async () => {
 };
 
 // --- 生命周期 ---
-onMounted(() => {
-  restoreSessionsCache();
+function bindGlobalListeners() {
   window.addEventListener('coolapk-context-delete-message', handleDeleteMessageContext);
   window.addEventListener('keydown', handleGlobalKeydown);
   window.addEventListener('click', handleClickOutside);
   window.addEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
-  void loadSessions();
-  startMessagePolling();
-});
+}
 
-onUnmounted(() => {
+function unbindGlobalListeners() {
   window.removeEventListener('coolapk-context-delete-message', handleDeleteMessageContext);
   window.removeEventListener('keydown', handleGlobalKeydown);
   window.removeEventListener('click', handleClickOutside);
+  window.removeEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
+}
+
+onMounted(() => {
+  restoreSessionsCache();
+});
+
+onUnmounted(() => {
+  unbindGlobalListeners();
   if (isDraggingSidebar) stopResizeSidebar();
   if (isDraggingInput) stopResizeInput();
-  window.removeEventListener('coolapk-message-count-increased', handleMessageCountIncrease);
   stopMessagePolling();
   saveCurrentDraft();
 });

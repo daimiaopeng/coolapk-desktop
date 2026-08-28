@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted, onUnmounted } from 'vue';
+import { reactive, ref, onMounted, onUnmounted, onActivated, onDeactivated } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import FeedCard from '../components/feed/FeedCard.vue';
 import FeedSkeleton from '../components/feed/FeedSkeleton.vue';
@@ -166,14 +166,21 @@ function handleFeedDeleted(id: string | number) {
   feeds.value = feeds.value.filter((f: any) => String(f.id) !== String(id));
 }
 
+function bindGlobalListeners() {
+  window.addEventListener('refresh-feeds', onRefreshFeeds);
+}
+
+function unbindGlobalListeners() {
+  window.removeEventListener('refresh-feeds', onRefreshFeeds);
+}
+
 onMounted(() => {
   loadFeeds(true);
-  window.addEventListener('refresh-feeds', onRefreshFeeds);
 });
 
-onUnmounted(() => {
-  window.removeEventListener('refresh-feeds', onRefreshFeeds);
-});
+onActivated(bindGlobalListeners);
+onDeactivated(unbindGlobalListeners);
+onUnmounted(unbindGlobalListeners);
 </script>
 
 <style scoped>
