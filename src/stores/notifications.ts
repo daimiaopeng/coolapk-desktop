@@ -52,40 +52,48 @@ export const useNotificationStore = defineStore('notifications', () => {
     const snapshot = normalizeNotificationCounts(response);
     const previous = serverTotal.value === null ? null : unreadCount.value;
     const previousCategoryCounts = { ...categoryCounts };
-    const previousLocallyViewedTotal = CATEGORY_NAMES.reduce(
-      (total, category) => total + locallyViewed[category],
-      0
-    );
+    let remainingServerTotalDecrease = serverTotal.value === null
+      ? 0
+      : Math.max(0, serverTotal.value - snapshot.total);
 
     for (const category of CATEGORY_NAMES) {
+      // checkCount 的部分版本只返回总数；缺少分类字段时保留已从通知列表恢复的数字。
+      if (!snapshot.categoryPresence[category]) continue;
+      const previousLocallyViewedCount = locallyViewed[category];
       const reconciled = reconcileViewedCount(
         serverCategoryCounts[category],
         snapshot.categories[category],
-        locallyViewed[category]
+        locallyViewed[category],
+        remainingServerTotalDecrease,
       );
       categoryCounts[category] = reconciled.count;
       locallyViewed[category] = reconciled.locallyViewedCount;
       serverCategoryCounts[category] = snapshot.categories[category];
+      remainingServerTotalDecrease = Math.max(
+        0,
+        remainingServerTotalDecrease - (previousLocallyViewedCount - reconciled.locallyViewedCount),
+      );
+    }
+
+    const acknowledgedUnknownCount = Math.min(
+      locallyViewedWithoutCategory.value,
+      remainingServerTotalDecrease,
+    );
+    locallyViewedWithoutCategory.value -= acknowledgedUnknownCount;
+    remainingServerTotalDecrease -= acknowledgedUnknownCount;
+
+    // 有些账号会先把分类字段清零、稍后才降低总 badge。总数最终下降时，
+    // 再释放这类分类的本地抵消，避免下一条真实通知被旧状态压住。
+    for (const category of CATEGORY_NAMES) {
+      if (remainingServerTotalDecrease <= 0 || serverCategoryCounts[category] !== 0) continue;
+      const acknowledgedCount = Math.min(locallyViewed[category], remainingServerTotalDecrease);
+      locallyViewed[category] -= acknowledgedCount;
+      remainingServerTotalDecrease -= acknowledgedCount;
     }
 
     const locallyViewedCategoryTotal = CATEGORY_NAMES.reduce(
       (total, category) => total + locallyViewed[category],
-      0
-    );
-    const acknowledgedCategoryCount = Math.max(
       0,
-      previousLocallyViewedTotal - locallyViewedCategoryTotal
-    );
-    const serverTotalDecrease = serverTotal.value === null
-      ? 0
-      : Math.max(0, serverTotal.value - snapshot.total);
-    const acknowledgedUnknownCount = Math.max(
-      0,
-      serverTotalDecrease - acknowledgedCategoryCount
-    );
-    locallyViewedWithoutCategory.value = Math.max(
-      0,
-      locallyViewedWithoutCategory.value - acknowledgedUnknownCount
     );
     const locallyViewedTotal = locallyViewedCategoryTotal + locallyViewedWithoutCategory.value;
     unreadCount.value = Math.max(0, snapshot.total - locallyViewedTotal);
@@ -96,6 +104,52 @@ export const useNotificationStore = defineStore('notifications', () => {
       );
     serverTotal.value = snapshot.total;
     return { previous, count: unreadCount.value, increasedCategories };
+  }
+
+  /**
+   * 通知列表项里的 notifyCount 是分类计数的另一条可靠来源。
+   * 同步它时不改变 checkCount 的总数，只让分类角标和本地已读抵消保持一致。
+   */
+  function applyCategoryCount(category: NotificationCategory, currentServerCount: number): number {
+    const count = Number(currentServerCount);
+    if (!Number.isFinite(count)) return categoryCounts[category];
+    const safeCount = Math.max(0, Math.floor(count));
+
+    // 之前只有总 badge 时无法判断分类；分类一旦从列表中识别出来，优先把这部分
+    // 本地抵消量归属到该分类，避免“点过后打开预览又重新出现”。
+    const reattributedCount = Math.min(locallyViewedWithoutCategory.value, safeCount);
+    if (reattributedCount > 0) {
+      locallyViewedWithoutCategory.value -= reattributedCount;
+      locallyViewed[category] += reattributedCount;
+    }
+
+    const reconciled = reconcileViewedCount(
+      serverCategoryCounts[category],
+      safeCount,
+      locallyViewed[category],
+    );
+    categoryCounts[category] = reconciled.count;
+    locallyViewed[category] = reconciled.locallyViewedCount;
+    serverCategoryCounts[category] = safeCount;
+
+    const locallyViewedTotal = CATEGORY_NAMES.reduce(
+      (total, itemCategory) => total + locallyViewed[itemCategory],
+      0,
+    ) + locallyViewedWithoutCategory.value;
+    const visibleCategoryTotal = CATEGORY_NAMES.reduce(
+      (total, itemCategory) => total + categoryCounts[itemCategory],
+      0,
+    );
+    if (serverTotal.value === null) {
+      unreadCount.value = Math.max(unreadCount.value, visibleCategoryTotal);
+    } else {
+      unreadCount.value = Math.max(
+        0,
+        serverTotal.value - locallyViewedTotal,
+        visibleCategoryTotal,
+      );
+    }
+    return categoryCounts[category];
   }
 
   /** 用户打开一条通知时先在本地扣减，两个角标会立即同步。 */
@@ -122,6 +176,22 @@ export const useNotificationStore = defineStore('notifications', () => {
   }
 
   /**
+   * 启动后经列表标识核对确认的旧通知，可能尚未有可用的分类计数。
+   * 先从总数抵消，后续拿到分类字段时 applyCategoryCount 会自动归属到对应分类。
+   */
+  function suppressNotificationCount(count: number): number {
+    const requested = Number(count);
+    if (!Number.isFinite(requested) || requested <= 0) return 0;
+
+    const suppressed = Math.min(Math.floor(requested), notificationCount.value);
+    if (suppressed <= 0) return 0;
+
+    locallyViewedWithoutCategory.value += suppressed;
+    unreadCount.value = Math.max(0, unreadCount.value - suppressed);
+    return suppressed;
+  }
+
+  /**
    * 服务端偶尔会把自己发出的最后一条私信也计入 message 未读。
    * 仅扣除已由会话列表明确识别为“自己发送”的数量，并保留本地抵消量，
    * 避免下一次 checkCount 在服务端尚未修正前再次显示红点。
@@ -139,7 +209,7 @@ export const useNotificationStore = defineStore('notifications', () => {
     return suppressed;
   }
 
-  /** 进入通知中心即视为已查看所有站内通知，私信未读保持不变。 */
+  /** 显式执行全部已读时清除站内通知，私信未读保持不变。 */
   function markAllNotificationsViewed(): number {
     const count = notificationCount.value;
     if (count <= 0) return 0;
@@ -175,8 +245,10 @@ export const useNotificationStore = defineStore('notifications', () => {
     notificationCount,
     messageCount,
     applyServerResponse,
+    applyCategoryCount,
     markViewed,
     markCategoryViewed,
+    suppressNotificationCount,
     suppressMessageCount,
     markAllNotificationsViewed,
     reset,

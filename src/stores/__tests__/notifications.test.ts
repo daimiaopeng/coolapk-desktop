@@ -52,7 +52,66 @@ describe('通知状态', () => {
     expect(store.notificationCount).toBe(1);
   });
 
-  it('进入通知中心清除通知红点，但保留私信未读', () => {
+  it('启动时恢复已确认通知的总数抵消，下一轮轮询不会重新显示', () => {
+    const store = useNotificationStore();
+    store.applyServerResponse({ data: { badge_v18: 1 } });
+
+    expect(store.suppressNotificationCount(1)).toBe(1);
+    expect(store.notificationCount).toBe(0);
+
+    store.applyServerResponse({ data: { badge_v18: 1 } });
+    expect(store.notificationCount).toBe(0);
+  });
+
+  it('从通知列表恢复收到的赞后，切换到该分类会同步清除全局角标', () => {
+    const store = useNotificationStore();
+    store.applyServerResponse({
+      data: {
+        badge_v18: 1,
+        notification_v18: 0,
+      },
+    });
+
+    expect(store.categoryCounts.like).toBe(0);
+    expect(store.notificationCount).toBe(1);
+
+    store.applyCategoryCount('like', 1);
+    expect(store.categoryCounts.like).toBe(1);
+    expect(store.notificationCount).toBe(1);
+    expect(store.markCategoryViewed('like')).toBe(1);
+    expect(store.categoryCounts.like).toBe(0);
+    expect(store.notificationCount).toBe(0);
+
+    // 服务端暂时仍返回旧 badge，不能把刚确认已读的点赞重新显示出来。
+    store.applyServerResponse({
+      data: {
+        badge_v18: 1,
+        notification_v18: 0,
+      },
+    });
+    expect(store.categoryCounts.like).toBe(0);
+    expect(store.notificationCount).toBe(0);
+  });
+
+  it('分类计数先清零、总 badge 滞后时，已读点赞不会重新显示总红点', () => {
+    const store = useNotificationStore();
+    store.applyServerResponse({ data: { badge_v18: 1 } });
+    store.applyCategoryCount('like', 1);
+    store.markCategoryViewed('like');
+
+    // 实际接口会出现 feedlike 已清零但 badge_v18 尚未清零的短暂不一致。
+    store.applyServerResponse({ data: { badge_v18: 1, feedlike: 0 } });
+    expect(store.categoryCounts.like).toBe(0);
+    expect(store.notificationCount).toBe(0);
+
+    // 总数真正清零后释放本地抵消；后续新点赞仍能正常出现。
+    store.applyServerResponse({ data: { badge_v18: 0, feedlike: 0 } });
+    store.applyServerResponse({ data: { badge_v18: 1, feedlike: 1 } });
+    expect(store.categoryCounts.like).toBe(1);
+    expect(store.notificationCount).toBe(1);
+  });
+
+  it('执行全部已读清除通知红点，但保留私信未读', () => {
     const store = useNotificationStore();
     store.applyServerResponse({
       data: {

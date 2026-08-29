@@ -297,9 +297,19 @@ import { useNotificationStore } from '../../stores/notifications';
 import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { desktopNotify } from '../../utils/desktopNotify';
-import { hasNotificationCountIncreased, type NotificationCategory } from '../../utils/notificationCount';
+import {
+  getNotificationCategoryCountsFromItems,
+  hasNotificationCountIncreased,
+  type NotificationCategory,
+} from '../../utils/notificationCount';
 import { getMessageUnreadCount, getSelfMessageUnreadCount } from '../../utils/messageUnread';
 import { getNotificationActor } from '../../utils/notificationItem';
+import {
+  addSeenNotificationCount,
+  hasSeenNotificationItems,
+  markNotificationItemsSeen,
+  takeSeenNotificationCount,
+} from '../../utils/notificationSeen';
 import { getNotificationExternalUrl, getNotificationFeedId, resolveNotificationTargetRoute } from '../../utils/notificationNavigation';
 import { syncWindowsNotificationIcons } from '../../utils/taskbarNotificationDot';
 import { openFeedDetail } from '../../utils/feedNavigation';
@@ -383,6 +393,8 @@ const notificationPreviewLoading = ref(false);
 const notificationPreviews = ref<NotificationPreview[]>([]);
 let notificationPopoverHideTimer: ReturnType<typeof setTimeout> | null = null;
 let notificationPreviewLoadedAt = 0;
+let restoredSeenLikeUid = '';
+let restoringSeenLikes = false;
 const isMessagePopoverVisible = ref(false);
 const messagePreviewLoading = ref(false);
 const messagePreviews = ref<MessagePreview[]>([]);
@@ -405,6 +417,38 @@ function isDesktopNotificationEnabledFor(categories: NotificationCategory[]): bo
   });
 }
 
+/**
+ * 服务端没有单独清除点赞未读的已知类型。启动后恢复本机保存的已读数量，
+ * 仅抵消这部分旧 badge，服务端总数归零时会自动清除本机记录。
+ */
+async function restoreSeenLikeNotifications(): Promise<number> {
+  const uid = String(authStore.user?.uid || '').trim();
+  if (!uid || restoredSeenLikeUid === uid || restoringSeenLikes || notificationStore.notificationCount <= 0) {
+    return 0;
+  }
+
+  restoringSeenLikes = true;
+  try {
+    let remaining = takeSeenNotificationCount(uid, 'like', notificationStore.notificationCount);
+    // 兼容上一版已经保存了通知标识、但尚未保存数量的用户；当前旧标识至少抵消一条。
+    if (remaining === 0 && hasSeenNotificationItems(uid, 'like')) {
+      remaining = Math.min(1, notificationStore.notificationCount);
+      if (remaining > 0) addSeenNotificationCount(uid, 'like', remaining);
+    }
+    const restoredCount = remaining;
+
+    while (remaining > 0 && notificationStore.categoryCounts.like > 0) {
+      if (!notificationStore.markViewed('like')) break;
+      remaining -= 1;
+    }
+    if (remaining > 0) notificationStore.suppressNotificationCount(remaining);
+    return restoredCount;
+  } finally {
+    restoringSeenLikes = false;
+    restoredSeenLikeUid = uid;
+  }
+}
+
 async function fetchNotificationCount(): Promise<boolean | null> {
   if (!authStore.isLoggedIn) {
     notificationStore.reset();
@@ -417,6 +461,9 @@ async function fetchNotificationCount(): Promise<boolean | null> {
     const previousMessageCount = notificationStore.messageCount;
     const applied = notificationStore.applyServerResponse(res);
     let { previous, count, increasedCategories } = applied;
+
+    await restoreSeenLikeNotifications();
+    count = notificationStore.unreadCount;
 
     // checkCount 只返回数量，服务端偶尔会把自己发出的最后一条私信也算进去。
     // 用会话列表中的发送者字段校正 message 分类后，再决定是否弹桌面提醒。
@@ -522,6 +569,10 @@ async function fetchNotificationPreviews(force = false) {
       try {
         const response = await CoolapkTauriAPI.getNotifications(source.apiType, 1);
         const data = Array.isArray(response?.data) ? response.data : [];
+        const recoveredCounts = getNotificationCategoryCountsFromItems(data);
+        for (const [category, count] of Object.entries(recoveredCounts) as Array<[NotificationCategory, number]>) {
+          notificationStore.applyCategoryCount(category, count);
+        }
         const limit = Math.max(1, Math.min(notificationStore.categoryCounts[source.category] || 1, 3));
         return data.slice(0, limit).map((item: any, index: number): NotificationPreview => ({
           key: `${source.apiType}:${item?.id || item?.likeTime || item?.dateline || index}`,
@@ -537,6 +588,23 @@ async function fetchNotificationPreviews(force = false) {
       .flat()
       .sort((a, b) => getNotificationItemTime(b.item) - getNotificationItemTime(a.item))
       .slice(0, previewLimit);
+
+    // 部分账号的 checkCount 和列表项都不带 feedlike 等分类字段，但这里已经通过
+    // 实际命中的接口确定了未读来源。全局只剩一条且只有一个预览时，可安全归属给它，
+    // 让“收到的赞”Tab 与左侧红点保持一致。
+    const knownCategoryCount = notificationPreviewSources.reduce(
+      (total, source) => total + notificationStore.categoryCounts[source.category],
+      0,
+    );
+    if (
+      notificationStore.notificationCount - knownCategoryCount === 1
+      && notificationPreviews.value.length === 1
+    ) {
+      const preview = notificationPreviews.value[0];
+      if (notificationStore.categoryCounts[preview.category] === 0) {
+        notificationStore.applyCategoryCount(preview.category, 1);
+      }
+    }
     notificationPreviewLoadedAt = Date.now();
   } finally {
     notificationPreviewLoading.value = false;
@@ -673,7 +741,11 @@ function openNotificationCenter() {
 }
 
 async function openNotificationPreview(preview: NotificationPreview) {
-  notificationStore.markViewed(preview.category);
+  const viewed = notificationStore.markViewed(preview.category);
+  if (viewed && preview.category === 'like' && authStore.user?.uid) {
+    addSeenNotificationCount(authStore.user.uid, preview.category, 1);
+    markNotificationItemsSeen(authStore.user.uid, preview.category, [preview.item], 1);
+  }
   notificationPreviews.value = notificationPreviews.value.filter((item) => item.key !== preview.key);
   isNotificationPopoverVisible.value = false;
   const externalUrl = getNotificationExternalUrl(preview.item);
@@ -783,6 +855,7 @@ watch(
     messagePreviews.value = [];
     messagePreviewLoadedAt = 0;
     isMessagePopoverVisible.value = false;
+    restoredSeenLikeUid = '';
     if (!authStore.isLoggedIn) notificationStore.reset();
     void pollNotificationCountNow();
   }

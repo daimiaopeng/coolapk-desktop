@@ -95,8 +95,13 @@
 import { nextTick, onActivated, onDeactivated, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
+import { useAuthStore } from '../stores/auth';
 import { useNotificationStore } from '../stores/notifications';
-import type { NotificationCategory } from '../utils/notificationCount';
+import {
+  getNotificationCategoryCountsFromItems,
+  type NotificationCategory,
+} from '../utils/notificationCount';
+import { addSeenNotificationCount, markNotificationItemsSeen } from '../utils/notificationSeen';
 import { getNotificationActor } from '../utils/notificationItem';
 import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
@@ -109,6 +114,7 @@ import ErrorState from '../components/common/ErrorState.vue';
 
 const router = useRouter();
 const route = useRoute();
+const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
 
 // 分类 Tabs（接口路径与官方 UWP 客户端一致）
@@ -130,7 +136,10 @@ const pageContainerRef = ref<HTMLElement | null>(null);
 
 // 切换 Tab
 async function switchTab(tabValue: string) {
-  if (currentTab.value === tabValue && items.value.length > 0) return;
+  if (currentTab.value === tabValue && items.value.length > 0) {
+    markCurrentTabViewed();
+    return;
+  }
   currentTab.value = tabValue;
   page.value = 1;
   items.value = [];
@@ -165,11 +174,18 @@ async function fetchNotifications() {
   if (loading.value) return;
   loading.value = true;
   notificationError.value = '';
+  let fetchSucceeded = false;
   try {
     const res = await CoolapkTauriAPI.getNotifications(currentTab.value, page.value);
     const data = res?.data || [];
     
     if (Array.isArray(data)) {
+      // 通知列表项通常携带 notifyCount；它比只看 checkCount 更能覆盖 v18 分类字段。
+      const recoveredCounts = getNotificationCategoryCountsFromItems(data);
+      for (const [category, count] of Object.entries(recoveredCounts) as Array<[NotificationCategory, number]>) {
+        notificationStore.applyCategoryCount(category, count);
+      }
+
       if (data.length === 0) {
         hasMore.value = false;
       } else {
@@ -178,16 +194,24 @@ async function fetchNotifications() {
         } else {
           items.value = [...items.value, ...data];
         }
+
+        // 官方通知页打开首屏后只确认当前分类，不能把其他分类一起清掉。
+        if (page.value === 1) markCurrentTabViewed();
       }
+      fetchSucceeded = true;
     } else {
       hasMore.value = false;
+      fetchSucceeded = true;
     }
   } catch (err) {
     console.warn('Notifications fetch warning', err);
     notificationError.value = err instanceof Error ? err.message : String(err);
+    // 请求失败时禁止 finally 里的自动 loadMore，否则会在无登录/网络错误时无限重试。
+    hasMore.value = false;
     if (page.value > 1) page.value -= 1;
   } finally {
     loading.value = false;
+    if (!fetchSucceeded) return;
     // “@ 提及”等分类可能只有一两条，首屏没有滚动条时不会触发 scroll。
     // DOM 更新后检查一次并继续加载，直到内容足以滚动或接口明确到底。
     await nextTick();
@@ -348,8 +372,25 @@ function isNotificationUnread(item: any): boolean {
   return getNotificationUnreadCount(item) > 0;
 }
 
-function markCurrentTabViewed() {
-  notificationStore.markCategoryViewed(getCurrentCategory());
+function markCurrentTabViewed(): number {
+  const category = getCurrentCategory();
+  let viewedCount = notificationStore.markCategoryViewed(category);
+  // 点赞分类的服务端字段会先于总 badge 清零。此时用户已经进入点赞页且列表有内容，
+  // 仍要把这条总未读明确归属为已读并持久化，不能因为分类数恰好变成 0 而漏记。
+  if (
+    viewedCount === 0
+    && category === 'like'
+    && items.value.length > 0
+    && notificationStore.notificationCount > 0
+    && notificationStore.markViewed(category)
+  ) {
+    viewedCount = 1;
+  }
+  if (viewedCount > 0 && category === 'like' && authStore.user?.uid) {
+    addSeenNotificationCount(authStore.user.uid, category, viewedCount);
+    markNotificationItemsSeen(authStore.user.uid, category, items.value, viewedCount);
+  }
+  return viewedCount;
 }
 
 function renderSafeHtml(text: string): string {
@@ -393,10 +434,7 @@ async function handleNotifyClick(e: Event, item: any) {
 
 onActivated(() => {
   window.addEventListener('coolapk-notification-count-increased', handleNotificationCountIncrease);
-  notificationStore.markAllNotificationsViewed();
-  void CoolapkTauriAPI.clearNotificationCount('feed').catch((err) => {
-    console.warn('清除服务端通知数失败', err);
-  });
+  // 打开通知中心只刷新当前分类；首屏成功后由 fetchNotifications 确认当前分类已读。
   const requestedTab = String(route.query.tab || '');
   if (tabs.some((tab) => tab.value === requestedTab)) currentTab.value = requestedTab;
   void refreshNotifications();
