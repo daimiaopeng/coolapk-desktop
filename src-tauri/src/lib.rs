@@ -71,6 +71,14 @@ struct WindowState {
     h: u32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ScreenRect {
+    x: i32,
+    y: i32,
+    w: u32,
+    h: u32,
+}
+
 static WINDOW_STATE: Mutex<Option<WindowState>> = Mutex::new(None);
 static STARTUP_STATE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -134,6 +142,67 @@ fn parse_saved_window_state(flags: &serde_json::Value) -> Option<WindowState> {
     Some(WindowState { x, y, w, h })
 }
 
+fn intersection_size(window: WindowState, screen: ScreenRect) -> (u32, u32) {
+    let left = i64::from(window.x).max(i64::from(screen.x));
+    let top = i64::from(window.y).max(i64::from(screen.y));
+    let right = (i64::from(window.x) + i64::from(window.w))
+        .min(i64::from(screen.x) + i64::from(screen.w));
+    let bottom = (i64::from(window.y) + i64::from(window.h))
+        .min(i64::from(screen.y) + i64::from(screen.h));
+    (
+        right.saturating_sub(left).max(0) as u32,
+        bottom.saturating_sub(top).max(0) as u32,
+    )
+}
+
+fn restore_window_rect(
+    saved: WindowState,
+    screens: &[ScreenRect],
+    primary: Option<ScreenRect>,
+) -> WindowState {
+    const MIN_VISIBLE: u32 = 64;
+    if screens.is_empty() {
+        return saved;
+    }
+
+    let visible_screen = screens
+        .iter()
+        .copied()
+        .filter_map(|screen| {
+            let (visible_w, visible_h) = intersection_size(saved, screen);
+            (visible_w >= MIN_VISIBLE && visible_h >= MIN_VISIBLE)
+                .then_some((u64::from(visible_w) * u64::from(visible_h), screen))
+        })
+        .max_by_key(|(area, _)| *area)
+        .map(|(_, screen)| screen);
+    let screen = visible_screen.or(primary).unwrap_or(screens[0]);
+    let width = saved.w.clamp(MIN_WINDOW_W, screen.w.max(MIN_WINDOW_W));
+    let height = saved.h.clamp(MIN_WINDOW_H, screen.h.max(MIN_WINDOW_H));
+
+    let (x, y) = if visible_screen.is_some() {
+        let min_x = i64::from(screen.x) - i64::from(width) + i64::from(MIN_VISIBLE);
+        let max_x = i64::from(screen.x) + i64::from(screen.w) - i64::from(MIN_VISIBLE);
+        let min_y = i64::from(screen.y) - i64::from(height) + i64::from(MIN_VISIBLE);
+        let max_y = i64::from(screen.y) + i64::from(screen.h) - i64::from(MIN_VISIBLE);
+        (
+            i64::from(saved.x).clamp(min_x, max_x) as i32,
+            i64::from(saved.y).clamp(min_y, max_y) as i32,
+        )
+    } else {
+        (
+            (i64::from(screen.x) + (i64::from(screen.w) - i64::from(width)) / 2) as i32,
+            (i64::from(screen.y) + (i64::from(screen.h) - i64::from(height)) / 2) as i32,
+        )
+    };
+
+    WindowState {
+        x,
+        y,
+        w: width,
+        h: height,
+    }
+}
+
 pub(crate) fn persist_current_window_geometry(app: &tauri::AppHandle) {
     if !REMEMBER_WINDOW_STATE.load(Ordering::SeqCst) {
         return;
@@ -159,7 +228,10 @@ pub(crate) fn persist_current_window_geometry(app: &tauri::AppHandle) {
 
 #[cfg(test)]
 mod window_state_tests {
-    use super::{MIN_WINDOW_H, MIN_WINDOW_W, WindowState, parse_saved_window_state};
+    use super::{
+        MIN_WINDOW_H, MIN_WINDOW_W, ScreenRect, WindowState, parse_saved_window_state,
+        restore_window_rect,
+    };
 
     #[test]
     fn parses_valid_window_geometry() {
@@ -173,6 +245,23 @@ mod window_state_tests {
         let wrong_type = serde_json::json!({"x": 0.5, "y": 0, "w": MIN_WINDOW_W, "h": MIN_WINDOW_H});
         assert!(parse_saved_window_state(&too_small).is_none());
         assert!(parse_saved_window_state(&wrong_type).is_none());
+    }
+
+    #[test]
+    fn preserves_visible_window_geometry() {
+        let screen = ScreenRect { x: 0, y: 0, w: 1920, h: 1080 };
+        let saved = WindowState { x: 120, y: 80, w: 1200, h: 700 };
+        assert_eq!(restore_window_rect(saved, &[screen], Some(screen)), saved);
+    }
+
+    #[test]
+    fn recenters_window_that_is_completely_off_screen() {
+        let screen = ScreenRect { x: 0, y: 0, w: 1920, h: 1080 };
+        let saved = WindowState { x: 3000, y: 200, w: 1200, h: 700 };
+        assert_eq!(
+            restore_window_rect(saved, &[screen], Some(screen)),
+            WindowState { x: 360, y: 190, w: 1200, h: 700 }
+        );
     }
 }
 
@@ -399,7 +488,27 @@ pub fn run() {
                                 flags["remember_window_state"].as_bool().unwrap_or(true);
                             REMEMBER_WINDOW_STATE.store(remember_window_state, Ordering::SeqCst);
                             if remember_window_state {
-                                if let Some(state) = parse_saved_window_state(&flags) {
+                                if let Some(saved_state) = parse_saved_window_state(&flags) {
+                                    let screens: Vec<ScreenRect> = w
+                                        .available_monitors()
+                                        .unwrap_or_default()
+                                        .into_iter()
+                                        .map(|monitor| ScreenRect {
+                                            x: monitor.position().x,
+                                            y: monitor.position().y,
+                                            w: monitor.size().width,
+                                            h: monitor.size().height,
+                                        })
+                                        .collect();
+                                    let primary = w.primary_monitor().ok().flatten().map(|monitor| {
+                                        ScreenRect {
+                                            x: monitor.position().x,
+                                            y: monitor.position().y,
+                                            w: monitor.size().width,
+                                            h: monitor.size().height,
+                                        }
+                                    });
+                                    let state = restore_window_rect(saved_state, &screens, primary);
                                     // set_size 使用内容区尺寸，因此保存时也必须读取 inner_size。
                                     let _ = w.set_size(tauri::PhysicalSize::new(state.w, state.h));
                                     // 先调整尺寸再恢复位置，避免窗口管理器按旧尺寸裁剪坐标。
