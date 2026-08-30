@@ -136,6 +136,7 @@ import { CoolapkTauriAPI } from './api/coolapk';
 import { clearResourceCache } from './utils/resourceCache';
 import { useSidebarTransition } from './utils/routeTransition';
 import { registerGlobalSelectionClear } from './utils/selection';
+import { getPlatformInfo } from './utils/platform';
 
 const { isSidebarTransitionActive, resetSidebarTransition } = useSidebarTransition();
 
@@ -154,7 +155,7 @@ const readyInfo = ref<ReadyInfo | null>(null);
 const downloading = ref<DownloadProgress | null>(null);
 const downloadError = ref<string | null>(null);
 const installingUpdate = ref(false);
-const isWindows = navigator.userAgent.includes('Windows');
+const isWindows = ref(false);
 let unregisterHotkeys: (() => void) | null = null;
 let unregisterSelectionClear: (() => void) | null = null;
 let updateDownloadInFlight = false;
@@ -167,6 +168,7 @@ function formatBytes(bytes: number) {
 
 async function checkForUpdate(manual = false) {
   try {
+    isWindows.value = (await getPlatformInfo()).os === 'windows';
     const result = await checkLatestRelease(settingsStore.settings.updateChannel);
     const latestVersion = normalizeVersion(result.latestVersion || '') || '';
     const ignoredVersion = normalizeVersion(settingsStore.settings.ignoredUpdateVersion) || '';
@@ -178,7 +180,7 @@ async function checkForUpdate(manual = false) {
       Boolean(readyInfo.value) &&
       result.hasNew &&
       Boolean(result.installerUrl) &&
-      isWindows &&
+      isWindows.value &&
       Boolean(latestVersion) &&
       isNewerVersion(latestVersion, readyInfo.value?.version || '') &&
       !settingsStore.settings.ignoreAllUpdates &&
@@ -199,7 +201,7 @@ async function checkForUpdate(manual = false) {
       if (settingsStore.settings.ignoreAllUpdates) return;
       if (latestVersion && latestVersion === ignoredVersion) return;
       // 自动检查：有可用安装包时静默后台下载，完成后弹窗询问是否立即更新
-      if (result.installerUrl && isWindows) {
+      if (result.installerUrl && isWindows.value) {
         void startBackgroundDownload(result);
         return;
       }
@@ -375,6 +377,7 @@ onMounted(() => {
   // 本地调试（vite dev）跳过自动更新检查，避免误弹更新提示或静默下载安装包；
   // 设置页的"立即检查更新"手动触发不受影响
   void (async () => {
+    isWindows.value = (await getPlatformInfo()).os === 'windows';
     await restorePendingUpdate();
     if (!import.meta.env.DEV && settingsStore.settings.checkUpdateOnStartup) {
       void checkForUpdate();

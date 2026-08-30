@@ -181,6 +181,14 @@ fn set_close_to_tray(enabled: bool) {
     CLOSE_TO_TRAY.store(enabled, Ordering::SeqCst);
 }
 
+#[tauri::command]
+fn get_platform_info() -> serde_json::Value {
+    serde_json::json!({
+        "os": std::env::consts::OS,
+        "arch": std::env::consts::ARCH,
+    })
+}
+
 #[cfg(windows)]
 fn windows_notification_icon_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     let directory = app
@@ -658,6 +666,7 @@ pub fn run() {
             get_following_feeds,
             get_follow_user_list,
             get_fans_user_list,
+            get_platform_info,
             set_close_to_tray,
             set_startup_flags,
             send_desktop_notification,
