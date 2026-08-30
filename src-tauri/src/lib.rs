@@ -91,36 +91,49 @@ fn startup_state_path(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     Some(dir.join(STARTUP_STATE_FILE))
 }
 
+fn update_startup_state_file<F>(
+    path: &std::path::Path,
+    fallback: serde_json::Value,
+    update: F,
+) -> Result<(), String>
+where
+    F: FnOnce(&mut serde_json::Value),
+{
+    let _lock = STARTUP_STATE_LOCK
+        .lock()
+        .map_err(|_| "启动状态锁已损坏".to_string())?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|error| error.to_string())?;
+    }
+    let mut state: serde_json::Value = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or(fallback);
+    if !state.is_object() {
+        state = serde_json::json!({});
+    }
+    update(&mut state);
+    let raw = serde_json::to_string_pretty(&state).map_err(|error| error.to_string())?;
+    std::fs::write(path, raw).map_err(|error| error.to_string())
+}
+
 /// 合并写入窗口几何信息，保留已有的启动参数（静默启动/记忆窗口/置顶）
 fn persist_window_geometry(app: &tauri::AppHandle, state: WindowState) {
-    let _lock = STARTUP_STATE_LOCK.lock().ok();
     let path = match startup_state_path(app) {
         Some(p) => p,
         None => return,
     };
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    let mut flags: serde_json::Value = std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_else(|| {
-            serde_json::json!({
-                "start_minimized": START_MINIMIZED.load(Ordering::SeqCst),
-                "remember_window_state": REMEMBER_WINDOW_STATE.load(Ordering::SeqCst),
-                "always_on_top": ALWAYS_ON_TOP.load(Ordering::SeqCst)
-            })
-        });
-    if !flags.is_object() {
-        flags = serde_json::json!({});
-    }
-    flags["x"] = serde_json::json!(state.x);
-    flags["y"] = serde_json::json!(state.y);
-    flags["w"] = serde_json::json!(state.w);
-    flags["h"] = serde_json::json!(state.h);
-    if let Ok(raw) = serde_json::to_string_pretty(&flags) {
-        let _ = std::fs::write(&path, raw);
-    }
+    let fallback = serde_json::json!({
+        "start_minimized": START_MINIMIZED.load(Ordering::SeqCst),
+        "remember_window_state": REMEMBER_WINDOW_STATE.load(Ordering::SeqCst),
+        "always_on_top": ALWAYS_ON_TOP.load(Ordering::SeqCst)
+    });
+    let _ = update_startup_state_file(&path, fallback, |flags| {
+        flags["x"] = serde_json::json!(state.x);
+        flags["y"] = serde_json::json!(state.y);
+        flags["w"] = serde_json::json!(state.w);
+        flags["h"] = serde_json::json!(state.h);
+    });
 }
 
 fn cached_window_state() -> Option<WindowState> {
@@ -230,7 +243,7 @@ pub(crate) fn persist_current_window_geometry(app: &tauri::AppHandle) {
 mod window_state_tests {
     use super::{
         MIN_WINDOW_H, MIN_WINDOW_W, ScreenRect, WindowState, parse_saved_window_state,
-        restore_window_rect,
+        restore_window_rect, update_startup_state_file,
     };
 
     #[test]
@@ -262,6 +275,38 @@ mod window_state_tests {
             restore_window_rect(saved, &[screen], Some(screen)),
             WindowState { x: 360, y: 190, w: 1200, h: 700 }
         );
+    }
+
+    #[test]
+    fn startup_state_updates_preserve_geometry_and_flags() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("coolapk-startup-state-{unique}"));
+        let path = root.join("startup_state.json");
+
+        update_startup_state_file(&path, serde_json::json!({}), |state| {
+            state["x"] = serde_json::json!(100);
+            state["y"] = serde_json::json!(80);
+            state["w"] = serde_json::json!(1200);
+            state["h"] = serde_json::json!(700);
+        })
+        .unwrap();
+        update_startup_state_file(&path, serde_json::json!({}), |state| {
+            state["start_minimized"] = serde_json::json!(true);
+            state["remember_window_state"] = serde_json::json!(true);
+            state["always_on_top"] = serde_json::json!(false);
+        })
+        .unwrap();
+
+        let state: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(state["x"], 100);
+        assert_eq!(state["w"], 1200);
+        assert_eq!(state["start_minimized"], true);
+        assert_eq!(state["remember_window_state"], true);
+        let _ = std::fs::remove_dir_all(root);
     }
 }
 
@@ -397,30 +442,16 @@ fn set_startup_flags(
     remember_window_state: bool,
     always_on_top: bool,
 ) -> Result<(), String> {
-    let _lock = STARTUP_STATE_LOCK
-        .lock()
-        .map_err(|_| "启动状态锁已损坏".to_string())?;
     START_MINIMIZED.store(start_minimized, Ordering::SeqCst);
     REMEMBER_WINDOW_STATE.store(remember_window_state, Ordering::SeqCst);
     ALWAYS_ON_TOP.store(always_on_top, Ordering::SeqCst);
 
     let path = startup_state_path(&app).ok_or("无法获取应用数据目录")?;
-    if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
-    let mut flags: serde_json::Value = std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_else(|| serde_json::json!({}));
-    if !flags.is_object() {
-        flags = serde_json::json!({});
-    }
-    flags["start_minimized"] = serde_json::json!(start_minimized);
-    flags["remember_window_state"] = serde_json::json!(remember_window_state);
-    flags["always_on_top"] = serde_json::json!(always_on_top);
-    let raw = serde_json::to_string_pretty(&flags).map_err(|e| e.to_string())?;
-    std::fs::write(&path, raw).map_err(|e| e.to_string())?;
-    Ok(())
+    update_startup_state_file(&path, serde_json::json!({}), |flags| {
+        flags["start_minimized"] = serde_json::json!(start_minimized);
+        flags["remember_window_state"] = serde_json::json!(remember_window_state);
+        flags["always_on_top"] = serde_json::json!(always_on_top);
+    })
 }
 
 /// 主窗口导航白名单：只允许应用自身源（dev 固定端口 / 打包后 tauri 自定义协议源）。
