@@ -1,4 +1,4 @@
-import logoUrl from '../assets/coolapk-logo-rounded.png';
+import { getPlatformInfo } from './platform';
 
 const ICON_SIZE = 64;
 const TRAY_ICON_ID = 'main-tray';
@@ -8,12 +8,14 @@ let iconUpdateQueue: Promise<void> = Promise.resolve();
 
 function loadLogoImage(): Promise<HTMLImageElement> {
   if (logoImagePromise) return logoImagePromise;
-  logoImagePromise = new Promise((resolve, reject) => {
-    const image = new window.Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('通知图标资源加载失败'));
-    image.src = logoUrl;
-  });
+  logoImagePromise = import('../assets/coolapk-logo-rounded.png').then(
+    ({ default: logoUrl }) => new Promise((resolve, reject) => {
+      const image = new window.Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('通知图标资源加载失败'));
+      image.src = logoUrl;
+    })
+  );
   return logoImagePromise;
 }
 
@@ -145,7 +147,8 @@ async function applyWindowsNotificationIcons(unreadCount: number): Promise<void>
 }
 
 /** 按顺序更新图标，避免快速清零时旧状态覆盖新状态。 */
-export function syncWindowsNotificationIcons(unreadCount: number): Promise<void> {
+export async function syncWindowsNotificationIcons(unreadCount: number): Promise<void> {
+  if ((await getPlatformInfo()).os !== 'windows') return;
   iconUpdateQueue = iconUpdateQueue
     .catch(() => undefined)
     .then(() => applyWindowsNotificationIcons(unreadCount));
