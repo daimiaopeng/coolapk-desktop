@@ -3,12 +3,17 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use md5::{Digest, Md5};
 use serde_json::{Value, json};
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};
 use tauri::{Manager, State};
 
 pub struct AppState {
     pub client: CoolapkClient,
 }
+
+static IMAGE_SAVE_LOCK: Mutex<()> = Mutex::new(());
+static IMAGE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[tauri::command]
 pub async fn get_index_v8_feeds(state: State<'_, AppState>, page: u32) -> Result<Value, String> {
@@ -1541,12 +1546,59 @@ pub async fn save_image(
     tokio::fs::create_dir_all(&target_dir)
         .await
         .map_err(|error| format!("创建图片保存目录失败：{error}"))?;
-    let target_path = next_available_file_path(&target_dir, &file_name);
-    tokio::fs::write(&target_path, bytes)
-        .await
-        .map_err(|error| format!("保存图片失败：{error}"))?;
+    let target_path = save_image_bytes(&target_dir, &file_name, &bytes).await?;
 
     Ok(target_path.to_string_lossy().to_string())
+}
+
+async fn save_image_bytes(
+    target_dir: &std::path::Path,
+    file_name: &str,
+    bytes: &[u8],
+) -> Result<PathBuf, String> {
+    use tokio::io::AsyncWriteExt;
+
+    let sequence = IMAGE_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let nonce = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let temp_path = target_dir.join(format!(
+        ".{file_name}.{}-{nonce}-{sequence}.part",
+        std::process::id()
+    ));
+    let mut temp_file = tokio::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp_path)
+        .await
+        .map_err(|error| format!("创建图片临时文件失败：{error}"))?;
+    if let Err(error) = async {
+        temp_file.write_all(bytes).await?;
+        temp_file.flush().await?;
+        temp_file.sync_all().await
+    }
+    .await
+    {
+        drop(temp_file);
+        let _ = tokio::fs::remove_file(&temp_path).await;
+        return Err(format!("写入图片临时文件失败：{error}"));
+    }
+    drop(temp_file);
+
+    let result = {
+        let _lock = IMAGE_SAVE_LOCK
+            .lock()
+            .map_err(|_| "图片保存锁已损坏".to_string())?;
+        let target_path = next_available_file_path(target_dir, file_name);
+        std::fs::rename(&temp_path, &target_path)
+            .map(|_| target_path)
+            .map_err(|error| format!("保存图片失败：{error}"))
+    };
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+    }
+    result
 }
 
 fn decode_image_data_url(data_url: &str) -> Result<(&str, Vec<u8>), String> {
@@ -2816,7 +2868,7 @@ pub async fn bind_feed_to_goods_list(
 mod cache_tests {
     use super::{
         build_image_file_name, decode_image_data_url, next_available_file_path, read_image_cache,
-        write_image_cache,
+        save_image_bytes, write_image_cache,
     };
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -2890,6 +2942,27 @@ mod cache_tests {
             next_available_file_path(&root, "history.json"),
             root.join("history_2.json")
         );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn concurrent_image_saves_do_not_overwrite_each_other() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("coolapk-image-concurrent-{unique}"));
+        std::fs::create_dir_all(&root).unwrap();
+
+        let (first, second) = tokio::join!(
+            save_image_bytes(&root, "same.png", b"first"),
+            save_image_bytes(&root, "same.png", b"second")
+        );
+        let first = first.unwrap();
+        let second = second.unwrap();
+        assert_ne!(first, second);
+        assert_eq!(std::fs::read(first).unwrap(), b"first");
+        assert_eq!(std::fs::read(second).unwrap(), b"second");
         let _ = std::fs::remove_dir_all(root);
     }
 }
