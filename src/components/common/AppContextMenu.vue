@@ -377,7 +377,7 @@ async function copyImage(url: string) {
 
 async function saveImage(url: string) {
   try {
-    await CoolapkTauriAPI.saveImage(url);
+    await CoolapkTauriAPI.saveImage(url, settingsStore.settings.downloadPath);
     showToast('图片保存成功');
   } catch (error) {
     showToast(`图片保存失败：${String(error)}`, 'error', 2400);
@@ -397,7 +397,10 @@ async function saveAllImages(urls: string[]) {
   const savedPaths: string[] = [];
   for (const url of originalUrls) {
     try {
-      const savedPath = await CoolapkTauriAPI.saveImage(url);
+      const savedPath = await CoolapkTauriAPI.saveImage(
+        url,
+        settingsStore.settings.downloadPath
+      );
       if (savedPath) savedPaths.push(savedPath);
       saved += 1;
     } catch (error) {
