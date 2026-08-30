@@ -242,7 +242,6 @@ async function clearCache() {
   if (cacheBusy.value) return;
   cacheBusy.value = true;
   try {
-    sessionStorage.clear();
     await clearResourceCache();
     const info = await CoolapkTauriAPI.clearAppCache(settingsStore.settings.cachePath);
     cacheBytes.value = Number(info?.bytes) || 0;

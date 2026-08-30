@@ -2310,19 +2310,6 @@ pub fn cleanup_update_packages(keep_path: Option<String>) -> Result<(), String> 
     Ok(())
 }
 
-fn clear_dir_contents(dir: &std::path::Path) {
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let _ = std::fs::remove_dir_all(&path);
-            } else {
-                let _ = std::fs::remove_file(&path);
-            }
-        }
-    }
-}
-
 /// 统计应用自己管理的图片缓存和更新包临时文件，并返回实际图片缓存目录。
 #[tauri::command]
 pub fn get_cache_info(
@@ -2342,21 +2329,15 @@ pub fn get_cache_info(
     }))
 }
 
-/// 删除图片、WebView 与更新包缓存。只清理由应用固定创建的缓存子目录。
+/// 只删除应用自己管理的图片缓存，不触碰 WebView profile 和更新包。
 #[tauri::command]
 pub fn clear_app_cache(
     app: tauri::AppHandle,
     cache_dir: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let (image, _update) = cache_locations(&app, cache_dir.as_deref())?;
-    let webview = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("EBWebView");
     let _ = std::fs::remove_dir_all(&image);
     let _ = std::fs::create_dir_all(&image);
-    clear_dir_contents(&webview);
     // 更新包由独立的待安装流程管理，清理普通缓存时必须保留，
     // 否则用户下载后暂不安装，重启或手动清理缓存就会丢失安装包。
     get_cache_info(app, cache_dir)
