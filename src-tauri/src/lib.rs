@@ -562,10 +562,9 @@ pub fn run() {
                 let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
                 let menu = Menu::with_items(app, &[&show, &quit])?;
 
-                let _tray = TrayIconBuilder::with_id("main-tray")
+                let tray_builder = TrayIconBuilder::with_id("main-tray")
                     .icon(icon)
                     .menu(&menu)
-                    .show_menu_on_left_click(false)
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "show" => {
                             if let Some(w) = app.get_webview_window("main") {
@@ -580,7 +579,11 @@ pub fn run() {
                             app.exit(0)
                         }
                         _ => {}
-                    })
+                    });
+
+                #[cfg(any(target_os = "windows", target_os = "macos"))]
+                let tray_builder = tray_builder
+                    .show_menu_on_left_click(false)
                     .on_tray_icon_event(|tray, event| {
                         use tauri::tray::{MouseButton, MouseButtonState};
                         if let tauri::tray::TrayIconEvent::Click {
@@ -596,8 +599,10 @@ pub fn run() {
                                 let _ = w.set_focus();
                             }
                         }
-                    })
-                    .build(app)?;
+                    });
+
+                // Linux 保留托盘实现的默认左键菜单行为，避免菜单弹出与窗口恢复同时触发。
+                let _tray = tray_builder.build(app)?;
             }
 
             Ok(())
