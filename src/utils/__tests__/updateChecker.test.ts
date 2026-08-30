@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { isNewerVersion, checkLatestRelease, normalizeVersion } from '../updateChecker';
+import {
+  isNewerVersion,
+  checkLatestRelease,
+  normalizeVersion,
+  selectInstallerAsset,
+} from '../updateChecker';
 
 describe('updateChecker', () => {
   beforeEach(() => {
@@ -56,7 +61,7 @@ describe('updateChecker', () => {
         json: async () => mockRelease,
       } as Response);
 
-      const info = await checkLatestRelease('stable');
+      const info = await checkLatestRelease('stable', { os: 'windows', arch: 'x86_64' });
       expect(info.hasNew).toBe(true);
       expect(info.latestVersion).toBe('v9.9.9');
       expect(info.installerUrl).toBe('https://github.com/download/coolapk-desktop_9.9.9_x64-setup.exe');
@@ -77,7 +82,7 @@ describe('updateChecker', () => {
         }),
       } as Response);
 
-      const info = await checkLatestRelease('stable');
+      const info = await checkLatestRelease('stable', { os: 'windows', arch: 'x86_64' });
       expect(info.hasNew).toBe(true);
       expect(info.installerUrl).toBeUndefined();
     });
@@ -92,7 +97,7 @@ describe('updateChecker', () => {
         }),
       } as Response);
 
-      const info = await checkLatestRelease('stable');
+      const info = await checkLatestRelease('stable', { os: 'windows', arch: 'x86_64' });
       expect(info.hasNew).toBe(false);
       expect(info.releaseNotes).toBe('1.9.1 远程说明');
       expect(info.publishedAt).toBeDefined();
@@ -107,10 +112,27 @@ describe('updateChecker', () => {
         }),
       } as Response);
 
-      const info = await checkLatestRelease('stable');
+      const info = await checkLatestRelease('stable', { os: 'windows', arch: 'x86_64' });
       expect(info.hasNew).toBe(false);
       expect(info.releaseNotes).toBe('暂无当前版本的更新日志。');
       expect(info.publishedAt).toBeUndefined();
+    });
+  });
+
+  describe('selectInstallerAsset', () => {
+    const assets = [
+      { name: 'coolapk-desktop_9.9.9_x64-setup.exe', browser_download_url: 'x64-url' },
+      { name: 'coolapk-desktop_9.9.9_arm64-setup.exe', browser_download_url: 'arm64-url' },
+    ];
+
+    it('selects the x64 installer on Windows x86_64', () => {
+      expect(selectInstallerAsset(assets, { os: 'windows', arch: 'x86_64' })?.browser_download_url)
+        .toBe('x64-url');
+    });
+
+    it('selects the arm64 installer on Windows aarch64', () => {
+      expect(selectInstallerAsset(assets, { os: 'windows', arch: 'aarch64' })?.browser_download_url)
+        .toBe('arm64-url');
     });
   });
 });

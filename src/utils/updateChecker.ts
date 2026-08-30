@@ -1,5 +1,6 @@
 import { APP_VERSION } from '../constants/version';
 import type { UpdateChannel } from '../types/settings';
+import { getPlatformInfo, type PlatformInfo } from './platform';
 
 export { APP_VERSION };
 const RELEASES_URL = 'https://api.github.com/repos/daimiaopeng/coolapk-desktop/releases';
@@ -12,6 +13,33 @@ export type UpdateInfo = {
   downloadUrl?: string;
   installerUrl?: string;
 };
+
+export type InstallerAsset = {
+  name?: string;
+  browser_download_url?: string;
+};
+
+export function selectInstallerAsset(
+  assets: InstallerAsset[],
+  platform: PlatformInfo
+): InstallerAsset | undefined {
+  if (platform.os !== 'windows') return undefined;
+  const candidates = assets.filter(
+    (asset) => asset.name && /[-_]setup\.exe$/i.test(asset.name) && asset.browser_download_url
+  );
+  const archPattern = platform.arch === 'aarch64'
+    ? /(?:^|[-_])(?:arm64|aarch64)(?=[-_.]|$)/i
+    : platform.arch === 'x86_64'
+      ? /(?:^|[-_])(?:x64|amd64)(?=[-_.]|$)/i
+      : null;
+  if (!archPattern) return undefined;
+  const exact = candidates.find((asset) => archPattern.test(asset.name || ''));
+  if (exact) return exact;
+  const hasExplicitArch = candidates.some((asset) =>
+    /(?:^|[-_])(?:x64|amd64|arm64|aarch64)(?=[-_.]|$)/i.test(asset.name || '')
+  );
+  return hasExplicitArch ? undefined : candidates[0];
+}
 
 export function isNewerVersion(latest: string, current = APP_VERSION) {
   const latestVersion = parseVersion(latest);
@@ -110,14 +138,17 @@ export function getCurrentVersionChangelog(version = APP_VERSION, remoteBody?: s
   return '暂无当前版本的更新日志。';
 }
 
-export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Promise<UpdateInfo> {
+export async function checkLatestRelease(
+  channel: UpdateChannel = 'stable',
+  platform?: PlatformInfo
+): Promise<UpdateInfo> {
   const release = await pickRelease(channel);
   const tagName = release.tag_name || '';
   const hasNew = Boolean(normalizeVersion(tagName)) && isNewerVersion(tagName);
 
   // 挑选 Windows 安装包（NSIS setup.exe），智能匹配系统架构 (x64 / arm64)，且版本号匹配
   let installerUrl: string | undefined;
-  const assets: Array<{ name?: string; browser_download_url?: string }> = release.assets || [];
+  const assets: InstallerAsset[] = release.assets || [];
   const candidates = assets.filter(
     (asset) => asset.name && /[-_]setup\.exe$/i.test(asset.name) && asset.browser_download_url
   );
@@ -134,19 +165,8 @@ export async function checkLatestRelease(channel: UpdateChannel = 'stable'): Pro
       ? []
       : candidates;
 
-  if (validCandidates.length > 0) {
-    const isArm64 = typeof navigator !== 'undefined' && /arm64|aarch64/i.test(navigator.userAgent || '');
-    if (isArm64) {
-      const armCandidate = validCandidates.find((asset) => /arm64|aarch64/i.test(asset.name || ''));
-      if (armCandidate) {
-        installerUrl = armCandidate.browser_download_url;
-      }
-    }
-    if (!installerUrl) {
-      const preferred = validCandidates.find((asset) => /x64|amd64/i.test(asset.name || ''));
-      installerUrl = (preferred || validCandidates[0]).browser_download_url;
-    }
-  }
+  const currentPlatform = platform ?? await getPlatformInfo();
+  installerUrl = selectInstallerAsset(validCandidates, currentPlatform)?.browser_download_url;
 
   const releaseNotes = hasNew
     ? (release.body ? release.body.trim() : '暂无特别更新说明')
