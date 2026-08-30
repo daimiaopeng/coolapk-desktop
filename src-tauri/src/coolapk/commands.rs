@@ -2229,15 +2229,10 @@ async fn write_image_cache(path: &std::path::Path, data_url: &str) -> Result<(),
 fn cache_locations(
     app: &tauri::AppHandle,
     custom_dir: Option<&str>,
-) -> Result<(PathBuf, PathBuf, PathBuf), String> {
+) -> Result<(PathBuf, PathBuf), String> {
     let image = image_cache_root(app, custom_dir)?;
-    let webview = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("EBWebView");
     let update = update_cache_dir();
-    Ok((image, webview, update))
+    Ok((image, update))
 }
 
 fn update_cache_dir() -> PathBuf {
@@ -2328,21 +2323,20 @@ fn clear_dir_contents(dir: &std::path::Path) {
     }
 }
 
-/// 统计当前图片缓存、WebView 缓存和更新包临时文件，并返回实际图片缓存目录。
+/// 统计应用自己管理的图片缓存和更新包临时文件，并返回实际图片缓存目录。
 #[tauri::command]
 pub fn get_cache_info(
     app: tauri::AppHandle,
     cache_dir: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let (image, webview, update) = cache_locations(&app, cache_dir.as_deref())?;
+    let (image, update) = cache_locations(&app, cache_dir.as_deref())?;
     let _ = std::fs::create_dir_all(&image);
     let image_bytes = dir_total_size(&image);
-    let webview_bytes = dir_total_size(&webview);
     let update_bytes = dir_total_size(&update);
     Ok(serde_json::json!({
-        "bytes": image_bytes + webview_bytes + update_bytes,
+        "bytes": image_bytes + update_bytes,
         "imageBytes": image_bytes,
-        "webviewBytes": webview_bytes,
+        "webviewBytes": 0,
         "updateBytes": update_bytes,
         "path": image.to_string_lossy(),
     }))
@@ -2354,7 +2348,12 @@ pub fn clear_app_cache(
     app: tauri::AppHandle,
     cache_dir: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let (image, webview, _update) = cache_locations(&app, cache_dir.as_deref())?;
+    let (image, _update) = cache_locations(&app, cache_dir.as_deref())?;
+    let webview = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?
+        .join("EBWebView");
     let _ = std::fs::remove_dir_all(&image);
     let _ = std::fs::create_dir_all(&image);
     clear_dir_contents(&webview);
