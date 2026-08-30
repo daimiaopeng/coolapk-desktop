@@ -2118,7 +2118,7 @@ pub fn export_json_file(
 
     let dir = user_save_dir(&app, dir.as_deref())?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建导出目录失败：{e}"))?;
-    let path = dir.join(safe_name);
+    let path = next_available_file_path(&dir, &safe_name);
     std::fs::write(&path, content).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
 }
@@ -2872,6 +2872,23 @@ mod cache_tests {
         assert_eq!(
             next_available_file_path(&root, "abc123.png"),
             root.join("abc123_2.png")
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn json_export_path_avoids_overwrite() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("coolapk-json-export-test-{unique}"));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("history.json"), b"existing").unwrap();
+
+        assert_eq!(
+            next_available_file_path(&root, "history.json"),
+            root.join("history_2.json")
         );
         let _ = std::fs::remove_dir_all(root);
     }
