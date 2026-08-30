@@ -33,6 +33,9 @@ export function registerGlobalHotkeys() {
 
   function handleKeydown(e: KeyboardEvent) {
     const ctrl = e.ctrlKey || e.metaKey;
+    const isAltArrow = e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight');
+
+    if (isAltArrow && isTypingTarget(e)) return;
 
     if (e.altKey && e.key === 'ArrowLeft') {
       e.preventDefault();
