@@ -1516,6 +1516,15 @@ pub async fn get_image_data_url(
     Ok(data_url)
 }
 
+fn user_save_dir(app: &tauri::AppHandle, custom_dir: Option<&str>) -> Result<PathBuf, String> {
+    if let Some(custom_dir) = custom_dir.map(str::trim).filter(|value| !value.is_empty()) {
+        return Ok(PathBuf::from(custom_dir));
+    }
+    app.path()
+        .download_dir()
+        .map_err(|_| "无法获取系统下载目录，请在设置中选择下载目录".to_string())
+}
+
 /// 下载并保存图片原始数据，目录为空时使用系统下载目录。
 #[tauri::command]
 pub async fn save_image(
@@ -1527,11 +1536,7 @@ pub async fn save_image(
     let data_url = state.client.get_image_data_url(&url).await?;
     let (mime_type, bytes) = decode_image_data_url(&data_url)?;
     let file_name = build_image_file_name(&url, mime_type);
-    let target_dir = dir
-        .filter(|value| !value.trim().is_empty())
-        .map(PathBuf::from)
-        .or_else(|| app.path().download_dir().ok())
-        .unwrap_or_else(std::env::temp_dir);
+    let target_dir = user_save_dir(&app, dir.as_deref())?;
 
     tokio::fs::create_dir_all(&target_dir)
         .await
@@ -2098,8 +2103,6 @@ pub fn export_json_file(
     content: String,
     dir: Option<String>,
 ) -> Result<String, String> {
-    use tauri::Manager;
-
     // 文件名净化：只保留安全字符，拒绝 .. 路径穿越与空名，并限制长度与内容体积
     let safe_name: String = file_name
         .chars()
@@ -2113,12 +2116,8 @@ pub fn export_json_file(
         return Err("导出内容过大（超过 20MB）".to_string());
     }
 
-    let dir = dir
-        .filter(|d| !d.trim().is_empty())
-        .map(PathBuf::from)
-        .or_else(|| app.path().download_dir().ok())
-        .unwrap_or_else(|| std::env::temp_dir());
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dir = user_save_dir(&app, dir.as_deref())?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建导出目录失败：{e}"))?;
     let path = dir.join(safe_name);
     std::fs::write(&path, content).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().to_string())
