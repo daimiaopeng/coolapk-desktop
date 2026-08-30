@@ -83,7 +83,7 @@
         <div class="row-info">
           <span class="row-label">图片缓存目录</span>
           <span class="row-sub cache-path">{{ cacheDirectoryText }}</span>
-          <span class="row-sub">自定义目录中会创建 CoolapkDesktopCache\images；WebView 系统缓存位置不变</span>
+          <span class="row-sub">自定义目录中会创建应用专用的图片缓存子目录；WebView 系统缓存位置不变</span>
         </div>
         <div class="row-actions">
           <AppButton variant="ghost" size="sm" @click="openCacheDir">打开目录</AppButton>
@@ -214,11 +214,9 @@ const displayDownloadPath = computed(
   () => settingsStore.settings.downloadPath || '（系统下载目录）'
 );
 
-const cacheDirectoryText = computed(() => (
-  cacheDirectory.value || (settingsStore.settings.cachePath
-    ? `${settingsStore.settings.cachePath}\\CoolapkDesktopCache\\images`
-    : '正在读取默认缓存目录...')
-));
+const cacheDirectoryText = computed(
+  () => cacheDirectory.value || '正在读取实际缓存目录...'
+);
 
 function formatBytes(bytes: number) {
   const mb = bytes / 1024 / 1024;
