@@ -55,7 +55,7 @@ use coolapk::commands::{
     vote_goods_list_item,
 };
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{Manager, WindowEvent};
 
 static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(false);
@@ -81,6 +81,7 @@ struct ScreenRect {
 
 static WINDOW_STATE: Mutex<Option<WindowState>> = Mutex::new(None);
 static STARTUP_STATE_LOCK: Mutex<()> = Mutex::new(());
+static STARTUP_STATE_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 const STARTUP_STATE_FILE: &str = "startup_state.json";
 const MIN_WINDOW_W: u32 = 800;
@@ -114,7 +115,69 @@ where
     }
     update(&mut state);
     let raw = serde_json::to_string_pretty(&state).map_err(|error| error.to_string())?;
-    std::fs::write(path, raw).map_err(|error| error.to_string())
+    atomic_write_startup_state(path, raw.as_bytes())
+}
+
+fn atomic_write_startup_state(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| "启动状态文件路径无效".to_string())?;
+    let sequence = STARTUP_STATE_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let mut temp_name = file_name.to_os_string();
+    temp_name.push(format!(".{}-{nonce}-{sequence}.tmp", std::process::id()));
+    let temp_path = path.with_file_name(temp_name);
+    let mut temp_file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp_path)
+        .map_err(|error| format!("创建启动状态临时文件失败：{error}"))?;
+    if let Err(error) = temp_file
+        .write_all(bytes)
+        .and_then(|_| temp_file.flush())
+        .and_then(|_| temp_file.sync_all())
+    {
+        drop(temp_file);
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(format!("写入启动状态临时文件失败：{error}"));
+    }
+    drop(temp_file);
+
+    if let Err(error) = replace_startup_state_file(&temp_path, path) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn replace_startup_state_file(temp_path: &std::path::Path, path: &std::path::Path) -> Result<(), String> {
+    std::fs::rename(temp_path, path).map_err(|error| format!("替换启动状态文件失败：{error}"))
+}
+
+#[cfg(target_os = "windows")]
+fn replace_startup_state_file(temp_path: &std::path::Path, path: &std::path::Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+    use windows::core::PCWSTR;
+
+    let source: Vec<u16> = temp_path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let target: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    unsafe {
+        MoveFileExW(
+            PCWSTR(source.as_ptr()),
+            PCWSTR(target.as_ptr()),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    }
+    .map_err(|error| format!("替换启动状态文件失败：{error}"))
 }
 
 /// 合并写入窗口几何信息，保留已有的启动参数（静默启动/记忆窗口/置顶）
