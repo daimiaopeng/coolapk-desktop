@@ -293,6 +293,7 @@ function installNow() {
       await CoolapkTauriAPI.installUpdate(info.path);
       // 保留待安装记录到下次启动：安装程序可能启动后失败或被取消，
       // 下次启动可校验版本和文件是否仍存在，再决定重试或重新下载。
+      await settingsStore.flushSettings();
       await CoolapkTauriAPI.quitApp();
     } catch (err) {
       installingUpdate.value = false;
