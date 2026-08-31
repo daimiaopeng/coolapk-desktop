@@ -81,7 +81,7 @@ describe('评论完整信息展示', () => {
     expect(wrapper.find('.comment-text').text()).not.toContain('[图片]');
   });
 
-  it('只看楼主只展示楼主评论且保留原始评论总数', async () => {
+  it('楼主筛选只展示楼主评论且保留原始评论总数', async () => {
     const wrapper = mountSection({}, {
       feedUid: 'owner-1',
       feedUsername: '楼主',
@@ -98,7 +98,7 @@ describe('评论完整信息展示', () => {
       ],
     });
 
-    const authorOnlyButton = wrapper.findAll('.comment-sort-button').find(button => button.text() === '只看楼主');
+    const authorOnlyButton = wrapper.findAll('.comment-sort-button').find(button => button.text() === '楼主');
     expect(authorOnlyButton).toBeDefined();
     expect(wrapper.findAll('.comment-row')).toHaveLength(2);
     await authorOnlyButton!.trigger('click');
@@ -141,11 +141,11 @@ describe('评论完整信息展示', () => {
       ],
     });
     const active = wrapper.find('.comment-sort-button.is-active');
-    expect(active.text()).toBe('最新的');
+    expect(active.text()).toBe('最新');
     expect(wrapper.find('.comment-row').text()).toContain('新评论');
   });
 
-  it('未指定设置时默认评论排序为点赞最多', () => {
+  it('未指定设置时默认评论排序为热门', () => {
     const wrapper = mountSection({}, {
       comments: [
         { id: 'c1', username: '评论1', message: '少赞', likenum: 1 },
@@ -153,7 +153,7 @@ describe('评论完整信息展示', () => {
       ],
     });
     const active = wrapper.find('.comment-sort-button.is-active');
-    expect(active.text()).toBe('点赞最多的');
+    expect(active.text()).toBe('热门');
     expect(wrapper.find('.comment-row').text()).toContain('多赞');
   });
 

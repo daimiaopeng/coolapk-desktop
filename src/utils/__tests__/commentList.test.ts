@@ -42,17 +42,17 @@ describe('评论列表处理', () => {
     expect(result[1].infoHtml).toBe('1分钟前');
   });
 
-  it('支持按点赞最多、最新和最早排序', () => {
+  it('支持按热门、最新和最早排序', () => {
     expect(sortComments(comments, 'likes').map((item) => item.id)).toEqual(['103', '101', '102']);
     expect(sortComments(comments, 'latest').map((item) => item.id)).toEqual(['102', '103', '101']);
     expect(sortComments(comments, 'earliest').map((item) => item.id)).toEqual(['101', '103', '102']);
   });
 
-  it('排序按钮包含最新、最早和点赞最多，并默认使用点赞最多', () => {
+  it('排序按钮包含最新、最早和热门，并默认使用热门', () => {
     expect(COMMENT_SORT_OPTIONS.map((option) => option.label)).toEqual([
-      '最新的',
-      '最早的',
-      '点赞最多的',
+      '最新',
+      '最早',
+      '热门',
     ]);
     expect(DEFAULT_COMMENT_SORT_MODE).toBe('likes');
   });

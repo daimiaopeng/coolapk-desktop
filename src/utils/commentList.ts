@@ -3,9 +3,9 @@ export type CommentSortMode = 'likes' | 'latest' | 'earliest';
 export const DEFAULT_COMMENT_SORT_MODE: CommentSortMode = 'likes';
 
 export const COMMENT_SORT_OPTIONS: ReadonlyArray<{ value: CommentSortMode; label: string }> = [
-  { value: 'latest', label: '最新的' },
-  { value: 'earliest', label: '最早的' },
-  { value: 'likes', label: '点赞最多的' },
+  { value: 'latest', label: '最新' },
+  { value: 'earliest', label: '最早' },
+  { value: 'likes', label: '热门' },
 ];
 
 export function getReplyData(response: any): any[] {

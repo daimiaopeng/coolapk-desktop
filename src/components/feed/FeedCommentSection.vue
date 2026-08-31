@@ -19,7 +19,7 @@
           :aria-pressed="authorOnly"
           @click.stop="authorOnly = !authorOnly"
         >
-          只看楼主
+          楼主
         </button>
       </div>
     </div>
