@@ -48,14 +48,13 @@ describe('评论列表处理', () => {
     expect(sortComments(comments, 'earliest').map((item) => item.id)).toEqual(['101', '103', '102']);
   });
 
-  it('排序按钮包含热门、最新、最早和点赞最多，并默认使用最早', () => {
+  it('排序按钮包含最新、最早和点赞最多，并默认使用点赞最多', () => {
     expect(COMMENT_SORT_OPTIONS.map((option) => option.label)).toEqual([
-      '热门的',
       '最新的',
       '最早的',
       '点赞最多的',
     ]);
-    expect(DEFAULT_COMMENT_SORT_MODE).toBe('earliest');
+    expect(DEFAULT_COMMENT_SORT_MODE).toBe('likes');
   });
 
   it('忽略热门接口的回复文案并根据时间戳显示评论时间', () => {

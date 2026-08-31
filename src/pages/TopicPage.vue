@@ -1,6 +1,10 @@
 <template>
-  <div class="page-container custom-scrollbar" @scroll="handleScroll">
-    <!-- 1. 话题头部卡片 (依照截图 1 还原) -->
+  <div
+    ref="pageContainerRef"
+    :class="['page-container', 'custom-scrollbar', { 'is-embedded': embedded }]"
+    @scroll="handleScroll"
+  >
+    <!-- 1. 话题头部卡片 -->
     <div v-if="topicDetail" class="topic-header-card">
       <div class="header-content">
         <div class="topic-icon-wrapper">
@@ -45,6 +49,7 @@
       </div>
     </div>
 
+    <!-- 保留「正在加载话题概况...」大白框转圈 -->
     <div v-else-if="headerLoading" class="topic-header-card skeleton-header">
       <LoadingState text="正在加载话题概况..." />
     </div>
@@ -83,21 +88,31 @@
       @change-feed-type="handleTopicFeedTypeChange"
     />
 
-    <!-- 5. Feed 动态列表 -->
+    <!-- 5. Feed 动态列表加载中转圈 -->
     <div v-if="feedsLoading && page === 1" class="loading-wrapper">
       <LoadingState :text="loadingText" />
     </div>
 
-    <div v-else-if="topicFeeds.length === 0" class="empty-wrapper">
+    <!-- 仅在请求彻底完成且确实无数据时才展示空状态，绝不提前闪现 -->
+    <div v-else-if="!feedsLoading && topicFeeds.length === 0" class="empty-wrapper">
       <EmptyState :title="emptyStateTitle" />
     </div>
 
     <div v-else class="feed-list">
       <template v-for="(item, index) in topicFeeds" :key="topicItemKey(item, index)">
-        <FeedCard v-if="isTopicFeedItem(item)" :feed="item" :highlight-keyword="searchKeyword" @deleted="handleFeedDeleted" />
+        <FeedCard
+          v-if="isTopicFeedItem(item)"
+          :feed="item"
+          :class="{ 'is-active-feed': String(item.id) === String(currentActiveFeedId) }"
+          :highlight-keyword="searchKeyword"
+          :disable-inline-comments="disableInlineComments"
+          @click="handleFeedCardClick(item)"
+          @open-comment="handleFeedCardClick(item)"
+          @deleted="handleFeedDeleted"
+        />
         <DiscoveryEntityCard v-else :entity="item" @open="openTopicEntity" />
       </template>
-      
+
       <div class="pagination-footer">
         <LoadingState v-if="feedsLoading && page > 1" text="加载更多中..." />
         <div v-else-if="noMore" class="no-more">没有更多动态了</div>
@@ -107,7 +122,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onActivated, onDeactivated, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
@@ -125,6 +140,25 @@ import {
   TOPIC_FEED_TYPE_OPTIONS,
   resolveFeedSearchSort,
 } from '../utils/coolapkFeedSearch';
+
+const props = withDefaults(
+  defineProps<{
+    tagParam?: string;
+    embedded?: boolean;
+    activeFeedId?: string | number;
+    disableInlineComments?: boolean;
+  }>(),
+  {
+    tagParam: '',
+    embedded: false,
+    activeFeedId: '',
+    disableInlineComments: false,
+  }
+);
+
+const emit = defineEmits<{
+  (e: 'select-feed', feed: any): void;
+}>();
 
 interface TopicSortOption {
   key: string;
@@ -154,10 +188,29 @@ function decodeTopicTag(raw: string): string {
 }
 
 // 固定当前缓存页面的话题参数，返回时恢复原页面实例。
-const tag = ref(decodeTopicTag((route.params.tag as string) || ''));
+const tag = ref(props.tagParam || decodeTopicTag((route?.params?.tag as string) || ''));
+
+const currentActiveFeedId = computed(() => props.activeFeedId);
+
+function handleFeedCardClick(item: any) {
+  emit('select-feed', item);
+}
+
+watch(
+  () => props.tagParam,
+  (newTag) => {
+    if (newTag && newTag !== tag.value) {
+      tag.value = newTag;
+      page.value = 1;
+      topicFeeds.value = [];
+      noMore.value = false;
+      void initializeTopic();
+    }
+  }
+);
 
 const topicDetail = ref<any>(null);
-const headerLoading = ref(false);
+const headerLoading = ref(true);
 const topicTabs = ref<TopicTab[]>([]);
 const activeTopicTabKey = ref('feed');
 const searchKeyword = ref('');
@@ -168,7 +221,7 @@ const topicFeeds = ref<any[]>([]);
 function handleFeedDeleted(id: string | number) {
   topicFeeds.value = topicFeeds.value.filter((f: any) => String(f.id) !== String(id));
 }
-const feedsLoading = ref(false);
+const feedsLoading = ref(true);
 const page = ref(1);
 const noMore = ref(false);
 const isFollowed = ref(false);
@@ -554,6 +607,10 @@ async function fetchFeeds(isLoadMore = false) {
         topicFeeds.value.push(...itemsToAdd);
       } else {
         topicFeeds.value = itemsToAdd;
+        const firstFeed = itemsToAdd.find((item) => isTopicFeedItem(item));
+        if (firstFeed) {
+          emit('select-feed', firstFeed);
+        }
       }
       page.value++;
       if (itemsToAdd.length === 0) noMore.value = true;
@@ -618,15 +675,29 @@ function changeTopicTab(tabKey: string) {
   void fetchFeeds(false);
 }
 
+const pageContainerRef = ref<HTMLElement | null>(null);
+let savedScrollTop = 0;
+
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement;
+  savedScrollTop = target.scrollTop;
   const { scrollTop, clientHeight, scrollHeight } = target;
-  if (scrollTop + clientHeight >= scrollHeight - 100) {
+  if (scrollTop + clientHeight >= scrollHeight - 300) {
     if (!feedsLoading.value && !noMore.value) {
       fetchFeeds(true);
     }
   }
 }
+
+onActivated(() => {
+  if (pageContainerRef.value && savedScrollTop > 0) {
+    nextTick(() => {
+      if (pageContainerRef.value) {
+        pageContainerRef.value.scrollTop = savedScrollTop;
+      }
+    });
+  }
+});
 
 async function toggleFollow() {
   if (followPending.value) return;
@@ -682,14 +753,19 @@ onMounted(() => {
 <style scoped>
 .page-container {
   width: 100%;
-  max-width: var(--feed-max-width, 860px);
+  max-width: 100%;
   height: 100%;
   overflow-y: auto;
   padding: 14px 16px;
-  margin: 0 auto;
+  margin: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  box-sizing: border-box;
+}
+
+.page-container.is-embedded {
+  padding: 8px 12px;
 }
 
 /* 1. 话题 Header */
@@ -909,7 +985,18 @@ onMounted(() => {
 .feed-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
+}
+
+.feed-list :deep(.feed-card) {
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.feed-list :deep(.feed-card.is-active-feed) {
+  border-color: var(--brand-primary, #10b981) !important;
+  box-shadow: 0 0 0 1.5px var(--brand-primary, #10b981), 0 4px 14px rgba(16, 185, 129, 0.12) !important;
 }
 
 .pagination-footer {

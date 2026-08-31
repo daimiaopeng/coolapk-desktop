@@ -1,9 +1,8 @@
-export type CommentSortMode = 'hot' | 'likes' | 'latest' | 'earliest';
+export type CommentSortMode = 'likes' | 'latest' | 'earliest';
 
-export const DEFAULT_COMMENT_SORT_MODE: CommentSortMode = 'earliest';
+export const DEFAULT_COMMENT_SORT_MODE: CommentSortMode = 'likes';
 
 export const COMMENT_SORT_OPTIONS: ReadonlyArray<{ value: CommentSortMode; label: string }> = [
-  { value: 'hot', label: '热门的' },
   { value: 'latest', label: '最新的' },
   { value: 'earliest', label: '最早的' },
   { value: 'likes', label: '点赞最多的' },
@@ -91,8 +90,6 @@ function getCommentTimestamp(item: any): number {
 
 export function sortComments(comments: any[], mode: CommentSortMode): any[] {
   const result = [...comments];
-  // 热门接口已经按服务端热度排序，合并完整评论时也保留了热门项在前。
-  if (mode === 'hot') return result;
   result.sort((left, right) => {
     const leftTime = getCommentTimestamp(left) || Number(left?.id) || 0;
     const rightTime = getCommentTimestamp(right) || Number(right?.id) || 0;

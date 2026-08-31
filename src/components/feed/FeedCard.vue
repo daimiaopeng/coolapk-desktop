@@ -262,6 +262,7 @@ const props = defineProps<{
   cloudFavorite?: boolean;
   maxLines?: number;
   highlightKeyword?: string;
+  disableInlineComments?: boolean;
 }>();
 
 const authorUid = computed(() => {
@@ -295,6 +296,7 @@ const feedImages = computed<FeedImageInput[]>(() => extractFeedImageInputs(props
 const emit = defineEmits<{
   (e: 'deleted', id: string | number): void;
   (e: 'favorite-changed', payload: { id: string | number; favorited: boolean }): void;
+  (e: 'open-comment', feed: FeedItem): void;
 }>();
 
 const authStore = useAuthStore();
@@ -865,6 +867,10 @@ function keepCollapsedCardVisible(card: HTMLElement, scrollContainer: HTMLElemen
 }
 
 async function toggleComments() {
+  if (props.disableInlineComments) {
+    emit('open-comment', props.feed);
+    return;
+  }
   if (showComments.value) {
     showComments.value = false;
     return;
@@ -883,6 +889,16 @@ function handleCollapseComments() {
     void nextTick(() => keepCollapsedCardVisible(card, scrollContainer));
   }
 }
+
+watch(
+  () => props.disableInlineComments,
+  (disabled) => {
+    if (disabled && showComments.value) {
+      showComments.value = false;
+    }
+  },
+  { immediate: true }
+);
 
 watch(
   showComments,

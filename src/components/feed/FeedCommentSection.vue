@@ -473,6 +473,7 @@ import { verifyWithCaptcha, extractCaptchaParamsFromResponse } from '../../utils
 import { hasActiveTextSelection } from '../../utils/selection';
 import {
   COMMENT_SORT_OPTIONS,
+  DEFAULT_COMMENT_SORT_MODE,
   formatCommentAbsoluteTime,
   formatCommentTime,
   getCommentDeviceTitle,
@@ -535,10 +536,8 @@ const sending = ref(false);
 const inputRef = ref<HTMLDivElement | null>(null);
 const replyTargetUser = ref('');
 const replyTargetId = ref('');
-// 与“默认评论排序”保持一致：热门接口保留服务端顺序，最新接口按时间倒序。
-// 用户仍可在当前评论区临时切换“最早的”等本地排序。
 const commentSortMode = ref<CommentSortMode>(
-  settingsStore.settings.commentSort === 'latest' ? 'latest' : 'hot',
+  settingsStore.settings.commentSort === 'latest' ? 'latest' : DEFAULT_COMMENT_SORT_MODE,
 );
 const authorOnly = ref(false);
 const commentSortOptions = COMMENT_SORT_OPTIONS;
@@ -1426,12 +1425,15 @@ async function handleSend() {
   justify-content: flex-start;
   gap: 12px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .comment-title {
   color: var(--text-primary);
   font-size: 0.95rem;
+  font-weight: 700;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .comment-title span {
@@ -1448,6 +1450,9 @@ async function handleSend() {
   border-radius: 999px;
   background: var(--surface-muted, var(--surface));
   border: 1px solid var(--border-light);
+  overflow-x: auto;
+  scrollbar-width: none;
+  max-width: 100%;
 }
 
 .comment-sort-button {
@@ -1457,7 +1462,10 @@ async function handleSend() {
   color: var(--text-secondary);
   background: transparent;
   font-size: 0.78rem;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
+  line-height: 1.4;
   transition: color var(--duration-fast), background var(--duration-fast), box-shadow var(--duration-fast);
 }
 

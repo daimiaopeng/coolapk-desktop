@@ -1,11 +1,11 @@
 <template>
   <AppShell>
     <router-view v-slot="{ Component, route }">
-      <!-- 原生标准页面堆栈：以 route.fullPath 为唯一标识，每个页面独立实例入栈与复原，彻底杜绝数据丢失与重载 -->
+      <!-- 原生标准页面堆栈：/topics 聚合页保持单实例常驻，其他页面以 route.fullPath 独立入栈 -->
       <keep-alive>
         <component
           :is="Component"
-          :key="route.fullPath"
+          :key="getRouteKey(route)"
           :class="{ 'sidebar-page-enter': isSidebarTransitionActive }"
         />
       </keep-alive>
@@ -145,6 +145,14 @@ import { registerGlobalSelectionClear } from './utils/selection';
 import { getPlatformInfo } from './utils/platform';
 
 const { isSidebarTransitionActive, resetSidebarTransition } = useSidebarTransition();
+
+function getRouteKey(route: any): string {
+  // /topics 话题聚合页保持单实例常驻，内部子话题切换不触发父页面销毁重建与闪烁
+  if (route.path === '/topics') {
+    return '/topics';
+  }
+  return route.fullPath;
+}
 
 const PENDING_UPDATE_KEY = 'coolapk_pending_update';
 

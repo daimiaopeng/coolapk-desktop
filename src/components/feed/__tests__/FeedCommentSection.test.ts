@@ -145,6 +145,18 @@ describe('评论完整信息展示', () => {
     expect(wrapper.find('.comment-row').text()).toContain('新评论');
   });
 
+  it('未指定设置时默认评论排序为点赞最多', () => {
+    const wrapper = mountSection({}, {
+      comments: [
+        { id: 'c1', username: '评论1', message: '少赞', likenum: 1 },
+        { id: 'c2', username: '评论2', message: '多赞', likenum: 99 },
+      ],
+    });
+    const active = wrapper.find('.comment-sort-button.is-active');
+    expect(active.text()).toBe('点赞最多的');
+    expect(wrapper.find('.comment-row').text()).toContain('多赞');
+  });
+
   it('点击评论时间可在相对时间和完整时间之间切换', async () => {
     const wrapper = mountSection();
     const timeButton = wrapper.get('.comment-time-button');
