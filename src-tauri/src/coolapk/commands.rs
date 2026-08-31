@@ -1521,9 +1521,17 @@ pub async fn get_image_data_url(
     Ok(data_url)
 }
 
+fn validate_custom_dir(value: &str, label: &str) -> Result<PathBuf, String> {
+    let path = PathBuf::from(value);
+    if !path.is_absolute() {
+        return Err(format!("{label}必须是当前平台的绝对路径：{value}"));
+    }
+    Ok(path)
+}
+
 fn user_save_dir(app: &tauri::AppHandle, custom_dir: Option<&str>) -> Result<PathBuf, String> {
     if let Some(custom_dir) = custom_dir.map(str::trim).filter(|value| !value.is_empty()) {
-        return Ok(PathBuf::from(custom_dir));
+        return validate_custom_dir(custom_dir, "自定义下载目录");
     }
     app.path()
         .download_dir()
@@ -2198,8 +2206,7 @@ fn image_cache_root(app: &tauri::AppHandle, custom_dir: Option<&str>) -> Result<
     let base = custom_dir
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .map(Ok)
+        .map(|value| validate_custom_dir(value, "自定义缓存目录"))
         .unwrap_or_else(|| app.path().app_cache_dir().map_err(|e| e.to_string()))?;
     Ok(base.join(IMAGE_CACHE_CONTAINER).join("images"))
 }
@@ -2868,7 +2875,7 @@ pub async fn bind_feed_to_goods_list(
 mod cache_tests {
     use super::{
         build_image_file_name, decode_image_data_url, next_available_file_path, read_image_cache,
-        save_image_bytes, write_image_cache,
+        save_image_bytes, validate_custom_dir, write_image_cache,
     };
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -2964,5 +2971,16 @@ mod cache_tests {
         assert_eq!(std::fs::read(first).unwrap(), b"first");
         assert_eq!(std::fs::read(second).unwrap(), b"second");
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_custom_directory_that_is_not_absolute_on_current_platform() {
+        #[cfg(target_os = "windows")]
+        let incompatible = "/home/user/Downloads";
+        #[cfg(not(target_os = "windows"))]
+        let incompatible = r"D:\Downloads";
+
+        assert!(validate_custom_dir(incompatible, "自定义目录").is_err());
+        assert!(validate_custom_dir("relative/downloads", "自定义目录").is_err());
     }
 }
