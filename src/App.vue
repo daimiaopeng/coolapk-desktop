@@ -44,6 +44,10 @@
           ></div>
         </div>
 
+        <p v-if="updateInfo.hasNew && !isWindows" class="startup-update-notes">
+          当前平台暂不支持应用内自动安装，请前往发布页面下载安装。
+        </p>
+
         <div class="startup-update-actions">
           <div v-if="updateInfo.hasNew" class="update-actions-left">
             <button class="btn-text" title="本次不再提示此版本" @click="ignoreThisVersion">忽略此版本</button>
@@ -55,7 +59,9 @@
 
           <div class="update-actions-right">
             <button v-if="!updateInfo.hasNew" class="startup-update-later" @click="updateInfo = null">关闭</button>
-            <button v-if="updateInfo.hasNew" class="startup-update-later" @click="openUpdate">前往下载</button>
+            <button v-if="updateInfo.hasNew" class="startup-update-later" @click="openUpdate">
+              {{ isWindows ? '前往下载' : '前往下载更新' }}
+            </button>
             <button
               v-if="updateInfo.hasNew && updateInfo.installerUrl && isWindows"
               class="startup-update-button"
@@ -84,7 +90,7 @@
       </div>
     </AppDialog>
 
-    <AppDialog :is-open="Boolean(readyInfo)" title="更新包已下载" :width="460" @close="readyInfo = null">
+    <AppDialog :is-open="Boolean(readyInfo) && isWindows" title="更新包已下载" :width="460" @close="readyInfo = null">
       <div v-if="readyInfo" class="startup-update">
         <p class="startup-update-version">酷安桌面版 {{ readyInfo.version }} 更新包已下载完成</p>
         <p class="startup-update-notes">是否立即更新？更新将关闭当前窗口，全自动完成安装后重新打开软件。</p>
@@ -221,7 +227,7 @@ async function startBackgroundDownload(info: UpdateInfo) {
   const url = info.installerUrl;
   // 自动检查、手动检查和按钮点击可能在同一时间触发；同一应用只允许一个下载任务，
   // 否则多个任务会同时写同一个安装包并让进度事件互相覆盖。
-  if (!url || updateDownloadInFlight || downloading.value || readyInfo.value) return;
+  if (!isWindows.value || !url || updateDownloadInFlight || downloading.value || readyInfo.value) return;
   updateDownloadInFlight = true;
   updateInfo.value = null;
   downloadError.value = null;
@@ -279,7 +285,7 @@ async function startBackgroundDownload(info: UpdateInfo) {
 
 function installNow() {
   const info = readyInfo.value;
-  if (!info || installingUpdate.value) return;
+  if (!isWindows.value || !info || installingUpdate.value) return;
   // 安装前再次校验：本地已不低于该版本时放弃安装旧包（防降级）
   if (info.version && !isNewerVersion(info.version)) {
     localStorage.removeItem(PENDING_UPDATE_KEY);
@@ -379,7 +385,7 @@ onMounted(() => {
   // 设置页的"立即检查更新"手动触发不受影响
   void (async () => {
     isWindows.value = (await getPlatformInfo()).os === 'windows';
-    await restorePendingUpdate();
+    if (isWindows.value) await restorePendingUpdate();
     if (!import.meta.env.DEV && settingsStore.settings.checkUpdateOnStartup) {
       void checkForUpdate();
     }
