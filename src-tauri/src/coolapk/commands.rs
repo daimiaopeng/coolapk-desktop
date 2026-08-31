@@ -2444,6 +2444,19 @@ pub fn open_cache_directory(
 /// 以静默更新模式启动安装包：/S 静默、/UPDATE 跳过卸载、/R 安装完成后自动重新启动应用
 #[tauri::command]
 pub fn install_update(installer_path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        install_update_windows(installer_path)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = installer_path;
+        Err("当前平台暂不支持应用内自动安装，请前往发布页面手动下载安装".to_string())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn install_update_windows(installer_path: String) -> Result<(), String> {
     // 只允许执行更新目录内的 .exe/.msi 安装包：
     // 路径必须真实存在于下载目录（canonicalize 解析 .. / 符号链接后再前缀校验），
     // 防止前端被注入时借助该命令执行任意文件。
@@ -2463,17 +2476,10 @@ pub fn install_update(installer_path: String) -> Result<(), String> {
         return Err("拒绝安装非安装包文件".to_string());
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new(&canonical)
-            .args(["/S", "/UPDATE", "/R"])
-            .spawn()
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = canonical;
-    }
+    std::process::Command::new(&canonical)
+        .args(["/S", "/UPDATE", "/R"])
+        .spawn()
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
