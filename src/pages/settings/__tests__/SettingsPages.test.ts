@@ -130,7 +130,6 @@ describe('设置页面交互', () => {
     await flushPromises();
     await wrapper.find('.switch-input').setValue(true);
     const inputs = wrapper.findAll('input[type="text"]');
-    await inputs[0].setValue('2211133C');
     await wrapper.get('select').setValue('2211133C');
     expect(settings.settings.deviceFingerprint.model).toBe('2211133C');
     expect(settings.settings.deviceFingerprint.androidVersion).toBe('15');
@@ -139,14 +138,16 @@ describe('设置页面交互', () => {
     await wrapper.get('.reset-button').trigger('click');
     expect(settings.settings.deviceFingerprint.model).toBe('23113RKC6C');
     expect(settings.settings.deviceFingerprint.appCode).toBe('2604201');
+    expect(settings.settings.deviceFingerprint.sdkInt).toBe('35');
   });
 
   it('下载页展示缓存总量与明细', async () => {
     const { wrapper } = mountPage(DownloadSettingsPage);
     await flushPromises();
-    expect(wrapper.get('.cache-total-value').text()).toContain('52.8 MB');
+    expect(wrapper.get('.cache-total-value').text()).toContain('48.4 MB');
     expect(wrapper.get('.cache-breakdown').text()).toContain('图片');
     expect(wrapper.get('.cache-breakdown').text()).toContain('48.4 MB');
+    expect(wrapper.get('.cache-breakdown').text()).toContain('独立保留');
     expect(mocks.getCacheInfo).toHaveBeenCalled();
   });
 

@@ -93,7 +93,7 @@ export interface DeviceFingerprintSettings {
   appVersion: string;
   /** X-App-Code / X-App-Supported，如 "2604201" */
   appCode: string;
-  /** X-Sdk-Int，如 "36" */
+  /** X-Sdk-Int，如 "35" */
   sdkInt: string;
   /** X-Sdk-Locale，如 "zh-CN" */
   locale: string;

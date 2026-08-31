@@ -81,6 +81,8 @@ window.addEventListener('unhandledrejection', (e) => {
 async function bootstrap() {
   await settingsStore.initializeSettings();
   app.mount('#app');
+  // 设置文件在应用挂载前读取；缩放等依赖 #app 的外观设置需在挂载后再应用一次。
+  settingsStore.applyAppearance();
 }
 
 void bootstrap();

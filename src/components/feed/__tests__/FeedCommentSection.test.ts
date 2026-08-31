@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { useAuthStore } from '../../../stores/auth';
+import { useSettingsStore } from '../../../stores/settings';
 
 const mocks = vi.hoisted(() => ({
   getReplyDetail: vi.fn(),
@@ -128,6 +129,20 @@ describe('评论完整信息展示', () => {
   it('没有评论总数时回退到已加载评论数量', () => {
     const wrapper = mountSection();
     expect(wrapper.find('.comment-title').text()).toBe('评论 1');
+  });
+
+  it('默认评论排序跟随内容设置', () => {
+    const settings = useSettingsStore();
+    settings.settings.commentSort = 'latest';
+    const wrapper = mountSection({}, {
+      comments: [
+        { id: 'old', username: '旧评论', message: '旧', dateline: 100 },
+        { id: 'new', username: '新评论', message: '新', dateline: 200 },
+      ],
+    });
+    const active = wrapper.find('.comment-sort-button.is-active');
+    expect(active.text()).toBe('最新的');
+    expect(wrapper.find('.comment-row').text()).toContain('新评论');
   });
 
   it('点击评论时间可在相对时间和完整时间之间切换', async () => {

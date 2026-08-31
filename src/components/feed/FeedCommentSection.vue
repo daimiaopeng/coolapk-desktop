@@ -473,7 +473,6 @@ import { verifyWithCaptcha, extractCaptchaParamsFromResponse } from '../../utils
 import { hasActiveTextSelection } from '../../utils/selection';
 import {
   COMMENT_SORT_OPTIONS,
-  DEFAULT_COMMENT_SORT_MODE,
   formatCommentAbsoluteTime,
   formatCommentTime,
   getCommentDeviceTitle,
@@ -536,7 +535,11 @@ const sending = ref(false);
 const inputRef = ref<HTMLDivElement | null>(null);
 const replyTargetUser = ref('');
 const replyTargetId = ref('');
-const commentSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+// 与“默认评论排序”保持一致：热门接口保留服务端顺序，最新接口按时间倒序。
+// 用户仍可在当前评论区临时切换“最早的”等本地排序。
+const commentSortMode = ref<CommentSortMode>(
+  settingsStore.settings.commentSort === 'latest' ? 'latest' : 'hot',
+);
 const authorOnly = ref(false);
 const commentSortOptions = COMMENT_SORT_OPTIONS;
 const absoluteTimeIds = ref<Set<string>>(new Set());

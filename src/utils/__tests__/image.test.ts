@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getImageUrlByQuality, isAnimatedImageUrl, isLivePhotoUrl, isPortraitLongImage } from '../image';
+import { getImageUrlByQuality, getStaticAnimatedImageUrl, isAnimatedImageUrl, isLivePhotoUrl, isPortraitLongImage } from '../image';
 
 describe('动图地址判断', () => {
   it('识别 GIF、GIFV 以及带参数的地址', () => {
@@ -16,6 +16,12 @@ describe('动图地址判断', () => {
   it('高清处理不会破坏 GIF 原地址', () => {
     const url = 'https://image.coolapk.com/a/demo.gif';
     expect(getImageUrlByQuality(url, 'hd')).toBe(url);
+  });
+
+  it('关闭自动播放时可为酷安 GIF 生成静态封面', () => {
+    expect(getStaticAnimatedImageUrl('https://image.coolapk.com/a/demo.gif?token=1'))
+      .toBe('https://image.coolapk.com/a/demo.gif.m.jpg');
+    expect(getStaticAnimatedImageUrl('https://example.com/demo.gif')).toBe('');
   });
 
   it('识别酷安 Live Photo 封面并保留原始地址', () => {

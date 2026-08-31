@@ -17,7 +17,7 @@ const SETTINGS_FILE = 'settings.json';
 const DEFAULT_ZOOM = 100;
 const MIN_ZOOM = 50;
 const MAX_ZOOM = 200;
-export const DEFAULT_HOME_TAB_ORDER: string[] = [];
+const DEFAULT_HOME_TAB_ORDER: string[] = [];
 
 function clampZoom(zoom: number) {
   const safeZoom = Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM;
@@ -199,8 +199,12 @@ export function normalizeSettings(value: unknown): AppSettings {
   if (isOneOf(source.commentSort, ['hot', 'latest'])) result.commentSort = source.commentSort;
   if (isOneOf(source.defaultHomeTab, ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'])) result.defaultHomeTab = source.defaultHomeTab;
   if (Array.isArray(source.homeTabOrder)) {
-    const valid = source.homeTabOrder.filter((item): item is HomeTabKey => isOneOf(item, DEFAULT_HOME_TAB_ORDER));
-    result.homeTabOrder = [...new Set([...valid, ...DEFAULT_HOME_TAB_ORDER])];
+    // 首页频道由服务端动态下发，不能用本地静态列表过滤，否则每次重启都会丢失
+    // 用户在频道管理器中保存的排序和隐藏状态。
+    const valid = source.homeTabOrder.filter(
+      (item): item is HomeTabKey => typeof item === 'string' && item.trim().length > 0 && item.length <= 512,
+    );
+    result.homeTabOrder = [...new Set(valid)];
   }
   if (isOneOf(source.imageQuality, ['standard', 'hd', 'raw'])) result.imageQuality = source.imageQuality;
   if (isOneOf(source.externalLinkMode, ['internal', 'system'])) result.externalLinkMode = source.externalLinkMode;
@@ -297,6 +301,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const isTauriRuntime = typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__);
   let fileStore: SettingsFileStore | null = null;
   let persistenceReady = !isTauriRuntime;
+  let nativeSyncReady = false;
   let saveQueue = Promise.resolve();
   let initializationPromise: Promise<void> | null = null;
 
@@ -344,12 +349,16 @@ export const useSettingsStore = defineStore('settings', () => {
       if (!settings.value.zoomManuallySet) settings.value.zoom = getSystemZoom();
       fileStore = store;
       persistenceReady = true;
+      nativeSyncReady = true;
+      syncNativeSettings(settings.value);
       await queueFileSave(settings.value);
     } catch (err) {
       console.error('加载 settings.json 失败，将回退到 localStorage', err);
       settings.value = loadLegacySettings();
       if (!settings.value.zoomManuallySet) settings.value.zoom = getSystemZoom();
       persistenceReady = true;
+      nativeSyncReady = true;
+      syncNativeSettings(settings.value);
     }
   }
 
@@ -364,7 +373,8 @@ export const useSettingsStore = defineStore('settings', () => {
     return saveQueue;
   }
 
-  // 持久化与生效应用
+  // 持久化只负责写盘。视觉和原生副作用使用字段级 watcher，避免修改任意
+  // 一个设置时重复调用所有系统 API。
   watch(
     settings,
     (newVal) => {
@@ -379,20 +389,39 @@ export const useSettingsStore = defineStore('settings', () => {
           }
         }
       }
-      applyTheme(newVal.theme);
-      applyAccent(newVal.accentColor);
-      applyDensity(newVal.density);
-      applyFontSize(newVal.fontSize);
-      applyZoom(newVal.zoom);
-      syncCloseToTray(newVal.closeToTray);
-      syncAutostart(newVal.autostart);
-      syncAlwaysOnTop(newVal.alwaysOnTop);
-      syncStartupFlags(newVal);
-      applyReduceMotion(newVal.reduceMotion);
-      syncDeviceProfile(newVal);
     },
-    { deep: true, immediate: true }
+    { deep: true }
   );
+
+  watch(() => settings.value.theme, (theme) => {
+    applyTheme(theme);
+    applyAccent(settings.value.accentColor);
+  }, { immediate: true });
+  watch(() => settings.value.accentColor, applyAccent, { immediate: true });
+  watch(() => settings.value.density, applyDensity, { immediate: true });
+  watch(() => settings.value.fontSize, applyFontSize, { immediate: true });
+  watch(() => settings.value.zoom, applyZoom, { immediate: true });
+  watch(() => settings.value.reduceMotion, applyReduceMotion, { immediate: true });
+
+  watch(() => settings.value.closeToTray, (enabled) => {
+    if (nativeSyncReady) syncCloseToTray(enabled);
+  }, { flush: 'sync' });
+  watch(() => settings.value.alwaysOnTop, (enabled) => {
+    if (nativeSyncReady) syncAlwaysOnTop(enabled);
+  }, { flush: 'sync' });
+  watch(
+    () => [settings.value.startMinimized, settings.value.rememberWindowState, settings.value.alwaysOnTop] as const,
+    () => {
+      if (nativeSyncReady) syncStartupFlags(settings.value);
+    },
+    { flush: 'sync' },
+  );
+  watch(() => settings.value.deviceFingerprint, () => {
+    if (nativeSyncReady) syncDeviceProfile(settings.value);
+  }, { deep: true, flush: 'sync' });
+  watch(() => settings.value.experimentalFeatures, (enabled) => {
+    if (!enabled && settings.value.updateChannel === 'beta') settings.value.updateChannel = 'stable';
+  }, { flush: 'sync' });
 
   void initializeSettings();
 
@@ -412,6 +441,15 @@ export const useSettingsStore = defineStore('settings', () => {
       }
     }
   }
+
+  const systemThemeMedia = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(prefers-color-scheme: dark)')
+    : null;
+  systemThemeMedia?.addEventListener('change', () => {
+    if (settings.value.theme !== 'system') return;
+    applyTheme('system');
+    applyAccent(settings.value.accentColor);
+  });
 
   function applyAccent(color: AccentColor) {
     const palette = ACCENT_PALETTES[color] || ACCENT_PALETTES.green;
@@ -468,28 +506,19 @@ export const useSettingsStore = defineStore('settings', () => {
     appEl.style.height = `${100 / factor}vh`;
   }
 
-  function syncCloseToTray(enabled: boolean) {
-    try {
-      void invoke('set_close_to_tray', { enabled });
-    } catch (err) {
-      console.warn('同步关闭到托盘设置失败:', err);
-    }
+  function applyAppearance() {
+    applyTheme(settings.value.theme);
+    applyAccent(settings.value.accentColor);
+    applyDensity(settings.value.density);
+    applyFontSize(settings.value.fontSize);
+    applyZoom(settings.value.zoom);
+    applyReduceMotion(settings.value.reduceMotion);
   }
 
-  function syncAutostart(enabled: boolean) {
-    // 非 Tauri 环境（浏览器预览/单元测试）下跳过
-    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) return;
-    import('@tauri-apps/plugin-autostart')
-      .then(async ({ enable, disable }) => {
-        if (enabled) {
-          await enable();
-        } else {
-          await disable();
-        }
-      })
-      .catch((err) => {
-        console.warn('同步开机自启动设置失败:', err);
-      });
+  function syncCloseToTray(enabled: boolean) {
+    invoke('set_close_to_tray', { enabled }).catch((err) => {
+      console.warn('同步关闭到托盘设置失败:', err);
+    });
   }
 
   function syncAlwaysOnTop(enabled: boolean) {
@@ -534,6 +563,30 @@ export const useSettingsStore = defineStore('settings', () => {
     });
   }
 
+  function syncNativeSettings(s: AppSettings) {
+    syncCloseToTray(s.closeToTray);
+    syncAlwaysOnTop(s.alwaysOnTop);
+    syncStartupFlags(s);
+    syncDeviceProfile(s);
+  }
+
+  async function setAutostart(enabled: boolean): Promise<boolean> {
+    if (!isTauriRuntime) {
+      settings.value.autostart = enabled;
+      return true;
+    }
+    try {
+      const plugin = await import('@tauri-apps/plugin-autostart');
+      if (enabled) await plugin.enable();
+      else await plugin.disable();
+      settings.value.autostart = enabled;
+      return true;
+    } catch (err) {
+      console.warn('同步开机自启动设置失败:', err);
+      return false;
+    }
+  }
+
   function setTheme(mode: ThemeMode) {
     settings.value.theme = mode;
   }
@@ -570,19 +623,6 @@ export const useSettingsStore = defineStore('settings', () => {
     settings.value.navVisibility[key] = !settings.value.navVisibility[key];
   }
 
-  function moveHomeTab(key: HomeTabKey, direction: -1 | 1) {
-    const order = [...settings.value.homeTabOrder];
-    const index = order.indexOf(key);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= order.length) return;
-    [order[index], order[target]] = [order[target], order[index]];
-    settings.value.homeTabOrder = order;
-  }
-
-  function resetHomeTabOrder() {
-    settings.value.homeTabOrder = [...DEFAULT_HOME_TAB_ORDER];
-  }
-
   function ignoreUpdateVersion(version: string) {
     settings.value.ignoredUpdateVersion = version;
   }
@@ -600,6 +640,8 @@ export const useSettingsStore = defineStore('settings', () => {
     settings,
     initializeSettings,
     flushSettings,
+    applyAppearance,
+    setAutostart,
     setTheme,
     toggleSidebar,
     toggleMoreExpanded,
@@ -607,8 +649,6 @@ export const useSettingsStore = defineStore('settings', () => {
     refreshAutoZoom,
     setAccent,
     toggleNavVisibility,
-    moveHomeTab,
-    resetHomeTabOrder,
     ignoreUpdateVersion,
     setIgnoreAllUpdates,
     resetUpdateNotifications,

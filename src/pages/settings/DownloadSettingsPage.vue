@@ -105,10 +105,10 @@
             <strong v-if="cacheBytes !== null" class="cache-total-value">{{ formatBytes(cacheBytes) }}</strong>
             <span v-else class="cache-total-value is-loading">正在统计...</span>
           </div>
+          <span v-if="cacheError" class="row-sub cache-error">{{ cacheError }}</span>
           <div class="cache-breakdown">
             <span class="cache-breakdown-item"><span>图片</span><strong>{{ formatBytes(cacheImageBytes) }}</strong></span>
-            <span class="cache-breakdown-item"><span>WebView</span><strong>{{ formatBytes(cacheWebviewBytes) }}</strong></span>
-            <span class="cache-breakdown-item"><span>更新包</span><strong>{{ formatBytes(cacheUpdateBytes) }}</strong></span>
+            <span class="cache-breakdown-item"><span>更新包（独立保留）</span><strong>{{ formatBytes(cacheUpdateBytes) }}</strong></span>
           </div>
         </div>
         <div class="row-actions cache-usage-actions">
@@ -116,7 +116,7 @@
             清理过期项
           </AppButton>
           <AppButton variant="ghost" size="sm" :disabled="cacheBusy" @click="clearCache">
-            {{ cacheBusy ? '清理中...' : '清理全部缓存' }}
+            {{ cacheBusy ? '清理中...' : '清理全部图片缓存' }}
           </AppButton>
         </div>
       </div>
@@ -206,16 +206,16 @@ const exportResult = ref('');
 const cacheBusy = ref(false);
 const cacheBytes = ref<number | null>(null);
 const cacheImageBytes = ref(0);
-const cacheWebviewBytes = ref(0);
 const cacheUpdateBytes = ref(0);
 const cacheDirectory = ref('');
+const cacheError = ref('');
 
 const displayDownloadPath = computed(
   () => settingsStore.settings.downloadPath || '（系统下载目录）'
 );
 
 const cacheDirectoryText = computed(
-  () => cacheDirectory.value || '正在读取实际缓存目录...'
+  () => cacheDirectory.value || (cacheError.value ? '无法读取实际缓存目录' : '正在读取实际缓存目录...')
 );
 
 function formatBytes(bytes: number) {
@@ -224,15 +224,19 @@ function formatBytes(bytes: number) {
 }
 
 async function refreshCacheInfo() {
+  cacheError.value = '';
   try {
     const info = await CoolapkTauriAPI.getCacheInfo(settingsStore.settings.cachePath);
-    cacheBytes.value = Number(info?.bytes) || 0;
     cacheImageBytes.value = Number(info?.imageBytes) || 0;
-    cacheWebviewBytes.value = Number(info?.webviewBytes) || 0;
     cacheUpdateBytes.value = Number(info?.updateBytes) || 0;
+    cacheBytes.value = cacheImageBytes.value;
     cacheDirectory.value = String(info?.path || '');
-  } catch {
+  } catch (err) {
     cacheBytes.value = 0;
+    cacheImageBytes.value = 0;
+    cacheUpdateBytes.value = 0;
+    cacheDirectory.value = '';
+    cacheError.value = `读取缓存信息失败：${err instanceof Error ? err.message : String(err)}`;
   }
 }
 

@@ -1559,6 +1559,37 @@ pub async fn save_image(
     Ok(target_path.to_string_lossy().to_string())
 }
 
+/// 下载图片到应用缓存后交给系统默认图片查看器，避免把 HTTPS 地址交给浏览器。
+#[tauri::command]
+pub async fn open_image_in_system_viewer(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    url: String,
+    cache_dir: Option<String>,
+) -> Result<String, String> {
+    let data_url = state.client.get_image_data_url(&url).await?;
+    let (mime_type, bytes) = decode_image_data_url(&data_url)?;
+    let mut hasher = Md5::new();
+    hasher.update(url.as_bytes());
+    let file_name = format!(
+        "system-{}.{}",
+        hex::encode(hasher.finalize()),
+        image_extension(mime_type)
+    );
+    let target_dir = image_cache_root(&app, cache_dir.as_deref())?;
+    tokio::fs::create_dir_all(&target_dir)
+        .await
+        .map_err(|error| format!("创建图片缓存目录失败：{error}"))?;
+    let preferred_path = target_dir.join(&file_name);
+    let target_path = if preferred_path.is_file() {
+        preferred_path
+    } else {
+        save_image_bytes(&target_dir, &file_name, &bytes).await?
+    };
+    opener::open(&target_path).map_err(|error| format!("打开系统图片查看器失败：{error}"))?;
+    Ok(target_path.to_string_lossy().to_string())
+}
+
 async fn save_image_bytes(
     target_dir: &std::path::Path,
     file_name: &str,

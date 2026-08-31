@@ -102,7 +102,7 @@
       </div>
       <p v-if="settingsStore.settings.closeToTray" class="tray-tip">
         <i class="fas fa-info-circle"></i>
-        最小化到托盘后，可通过托盘图标左键恢复窗口，或右键菜单选择“退出”来彻底关闭应用。
+        最小化到托盘后，可通过托盘图标或托盘菜单恢复窗口，并从菜单选择“退出”来彻底关闭应用。
       </p>
 
       <div class="setting-row">
@@ -162,20 +162,8 @@ onMounted(async () => {
 });
 
 async function toggleAutostart(enabled: boolean) {
-  const prev = settingsStore.settings.autostart;
-  settingsStore.settings.autostart = enabled;
   autostartError.value = false;
-  try {
-    const { enable, disable } = await import('@tauri-apps/plugin-autostart');
-    if (enabled) {
-      await enable();
-    } else {
-      await disable();
-    }
-  } catch {
-    settingsStore.settings.autostart = prev;
-    autostartError.value = true;
-  }
+  autostartError.value = !(await settingsStore.setAutostart(enabled));
 }
 
 function checkNow() {

@@ -238,8 +238,8 @@ import ProductSelectorPage from './ProductSelectorPage.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
 import { hasFeedRenderableContent, shouldHideFeed } from '../utils/feedFilter';
-import { DEFAULT_HOME_TAB_ORDER } from '../stores/settings';
 import type { FeedLayout, ConfigPageTab } from '../types/settings';
+import { resolvePreferredHomeTab } from '../utils/homeTabs';
 import { extractHotSearchKeywords } from '../utils/searchEntities';
 
 const settingsStore = useSettingsStore();
@@ -488,19 +488,7 @@ function isNewsConfigTab(tab: ConfigPageTab): boolean {
 }
 
 function resolveInitialTab(): string {
-  const tabs = orderedDynamicTabs.value;
-  const preferred = settingsStore.settings.defaultHomeTab;
-  const exact = tabs.find((tab) => getTabKey(tab) === preferred);
-  if (exact) return getTabKey(exact);
-
-  const semanticTab = preferred === 'hot'
-    ? tabs.find(isHotConfigTab)
-    : preferred === 'latest'
-      ? tabs.find(isNewsConfigTab)
-      : tabs.find(isHeadlineConfigTab);
-  if (semanticTab) return getTabKey(semanticTab);
-
-  return tabs[0] ? getTabKey(tabs[0]) : 'V9_HOME_TAB_HEADLINE';
+  return resolvePreferredHomeTab(orderedDynamicTabs.value, settingsStore.settings.defaultHomeTab);
 }
 
 function syncTabFromRoute() {

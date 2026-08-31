@@ -41,8 +41,10 @@ import { computed, ref } from 'vue';
 import { useAppStore } from '../../stores/app';
 import { useSettingsStore } from '../../stores/settings';
 import LivePhotoPreview from './LivePhotoPreview.vue';
-import { isAnimatedImageUrl, isPortraitLongImage } from '../../utils/image';
+import { getStaticAnimatedImageUrl, isAnimatedImageUrl, isPortraitLongImage } from '../../utils/image';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { getErrorMessage } from '../../utils/errors';
+import { showToast } from '../../utils/toast';
 import {
   normalizeFeedImageItems,
   type LivePhotoContextType,
@@ -65,12 +67,13 @@ const LONG_IMAGE_RATIO = 1.8;
 const imageRatios = ref<Record<string, number>>({});
 
 const processedImages = computed(() => {
-  return normalizeFeedImageItems(props.images).filter(item => {
-    // 关闭动图自动播放时，过滤 GIF 图片以节省流量
+  return normalizeFeedImageItems(props.images).flatMap(item => {
+    // 关闭动图自动播放时加载 CDN 静态封面，保留原图地址供点击查看。
     if (!settingsStore.settings.autoPlayGif && !item.isLivePhoto && isAnimatedImageUrl(item.sourceUrl)) {
-      return false;
+      const staticCover = getStaticAnimatedImageUrl(item.sourceUrl);
+      return staticCover ? [{ ...item, coverUrl: staticCover }] : [];
     }
-    return true;
+    return [item];
   });
 });
 
@@ -98,9 +101,10 @@ function openViewer(index: number) {
   const images = processedImages.value;
   const item = images[index];
   if (!item) return;
-  // 系统查看器模式：直接用系统默认程序打开原图链接
+  // 系统查看器模式：先缓存原图文件，再交给系统默认图片程序。
   if (settingsStore.settings.imageOpenMode === 'system') {
-    void CoolapkTauriAPI.openUrl(item.sourceUrl, 'system');
+    void CoolapkTauriAPI.openImageInSystemViewer(item.sourceUrl, settingsStore.settings.cachePath)
+      .catch((error) => showToast(getErrorMessage(error, '系统图片查看器打开失败'), 'error'));
     return;
   }
   appStore.openImageViewer(images, index, {

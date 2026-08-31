@@ -1059,6 +1059,10 @@ export class CoolapkTauriAPI {
     return await invoke<string>('save_image', { url, dir: dir || '' });
   }
 
+  static async openImageInSystemViewer(url: string, cacheDir?: string) {
+    return await invoke<string>('open_image_in_system_viewer', { url, cacheDir: cacheDir || '' });
+  }
+
   static async openUrl(url: string, mode: 'internal' | 'system' = 'internal') {
     if (mode === 'internal') {
       // 酷安站内深链优先交给桌面原生页面处理，避免把 feed、话题、用户、应用、产品

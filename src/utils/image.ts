@@ -12,6 +12,16 @@ export function isAnimatedImageUrl(url: string): boolean {
   return /\.(?:gif|gifv)$/.test(path);
 }
 
+/**
+ * 将酷安 CDN 的 GIF 原图转换为静态 JPEG 缩略图。返回空字符串表示该地址
+ * 无法可靠生成静态封面，调用方可选择不在列表中加载它。
+ */
+export function getStaticAnimatedImageUrl(url: string): string {
+  if (!isAnimatedImageUrl(url) || !/^https?:\/\//i.test(url) || !url.includes('coolapk.com')) return '';
+  const baseUrl = url.replace(/(\.xs|\.s|\.m|\.b|\.t)\.jpg$/i, '').split(/[?#]/, 1)[0];
+  return `${baseUrl}.m.jpg`;
+}
+
 /** 判断是否为酷安 Live Photo 的静态封面地址。实况视频由独立地址提供。 */
 export function isLivePhotoUrl(url: string): boolean {
   if (!url || typeof url !== 'string') return false;

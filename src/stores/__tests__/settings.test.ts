@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { nextTick } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { normalizeSettings, useSettingsStore } from '../../stores/settings';
 import type { AppSettings } from '../../types/settings';
 
@@ -26,6 +27,7 @@ describe('settings store', () => {
     fileStoreState.values.clear();
     fileStoreState.load.mockClear();
     fileStoreState.store.save.mockClear();
+    vi.mocked(invoke).mockClear();
   });
 
   const defaults: Partial<AppSettings> = {
@@ -80,6 +82,16 @@ describe('settings store', () => {
     expect(normalized.autoPlayLivePhotoSound).toBe(true);
     expect(normalized.autoLoadOriginalImage).toBe(false);
     expect(normalizeSettings({ rememberWindowState: false }).rememberWindowState).toBe(false);
+  });
+
+  it('保留服务端动态首页频道的排序和隐藏状态', () => {
+    const normalized = normalizeSettings({
+      homeTabOrder: ['V9_HOME_TAB_HEADLINE', '__hidden__V11_HOME_TAB_NEWS', '', 'V9_HOME_TAB_HEADLINE'],
+    });
+    expect(normalized.homeTabOrder).toEqual([
+      'V9_HOME_TAB_HEADLINE',
+      '__hidden__V11_HOME_TAB_NEWS',
+    ]);
   });
 
   it('falls back to legacy localStorage when the JSON store cannot load', async () => {
@@ -152,6 +164,30 @@ describe('settings store', () => {
     const app = document.getElementById('app')!;
     expect(app.style.transform).toBe('scale(1.25)');
     expect(app.style.width).toBe('80vw');
+  });
+
+  it('修改视觉设置时不重复调用原生系统设置', async () => {
+    (window as any).__TAURI_INTERNALS__ = {};
+    fileStoreState.values.set('closeToTray', true);
+    const store = useSettingsStore();
+    await store.initializeSettings();
+    vi.mocked(invoke).mockClear();
+
+    store.settings.fontSize = 17;
+    await nextTick();
+    expect(invoke).not.toHaveBeenCalled();
+
+    store.settings.closeToTray = false;
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith('set_close_to_tray', { enabled: false });
+  });
+
+  it('关闭实验性功能时立即退回稳定更新渠道', () => {
+    const store = useSettingsStore();
+    store.settings.experimentalFeatures = true;
+    store.settings.updateChannel = 'beta';
+    store.settings.experimentalFeatures = false;
+    expect(store.settings.updateChannel).toBe('stable');
   });
 
   it('setAccent changes accent color', () => {

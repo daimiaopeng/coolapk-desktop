@@ -41,7 +41,7 @@
             <span class="row-label">预设机型</span>
             <span class="row-sub">一键套用常见机型模板，或选择"自定义"手动输入</span>
           </div>
-          <select v-model="presetModel" class="text-input select-input" @change="applyPreset">
+          <select v-model="presetModel" class="text-input select-input">
             <option value="">自定义机型</option>
             <option v-for="p in DEVICE_PRESETS" :key="p.model" :value="p.model">
               {{ p.label }}（{{ p.model }}）
@@ -125,7 +125,7 @@
             v-model="settingsStore.settings.deviceFingerprint.sdkInt"
             type="text"
             class="text-input small-input"
-            placeholder="36"
+            placeholder="35"
             maxlength="4"
           />
           <div class="row-info">
@@ -168,7 +168,7 @@
           </div>
           <div class="preview-row">
             <span class="preview-key">X-Sdk-Int</span>
-            <code class="preview-value">{{ fingerprint.sdkInt || '36' }}</code>
+            <code class="preview-value">{{ fingerprint.sdkInt || '35' }}</code>
             <span class="preview-key">X-Sdk-Locale</span>
             <code class="preview-value">{{ fingerprint.locale || 'zh-CN' }}</code>
             <span class="preview-key">X-Dark-Mode</span>
@@ -244,18 +244,16 @@ const presetModel = computed({
     const f = fingerprint.value;
     return DEVICE_PRESETS.some((p) => p.model === f.model.trim()) ? f.model.trim() : '';
   },
-  set: () => {
-    // 仅通过 applyPreset 写入，避免 v-model 直接改动模型字段
+  set: (model: string) => {
+    const preset = DEVICE_PRESETS.find((item) => item.model === model);
+    if (!preset) return;
+    Object.assign(fingerprint.value, {
+      model: preset.model,
+      androidVersion: preset.androidVersion,
+      build: preset.build,
+    });
   },
 });
-
-function applyPreset() {
-  const f = fingerprint.value;
-  const preset = DEVICE_PRESETS.find((p) => p.model === f.model.trim());
-  if (!preset) return;
-  f.androidVersion = preset.androidVersion;
-  f.build = preset.build;
-}
 
 const versionWarning = computed(() => {
   const f = fingerprint.value;
@@ -281,7 +279,7 @@ function resetToDefault() {
     build: 'AQ3A.250226.002',
     appVersion: '16.2.0',
     appCode: '2604201',
-    sdkInt: '36',
+    sdkInt: '35',
     locale: 'zh-CN',
     darkMode: '0',
   };
