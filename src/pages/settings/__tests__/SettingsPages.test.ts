@@ -161,7 +161,7 @@ describe('设置页面交互', () => {
   it('快捷键页展示全部快捷键', () => {
     const { wrapper } = mountPage(ShortcutSettingsPage);
     expect(wrapper.findAll('.setting-row')).toHaveLength(10);
-    expect(wrapper.text()).toContain('Ctrl + K');
+    expect(wrapper.text()).toContain('Ctrl+K');
     expect(wrapper.text()).toContain('Esc');
   });
 

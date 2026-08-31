@@ -37,6 +37,7 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import { openFeedDetail } from '../../utils/feedNavigation';
 import { showToast } from '../../utils/toast';
 import { getOriginalImageUrl } from '../../utils/image';
+import { usePlatformShortcuts } from '../../utils/shortcuts';
 
 type ContextKind = 'page' | 'selection' | 'link' | 'image' | 'comment' | 'feed' | 'message';
 
@@ -76,6 +77,7 @@ type MenuData = ContextState & { items: MenuItem[] };
 const router = useRouter();
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
+const { formatShortcut } = usePlatformShortcuts();
 const menu = ref<MenuData | null>(null);
 
 const menuStyle = computed(() => ({
@@ -303,7 +305,7 @@ function createItems(state: ContextState): MenuItem[] {
 
   if (state.kind === 'selection') {
     return [
-      item('copy-selection', '复制选中文字', 'far fa-copy', () => copyText(state.selectedText), { shortcut: 'Ctrl+C' }),
+      item('copy-selection', '复制选中文字', 'far fa-copy', () => copyText(state.selectedText), { shortcut: formatShortcut('Ctrl+C') }),
       item('search-selection-app', '在酷安内搜索', 'fas fa-search', () => searchInApp(state.selectedText)),
       item('search-selection-system', '在浏览器中搜索', 'fas fa-globe', () => searchInSystem(state.selectedText)),
       item('copy-selection-markdown', '复制为 Markdown', 'fab fa-markdown', () => copyText(state.selectedText)),
@@ -325,9 +327,9 @@ function createItems(state: ContextState): MenuItem[] {
   const nextDensity = density === 'compact' ? 'comfortable' : density === 'comfortable' ? 'standard' : 'compact';
   const fontSize = settingsStore.settings.fontSize || 15;
   return [
-    item('back', '返回', 'fas fa-arrow-left', () => router.back(), { shortcut: 'Alt+←' }),
-    item('forward', '前进', 'fas fa-arrow-right', () => router.go(1), { shortcut: 'Alt+→' }),
-    item('refresh', '刷新页面', 'fas fa-sync-alt', () => window.location.reload(), { shortcut: 'Ctrl+R' }),
+    item('back', '返回', 'fas fa-arrow-left', () => router.back(), { shortcut: formatShortcut('Alt+←') }),
+    item('forward', '前进', 'fas fa-arrow-right', () => router.go(1), { shortcut: formatShortcut('Alt+→') }),
+    item('refresh', '刷新页面', 'fas fa-sync-alt', () => window.location.reload(), { shortcut: formatShortcut('Ctrl+R') }),
     separator('page-separator-1'),
     item('scroll-top', '返回顶部', 'fas fa-arrow-up', () => scrollToTop()),
     item('toggle-sidebar', settingsStore.settings.sidebarCollapsed ? '显示侧边栏' : '隐藏侧边栏', 'fas fa-columns', () => settingsStore.toggleSidebar()),

@@ -34,7 +34,7 @@
       <div class="search-input-wrapper" @click="appStore.openSearch">
         <i class="fas fa-search search-icon"></i>
         <span class="placeholder-text">搜索应用、动态、用户、话题</span>
-        <kbd class="shortcut-kbd">Ctrl K</kbd>
+        <kbd class="shortcut-kbd">{{ formatShortcut('Ctrl+K') }}</kbd>
       </div>
       <AppIconButton
         :icon="isDark ? 'fas fa-sun' : 'fas fa-moon'"
@@ -323,6 +323,7 @@ import {
 import AppButton from '../common/AppButton.vue';
 import AppIconButton from '../common/AppIconButton.vue';
 import AppAvatar from '../common/AppAvatar.vue';
+import { usePlatformShortcuts } from '../../utils/shortcuts';
 
 const router = useRouter();
 const route = useRoute();
@@ -330,6 +331,7 @@ const appStore = useAppStore();
 const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
 const settingsStore = useSettingsStore();
+const { formatShortcut } = usePlatformShortcuts();
 
 const isDark = computed(() => settingsStore.settings.theme === 'dark');
 
