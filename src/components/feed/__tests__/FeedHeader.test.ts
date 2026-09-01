@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import FeedHeader from '../FeedHeader.vue';
+import { reactiveUserProfileMap } from '../../../utils/userProfilePreloader';
 
 const routerPush = vi.hoisted(() => vi.fn());
 
@@ -69,5 +70,28 @@ describe('动态头部信息布局', () => {
     await wrapper.setProps({ uid: '24680' });
     await wrapper.find('.username').trigger('click');
     expect(routerPush).toHaveBeenCalledWith('/user/24680');
+  });
+
+  it('动态只有用户 ID 时使用预加载资料中的头像', () => {
+    const uid = '24681';
+    reactiveUserProfileMap[uid] = { userAvatar: 'https://image.coolapk.com/avatar/user.jpg' };
+    setActivePinia(createPinia());
+
+    const wrapper = mount(FeedHeader, {
+      props: { uid, username: '资料用户' },
+      global: {
+        stubs: {
+          AppAvatar: {
+            props: ['src'],
+            template: '<div class="stub-avatar" :data-src="src"></div>',
+          },
+          AppIconButton: true,
+          UserHoverCard: { template: '<div><slot /></div>' },
+        },
+      },
+    });
+
+    expect(wrapper.find('.stub-avatar').attributes('data-src')).toBe('https://image.coolapk.com/avatar/user.jpg');
+    delete reactiveUserProfileMap[uid];
   });
 });

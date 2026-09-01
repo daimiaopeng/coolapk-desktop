@@ -15,7 +15,7 @@
 
     <FeedHeader
       :uid="authorUid"
-      :avatar="feed.userAvatar || feed.userInfo?.userAvatar || feed.pic"
+      :avatar="feed.userAvatar || feed.userInfo?.userAvatar"
       :plugin-url="(feed.userInfo as any)?.avatar_plugin_url || (feed as any).avatar_plugin_url || (feed as any).userAvatarPluginUrl"
       :username="feed.username || feed.userInfo?.username"
       :level="feed.userInfo?.level || feed.level"

@@ -93,7 +93,7 @@ const messageInput = ref<HTMLTextAreaElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 
 const sourceAvatar = computed(
-  () => props.feed?.userAvatar || props.feed?.userInfo?.userAvatar || props.feed?.pic || ''
+  () => props.feed?.userAvatar || props.feed?.userInfo?.userAvatar || ''
 );
 const sourceUsername = computed(
   () => props.feed?.username || props.feed?.userInfo?.username || '酷友'

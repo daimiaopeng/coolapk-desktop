@@ -2,14 +2,14 @@
   <div class="feed-header">
     <UserHoverCard
       :uid="uid"
-      :avatar="avatar"
+      :avatar="effectiveAvatar"
       :username="username"
       :level="level"
       :verify-title="verifyTitle"
       :device="device"
     >
       <div class="user-clickable" @click.stop="handleUserClick">
-        <AppAvatar :src="avatar" :plugin-url="effectivePluginUrl" size="md" />
+        <AppAvatar :src="effectiveAvatar" :plugin-url="effectivePluginUrl" size="md" />
       </div>
     </UserHoverCard>
 
@@ -17,7 +17,7 @@
       <div class="user-row">
         <UserHoverCard
           :uid="uid"
-          :avatar="avatar"
+          :avatar="effectiveAvatar"
           :username="username"
           :level="level"
           :verify-title="verifyTitle"
@@ -122,6 +122,27 @@ const currentUid = computed(() => normalizeUserUid(props.uid));
 const preloadedProfile = computed(() => {
   if (!currentUid.value) return null;
   return reactiveUserProfileMap[currentUid.value] || getCachedUserProfileSync(currentUid.value);
+});
+
+// 动态详情有时只带用户 ID，头像需要从预加载的用户资料补齐。
+// 不能把 feed.pic 当作头像：它是动态正文配图，失败时会直接显示破图。
+const effectiveAvatar = computed(() => {
+  const p = preloadedProfile.value;
+  const candidates = [
+    props.avatar,
+    p?.userAvatar,
+    p?.avatar,
+    p?.user_avatar,
+    p?.userBigAvatar,
+    p?.userSmallAvatar,
+    p?.userInfo?.userAvatar,
+    p?.userInfo?.avatar,
+    p?.userInfo?.user_avatar,
+    p?.userInfo?.userBigAvatar,
+    p?.userInfo?.userSmallAvatar,
+  ];
+  const value = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim());
+  return value ? String(value).trim() : '';
 });
 
 // 头像挂件（支持原生字段与预加载自动补全）

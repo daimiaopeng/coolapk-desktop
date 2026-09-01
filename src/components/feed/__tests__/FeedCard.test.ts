@@ -102,6 +102,36 @@ describe('动态卡片编辑记录', () => {
     expect(mocks.getFeedChangeHistory).not.toHaveBeenCalled();
   });
 
+  it('不把动态正文配图当作作者头像', () => {
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: {
+          id: 'avatar-feed',
+          uid: '789',
+          username: '测试用户',
+          message: '带正文配图的动态',
+          pic: 'https://image.coolapk.com/feed/content.jpg',
+        },
+      },
+      global: {
+        stubs: {
+          FeedHeader: {
+            props: ['avatar'],
+            template: '<div class="stub-feed-header" :data-avatar="avatar"></div>',
+          },
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedActionBar: true,
+          FeedCommentSection: true,
+          ForwardDialog: true,
+          AppDialog: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.stub-feed-header').attributes('data-avatar')).toBeUndefined();
+  });
+
   it('单动态详情页进入后自动展开并加载评论', async () => {
     mocks.getHotReplies.mockResolvedValue({
       data: [{ id: 'reply-1', username: '评论用户', message: '评论内容' }],
