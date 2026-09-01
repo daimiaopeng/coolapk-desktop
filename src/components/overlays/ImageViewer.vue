@@ -80,7 +80,6 @@
             :style="{ ...mediaTransformStyle, opacity: liveVideoPlaying ? 1 : 0 }"
             aria-label="Live Photo 实况视频"
             @canplay="handleLiveCanPlay"
-            @playing="liveVideoPlaying = true"
             @pause="liveVideoPlaying = false"
             @error="handleLiveVideoError"
           ></video>
@@ -99,11 +98,11 @@
                 class="island-btn live-play-btn"
                 :class="{ 'is-active': liveVideoPlaying }"
                 :disabled="!liveVideoUrl || liveResolving"
-                :title="liveVideoError ? '重新解析并播放实况' : (liveVideoPlaying ? '暂停实况' : '播放实况')"
+                :title="liveVideoUnsupported ? `当前系统不支持 ${liveVideoUnsupported.name}` : (liveVideoError ? '重新解析并播放实况' : (liveVideoPlaying ? '暂停实况' : '播放实况'))"
                 @click.stop="toggleLivePlayback"
               >
-                <i :class="liveVideoPlaying ? 'fas fa-pause' : 'fas fa-play'"></i>
-                <span>{{ liveResolving ? '加载中' : (liveVideoError ? '重试' : (liveVideoPlaying ? '实况' : '播放')) }}</span>
+                <i :class="liveVideoPlaying ? 'fas fa-pause' : (liveVideoUnsupported ? 'fas fa-ban' : 'fas fa-play')"></i>
+                <span>{{ liveResolving ? '加载中' : (liveVideoUnsupported ? '不支持' : (liveVideoError ? '重试' : (liveVideoPlaying ? '实况' : '播放'))) }}</span>
               </button>
 
               <button
@@ -152,6 +151,7 @@ import { loadImageResource, normalizeResourceUrl } from '../../utils/resourceCac
 import { getErrorMessage } from '../../utils/errors';
 import { showToast } from '../../utils/toast';
 import { normalizeFeedImageItems, resolveLivePhotoVideo } from '../../utils/livePhoto';
+import { detectLiveVideoCodec, getLiveVideoCodecSupport, waitForDecodedVideoFrame, type LiveVideoCodec } from '../../utils/liveVideoCodec';
 
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
@@ -174,9 +174,13 @@ const liveResolving = ref(false);
 const liveVideoPlaying = ref(false);
 const liveSoundEnabled = ref(false);
 const liveVideoError = ref(false);
+const liveVideoUnsupported = ref<LiveVideoCodec | null>(null);
 const liveVideoSource = ref<'metadata' | 'resolver' | 'none'>('none');
 const liveVideoFallbackAttempted = ref(false);
 let liveResolveSequence = 0;
+let livePlaybackSequence = 0;
+let liveUnsupportedNoticeUrl = '';
+const liveVideoCodecChecks = new Map<string, Promise<{ codec: LiveVideoCodec | null; unsupported: boolean }>>();
 
 const originalLoadedMap = ref<Record<number, boolean>>({});
 const originalLoadingMap = ref<Record<number, boolean>>({});
@@ -248,11 +252,14 @@ async function resolveImageData(url: string): Promise<boolean> {
 
 function resetLiveState() {
   liveResolveSequence += 1;
+  livePlaybackSequence += 1;
   liveResolving.value = false;
   liveVideoPlaying.value = false;
   liveSoundEnabled.value = settingsStore.settings.autoPlayLivePhotoSound;
   liveVideoError.value = false;
+  liveVideoUnsupported.value = null;
   liveVideoFallbackAttempted.value = false;
+  liveUnsupportedNoticeUrl = '';
   liveVideoSource.value = currentItem.value?.liveVideoUrl ? 'metadata' : 'none';
   const video = liveVideoRef.value;
   if (video) {
@@ -266,15 +273,60 @@ function resetLiveState() {
   liveVideoUrl.value = currentItem.value?.liveVideoUrl || '';
 }
 
-async function playLiveVideo(): Promise<boolean> {
+function decodeVideoHeader(encodedHeader: string): Uint8Array | null {
+  try {
+    const binary = atob(encodedHeader);
+    return Uint8Array.from(binary, char => char.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+async function checkLiveVideoCodec(videoUrl: string): Promise<{ codec: LiveVideoCodec | null; unsupported: boolean }> {
+  const cached = liveVideoCodecChecks.get(videoUrl);
+  if (cached) return await cached;
+  const check = (async () => {
+    try {
+      const header = decodeVideoHeader(await CoolapkTauriAPI.getLivePhotoVideoHeader(videoUrl));
+      const codec = header ? detectLiveVideoCodec(header) : null;
+      if (!codec) return { codec: null, unsupported: false };
+      return { codec, unsupported: await getLiveVideoCodecSupport(codec) === 'unsupported' };
+    } catch {
+      return { codec: null, unsupported: false };
+    }
+  })();
+  liveVideoCodecChecks.set(videoUrl, check);
+  return await check;
+}
+
+function showUnsupportedLiveVideoToast(codec: LiveVideoCodec, force = false) {
+  if (!force && liveUnsupportedNoticeUrl === liveVideoUrl.value) return;
+  liveUnsupportedNoticeUrl = liveVideoUrl.value;
+  showToast(`当前系统不支持该实况照片的视频编码格式（${codec.name}），请安装对应的视频解码组件后重启应用。`, 'warning', 4200);
+}
+
+async function playLiveVideo(forceUnsupportedNotice = false): Promise<boolean> {
   const video = liveVideoRef.value;
   if (!video || !liveVideoUrl.value || liveVideoError.value) return false;
+  const playbackSequence = ++livePlaybackSequence;
+  liveVideoPlaying.value = false;
+  const codecCheck = await checkLiveVideoCodec(liveVideoUrl.value);
+  if (playbackSequence !== livePlaybackSequence || video !== liveVideoRef.value) return false;
+  if (codecCheck.unsupported && codecCheck.codec) {
+    liveVideoUnsupported.value = codecCheck.codec;
+    video.pause();
+    showUnsupportedLiveVideoToast(codecCheck.codec, forceUnsupportedNotice);
+    return false;
+  }
+  liveVideoUnsupported.value = null;
   video.loop = true;
   video.muted = !liveSoundEnabled.value;
   try {
     await video.play();
-    liveVideoPlaying.value = true;
-    return true;
+    const hasFrame = await waitForDecodedVideoFrame(video);
+    if (playbackSequence !== livePlaybackSequence || video !== liveVideoRef.value) return false;
+    liveVideoPlaying.value = hasFrame;
+    return hasFrame;
   } catch {
     liveVideoPlaying.value = false;
     // 自动播放策略拒绝时保留静态封面，用户点击播放按钮仍可重试。
@@ -330,17 +382,27 @@ async function retryLiveVideoThroughResolver() {
   if (!item?.isLivePhoto || liveVideoFallbackAttempted.value || !item.sourceUrl) return;
 
   liveVideoFallbackAttempted.value = true;
+  livePlaybackSequence += 1;
   liveVideoError.value = false;
   liveVideoPlaying.value = false;
+  liveVideoUnsupported.value = null;
   liveVideoSource.value = 'none';
   liveVideoUrl.value = '';
   await nextTick();
   await resolveCurrentLiveVideo(true);
 }
 
-function handleLiveVideoError(event: Event) {
+async function handleLiveVideoError(event: Event) {
   // 切换地址时旧 video 节点可能晚到一步派发 error，不能覆盖新解析结果。
   if (event.target !== liveVideoRef.value) return;
+  const codecCheck = await checkLiveVideoCodec(liveVideoUrl.value);
+  if (event.target !== liveVideoRef.value) return;
+  if (codecCheck.unsupported && codecCheck.codec) {
+    liveVideoUnsupported.value = codecCheck.codec;
+    liveVideoPlaying.value = false;
+    showUnsupportedLiveVideoToast(codecCheck.codec);
+    return;
+  }
   liveVideoError.value = true;
   liveVideoPlaying.value = false;
   // imageUriList 里的 liveVideoUrl 可能是旧的直链；失败后按 APK 重新解析一次。
@@ -352,15 +414,19 @@ function handleLiveVideoError(event: Event) {
 async function toggleLivePlayback() {
   const video = liveVideoRef.value;
   if (!video || !liveVideoUrl.value) return;
+  if (liveVideoUnsupported.value) {
+    showUnsupportedLiveVideoToast(liveVideoUnsupported.value, true);
+    return;
+  }
   if (video.paused) {
     if (liveVideoError.value && liveVideoSource.value === 'metadata') {
       await retryLiveVideoThroughResolver();
       return;
     }
     liveVideoError.value = false;
-    video.load();
-    await playLiveVideo();
+    await playLiveVideo(true);
   } else {
+    livePlaybackSequence += 1;
     video.pause();
     liveVideoPlaying.value = false;
   }
@@ -383,8 +449,10 @@ watch(viewerData, (val) => {
     resetTransform();
   } else {
     liveResolveSequence += 1;
+    livePlaybackSequence += 1;
     liveVideoUrl.value = '';
     liveVideoPlaying.value = false;
+    liveVideoUnsupported.value = null;
   }
 });
 

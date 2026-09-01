@@ -3365,6 +3365,46 @@ impl CoolapkClient {
         Err("酷安未返回可播放的 Live Photo 视频地址".to_string())
     }
 
+    /// 仅读取 Live Photo 视频的前部数据，用于识别容器中的实际视频编码。
+    pub async fn get_live_photo_video_header(&self, video_url: &str) -> Result<String, String> {
+        const HEADER_LIMIT: usize = 256 * 1024;
+        let video_url = video_url.trim();
+        let parsed_url = reqwest::Url::parse(video_url).map_err(|e| format!("invalid Live Photo video URL: {e}"))?;
+        let host = parsed_url.host_str().unwrap_or_default();
+        if parsed_url.scheme() != "https" || !is_coolapk_host(host) {
+            return Err("Live Photo 视频地址必须来自酷安官方 HTTPS 域名".to_string());
+        }
+
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(12))
+            .build()
+            .map_err(|e| format!("failed to create Live Photo codec client: {e}"))?;
+        let mut response = client
+            .get(parsed_url)
+            .header("Range", format!("bytes=0-{}", HEADER_LIMIT - 1))
+            .header(USER_AGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .header("Referer", "https://www.coolapk.com/")
+            .send()
+            .await
+            .map_err(|e| format!("failed to fetch Live Photo video header: {e}"))?;
+        if !response.status().is_success() {
+            return Err(format!("Live Photo 视频头请求失败：HTTP {}", response.status()));
+        }
+
+        let mut header = Vec::with_capacity(HEADER_LIMIT);
+        while header.len() < HEADER_LIMIT {
+            let Some(chunk) = response.chunk().await.map_err(|e| format!("failed to read Live Photo video header: {e}"))? else {
+                break;
+            };
+            let remaining = HEADER_LIMIT - header.len();
+            header.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
+        }
+        if header.is_empty() {
+            return Err("Live Photo 视频头为空".to_string());
+        }
+        Ok(BASE64.encode(header))
+    }
+
     /// 获取单条评论的完整元数据。
     /// 评论列表接口会省略设备型号等字段，详情接口用于后台补齐，不影响列表首屏显示。
     pub async fn get_reply_detail(&self, reply_id: &str) -> Result<Value, String> {

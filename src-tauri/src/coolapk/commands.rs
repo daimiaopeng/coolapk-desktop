@@ -789,6 +789,11 @@ pub async fn resolve_live_photo_video(
 }
 
 #[tauri::command]
+pub async fn get_live_photo_video_header(state: State<'_, AppState>, video_url: String) -> Result<String, String> {
+    state.client.get_live_photo_video_header(&video_url).await
+}
+
+#[tauri::command]
 pub async fn get_reply_detail(
     state: State<'_, AppState>,
     reply_id: String,

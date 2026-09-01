@@ -464,6 +464,10 @@ export class CoolapkTauriAPI {
     }, { retry: true, kind: 'feed' });
   }
 
+  static async getLivePhotoVideoHeader(videoUrl: string) {
+    return await invoke<string>('get_live_photo_video_header', { videoUrl });
+  }
+
   static async getHotReplies(feedId: string, page: number = 1) {
     return await invokeNative('get_hot_replies', { feedId, page }, { retry: true, kind: 'comment' });
   }
