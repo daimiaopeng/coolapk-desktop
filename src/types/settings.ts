@@ -116,6 +116,7 @@ export interface AppSettings {
   commentSort: CommentSort;
   autoPlayGif: boolean;
   autoPlayLivePhotoSound: boolean;
+  suppressUnsupportedLivePhotoCodecPrompt: boolean;
   autoLoadOriginalImage: boolean;
   showDeviceInfo: boolean;
   defaultHomeTab: HomeTabKey;

@@ -95,6 +95,14 @@
 
       <div class="setting-row">
         <div class="row-info">
+          <span class="row-label">不再提醒 Live 图片编码问题</span>
+          <span class="row-sub">关闭后仍保留静态封面，可在此处重新开启提示</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.suppressUnsupportedLivePhotoCodecPrompt" />
+      </div>
+
+      <div class="setting-row">
+        <div class="row-info">
           <span class="row-label">打开图片自动加载原图</span>
           <span class="row-sub">进入内置图片查看器时直接加载原图，可能增加等待时间和流量消耗</span>
         </div>

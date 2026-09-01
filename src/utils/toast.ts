@@ -1,5 +1,10 @@
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 const TOAST_ICONS: Record<ToastType, string> = {
   success: 'fas fa-check-circle',
   error: 'fas fa-times-circle',
@@ -21,7 +26,8 @@ function getToastContainer(): HTMLElement {
 export function showToast(
   message: string,
   type: ToastType = 'success',
-  duration: number = 2200
+  duration: number = 2200,
+  action?: ToastAction,
 ): void {
   if (!message || typeof window === 'undefined') return;
 
@@ -40,8 +46,6 @@ export function showToast(
   textSpan.textContent = message;
   tip.appendChild(textSpan);
 
-  container.appendChild(tip);
-
   const dismiss = () => {
     if (tip.classList.contains('is-leaving')) return;
     tip.classList.add('is-leaving');
@@ -53,6 +57,23 @@ export function showToast(
       }
     }, 220);
   };
+
+  if (action) {
+    const actionButton = document.createElement('button');
+    actionButton.type = 'button';
+    actionButton.className = 'app-toast-action';
+    actionButton.textContent = action.label;
+    actionButton.addEventListener('click', () => {
+      try {
+        action.onClick();
+      } finally {
+        dismiss();
+      }
+    });
+    tip.appendChild(actionButton);
+  }
+
+  container.appendChild(tip);
 
   setTimeout(dismiss, duration);
 }

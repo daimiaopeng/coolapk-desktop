@@ -40,6 +40,7 @@ describe('settings store', () => {
     commentSort: 'hot',
     autoPlayGif: true,
     autoPlayLivePhotoSound: false,
+    suppressUnsupportedLivePhotoCodecPrompt: false,
     autoLoadOriginalImage: true,
     imageQuality: 'hd',
   };
@@ -51,6 +52,7 @@ describe('settings store', () => {
     expect(store.settings.accentColor).toBe(defaults.accentColor);
     expect(store.settings.imageQuality).toBe(defaults.imageQuality);
     expect(store.settings.autoPlayLivePhotoSound).toBe(defaults.autoPlayLivePhotoSound);
+    expect(store.settings.suppressUnsupportedLivePhotoCodecPrompt).toBe(defaults.suppressUnsupportedLivePhotoCodecPrompt);
     expect(store.settings.autoLoadOriginalImage).toBe(defaults.autoLoadOriginalImage);
     expect(store.settings.navVisibility?.albums).toBe(true);
     expect(store.settings.navVisibility?.pictures).toBe(true);
@@ -68,6 +70,7 @@ describe('settings store', () => {
       navVisibility: { albums: false, pictures: 'false' },
       deviceFingerprint: { customFingerprint: true, darkMode: '1' },
       autoPlayLivePhotoSound: true,
+      suppressUnsupportedLivePhotoCodecPrompt: true,
       autoLoadOriginalImage: false,
     });
     expect(normalized.theme).toBe('system');
@@ -80,6 +83,7 @@ describe('settings store', () => {
     expect(normalized.deviceFingerprint.customFingerprint).toBe(true);
     expect(normalized.deviceFingerprint.darkMode).toBe('1');
     expect(normalized.autoPlayLivePhotoSound).toBe(true);
+    expect(normalized.suppressUnsupportedLivePhotoCodecPrompt).toBe(true);
     expect(normalized.autoLoadOriginalImage).toBe(false);
     expect(normalizeSettings({ rememberWindowState: false }).rememberWindowState).toBe(false);
   });

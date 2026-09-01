@@ -87,8 +87,10 @@ describe('设置页面交互', () => {
     expect(settings.settings.commentSort).toBe('latest');
     const contentRows = wrapper.findAll('.setting-row');
     await contentRows.find((row) => row.text().includes('Live 图片自动播放声音'))!.find('.switch-input').setValue(true);
+    await contentRows.find((row) => row.text().includes('不再提醒 Live 图片编码问题'))!.find('.switch-input').setValue(true);
     await contentRows.find((row) => row.text().includes('打开图片自动加载原图'))!.find('.switch-input').setValue(false);
     expect(settings.settings.autoPlayLivePhotoSound).toBe(true);
+    expect(settings.settings.suppressUnsupportedLivePhotoCodecPrompt).toBe(true);
     expect(settings.settings.autoLoadOriginalImage).toBe(false);
     expect(settings.settings.blockedKeywords).toEqual(['广告']);
     await wrapper.get('.chip-remove').trigger('click');

@@ -108,6 +108,7 @@ const defaultSettings: AppSettings = {
   commentSort: 'hot',
   autoPlayGif: true,
   autoPlayLivePhotoSound: false,
+  suppressUnsupportedLivePhotoCodecPrompt: false,
   autoLoadOriginalImage: true,
   showDeviceInfo: true,
   defaultHomeTab: 'digest',
@@ -220,6 +221,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.collapseLines = [0, 8, 12, 18].includes(Number(source.collapseLines)) ? Number(source.collapseLines) : result.collapseLines;
   result.autoPlayGif = readBoolean(source.autoPlayGif, result.autoPlayGif);
   result.autoPlayLivePhotoSound = readBoolean(source.autoPlayLivePhotoSound, result.autoPlayLivePhotoSound);
+  result.suppressUnsupportedLivePhotoCodecPrompt = readBoolean(source.suppressUnsupportedLivePhotoCodecPrompt, result.suppressUnsupportedLivePhotoCodecPrompt);
   result.autoLoadOriginalImage = readBoolean(source.autoLoadOriginalImage, result.autoLoadOriginalImage);
   result.showDeviceInfo = readBoolean(source.showDeviceInfo, result.showDeviceInfo);
   result.downloadPath = readString(source.downloadPath, result.downloadPath);

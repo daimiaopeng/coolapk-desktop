@@ -300,9 +300,20 @@ async function checkLiveVideoCodec(videoUrl: string): Promise<{ codec: LiveVideo
 }
 
 function showUnsupportedLiveVideoToast(codec: LiveVideoCodec, force = false) {
+  if (settingsStore.settings.suppressUnsupportedLivePhotoCodecPrompt) return;
   if (!force && liveUnsupportedNoticeUrl === liveVideoUrl.value) return;
   liveUnsupportedNoticeUrl = liveVideoUrl.value;
-  showToast(`当前系统不支持该实况照片的视频编码格式（${codec.name}），请安装对应的视频解码组件后重启应用。`, 'warning', 4200);
+  showToast(
+    `当前系统不支持该实况照片的视频编码格式（${codec.name}），请安装对应的视频解码组件后重启应用。`,
+    'warning',
+    6000,
+    {
+      label: '不再提醒',
+      onClick: () => {
+        settingsStore.settings.suppressUnsupportedLivePhotoCodecPrompt = true;
+      },
+    },
+  );
 }
 
 async function playLiveVideo(forceUnsupportedNotice = false): Promise<boolean> {
