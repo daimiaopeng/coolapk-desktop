@@ -228,7 +228,7 @@
             :key="activeTopicTag"
             :tag-param="activeTopicTag"
             :embedded="true"
-            :disable-inline-comments="isThreeColumnMode"
+            :disable-inline-comments="showRightAsidePanel"
             :active-feed-id="activeFeed?.id"
             @select-feed="handleFeedSelected"
           />
@@ -239,7 +239,7 @@
       <div
         v-if="showRightAsidePanel"
         class="split-right-wrapper"
-        :style="{ width: `${rightAsideWidth}px`, flex: `0 0 ${rightAsideWidth}px` }"
+        :style="{ width: `${visibleRightAsideWidth}px`, flex: `0 0 ${visibleRightAsideWidth}px` }"
       >
         <!-- 右侧栏宽度调节手柄 -->
         <div
@@ -327,11 +327,21 @@ const subtopicItemRefs = new Map<string, HTMLElement>();
 
 // 窗口与版面自适应监听
 const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1280);
+const pageContentWidth = ref(viewportWidth.value);
+let pageResizeObserver: ResizeObserver | null = null;
+
+const MIN_CENTER_WIDTH = 480;
+
+function updatePageContentWidth() {
+  const width = pageRootRef.value?.clientWidth || 0;
+  if (width > 0) pageContentWidth.value = width;
+}
 
 function handleResize() {
   if (typeof window !== 'undefined') {
     viewportWidth.value = window.innerWidth;
   }
+  updatePageContentWidth();
 }
 
 // 响应式断点判定：
@@ -343,7 +353,7 @@ const isTwoColumnMode = computed(() => viewportWidth.value >= 768 && viewportWid
 const isOneColumnMode = computed(() => viewportWidth.value < 768);
 
 const activeColumnCount = computed(() => {
-  if (isThreeColumnMode.value && !isRightAsideUserClosed.value && showLeftSidebarActual.value) return 3;
+  if (showRightAsidePanel.value && showLeftSidebarActual.value) return 3;
   if (isOneColumnMode.value || (!showLeftSidebarActual.value && (!isThreeColumnMode.value || isRightAsideUserClosed.value))) return 1;
   return 2;
 });
@@ -353,9 +363,25 @@ const showLeftSidebarActual = computed(() => {
   return viewportWidth.value >= 768 && !isLeftSidebarCollapsed.value;
 });
 
+// 右侧评论区至少需要为中间动态流和自身保留最小宽度，避免超出应用窗口后被裁切。
+const availableRightWidth = computed(() => {
+  const leftWidth = showLeftSidebarActual.value ? leftSidebarWidth.value : 0;
+  return pageContentWidth.value - leftWidth - MIN_CENTER_WIDTH;
+});
+
 // 右侧评论区仅在宽度允许三栏且未被手动关闭时展示
 const showRightAsidePanel = computed(() => {
-  return isThreeColumnMode.value && !isRightAsideUserClosed.value;
+  return isThreeColumnMode.value
+    && !isRightAsideUserClosed.value
+    && availableRightWidth.value >= MIN_RIGHT_WIDTH;
+});
+
+// 兼容历史上保存过的较大右栏宽度：随当前窗口可用空间收缩，但不修改用户偏好值。
+const visibleRightAsideWidth = computed(() => {
+  return Math.min(
+    rightAsideWidth.value,
+    Math.max(MIN_RIGHT_WIDTH, availableRightWidth.value),
+  );
 });
 
 // 浮动展开按钮仅在三栏模式且被手动关闭时展示
@@ -888,6 +914,11 @@ function handleClickOutside(e: MouseEvent) {
 
 onMounted(() => {
   loadPersistedSettings();
+  updatePageContentWidth();
+  if (typeof ResizeObserver !== 'undefined' && pageRootRef.value) {
+    pageResizeObserver = new ResizeObserver(() => updatePageContentWidth());
+    pageResizeObserver.observe(pageRootRef.value);
+  }
   fetchTopicData(topicEntryUrl, false);
   window.addEventListener('resize', handleResize);
   window.addEventListener('keydown', handleGlobalKeydown);
@@ -895,6 +926,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  pageResizeObserver?.disconnect();
+  pageResizeObserver = null;
   window.removeEventListener('resize', handleResize);
   window.removeEventListener('keydown', handleGlobalKeydown);
   document.removeEventListener('click', handleClickOutside);
@@ -1492,6 +1525,7 @@ onUnmounted(() => {
 .split-right-wrapper {
   position: relative;
   height: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;

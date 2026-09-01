@@ -187,9 +187,11 @@ onMounted(() => {
 .topic-feed-comment-aside {
   width: 380px;
   flex: 0 0 380px;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   background: var(--surface);
   border-left: 1px solid var(--border-light, rgba(0, 0, 0, 0.08));
   overflow: hidden;
