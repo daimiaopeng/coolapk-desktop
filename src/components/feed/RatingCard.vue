@@ -89,11 +89,20 @@
         :feed-id="feed.id"
         :feed-uid="feed.uid || feed.userInfo?.uid"
         :feed-username="feed.username"
+        :total-comment-count="feed.replynum"
         :comments="comments"
         :loading="commentsLoading"
+        :error="commentsError"
+        :has-more-comments="hasMoreComments"
+        :loading-more-comments="commentsLoadingMore"
+        :load-more-error="commentsLoadMoreError"
         :normalize-img="(u) => u"
         :format-rich-text="formatRichText"
         @collapse="handleCollapseComments"
+        @retry-comments="loadComments"
+        @load-more-comments="loadMoreComments"
+        @retry-more-comments="loadMoreComments"
+        @comment-sort-change="handleCommentSortChange"
       />
       <!-- 评论区右下角固定悬浮收起按钮（评论滑动时按钮固定在视口右下角纹丝不动） -->
       <Teleport to="body">
@@ -139,7 +148,17 @@ import FeedCommentSection from './FeedCommentSection.vue';
 import AppImage from '../common/AppImage.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkRichText } from '../../utils/richText';
-import { getReplyData, mergeReplies } from '../../utils/commentList';
+import {
+  DEFAULT_COMMENT_SORT_MODE,
+  getCommentReplyRequestOptions,
+  getExpectedCommentCount,
+  getReplyData,
+  getReplyPageCursor,
+  hasMoreReplyPages,
+  mergeReplies,
+  type CommentSortMode,
+  type CommentSortSelection,
+} from '../../utils/commentList';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
@@ -170,6 +189,16 @@ const collectionInitialSelectedIds = ref<string[]>([]);
 const showComments = ref(false);
 const comments = ref<any[]>([]);
 const commentsLoading = ref(false);
+const commentsError = ref('');
+const commentsPage = ref(0);
+const hasMoreComments = ref(false);
+const commentsLoadingMore = ref(false);
+const commentsLoadMoreError = ref('');
+const commentsSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentsAuthorOnly = ref(false);
+let commentsFirstItem = '';
+let commentsLastItem = '';
+let commentsRequestVersion = 0;
 
 async function toggleFav() {
   if (!authStore.isLoggedIn) {
@@ -346,8 +375,9 @@ function updateFloatingCollapse() {
   if (isInViewport) {
     isCommentsFloatingVisible.value = true;
     const rightOffset = Math.max(28, windowWidth - rect.right + 24);
+    const isOverlappingFabZone = rightOffset < 96;
     floatingCollapseStyle.value = {
-      bottom: '32px',
+      bottom: isOverlappingFabZone ? '84px' : '32px',
       right: `${rightOffset}px`,
     };
   } else {
@@ -399,30 +429,137 @@ onUnmounted(() => {
   unbindScrollListener();
 });
 
-async function toggleComments() {
-  showComments.value = !showComments.value;
-  if (showComments.value && comments.value.length === 0) {
-    commentsLoading.value = true;
-    try {
-      let loadedComments: any[] = [];
-      if (settingsStore.settings.commentSort === 'hot') {
-        const [hotResult, allResult] = await Promise.allSettled([
-          CoolapkTauriAPI.getHotReplies(String(props.feed.id), 1),
-          CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1),
-        ]);
-        const hotReplies = hotResult.status === 'fulfilled' ? getReplyData(hotResult.value) : [];
-        const allReplies = allResult.status === 'fulfilled' ? getReplyData(allResult.value) : [];
-        loadedComments = mergeReplies(hotReplies, allReplies);
-      } else {
-        loadedComments = getReplyData(await CoolapkTauriAPI.getFeedReplies(String(props.feed.id), 1));
-      }
-      comments.value = loadedComments;
-    } catch (err) {
+function isCurrentCommentRequest(requestedFeedId: string, currentRequest: number): boolean {
+  return currentRequest === commentsRequestVersion
+    && requestedFeedId === String(props.feed.id || '');
+}
+
+async function loadCommentPage(
+  requestedFeedId: string,
+  page: number,
+  cursor?: { firstItem?: string; lastItem?: string },
+): Promise<any[]> {
+  const response = await CoolapkTauriAPI.getFeedReplies(requestedFeedId, page, {
+    ...getCommentReplyRequestOptions(commentsSortMode.value, commentsAuthorOnly.value),
+    ...cursor,
+  });
+  return getReplyData(response);
+}
+
+function updateCommentCursor(pageReplies: any[], resetFirst = false) {
+  const cursor = getReplyPageCursor(pageReplies);
+  if (resetFirst || !commentsFirstItem) commentsFirstItem = cursor.firstItem;
+  if (cursor.lastItem) commentsLastItem = cursor.lastItem;
+}
+
+async function loadMoreComments() {
+  if (
+    !hasMoreComments.value ||
+    commentsLoading.value ||
+    commentsLoadingMore.value
+  ) {
+    return;
+  }
+
+  const requestedFeedId = String(props.feed.id || '');
+  if (!requestedFeedId) return;
+
+  const currentRequest = commentsRequestVersion;
+  const page = commentsPage.value + 1;
+  commentsLoadingMore.value = true;
+  commentsLoadMoreError.value = '';
+
+  try {
+    const pageReplies = await loadCommentPage(requestedFeedId, page, {
+      firstItem: commentsFirstItem,
+      lastItem: commentsLastItem,
+    });
+    if (!isCurrentCommentRequest(requestedFeedId, currentRequest)) return;
+
+    updateCommentCursor(pageReplies);
+    const previousReplies = comments.value;
+    const mergedReplies = mergeReplies(previousReplies, pageReplies);
+    if (mergedReplies.length > previousReplies.length) {
+      comments.value = mergedReplies;
+      commentsPage.value = page;
+    }
+    hasMoreComments.value = hasMoreReplyPages(
+      pageReplies,
+      previousReplies,
+      mergedReplies,
+      getExpectedCommentCount(props.feed.replynum),
+    );
+  } catch (err) {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
+      console.error('Failed to load more rating comments', err);
+      commentsLoadMoreError.value = err instanceof Error ? err.message : String(err);
+    }
+  } finally {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
+      commentsLoadingMore.value = false;
+    }
+  }
+}
+
+async function loadComments(force = false) {
+  if (
+    !force &&
+    (commentsLoading.value || commentsLoadingMore.value || commentsPage.value > 0)
+  ) {
+    return;
+  }
+
+  const requestedFeedId = String(props.feed.id || '');
+  if (!requestedFeedId) return;
+
+  const currentRequest = ++commentsRequestVersion;
+  if (force) comments.value = [];
+  commentsPage.value = 0;
+  hasMoreComments.value = false;
+  commentsFirstItem = '';
+  commentsLastItem = '';
+  commentsError.value = '';
+  commentsLoadMoreError.value = '';
+  commentsLoadingMore.value = false;
+  commentsLoading.value = true;
+
+  try {
+    const pageReplies = await loadCommentPage(requestedFeedId, 1);
+
+    if (!isCurrentCommentRequest(requestedFeedId, currentRequest)) return;
+
+    updateCommentCursor(pageReplies, true);
+    comments.value = pageReplies;
+    commentsPage.value = pageReplies.length > 0 ? 1 : 0;
+    hasMoreComments.value = hasMoreReplyPages(
+      pageReplies,
+      [],
+      pageReplies,
+      getExpectedCommentCount(props.feed.replynum),
+    );
+    commentsLoading.value = false;
+    if (hasMoreComments.value) void loadMoreComments();
+  } catch (err) {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
       console.error('Failed to load rating comments', err);
-    } finally {
+      commentsError.value = err instanceof Error ? err.message : String(err);
+    }
+  } finally {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
       commentsLoading.value = false;
     }
   }
+}
+
+function handleCommentSortChange(selection: CommentSortSelection) {
+  commentsSortMode.value = selection.mode;
+  commentsAuthorOnly.value = selection.authorOnly;
+  void loadComments(true);
+}
+
+async function toggleComments() {
+  showComments.value = !showComments.value;
+  if (showComments.value) void loadComments();
 }
 
 function handleCardClick(e: MouseEvent) {
@@ -613,8 +750,9 @@ function formatRichText(text: string) {
 /* 全局固定悬浮收起按钮（Fixed 定位在视口右下角，评论滚动时静止不动） */
 .global-floating-comment-collapse {
   position: fixed;
-  z-index: 9999;
+  z-index: 900;
   pointer-events: auto;
+  transition: bottom 0.2s cubic-bezier(0.4, 0, 0.2, 1), right 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-floating-collapse {

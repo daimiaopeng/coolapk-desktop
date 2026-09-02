@@ -133,13 +133,13 @@ describe('动态卡片编辑记录', () => {
   });
 
   it('单动态详情页进入后自动展开并加载评论', async () => {
-    mocks.getHotReplies.mockResolvedValue({
+    mocks.getFeedReplies.mockResolvedValue({
       data: [{ id: 'reply-1', username: '评论用户', message: '评论内容' }],
     });
 
     const wrapper = mount(FeedCard, {
       props: {
-        feed: { id: '789', uid: '456', username: '测试用户', message: '动态正文' },
+        feed: { id: '789', uid: '456', username: '测试用户', message: '动态正文', replynum: 1 },
         detailMode: true,
         autoOpenComments: true,
       },
@@ -161,13 +161,119 @@ describe('动态卡片编辑记录', () => {
     });
     await flushPromises();
 
-    expect(mocks.getHotReplies).toHaveBeenCalledWith('789', 1);
-    expect(wrapper.find('.stub-comments').text()).toBe('1 /');
+    expect(mocks.getHotReplies).not.toHaveBeenCalled();
+    expect(mocks.getFeedReplies).toHaveBeenCalledWith(
+      '789',
+      1,
+      { listType: 'lastupdate_desc', fromFeedAuthor: 0 },
+    );
+    expect(wrapper.find('.stub-comments').text()).toBe('1 / 1');
 
     await wrapper.setProps({
       feed: { id: '789', uid: '456', username: '测试用户', message: '动态正文', replynum: 22 },
     });
     expect(wrapper.find('.stub-comments').text()).toBe('1 / 22');
+  });
+
+  it('展开动态评论时自动读取后续分页', async () => {
+    mocks.getFeedReplies.mockImplementation(async (_feedId: string, page: number) => ({
+      data: Array.from({ length: page === 3 ? 5 : 10 }, (_, index) => ({
+        id: `reply-${(page - 1) * 10 + index + 1}`,
+        message: `第${page}页`,
+      })),
+    }));
+
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: { id: 'paged-feed', uid: '456', username: '测试用户', message: '动态正文', replynum: 25 },
+        detailMode: true,
+        autoOpenComments: true,
+      },
+      global: {
+        stubs: {
+          FeedHeader: true,
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedActionBar: true,
+          FeedCommentSection: {
+            props: ['comments', 'hasMoreComments', 'loadingMoreComments'],
+            emits: ['load-more-comments'],
+            template: '<div class="stub-comments"><span>{{ comments.length }}</span><button v-if="hasMoreComments && !loadingMoreComments" class="load-more" @click="$emit(\'load-more-comments\')">更多</button></div>',
+          },
+          ForwardDialog: true,
+          LoadingState: true,
+          AppDialog: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(mocks.getFeedReplies.mock.calls.map(([, page]) => page)).toEqual([1, 2]);
+    expect(mocks.getFeedReplies).toHaveBeenCalledWith(
+      'paged-feed',
+      2,
+      {
+        listType: 'lastupdate_desc',
+        fromFeedAuthor: 0,
+        firstItem: 'reply-1',
+        lastItem: 'reply-10',
+      },
+    );
+    expect(mocks.getFeedReplies).not.toHaveBeenCalledWith('paged-feed', 3);
+    expect(wrapper.find('.stub-comments span').text()).toBe('20');
+
+    await wrapper.find('.load-more').trigger('click');
+    await flushPromises();
+
+    expect(mocks.getFeedReplies.mock.calls.map(([, page]) => page)).toEqual([1, 2, 3]);
+    expect(mocks.getFeedReplies).toHaveBeenCalledWith(
+      'paged-feed',
+      3,
+      {
+        listType: 'lastupdate_desc',
+        fromFeedAuthor: 0,
+        firstItem: 'reply-1',
+        lastItem: 'reply-20',
+      },
+    );
+    expect(wrapper.find('.stub-comments span').text()).toBe('25');
+  });
+
+  it('少量评论只请求第一页，不为确认末页额外等待', async () => {
+    mocks.getFeedReplies.mockResolvedValue({
+      data: [
+        { id: 'short-1', message: '评论一' },
+        { id: 'short-2', message: '评论二' },
+        { id: 'short-3', message: '评论三' },
+      ],
+    });
+
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: { id: 'short-feed', uid: '456', username: '测试用户', message: '动态正文', replynum: 3 },
+        detailMode: true,
+        autoOpenComments: true,
+      },
+      global: {
+        stubs: {
+          FeedHeader: true,
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedActionBar: true,
+          FeedCommentSection: {
+            props: ['comments'],
+            template: '<div class="stub-comments">{{ comments.length }}</div>',
+          },
+          ForwardDialog: true,
+          LoadingState: true,
+          AppDialog: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(mocks.getFeedReplies.mock.calls.map(([, page]) => page)).toEqual([1]);
+    expect(wrapper.find('.stub-comments').text()).toBe('3');
   });
 
   it('通知摘要阶段不请求评论，完整动态准备好后再加载', async () => {
@@ -199,14 +305,15 @@ describe('动态卡片编辑记录', () => {
     });
     await flushPromises();
 
-    expect(mocks.getHotReplies).toHaveBeenCalledWith('real-feed-id', 1);
+    expect(mocks.getFeedReplies).toHaveBeenCalledWith(
+      'real-feed-id',
+      1,
+      { listType: 'lastupdate_desc', fromFeedAuthor: 0 },
+    );
     expect(mocks.getHotReplies).not.toHaveBeenCalledWith('summary-id', 1);
   });
 
-  it('热门排序同时保留普通评论，并去除热门评论中的重复项', async () => {
-    mocks.getHotReplies.mockResolvedValue({
-      data: [{ id: 'hot-1', username: '热门用户', message: '热门评论' }],
-    });
+  it('热门排序使用 replyList 的 popular 参数并去除重复项', async () => {
     mocks.getFeedReplies.mockResolvedValue({
       data: [
         { id: 'hot-1', username: '热门用户', message: '热门评论' },
@@ -216,7 +323,7 @@ describe('动态卡片编辑记录', () => {
 
     const wrapper = mount(FeedCard, {
       props: {
-        feed: { id: 'all-comments-feed', uid: '456', username: '动态作者', message: '动态正文' },
+        feed: { id: 'all-comments-feed', uid: '456', username: '动态作者', message: '动态正文', replynum: 2 },
         detailMode: true,
         autoOpenComments: true,
       },
@@ -228,7 +335,8 @@ describe('动态卡片编辑记录', () => {
           FeedActionBar: true,
           FeedCommentSection: {
             props: ['comments'],
-            template: '<div class="stub-comments">{{ comments.map(item => item.id).join(",") }}</div>',
+            emits: ['comment-sort-change'],
+            template: '<div class="stub-comments"><button class="sort-hot" @click="$emit(\'comment-sort-change\', { mode: \'likes\', authorOnly: false })"></button>{{ comments.map(item => item.id).join(",") }}</div>',
           },
           ForwardDialog: true,
           LoadingState: true,
@@ -238,9 +346,107 @@ describe('动态卡片编辑记录', () => {
     });
     await flushPromises();
 
-    expect(mocks.getHotReplies).toHaveBeenCalledWith('all-comments-feed', 1);
-    expect(mocks.getFeedReplies).toHaveBeenCalledWith('all-comments-feed', 1);
+    expect(mocks.getHotReplies).not.toHaveBeenCalled();
+    expect(mocks.getFeedReplies).toHaveBeenCalledWith(
+      'all-comments-feed',
+      1,
+      { listType: 'lastupdate_desc', fromFeedAuthor: 0 },
+    );
+    await wrapper.find('.sort-hot').trigger('click');
+    await flushPromises();
+    expect(mocks.getFeedReplies).toHaveBeenLastCalledWith(
+      'all-comments-feed',
+      1,
+      { listType: 'popular', fromFeedAuthor: 0 },
+    );
     expect(wrapper.find('.stub-comments').text()).toBe('hot-1,normal-1');
+  });
+
+  it('切换排序时重置分页并使用 APK 的默认、最新和楼主参数', async () => {
+    mocks.getFeedReplies.mockImplementation(async (_feedId: string, page: number, options: { listType?: string; fromFeedAuthor?: number }) => ({
+      data: Array.from({ length: 10 }, (_, index) => ({
+        id: `${options.listType || 'author'}-${(page - 1) * 10 + index + 1}`,
+        message: `第${page}页`,
+      })),
+    }));
+
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: { id: 'sort-feed', uid: '456', username: '动态作者', message: '动态正文', replynum: 20 },
+        detailMode: true,
+        autoOpenComments: true,
+      },
+      global: {
+        stubs: {
+          FeedHeader: true,
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedActionBar: true,
+          FeedCommentSection: {
+            props: ['comments', 'hasMoreComments', 'loadingMoreComments'],
+            emits: ['comment-sort-change'],
+            template: `
+              <div class="stub-comments">
+                <button class="sort-default" @click="$emit('comment-sort-change', { mode: 'default', authorOnly: false })">默认</button>
+                <button class="sort-latest" @click="$emit('comment-sort-change', { mode: 'latest', authorOnly: false })">最新</button>
+                <button class="sort-author" @click="$emit('comment-sort-change', { mode: 'default', authorOnly: true })">楼主</button>
+                <span>{{ comments.length }}</span>
+              </div>
+            `,
+          },
+          ForwardDialog: true,
+          LoadingState: true,
+          AppDialog: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    expect(mocks.getFeedReplies.mock.calls.slice(0, 2)).toEqual([
+      ['sort-feed', 1, { listType: 'lastupdate_desc', fromFeedAuthor: 0 }],
+      ['sort-feed', 2, {
+        listType: 'lastupdate_desc',
+        fromFeedAuthor: 0,
+        firstItem: 'lastupdate_desc-1',
+        lastItem: 'lastupdate_desc-10',
+      }],
+    ]);
+
+    await wrapper.find('.sort-latest').trigger('click');
+    await flushPromises();
+    expect(mocks.getFeedReplies.mock.calls.slice(-2)).toEqual([
+      ['sort-feed', 1, { listType: 'dateline_desc', fromFeedAuthor: 0 }],
+      ['sort-feed', 2, {
+        listType: 'dateline_desc',
+        fromFeedAuthor: 0,
+        firstItem: 'dateline_desc-1',
+        lastItem: 'dateline_desc-10',
+      }],
+    ]);
+
+    await wrapper.find('.sort-default').trigger('click');
+    await flushPromises();
+    expect(mocks.getFeedReplies.mock.calls.slice(-2)).toEqual([
+      ['sort-feed', 1, { listType: 'lastupdate_desc', fromFeedAuthor: 0 }],
+      ['sort-feed', 2, {
+        listType: 'lastupdate_desc',
+        fromFeedAuthor: 0,
+        firstItem: 'lastupdate_desc-1',
+        lastItem: 'lastupdate_desc-10',
+      }],
+    ]);
+
+    await wrapper.find('.sort-author').trigger('click');
+    await flushPromises();
+    expect(mocks.getFeedReplies.mock.calls.slice(-2)).toEqual([
+      ['sort-feed', 1, { listType: '', fromFeedAuthor: 1 }],
+      ['sort-feed', 2, {
+        listType: '',
+        fromFeedAuthor: 1,
+        firstItem: 'author-1',
+        lastItem: 'author-10',
+      }],
+    ]);
   });
 });
 
@@ -373,6 +579,84 @@ describe('评论区收起定位', () => {
 
     expect(host.scrollTop).toBe(3300);
     expect(wrapper.find('.stub-comments').exists()).toBe(false);
+    wrapper.unmount();
+    host.remove();
+  });
+
+  it('当卡片靠近屏幕右侧时悬浮收起评论按钮自动上移避让回到顶部按钮', async () => {
+    const host = document.createElement('div');
+    host.className = 'feed-scroll-container';
+    document.body.appendChild(host);
+
+    let cardRight = 980;
+    const makeRect = (right: number): DOMRect => ({
+      x: 0,
+      y: 100,
+      width: 780,
+      height: 400,
+      top: 100,
+      right,
+      bottom: 500,
+      left: right - 780,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function(this: HTMLElement) {
+      if (this.classList.contains('feed-scroll-container')) return makeRect(1000);
+      if (this.classList.contains('feed-card')) return makeRect(cardRight);
+      return makeRect(0);
+    });
+
+    // 模拟窗口宽度 1000px，卡片右边缘在 980px（距离右边缘 20px，加上 24px 后 rightOffset = 44px < 96px）
+    Object.defineProperty(window, 'innerWidth', { value: 1000, writable: true, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 800, writable: true, configurable: true });
+
+    const wrapper = mount(FeedCard, {
+      attachTo: host,
+      props: {
+        feed: { id: 'collapse-feed-avoid-overlap', uid: '456', username: '动态作者', message: '动态正文' },
+      },
+      global: {
+        stubs: {
+          FeedHeader: true,
+          FeedContent: true,
+          VoteCard: true,
+          FeedImageGrid: true,
+          FeedVideoCard: true,
+          FeedActionBar: {
+            template: '<button class="stub-open-comments" @click="$emit(\'open-comment\')">评论</button>',
+          },
+          FeedCommentSection: {
+            props: ['comments'],
+            template: '<div class="stub-comments">{{ comments.length }}</div>',
+          },
+          ForwardDialog: true,
+          LoadingState: true,
+          AppDialog: true,
+          AppImage: true,
+          FeedCollectionPickerDialog: true,
+        },
+      },
+    });
+
+    await wrapper.find('.stub-open-comments').trigger('click');
+    await flushPromises();
+    window.dispatchEvent(new Event('scroll'));
+    await nextTick();
+
+    const floatingContainer = document.body.querySelector<HTMLElement>('.global-floating-comment-collapse');
+    expect(floatingContainer).not.toBeNull();
+    // 应该避让到 84px
+    expect(floatingContainer?.style.bottom).toBe('84px');
+
+    // 模拟窗口宽度变宽为 1400px，卡片右边缘在 1000px（距离右边缘 400px，rightOffset = 424px >= 96px）
+    cardRight = 1000;
+    Object.defineProperty(window, 'innerWidth', { value: 1400, writable: true, configurable: true });
+    window.dispatchEvent(new Event('resize'));
+    await nextTick();
+
+    expect(floatingContainer?.style.bottom).toBe('32px');
+
     wrapper.unmount();
     host.remove();
   });

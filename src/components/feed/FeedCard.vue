@@ -135,10 +135,16 @@
         :comments="comments"
         :loading="commentsLoading"
         :error="commentsError"
+        :has-more-comments="hasMoreComments"
+        :loading-more-comments="commentsLoadingMore"
+        :load-more-error="commentsLoadMoreError"
         :normalize-img="normalizeImg"
         :format-rich-text="formatRichText"
         @delete-comment="removeComment"
         @retry-comments="openComments(true)"
+        @load-more-comments="loadMoreComments"
+        @retry-more-comments="loadMoreComments"
+        @comment-sort-change="handleCommentSortChange"
       />
       <!-- 评论区右下角固定悬浮收起按钮（评论滑动时按钮固定在视口右下角纹丝不动） -->
       <Teleport to="body">
@@ -229,7 +235,17 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import { preloadUserProfile, reactiveUserProfileMap } from '../../utils/userProfilePreloader';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { generateTextDiffHtml, getDiffSummary } from '../../utils/textDiff';
-import { getReplyData, mergeReplies } from '../../utils/commentList';
+import {
+  DEFAULT_COMMENT_SORT_MODE,
+  getCommentReplyRequestOptions,
+  getExpectedCommentCount,
+  getReplyData,
+  getReplyPageCursor,
+  hasMoreReplyPages,
+  mergeReplies,
+  type CommentSortMode,
+  type CommentSortSelection,
+} from '../../utils/commentList';
 import { useAppStore } from '../../stores/app';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
@@ -626,6 +642,14 @@ const showComments = ref(false);
 const comments = ref<any[]>([]);
 const commentsLoading = ref(false);
 const commentsError = ref('');
+const commentsPage = ref(0);
+const hasMoreComments = ref(false);
+const commentsLoadingMore = ref(false);
+const commentsLoadMoreError = ref('');
+const commentsSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentsAuthorOnly = ref(false);
+let commentsFirstItem = '';
+let commentsLastItem = '';
 let commentsRequestVersion = 0;
 const hasBlockingOverlay = computed(() => Boolean(appStore.activeImageViewer || appStore.isSearchOpen || appStore.isPublishOpen || authStore.isLoginModalOpen || forwardOpen.value || historyDialogOpen.value || collectionPickerOpen.value || moreMenuOpen.value));
 
@@ -736,46 +760,136 @@ async function confirmCollectionSelection(selectedIds: string[]) {
   }
 }
 
-async function openComments(force = false) {
-  showComments.value = true;
-  commentsError.value = '';
-  if (force || comments.value.length === 0) {
-    const requestedFeedId = String(props.feed.id || '');
-    if (!requestedFeedId) return;
-    const currentRequest = ++commentsRequestVersion;
-    if (force) comments.value = [];
-    commentsLoading.value = true;
-    try {
-      let loadedComments: any[] = [];
-      if (settingsStore.settings.commentSort === 'hot') {
-        // 热门接口只返回部分评论，因此同时加载完整评论并合并，热门评论仍排在前面。
-        const [hotResult, allResult] = await Promise.allSettled([
-          CoolapkTauriAPI.getHotReplies(requestedFeedId, 1),
-          CoolapkTauriAPI.getFeedReplies(requestedFeedId, 1),
-        ]);
-        const hotReplies = hotResult.status === 'fulfilled' ? getReplyData(hotResult.value) : [];
-        const allReplies = allResult.status === 'fulfilled' ? getReplyData(allResult.value) : [];
-        loadedComments = mergeReplies(hotReplies, allReplies);
+function isCurrentCommentRequest(requestedFeedId: string, currentRequest: number): boolean {
+  return currentRequest === commentsRequestVersion
+    && requestedFeedId === String(props.feed.id || '');
+}
 
-        if (hotResult.status === 'rejected' && allResult.status === 'rejected') {
-          throw allResult.reason || hotResult.reason;
-        }
-      } else {
-        loadedComments = getReplyData(await CoolapkTauriAPI.getFeedReplies(requestedFeedId, 1));
-      }
-      if (
-        currentRequest === commentsRequestVersion
-        && requestedFeedId === String(props.feed.id || '')
-      ) {
-        comments.value = loadedComments;
-      }
-    } catch (err) {
-      console.error('Failed to load comments', err);
-      commentsError.value = err instanceof Error ? err.message : String(err);
-    } finally {
-      if (currentRequest === commentsRequestVersion) commentsLoading.value = false;
+async function loadCommentPage(
+  requestedFeedId: string,
+  page: number,
+  cursor?: { firstItem?: string; lastItem?: string },
+): Promise<any[]> {
+  const response = await CoolapkTauriAPI.getFeedReplies(requestedFeedId, page, {
+    ...getCommentReplyRequestOptions(commentsSortMode.value, commentsAuthorOnly.value),
+    ...cursor,
+  });
+  return getReplyData(response);
+}
+
+function updateCommentCursor(pageReplies: any[], resetFirst = false) {
+  const cursor = getReplyPageCursor(pageReplies);
+  if (resetFirst || !commentsFirstItem) commentsFirstItem = cursor.firstItem;
+  if (cursor.lastItem) commentsLastItem = cursor.lastItem;
+}
+
+async function loadMoreComments() {
+  if (
+    !hasMoreComments.value ||
+    commentsLoading.value ||
+    commentsLoadingMore.value
+  ) {
+    return;
+  }
+
+  const requestedFeedId = String(props.feed.id || '');
+  if (!requestedFeedId) return;
+
+  const currentRequest = commentsRequestVersion;
+  const page = commentsPage.value + 1;
+  commentsLoadingMore.value = true;
+  commentsLoadMoreError.value = '';
+
+  try {
+    const pageReplies = await loadCommentPage(requestedFeedId, page, {
+      firstItem: commentsFirstItem,
+      lastItem: commentsLastItem,
+    });
+    if (!isCurrentCommentRequest(requestedFeedId, currentRequest)) return;
+
+    updateCommentCursor(pageReplies);
+    const previousReplies = comments.value;
+    const mergedReplies = mergeReplies(previousReplies, pageReplies);
+    if (mergedReplies.length > previousReplies.length) {
+      comments.value = mergedReplies;
+      commentsPage.value = page;
+    }
+    hasMoreComments.value = hasMoreReplyPages(
+      pageReplies,
+      previousReplies,
+      mergedReplies,
+      getExpectedCommentCount(props.feed.replynum),
+    );
+  } catch (err) {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
+      console.error('Failed to load more comments', err);
+      commentsLoadMoreError.value = err instanceof Error ? err.message : String(err);
+    }
+  } finally {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
+      commentsLoadingMore.value = false;
     }
   }
+}
+
+async function openComments(force = false) {
+  showComments.value = true;
+  if (
+    !force &&
+    (commentsLoading.value || commentsLoadingMore.value || commentsPage.value > 0)
+  ) {
+    return;
+  }
+
+  const requestedFeedId = String(props.feed.id || '');
+  if (!requestedFeedId) return;
+
+  const currentRequest = ++commentsRequestVersion;
+  if (force) comments.value = [];
+  commentsPage.value = 0;
+  hasMoreComments.value = false;
+  commentsFirstItem = '';
+  commentsLastItem = '';
+  commentsError.value = '';
+  commentsLoadMoreError.value = '';
+  commentsLoadingMore.value = false;
+  commentsLoading.value = true;
+
+  try {
+    const pageReplies = await loadCommentPage(requestedFeedId, 1);
+
+    if (!isCurrentCommentRequest(requestedFeedId, currentRequest)) return;
+
+    updateCommentCursor(pageReplies, true);
+    comments.value = pageReplies;
+    commentsPage.value = pageReplies.length > 0 ? 1 : 0;
+    hasMoreComments.value = hasMoreReplyPages(
+      pageReplies,
+      [],
+      pageReplies,
+      getExpectedCommentCount(props.feed.replynum),
+    );
+
+    // 第 1 页返回即结束首屏 loading。若确实还有评论，第 2 页在底部以“加载更多”状态补齐，
+    // 不再让用户等待两页请求都完成后才看到第一批评论。
+    commentsLoading.value = false;
+    if (hasMoreComments.value) void loadMoreComments();
+  } catch (err) {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
+      console.error('Failed to load comments', err);
+      commentsError.value = err instanceof Error ? err.message : String(err);
+    }
+  } finally {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
+      commentsLoading.value = false;
+    }
+  }
+}
+
+function handleCommentSortChange(selection: CommentSortSelection) {
+  commentsSortMode.value = selection.mode;
+  commentsAuthorOnly.value = selection.authorOnly;
+  void openComments(true);
 }
 
 const cardRef = ref<HTMLElement | null>(null);
@@ -807,10 +921,12 @@ function updateFloatingCollapse() {
 
   if (isInViewport) {
     isCommentsFloatingVisible.value = true;
-    // 水平对齐到卡片右内侧边缘，垂直固定在视口底部 32px 处（评论滚动时按钮绝对静止）
+    // 水平对齐到卡片右内侧边缘，当卡片靠右（rightOffset < 96px）时进入右下角回到顶部悬浮球区域，
+    // 将收起评论按钮上移到回到顶部上方（bottom: 84px），防止两按钮重叠冲突；空间充足时固定在底部 32px
     const rightOffset = Math.max(28, windowWidth - rect.right + 24);
+    const isOverlappingFabZone = rightOffset < 96;
     floatingCollapseStyle.value = {
-      bottom: '32px',
+      bottom: isOverlappingFabZone ? '84px' : '32px',
       right: `${rightOffset}px`,
     };
   } else {
@@ -965,8 +1081,14 @@ watch(
     if (nextFeedId === previousFeedId) return;
     commentsRequestVersion += 1;
     comments.value = [];
+    commentsPage.value = 0;
+    commentsFirstItem = '';
+    commentsLastItem = '';
     commentsLoading.value = false;
+    hasMoreComments.value = false;
+    commentsLoadingMore.value = false;
     commentsError.value = '';
+    commentsLoadMoreError.value = '';
     if (props.autoOpenComments) void openComments();
   }
 );
@@ -1281,6 +1403,7 @@ function formatRichText(text: string) {
   position: fixed;
   z-index: 900;
   pointer-events: auto;
+  transition: bottom 0.2s cubic-bezier(0.4, 0, 0.2, 1), right 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-floating-collapse {

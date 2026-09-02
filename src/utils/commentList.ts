@@ -1,15 +1,75 @@
-export type CommentSortMode = 'likes' | 'latest' | 'earliest';
+export type CommentSortMode = 'default' | 'likes' | 'latest' | 'earliest';
 
-export const DEFAULT_COMMENT_SORT_MODE: CommentSortMode = 'likes';
+export type CommentSortSelection = {
+  mode: CommentSortMode;
+  authorOnly: boolean;
+};
+
+export type CommentReplyListType = '' | 'lastupdate_desc' | 'dateline_desc' | 'popular';
+
+export type CommentReplyRequestOptions = {
+  listType: CommentReplyListType;
+  fromFeedAuthor: 0 | 1;
+  firstItem?: string;
+  lastItem?: string;
+};
+
+export const DEFAULT_COMMENT_SORT_MODE: CommentSortMode = 'default';
 
 export const COMMENT_SORT_OPTIONS: ReadonlyArray<{ value: CommentSortMode; label: string }> = [
+  { value: 'default', label: '默认' },
   { value: 'latest', label: '最新' },
-  { value: 'earliest', label: '最早' },
   { value: 'likes', label: '热门' },
 ];
 
+// 酷安动态评论接口默认每页 10 条；实际是否结束以接口空页为准。
+export const COMMENT_PAGE_SIZE = 10;
+
+export type CommentPageCursor = {
+  firstItem: string;
+  lastItem: string;
+};
+
+/**
+ * APK 的 ReplyListV13 请求参数：排序由 listType 服务端完成，楼主是独立筛选。
+ * APK 没有“最早”接口；保留旧模式时沿用时间接口并在当前已加载数据上反向显示。
+ */
+export function getCommentReplyRequestOptions(
+  mode: CommentSortMode,
+  authorOnly = false,
+): CommentReplyRequestOptions {
+  if (authorOnly) {
+    return { listType: '', fromFeedAuthor: 1 };
+  }
+
+  if (mode === 'likes') return { listType: 'popular', fromFeedAuthor: 0 };
+  if (mode === 'latest' || mode === 'earliest') {
+    return { listType: 'dateline_desc', fromFeedAuthor: 0 };
+  }
+  return { listType: 'lastupdate_desc', fromFeedAuthor: 0 };
+}
+
 export function getReplyData(response: any): any[] {
   return Array.isArray(response?.data) ? response.data : [];
+}
+
+function getReplyEntityId(item: any): string {
+  return String(item?.entityId ?? item?.id ?? '').trim();
+}
+
+/** APK replyList 使用已加载评论的首尾 ID 作为下一页游标。 */
+export function getReplyPageCursor(replies: any[]): CommentPageCursor {
+  const ids = replies.map(getReplyEntityId).filter(Boolean);
+  return {
+    firstItem: ids[0] || '',
+    lastItem: ids[ids.length - 1] || '',
+  };
+}
+
+/** replynum 为 0/缺失时通常表示调用方没有可靠总数，不作为分页上限。 */
+export function getExpectedCommentCount(value: unknown): number | null {
+  const count = Number(value);
+  return Number.isFinite(count) && count > 0 ? count : null;
 }
 
 function getReplyKey(item: any, index: number): string {
@@ -70,6 +130,24 @@ export function mergeReplies(primary: any[], secondary: any[]): any[] {
   return result;
 }
 
+/**
+ * 根据 APK 的分页规则判断是否需要请求下一页。
+ *
+ * APK 只把空页视为到达末页。短页可能是服务端过滤卡片后的结果，不能因此
+ * 提前停止；如果动态已提供可靠总数，则在已加载数量达到总数时提前结束，避免
+ * 少量评论为了确认末页再多等一次请求。
+ */
+export function hasMoreReplyPages(
+  pageReplies: any[],
+  previousReplies: any[],
+  mergedReplies: any[],
+  expectedTotal?: number | null,
+): boolean {
+  if (pageReplies.length === 0 || mergedReplies.length <= previousReplies.length) return false;
+  const total = getExpectedCommentCount(expectedTotal);
+  return total === null || mergedReplies.length < total;
+}
+
 function getCommentLikes(item: any): number {
   const value = Number(item?.likenum ?? item?.likeNum ?? item?.like_num ?? 0);
   return Number.isFinite(value) ? value : 0;
@@ -90,6 +168,7 @@ function getCommentTimestamp(item: any): number {
 
 export function sortComments(comments: any[], mode: CommentSortMode): any[] {
   const result = [...comments];
+  if (mode === 'default') return result;
   result.sort((left, right) => {
     const leftTime = getCommentTimestamp(left) || Number(left?.id) || 0;
     const rightTime = getCommentTimestamp(right) || Number(right?.id) || 0;

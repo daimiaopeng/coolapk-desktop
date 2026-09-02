@@ -108,9 +108,17 @@
           :feed-username="feedUsername"
           :comments="comments"
           :loading="commentsLoading"
+          :error="commentsError"
+          :total-comment-count="replyNum"
+          :has-more-comments="hasMoreComments"
+          :loading-more-comments="commentsLoadingMore"
+          :load-more-error="commentsLoadMoreError"
           :normalize-img="(u) => u"
           :format-rich-text="formatRichText"
           @retry-comments="loadComments"
+          @load-more-comments="loadMoreComments"
+          @retry-more-comments="loadMoreComments"
+          @comment-sort-change="handleCommentSortChange"
         />
         <div v-else class="state-wrapper is-small">
           <AppButton size="sm" variant="ghost" @click="loadComments">加载回复</AppButton>
@@ -166,7 +174,17 @@ import GoodsSearchPickerDialog from './GoodsSearchPickerDialog.vue';
 import CreateGoodsListDialog from './CreateGoodsListDialog.vue';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { handleAnchorClick } from '../../utils/anchorClick';
-import { getReplyData } from '../../utils/commentList';
+import {
+  DEFAULT_COMMENT_SORT_MODE,
+  getCommentReplyRequestOptions,
+  getExpectedCommentCount,
+  getReplyData,
+  getReplyPageCursor,
+  hasMoreReplyPages,
+  mergeReplies,
+  type CommentSortMode,
+  type CommentSortSelection,
+} from '../../utils/commentList';
 import { useAuthStore } from '../../stores/auth';
 import { showToast } from '../../utils/toast';
 import { getErrorMessage } from '../../utils/errors';
@@ -182,7 +200,6 @@ const props = withDefaults(
 );
 
 const authStore = useAuthStore();
-
 const feed = ref<any>(null);
 const loading = ref(false);
 const error = ref('');
@@ -191,6 +208,16 @@ const items = ref<any[]>([]);
 
 const comments = ref<any[]>([]);
 const commentsLoading = ref(false);
+const commentsError = ref('');
+const commentsPage = ref(0);
+const hasMoreComments = ref(false);
+const commentsLoadingMore = ref(false);
+const commentsLoadMoreError = ref('');
+const commentsSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentsAuthorOnly = ref(false);
+let commentsFirstItem = '';
+let commentsLastItem = '';
+let commentsRequestVersion = 0;
 const replyReady = ref(false);
 
 const pickerOpen = ref(false);
@@ -232,6 +259,12 @@ const voteNum = computed(() => Number(info.value?.vote_num || 0));
 const votePersonNum = computed(() => Number(info.value?.vote_person_num || 0));
 const followNum = computed(() => Number(info.value?.follow_num || 0));
 const replyNum = computed(() => Number(info.value?.reply_num || 0));
+
+function updateCommentCursor(pageReplies: any[], resetFirst = false) {
+  const cursor = getReplyPageCursor(pageReplies);
+  if (resetFirst || !commentsFirstItem) commentsFirstItem = cursor.firstItem;
+  if (cursor.lastItem) commentsLastItem = cursor.lastItem;
+}
 
 const openVote = computed(() => {
   const value = info.value?.is_open_vote;
@@ -281,17 +314,86 @@ async function loadItems() {
   return loadFeed();
 }
 
-async function loadComments() {
+function isCurrentCommentRequest(currentRequest: number): boolean {
+  return currentRequest === commentsRequestVersion;
+}
+
+async function loadMoreComments() {
+  if (!hasMoreComments.value || commentsLoading.value || commentsLoadingMore.value) return;
+  const currentRequest = commentsRequestVersion;
+  const page = commentsPage.value + 1;
+  commentsLoadingMore.value = true;
+  commentsLoadMoreError.value = '';
+  try {
+    const pageReplies = getReplyData(await CoolapkTauriAPI.getFeedReplies(props.feedId, page, {
+      ...getCommentReplyRequestOptions(commentsSortMode.value, commentsAuthorOnly.value),
+      firstItem: commentsFirstItem,
+      lastItem: commentsLastItem,
+    }));
+    if (!isCurrentCommentRequest(currentRequest)) return;
+    updateCommentCursor(pageReplies);
+    const previousReplies = comments.value;
+    const mergedReplies = mergeReplies(previousReplies, pageReplies);
+    if (mergedReplies.length > previousReplies.length) {
+      comments.value = mergedReplies;
+      commentsPage.value = page;
+    }
+    hasMoreComments.value = hasMoreReplyPages(
+      pageReplies,
+      previousReplies,
+      mergedReplies,
+      getExpectedCommentCount(replyNum.value),
+    );
+  } catch (err: any) {
+    if (isCurrentCommentRequest(currentRequest)) {
+      commentsLoadMoreError.value = err?.message || '获取更多回复失败';
+    }
+  } finally {
+    if (isCurrentCommentRequest(currentRequest)) commentsLoadingMore.value = false;
+  }
+}
+
+async function loadComments(force = false) {
+  if (!force && (commentsLoading.value || commentsLoadingMore.value || commentsPage.value > 0)) return;
+  const currentRequest = ++commentsRequestVersion;
+  if (force) comments.value = [];
+  commentsPage.value = 0;
+  hasMoreComments.value = false;
+  commentsFirstItem = '';
+  commentsLastItem = '';
+  commentsError.value = '';
+  commentsLoadMoreError.value = '';
   commentsLoading.value = true;
   replyReady.value = true;
   try {
-    const res = await CoolapkTauriAPI.getFeedReplies(props.feedId, 1);
-    comments.value = getReplyData(res);
-  } catch (err) {
-    console.warn('加载回复失败', err);
-  } finally {
+    const pageReplies = getReplyData(await CoolapkTauriAPI.getFeedReplies(props.feedId, 1, {
+      ...getCommentReplyRequestOptions(commentsSortMode.value, commentsAuthorOnly.value),
+    }));
+    if (!isCurrentCommentRequest(currentRequest)) return;
+    updateCommentCursor(pageReplies, true);
+    comments.value = pageReplies;
+    commentsPage.value = pageReplies.length > 0 ? 1 : 0;
+    hasMoreComments.value = hasMoreReplyPages(
+      pageReplies,
+      [],
+      pageReplies,
+      getExpectedCommentCount(replyNum.value),
+    );
     commentsLoading.value = false;
+    if (hasMoreComments.value) void loadMoreComments();
+  } catch (err: any) {
+    if (isCurrentCommentRequest(currentRequest)) {
+      commentsError.value = err?.message || '加载回复失败';
+    }
+  } finally {
+    if (isCurrentCommentRequest(currentRequest)) commentsLoading.value = false;
   }
+}
+
+function handleCommentSortChange(selection: CommentSortSelection) {
+  commentsSortMode.value = selection.mode;
+  commentsAuthorOnly.value = selection.authorOnly;
+  void loadComments(true);
 }
 
 function loadAll(isRefresh = false) {

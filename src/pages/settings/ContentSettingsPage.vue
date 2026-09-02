@@ -20,32 +20,6 @@
     </div>
 
     <div class="setting-group">
-      <h4 class="group-title">评论区</h4>
-      <div class="setting-row">
-        <div class="row-info">
-          <span class="row-label">默认评论排序</span>
-          <span class="row-sub">加载评论楼层时缺省的排列顺序</span>
-        </div>
-        <div class="pill-group">
-          <button
-            class="pill-btn"
-            :class="{ 'is-active': settingsStore.settings.commentSort === 'hot' }"
-            @click="settingsStore.settings.commentSort = 'hot'"
-          >
-            <i class="fas fa-fire"></i> 热门优先
-          </button>
-          <button
-            class="pill-btn"
-            :class="{ 'is-active': settingsStore.settings.commentSort === 'latest' }"
-            @click="settingsStore.settings.commentSort = 'latest'"
-          >
-            <i class="far fa-clock"></i> 最新时间
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div class="setting-group">
       <h4 class="group-title">动态展示</h4>
       <div class="setting-row">
         <div class="row-info">
@@ -332,35 +306,4 @@ function removeKeyword(kw: string) {
   gap: var(--space-2);
 }
 
-.pill-group {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.pill-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sub);
-  cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-default);
-}
-
-.pill-btn:hover {
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-}
-
-.pill-btn.is-active {
-  background: var(--brand-soft);
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-  font-weight: var(--font-weight-semibold);
-}
 </style>

@@ -472,35 +472,41 @@ async fn test_reply_list_api() {
         return;
     }
 
-    // 测试 replyList API，打印原始 id/rid/rrid 值
-    let url = format!(
-        "https://api.coolapk.com/v6/feed/replyList?id={}&rid={}&page=1",
-        feed_id, target_cid
-    );
-    println!("\nTesting URL: {}", url);
-    let token = client.get_token().unwrap();
-    let res = client
-        .client
-        .get(&url)
-        .header("X-App-Token", token)
-        .send()
-        .await
-        .unwrap();
-    let json: Value = res.json().await.unwrap();
-    if let Some(arr) = json.get("data").and_then(Value::as_array) {
-        println!("Total items returned: {}", arr.len());
-        for (idx, item) in arr.iter().take(8).enumerate() {
-            let id = item.get("id");
-            let rid = item.get("rid");
-            let rrid = item.get("rrid");
-            let username = item.get("username").and_then(|v| v.as_str()).unwrap_or("");
-            println!(
-                "  [{}] id={:?}, rid={:?}, rrid={:?}, username={}",
-                idx, id, rid, rrid, username
-            );
-        }
-    } else {
-        println!("No data array in response");
+    let embedded_ids: Vec<String> = replies_arr
+        .iter()
+        .find(|item| item.get("id").and_then(Value::as_str) == Some(target_cid.as_str()))
+        .and_then(|item| item.get("replyRows"))
+        .and_then(Value::as_array)
+        .map(|rows| rows.iter().filter_map(|row| row.get("id").map(value_to_string)).collect())
+        .unwrap_or_default();
+    println!("Embedded child IDs: {:?}", embedded_ids);
+
+    // 测试 APK 对应的 replyList 子回复分页请求，并按上一页最后一条 ID 传递游标。
+    let mut last_item = String::new();
+    for page in 1..=5 {
+        println!("\nTesting APK sub-reply request page={page}, feedType=feed_reply");
+        let json = match client
+            .get_sub_replies_paged(&feed_id, &target_cid, page, &last_item)
+            .await
+        {
+            Ok(value) => value,
+            Err(error) => {
+                println!("Sub-reply request failed: {error}");
+                continue;
+            }
+        };
+        let ids: Vec<String> = json
+            .get("data")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.get("id").map(value_to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        println!("Total items returned: {}, ids={ids:?}", ids.len());
+        last_item = ids.last().cloned().unwrap_or_default();
     }
 }
 

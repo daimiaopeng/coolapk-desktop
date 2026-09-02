@@ -242,18 +242,24 @@ TS 方法：`searchFeedTopics(query, page)`
 | page | num | 必要 | 页数 |
 | discussMode | num | 非必要 | `1` |
 
-Rust 方法：`get_hot_replies(feed_id, page)` / `get_feed_replies` 首选路
+Rust 方法：`get_hot_replies(feed_id, page)`
 
 ### GET `/v6/feed/replyList` — 评论列表（含楼中楼） ✅ 可用 · 🔌 已接入
 
 | 参数 | 类型 | 必要性 | 说明 |
 | - | - | - | - |
-| id | num | 必要 | 动态 ID |
-| rid | num | 非必要 | 楼中楼目标回复 ID |
-| listType | str | 非必要 | `lastupdate`=最近回复 |
+| id | num | 必要 | 动态 ID；APK 楼中楼详情请求时为父评论 ID |
+| rid | num | 非必要 | 仅 APK 通知详情流 `m51787` 使用；动态评论楼中楼详情不传 |
+| listType | str | 非必要 | `lastupdate_desc`=默认、`dateline_desc`=最新、`popular`=热门；楼主筛选时为空 |
 | page | num | 必要 | 页数 |
+| feedType | str | 非必要 | 一级评论使用 `feed`；APK 楼中楼详情使用 `feed_reply` |
+| discussMode | num | 非必要 | `1` |
+| blockStatus | num | 非必要 | `0` |
+| firstItem | str | 非必要 | APK 分页游标：已加载评论首项 ID |
+| lastItem | str | 非必要 | APK 分页游标：已加载列表末项 ID |
+| fromFeedAuthor | num | 非必要 | `1`=只看楼主；普通评论为 `0` |
 
-Rust 方法：`get_feed_replies` / `get_sub_replies(feed_id, reply_id, page)`
+Rust 方法：`get_feed_replies` / `get_feed_replies_paged` / `get_sub_replies_paged(feed_id, reply_id, page, firstItem, lastItem, feedType)`。APK 会直接展示响应里的 `replyRows`；只有 `replyRowsMore>0` 或 `replynum` 大于已内嵌数量时，才按 `id=reply_id&feedType=feed_reply` 和 `firstItem/lastItem` 继续请求同一个接口。登录时附带 Cookie，未登录时使用游客设备身份，不使用热门评论兜底。
 
 ### GET `/v6/feed/forwardList` — 转发列表 ✅ 可用 · 🆕 新接入
 

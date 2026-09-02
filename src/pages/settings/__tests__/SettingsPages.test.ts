@@ -74,17 +74,16 @@ describe('设置页面交互', () => {
     expect(settings.settings.navVisibility?.home).toBe(false);
   });
 
-  it('内容页覆盖正文、评论、链接和关键词设置', async () => {
+  it('内容页覆盖正文、链接和关键词设置', async () => {
     const { wrapper, settings } = mountPage(ContentSettingsPage);
     const selects = wrapper.findAll('select');
     await selects[0].setValue('18');
-    await wrapper.get('.pill-btn:last-child').trigger('click');
     await wrapper.get('.text-input').setValue('广告');
     await wrapper.get('.keyword-input-row button').trigger('click');
     await wrapper.get('.text-input').setValue('广告');
     await wrapper.get('.keyword-input-row button').trigger('click');
     expect(settings.settings.collapseLines).toBe(18);
-    expect(settings.settings.commentSort).toBe('latest');
+    expect(wrapper.text()).not.toContain('默认评论排序');
     const contentRows = wrapper.findAll('.setting-row');
     await contentRows.find((row) => row.text().includes('Live 图片自动播放声音'))!.find('.switch-input').setValue(true);
     await contentRows.find((row) => row.text().includes('不再提醒 Live 图片编码问题'))!.find('.switch-input').setValue(true);

@@ -105,7 +105,6 @@ const defaultSettings: AppSettings = {
   reduceMotion: false,
   accentColor: 'green',
   collapseLines: 12,
-  commentSort: 'hot',
   autoPlayGif: true,
   autoPlayLivePhotoSound: false,
   suppressUnsupportedLivePhotoCodecPrompt: false,
@@ -197,7 +196,6 @@ export function normalizeSettings(value: unknown): AppSettings {
   if (isOneOf(source.density, ['comfortable', 'standard', 'compact'])) result.density = source.density;
   if (isOneOf(source.feedLayout, ['single', 'double'])) result.feedLayout = source.feedLayout;
   if (isOneOf(source.accentColor, ['green', 'blue', 'violet', 'orange'])) result.accentColor = source.accentColor;
-  if (isOneOf(source.commentSort, ['hot', 'latest'])) result.commentSort = source.commentSort;
   if (isOneOf(source.defaultHomeTab, ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'])) result.defaultHomeTab = source.defaultHomeTab;
   if (Array.isArray(source.homeTabOrder)) {
     // 首页频道由服务端动态下发，不能用本地静态列表过滤，否则每次重启都会丢失

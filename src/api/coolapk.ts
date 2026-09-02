@@ -403,9 +403,27 @@ export class CoolapkTauriAPI {
     return await invokeNative('search_feeds', { query, page, sortType });
   }
 
-  // 8. 手机楼层评论 (Rust 原生原生打通)
-  static async getFeedReplies(feedId: string, page: number = 1) {
-    return await safeFetch(`/feed/replies?id=${feedId}&page=${page}`, 'get_feed_replies', { feedId, page });
+  // 8. 手机楼层评论：对应 APK 的 GET /v6/feed/replyList。
+  // listType / fromFeedAuthor 由 APK 的 ReplyListV13 筛选项决定；登录时主请求会附带
+  // Cookie，未登录时使用游客设备身份；分页失败交给评论区显示重试。
+  static async getFeedReplies(
+    feedId: string,
+    page: number = 1,
+    options: {
+      firstItem?: string;
+      lastItem?: string;
+      listType?: string;
+      fromFeedAuthor?: number;
+    } = {},
+  ) {
+    return await invokeNative('get_feed_replies', {
+      feedId,
+      page,
+      firstItem: options.firstItem || '',
+      lastItem: options.lastItem || '',
+      listType: options.listType ?? 'lastupdate_desc',
+      fromFeedAuthor: options.fromFeedAuthor ?? 0,
+    }, { retry: false, kind: 'comment' });
   }
 
   // 评论列表不包含完整设备信息，详情接口用于后台补齐评论元数据。
@@ -413,8 +431,23 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_reply_detail', { replyId }, { retry: true, kind: 'comment' });
   }
 
-  static async getSubReplies(feedId: string, replyId: string, page: number = 1) {
-    return await safeFetch(`/feed/replies?id=${feedId}&rid=${replyId}&page=${page}`, 'get_sub_replies', { feedId, replyId, page });
+  static async getSubReplies(
+    feedId: string,
+    replyId: string,
+    page: number = 1,
+    options: {
+      lastItem?: string;
+    } = {},
+  ) {
+    // APK 的楼中楼详情使用同一个 feed/replyList；父评论 ID 作为 id，
+    // 原生命令固定使用 feedType=feed_reply，并按 lastItem 游标翻页。
+    // 不走旧的 Python /feed/replies 路径，也不在失败时切换其他接口。
+    return await invokeNative('get_sub_replies', {
+      feedId,
+      replyId,
+      page,
+      lastItem: options.lastItem || '',
+    }, { retry: false, kind: 'comment' });
   }
 
   static async getFeedDetail(feedId: string) {
@@ -469,7 +502,7 @@ export class CoolapkTauriAPI {
   }
 
   static async getHotReplies(feedId: string, page: number = 1) {
-    return await invokeNative('get_hot_replies', { feedId, page }, { retry: true, kind: 'comment' });
+    return await invokeNative('get_hot_replies', { feedId, page }, { retry: false, kind: 'comment' });
   }
 
   // 9. 酷友空间

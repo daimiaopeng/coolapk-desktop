@@ -234,12 +234,16 @@ API 统一返回 JSON 格式：
 
 ### 4.2 获取楼中楼子回复列表
 * **接口路径**：`GET /v6/feed/replyList`
-* **功能说明**：获取指定楼层评论的所有二级楼中楼回复。
+* **功能说明**：获取指定楼层评论的二级楼中楼回复分页。
 * **APK 对应方法**：`kb1.java` -> `m51787` (`@GET("feed/replyList")`)
 * **请求参数**：
-  * `id` (string, 必填): 动态 ID
-  * `rid` (string, 必填): 目标楼层评论 ID
+  * `id` (string, 必填): 目标楼层评论 ID；APK 的详情请求直接把父评论 ID 放在这里
   * `page` (int, 必填): 页码，从 `1` 开始
+  * `feedType` (string, 可选): 动态楼中楼详情使用 `feed_reply`
+  * `firstItem` (string, 可选): 已加载楼中楼首项 ID
+  * `lastItem` (string, 可选): 已加载楼中楼末项 ID（游标）
+
+APK 的动态评论响应会把首批楼中楼放在父评论的 `replyRows` 中直接展示；`replyRowsMore>0` 表示服务端仍有剩余数据，此时详情请求把父评论 ID 放到 `id`，使用 `feedType=feed_reply` 和上述游标继续请求。桌面端只调用这一条 `replyList` 接口，不用热门评论或其他接口兜底。
 
 ---
 

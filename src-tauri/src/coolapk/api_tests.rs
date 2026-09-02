@@ -526,7 +526,7 @@ async fn probe_readonly_endpoints_smoke() {
             "/v6/feed/replyList",
             &[
                 ("id", default_feed.to_string()),
-                ("listType", "lastupdate".to_string()),
+                ("listType", "lastupdate_desc".to_string()),
                 ("page", "1".to_string()),
             ],
         ),
@@ -815,7 +815,7 @@ async fn probe_all_documented_endpoints_from_collect() {
             "/v6/feed/replyList",
             &[
                 ("id", "73077541".to_string()),
-                ("listType", "lastupdate".to_string()),
+                ("listType", "lastupdate_desc".to_string()),
                 ("page", "1".to_string()),
             ],
         ),
@@ -1667,7 +1667,7 @@ async fn probe_more_endpoints_deep() {
             "/v6/feed/replyList",
             &[
                 ("id", "73077541".to_string()),
-                ("listType", "lastupdate".to_string()),
+                ("listType", "lastupdate_desc".to_string()),
                 ("page", "1".to_string()),
             ],
         ),
@@ -1917,7 +1917,7 @@ async fn probe_api2_and_static_endpoints() {
             "/v6/feed/replyList",
             &[
                 ("id", "73077541".to_string()),
-                ("listType", "lastupdate".to_string()),
+                ("listType", "lastupdate_desc".to_string()),
                 ("page", "1".to_string()),
             ],
         ),

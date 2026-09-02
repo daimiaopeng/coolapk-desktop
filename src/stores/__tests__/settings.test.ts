@@ -37,7 +37,6 @@ describe('settings store', () => {
     zoom: 100,
     accentColor: 'green',
     collapseLines: 12,
-    commentSort: 'hot',
     autoPlayGif: true,
     autoPlayLivePhotoSound: false,
     suppressUnsupportedLivePhotoCodecPrompt: false,
@@ -86,6 +85,11 @@ describe('settings store', () => {
     expect(normalized.suppressUnsupportedLivePhotoCodecPrompt).toBe(true);
     expect(normalized.autoLoadOriginalImage).toBe(false);
     expect(normalizeSettings({ rememberWindowState: false }).rememberWindowState).toBe(false);
+  });
+
+  it('忽略旧版评论排序设置', () => {
+    expect(Object.prototype.hasOwnProperty.call(normalizeSettings({ commentSort: 'hot' }), 'commentSort')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(normalizeSettings({ commentSort: 'latest' }), 'commentSort')).toBe(false);
   });
 
   it('保留服务端动态首页频道的排序和隐藏状态', () => {

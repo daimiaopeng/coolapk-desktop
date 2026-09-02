@@ -52,7 +52,13 @@
           :comments="comments"
           :loading="loading"
           :error="error"
+          :has-more-comments="hasMoreComments"
+          :loading-more-comments="commentsLoadingMore"
+          :load-more-error="commentsLoadMoreError"
           @retry-comments="loadComments"
+          @load-more-comments="loadMoreComments"
+          @retry-more-comments="loadMoreComments"
+          @comment-sort-change="handleCommentSortChange"
           @delete-comment="handleDeleteComment"
         />
       </div>
@@ -66,11 +72,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import FeedCommentSection from '../feed/FeedCommentSection.vue';
 import { getUserUid } from '../../utils/userRoute';
-import { getReplyData } from '../../utils/commentList';
+import {
+  DEFAULT_COMMENT_SORT_MODE,
+  getCommentReplyRequestOptions,
+  getExpectedCommentCount,
+  getReplyData,
+  getReplyPageCursor,
+  hasMoreReplyPages,
+  mergeReplies,
+  type CommentSortMode,
+  type CommentSortSelection,
+} from '../../utils/commentList';
 
 const props = defineProps<{
   feed?: any;
@@ -83,6 +99,15 @@ defineEmits<{
 const comments = ref<any[]>([]);
 const loading = ref(false);
 const error = ref('');
+const commentsPage = ref(0);
+const hasMoreComments = ref(false);
+const commentsLoadingMore = ref(false);
+const commentsLoadMoreError = ref('');
+const commentsSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentsAuthorOnly = ref(false);
+let commentsFirstItem = '';
+let commentsLastItem = '';
+let commentsRequestVersion = 0;
 
 const authorName = computed(() => {
   if (!props.feed) return '';
@@ -142,22 +167,108 @@ const commentCount = computed(() => {
   return props.feed.replynum || props.feed.commentnum || 0;
 });
 
-async function loadComments() {
+function isCurrentCommentRequest(requestedFeedId: string, currentRequest: number): boolean {
+  return currentRequest === commentsRequestVersion
+    && requestedFeedId === String(props.feed?.id || '');
+}
+
+function updateCommentCursor(pageReplies: any[], resetFirst = false) {
+  const cursor = getReplyPageCursor(pageReplies);
+  if (resetFirst || !commentsFirstItem) commentsFirstItem = cursor.firstItem;
+  if (cursor.lastItem) commentsLastItem = cursor.lastItem;
+}
+
+async function loadMoreComments() {
+  if (!hasMoreComments.value || loading.value || commentsLoadingMore.value) return;
+  const requestedFeedId = String(props.feed?.id || '');
+  if (!requestedFeedId) return;
+
+  const currentRequest = commentsRequestVersion;
+  const page = commentsPage.value + 1;
+  commentsLoadingMore.value = true;
+  commentsLoadMoreError.value = '';
+  try {
+    const pageReplies = getReplyData(await CoolapkTauriAPI.getFeedReplies(requestedFeedId, page, {
+      ...getCommentReplyRequestOptions(commentsSortMode.value, commentsAuthorOnly.value),
+      firstItem: commentsFirstItem,
+      lastItem: commentsLastItem,
+    }));
+    if (!isCurrentCommentRequest(requestedFeedId, currentRequest)) return;
+    updateCommentCursor(pageReplies);
+    const previousReplies = comments.value;
+    const mergedReplies = mergeReplies(previousReplies, pageReplies);
+    if (mergedReplies.length > previousReplies.length) {
+      comments.value = mergedReplies;
+      commentsPage.value = page;
+    }
+    hasMoreComments.value = hasMoreReplyPages(
+      pageReplies,
+      previousReplies,
+      mergedReplies,
+      getExpectedCommentCount(commentCount.value),
+    );
+  } catch (err: any) {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
+      commentsLoadMoreError.value = err?.message || '获取更多评论失败';
+    }
+  } finally {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
+      commentsLoadingMore.value = false;
+    }
+  }
+}
+
+async function loadComments(force = false) {
+  if (!force && (loading.value || commentsLoadingMore.value || commentsPage.value > 0)) return;
   if (!props.feed || !props.feed.id) {
+    commentsRequestVersion += 1;
     comments.value = [];
+    commentsPage.value = 0;
+    hasMoreComments.value = false;
+    commentsFirstItem = '';
+    commentsLastItem = '';
     return;
   }
 
+  const requestedFeedId = String(props.feed.id);
+  const currentRequest = ++commentsRequestVersion;
+  if (force) comments.value = [];
+  commentsPage.value = 0;
+  hasMoreComments.value = false;
+  commentsFirstItem = '';
+  commentsLastItem = '';
+  commentsLoadMoreError.value = '';
   loading.value = true;
   error.value = '';
   try {
-    const res: any = await CoolapkTauriAPI.getFeedReplies(props.feed.id, 1);
-    comments.value = getReplyData(res);
-  } catch (err: any) {
-    error.value = err?.message || '获取评论列表失败';
-  } finally {
+    const pageReplies = getReplyData(await CoolapkTauriAPI.getFeedReplies(requestedFeedId, 1, {
+      ...getCommentReplyRequestOptions(commentsSortMode.value, commentsAuthorOnly.value),
+    }));
+    if (!isCurrentCommentRequest(requestedFeedId, currentRequest)) return;
+    updateCommentCursor(pageReplies, true);
+    comments.value = pageReplies;
+    commentsPage.value = pageReplies.length > 0 ? 1 : 0;
+    hasMoreComments.value = hasMoreReplyPages(
+      pageReplies,
+      [],
+      pageReplies,
+      getExpectedCommentCount(commentCount.value),
+    );
     loading.value = false;
+    if (hasMoreComments.value) void loadMoreComments();
+  } catch (err: any) {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) {
+      error.value = err?.message || '获取评论列表失败';
+    }
+  } finally {
+    if (isCurrentCommentRequest(requestedFeedId, currentRequest)) loading.value = false;
   }
+}
+
+function handleCommentSortChange(selection: CommentSortSelection) {
+  commentsSortMode.value = selection.mode;
+  commentsAuthorOnly.value = selection.authorOnly;
+  void loadComments(true);
 }
 
 function handleDeleteComment(commentId: string | number) {
@@ -168,19 +279,18 @@ watch(
   () => props.feed?.id,
   (newId) => {
     if (newId) {
-      loadComments();
+      void loadComments(true);
     } else {
+      commentsRequestVersion += 1;
       comments.value = [];
+      commentsPage.value = 0;
+      hasMoreComments.value = false;
+      commentsFirstItem = '';
+      commentsLastItem = '';
     }
   },
   { immediate: true }
 );
-
-onMounted(() => {
-  if (props.feed?.id) {
-    loadComments();
-  }
-});
 </script>
 
 <style scoped>

@@ -806,8 +806,22 @@ pub async fn get_feed_replies(
     state: State<'_, AppState>,
     feed_id: String,
     page: u32,
+    first_item: Option<String>,
+    last_item: Option<String>,
+    list_type: Option<String>,
+    from_feed_author: Option<u32>,
 ) -> Result<Value, String> {
-    state.client.get_feed_replies(&feed_id, page).await
+    state
+        .client
+        .get_feed_replies_paged(
+            &feed_id,
+            page,
+            first_item.as_deref().unwrap_or(""),
+            last_item.as_deref().unwrap_or(""),
+            list_type.as_deref().unwrap_or("lastupdate_desc"),
+            from_feed_author.unwrap_or(0),
+        )
+        .await
 }
 
 #[tauri::command]
@@ -816,10 +830,16 @@ pub async fn get_sub_replies(
     feed_id: String,
     reply_id: String,
     page: u32,
+    last_item: Option<String>,
 ) -> Result<Value, String> {
     state
         .client
-        .get_sub_replies(&feed_id, &reply_id, page)
+        .get_sub_replies_paged(
+            &feed_id,
+            &reply_id,
+            page,
+            last_item.as_deref().unwrap_or(""),
+        )
         .await
 }
 

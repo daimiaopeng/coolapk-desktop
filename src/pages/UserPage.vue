@@ -606,7 +606,7 @@ const activeTab = ref('home');
 const tabScrollContainer = ref<HTMLElement | null>(null);
 
 // APK 的 Tab 标题和顺序来自客户端资源；真正的主页卡片和列表内容仍由接口返回。
-// 这里保留 APK 已确认的客户端纯文本映射，并按 UserSpaceV9TabHelper 的权限规则筛选。
+// “赞过”是“我的赞”入口，不属于他人公开主页，因此只在自己的主页显示。
 const tabs = computed(() => {
   const p = profile.value || {};
   const homeRows = Array.isArray(p.homeTabCardRows) ? p.homeTabCardRows : [];
@@ -637,7 +637,7 @@ const tabs = computed(() => {
   return [
     ...(homeRows.length > 0 ? [{ key: 'home', label: '主页' }] : []),
     { key: 'feed', label: '动态' },
-    { key: 'like', label: '赞过' },
+    ...(isSelf ? [{ key: 'like', label: '赞过' }] : []),
     ...(isSelf || isModerator ? [{ key: 'reply', label: '回复' }] : []),
     ...(isModerator ? [{ key: 'blacklist', label: '黑名单' }] : []),
     { key: 'rating', label: '评分' },
@@ -712,6 +712,12 @@ function selectInitialTab(spaceData: any) {
   }
   if (tabs.value.some(tab => tab.key === preferredTab)) activeTab.value = preferredTab;
   else if (tabs.value.length > 0) activeTab.value = tabs.value[0].key;
+}
+
+function ensureActiveTabVisible() {
+  if (tabs.value.some(tab => tab.key === activeTab.value)) return;
+  const fallbackTab = tabs.value.find(tab => tab.key === 'feed') || tabs.value[0];
+  if (fallbackTab) activeTab.value = fallbackTab.key;
 }
 
 const getFollowCount = (p: any) => p?.follow ?? p?.followNum ?? p?.follow_num ?? 0;
@@ -1337,6 +1343,8 @@ watch(activeRatingFilter, () => {
   if (activeTab.value === 'rating') void fetchTabFeeds(true);
 });
 
+watch(tabs, ensureActiveTabVisible);
+
 watch(
   () => [route.query.tab, route.query.ratingTarget],
   () => {
@@ -1344,6 +1352,7 @@ watch(
     activeRatingFilter.value = ratingFilters.some(filter => filter.key === requestedRatingFilter) ? requestedRatingFilter : 'all';
     const requestedTab = String(route.query.tab || '');
     if (tabs.value.some(tab => tab.key === requestedTab)) activeTab.value = requestedTab;
+    else ensureActiveTabVisible();
   }
 );
 </script>

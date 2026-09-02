@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { useAuthStore } from '../../../stores/auth';
-import { useSettingsStore } from '../../../stores/settings';
 
 const mocks = vi.hoisted(() => ({
   getReplyDetail: vi.fn(),
+  getSubReplies: vi.fn(),
   replyFeed: vi.fn(),
   uploadImage: vi.fn(),
 }));
@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../api/coolapk', () => ({
   CoolapkTauriAPI: {
     getReplyDetail: mocks.getReplyDetail,
+    getSubReplies: mocks.getSubReplies,
     replyFeed: mocks.replyFeed,
     uploadImage: mocks.uploadImage,
   },
@@ -24,6 +25,7 @@ describe('评论完整信息展示', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getReplyDetail.mockResolvedValue({ data: {} });
+    mocks.getSubReplies.mockResolvedValue({ code: 200, data: [] });
     mocks.replyFeed.mockResolvedValue({ code: 200, message: 'ok' });
     mocks.uploadImage.mockResolvedValue({ code: 200, data: { url: 'https://image.coolapk.com/feed/test.jpg' } });
     setActivePinia(createPinia());
@@ -131,9 +133,7 @@ describe('评论完整信息展示', () => {
     expect(wrapper.find('.comment-title').text()).toBe('评论 1');
   });
 
-  it('默认评论排序跟随内容设置', () => {
-    const settings = useSettingsStore();
-    settings.settings.commentSort = 'latest';
+  it('评论区初始排序固定为默认', () => {
     const wrapper = mountSection({}, {
       comments: [
         { id: 'old', username: '旧评论', message: '旧', dateline: 100 },
@@ -141,11 +141,14 @@ describe('评论完整信息展示', () => {
       ],
     });
     const active = wrapper.find('.comment-sort-button.is-active');
-    expect(active.text()).toBe('最新');
-    expect(wrapper.find('.comment-row').text()).toContain('新评论');
+    expect(active.text()).toBe('默认');
+    expect(wrapper.findAll('.comment-row').map(row => row.text())).toEqual([
+      expect.stringContaining('旧评论'),
+      expect.stringContaining('新评论'),
+    ]);
   });
 
-  it('未指定设置时默认评论排序为热门', () => {
+  it('未指定设置时默认评论排序为默认并保留接口顺序', () => {
     const wrapper = mountSection({}, {
       comments: [
         { id: 'c1', username: '评论1', message: '少赞', likenum: 1 },
@@ -153,8 +156,115 @@ describe('评论完整信息展示', () => {
       ],
     });
     const active = wrapper.find('.comment-sort-button.is-active');
-    expect(active.text()).toBe('热门');
-    expect(wrapper.find('.comment-row').text()).toContain('多赞');
+    expect(active.text()).toBe('默认');
+    expect(wrapper.findAll('.comment-row').map(row => row.text())).toEqual([
+      expect.stringContaining('评论1'),
+      expect.stringContaining('评论2'),
+    ]);
+  });
+
+  it('直接展示 APK 内嵌的全部楼中楼，不因前端截断成两条', () => {
+    const wrapper = mountSection({
+      id: 'floor-embedded',
+      replyRows: [1, 2, 3, 4, 5].map(index => ({
+        id: `embedded-${index}`,
+        username: `内嵌回复${index}`,
+        message: `内嵌内容${index}`,
+      })),
+      replyRowsCount: 5,
+      replynum: 5,
+    });
+
+    expect(wrapper.findAll('.sub-reply-row')).toHaveLength(5);
+    expect(mocks.getSubReplies).not.toHaveBeenCalled();
+  });
+
+  it('展开楼中楼会按 APK replyList 分页补齐全部回复', async () => {
+    const firstPage = Array.from({ length: 20 }, (_, index) => ({
+      id: `remote-${index + 1}`,
+      username: `远程回复${index + 1}`,
+      message: `远程内容${index + 1}`,
+    }));
+    const secondPage = Array.from({ length: 3 }, (_, index) => ({
+      id: `remote-${index + 21}`,
+      username: `远程回复${index + 21}`,
+      message: `远程内容${index + 21}`,
+    }));
+    mocks.getSubReplies
+      .mockResolvedValueOnce({ code: 200, data: firstPage })
+      .mockResolvedValueOnce({ code: 200, data: secondPage });
+
+    const wrapper = mountSection({
+      id: 'floor-1',
+      username: '一级评论',
+      message: '一级评论内容',
+      replyRows: [
+        { id: 'embedded-1', username: '内嵌回复1', message: '内嵌内容1' },
+        { id: 'embedded-2', username: '内嵌回复2', message: '内嵌内容2' },
+      ],
+      replyRowsCount: 2,
+      replyRowsMore: 1,
+      replynum: 25,
+    });
+
+    expect(wrapper.text()).toContain('展开剩下的 23 条回复');
+    expect(wrapper.findAll('.sub-reply-row')).toHaveLength(2);
+
+    await wrapper.get('.sub-more-btn').trigger('click');
+    await flushPromises();
+
+    expect(mocks.getSubReplies).toHaveBeenNthCalledWith(
+      1,
+      'feed-1',
+      'floor-1',
+      1,
+      { lastItem: '' },
+    );
+    expect(wrapper.findAll('.sub-reply-row')).toHaveLength(22);
+    expect(wrapper.text()).toContain('加载更多楼中楼');
+
+    const loadMoreButton = wrapper
+      .findAll('.sub-more-btn')
+      .find((button) => button.text().includes('加载更多楼中楼'));
+    expect(loadMoreButton).toBeDefined();
+    await loadMoreButton!.trigger('click');
+    await flushPromises();
+
+    expect(mocks.getSubReplies).toHaveBeenNthCalledWith(
+      2,
+      'feed-1',
+      'floor-1',
+      2,
+      { lastItem: 'remote-20' },
+    );
+    expect(wrapper.findAll('.sub-reply-row')).toHaveLength(25);
+    expect(wrapper.text()).not.toContain('加载更多楼中楼');
+    expect(wrapper.text()).toContain('远程内容23');
+  });
+
+  it('楼中楼分页返回重复数据时停止继续请求，不反复卡在加载状态', async () => {
+    mocks.getSubReplies.mockResolvedValue({
+      code: 200,
+      data: [{ id: 'embedded-1', username: '内嵌回复1', message: '内嵌内容1' }],
+    });
+    const wrapper = mountSection({
+      id: 'floor-duplicate',
+      replyRows: [
+        { id: 'embedded-1', username: '内嵌回复1', message: '内嵌内容1' },
+        { id: 'embedded-2', username: '内嵌回复2', message: '内嵌内容2' },
+      ],
+      replyRowsCount: 2,
+      replyRowsMore: 1,
+      replynum: 10,
+    });
+
+    await wrapper.get('.sub-more-btn').trigger('click');
+    await flushPromises();
+
+    expect(mocks.getSubReplies).toHaveBeenCalledTimes(1);
+    expect(wrapper.findAll('.sub-reply-row')).toHaveLength(2);
+    expect(wrapper.text()).not.toContain('加载更多楼中楼');
+    expect(wrapper.text()).not.toContain('加载楼中楼...');
   });
 
   it('点击评论时间可在相对时间和完整时间之间切换', async () => {

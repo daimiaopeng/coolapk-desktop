@@ -17,7 +17,7 @@
           type="button"
           :class="['comment-sort-button', { 'is-active': authorOnly }]"
           :aria-pressed="authorOnly"
-          @click.stop="authorOnly = !authorOnly"
+          @click.stop="selectAuthorOnly"
         >
           楼主
         </button>
@@ -317,7 +317,7 @@
           </div>
 
           <!-- 2. 带竖线的多层级楼中楼回复 -->
-          <div v-if="c.replyRows && c.replyRows.length > 0" class="sub-reply-thread">
+          <div v-if="getSubReplyRows(c).length > 0 || hasSubReplyMore(c)" class="sub-reply-thread">
             <div
               v-for="sub in getVisibleSubReplies(c)"
               :key="sub.id || sub.uid"
@@ -426,27 +426,77 @@
               </div>
             </div>
 
-            <!-- 楼中楼展开 / 收起按钮 -->
-            <div
-              v-if="c.replyRows.length > 2 || (c.replyRowsCount && c.replyRowsCount > 2)"
-              class="sub-more-btn-wrap"
+            <div v-if="getSubReplyLoading(c)" class="sub-reply-status" aria-live="polite">
+              <i class="fa-solid fa-circle-notch fa-spin text-green"></i>
+              <span>加载楼中楼...</span>
+            </div>
+            <button
+              v-else-if="getSubReplyError(c)"
+              type="button"
+              class="sub-more-btn sub-reply-error"
+              @click.stop="retrySubReplies(c)"
             >
+              {{ getSubReplyError(c) }}，点击重试
+            </button>
+
+            <!-- 楼中楼按 APK 的 replyList 分页；展开时只请求当前楼层，不预取所有楼层。 -->
+            <div v-else-if="hasSubReplyMore(c) || expandedFloorIds.has(String(c.id))" class="sub-more-btn-wrap">
               <button
+                v-if="!expandedFloorIds.has(String(c.id))"
                 type="button"
                 class="sub-more-btn"
-                @click.stop="toggleExpandSub(String(c.id))"
+                @click.stop="toggleExpandSub(c)"
               >
-                <template v-if="!expandedFloorIds.has(String(c.id))">
-                  展开剩下的 {{ getRemainingSubCount(c) }} 条回复 <i class="fa-solid fa-chevron-down icon-arrow"></i>
+                <template v-if="getRemainingSubCount(c) > 0">
+                  展开剩下的 {{ getRemainingSubCount(c) }} 条回复
                 </template>
                 <template v-else>
-                  收起回复 <i class="fa-solid fa-chevron-up icon-arrow"></i>
+                  展开更多回复
                 </template>
+                <i class="fa-solid fa-chevron-down icon-arrow"></i>
               </button>
+              <template v-else>
+                <button
+                  v-if="hasSubReplyMore(c)"
+                  type="button"
+                  class="sub-more-btn"
+                  @click.stop="loadMoreSubReplies(c)"
+                >
+                  加载更多楼中楼 <i class="fa-solid fa-chevron-down icon-arrow"></i>
+                </button>
+                <button
+                  type="button"
+                  class="sub-more-btn sub-collapse-btn"
+                  @click.stop="toggleExpandSub(c)"
+                >
+                  收起回复 <i class="fa-solid fa-chevron-up icon-arrow"></i>
+                </button>
+              </template>
             </div>
           </div>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="hasMoreComments"
+      ref="loadMoreSentinel"
+      class="comment-load-more"
+      aria-live="polite"
+    >
+      <div v-if="loadingMoreComments" class="comment-loading-more">
+        <i class="fa-solid fa-circle-notch fa-spin text-green"></i>
+        <span>加载更多评论...</span>
+      </div>
+      <button
+        v-else-if="loadMoreError"
+        type="button"
+        class="comment-load-more-error"
+        @click.stop="$emit('retry-more-comments')"
+      >
+        {{ loadMoreError }}，点击重试
+      </button>
+      <span v-else class="comment-load-more-hint">继续下滑加载更多评论</span>
     </div>
   </div>
 </template>
@@ -481,8 +531,12 @@ import {
   getCommentLocation,
   getCommentUserLevel,
   getCommentVerifyTitle,
+  getReplyPageCursor,
+  hasMoreReplyPages,
+  mergeReplies,
   sortComments,
   type CommentSortMode,
+  type CommentSortSelection,
 } from '../../utils/commentList';
 
 const props = withDefaults(
@@ -494,6 +548,9 @@ const props = withDefaults(
     totalCommentCount?: number | string | null;
     loading?: boolean;
     error?: string;
+    hasMoreComments?: boolean;
+    loadingMoreComments?: boolean;
+    loadMoreError?: string;
     normalizeImg?: (url: string, type: 'avatar' | 'feed') => string;
     formatRichText?: (text: string) => string;
   }>(),
@@ -504,6 +561,9 @@ const props = withDefaults(
     totalCommentCount: undefined,
     loading: false,
     error: '',
+    hasMoreComments: false,
+    loadingMoreComments: false,
+    loadMoreError: '',
     normalizeImg: (url: string) => url,
     formatRichText: (text: string) => renderCoolapkRichText(text),
   }
@@ -524,6 +584,9 @@ const emit = defineEmits<{
   (e: 'send-comment', text: string): void;
   (e: 'delete-comment', id: string | number): void;
   (e: 'retry-comments'): void;
+  (e: 'load-more-comments'): void;
+  (e: 'retry-more-comments'): void;
+  (e: 'comment-sort-change', selection: CommentSortSelection): void;
   (e: 'collapse'): void;
 }>();
 
@@ -536,16 +599,67 @@ const sending = ref(false);
 const inputRef = ref<HTMLDivElement | null>(null);
 const replyTargetUser = ref('');
 const replyTargetId = ref('');
-const commentSortMode = ref<CommentSortMode>(
-  settingsStore.settings.commentSort === 'latest' ? 'latest' : DEFAULT_COMMENT_SORT_MODE,
-);
+const commentSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
 const authorOnly = ref(false);
 const commentSortOptions = COMMENT_SORT_OPTIONS;
 const absoluteTimeIds = ref<Set<string>>(new Set());
+const loadMoreSentinel = ref<HTMLElement | null>(null);
+let loadMoreObserver: IntersectionObserver | null = null;
+
+function disconnectLoadMoreObserver() {
+  loadMoreObserver?.disconnect();
+  loadMoreObserver = null;
+}
+
+function findScrollableParent(element: HTMLElement): HTMLElement | null {
+  let parent = element.parentElement;
+  while (parent) {
+    const style = window.getComputedStyle(parent);
+    if (
+      /(auto|scroll|overlay)/.test(`${style.overflowY} ${style.overflowX}`)
+      && parent.scrollHeight > parent.clientHeight
+    ) {
+      return parent;
+    }
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
+function refreshLoadMoreObserver() {
+  disconnectLoadMoreObserver();
+  if (
+    !props.hasMoreComments ||
+    props.loadingMoreComments ||
+    props.loadMoreError ||
+    !loadMoreSentinel.value ||
+    typeof IntersectionObserver === 'undefined'
+  ) {
+    return;
+  }
+
+  const root = findScrollableParent(loadMoreSentinel.value);
+  loadMoreObserver = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) {
+      emit('load-more-comments');
+    }
+  }, { root, rootMargin: '0px 0px 200px 0px', threshold: 0 });
+  loadMoreObserver.observe(loadMoreSentinel.value);
+}
 
 function selectCommentSort(mode: CommentSortMode) {
+  if (!authorOnly.value && commentSortMode.value === mode) return;
   authorOnly.value = false;
   commentSortMode.value = mode;
+  emit('comment-sort-change', { mode, authorOnly: false });
+}
+
+function selectAuthorOnly() {
+  authorOnly.value = !authorOnly.value;
+  emit('comment-sort-change', {
+    mode: commentSortMode.value,
+    authorOnly: authorOnly.value,
+  });
 }
 
 // 评论配图与酷安表情输入
@@ -907,39 +1021,212 @@ async function toggleLike(item: any) {
   }
 }
 
-// 维护楼中楼展开的 ID 集合 (Set)
-const expandedFloorIds = ref<Set<string>>(new Set());
+type SubReplyState = {
+  items: any[];
+  nextPage: number;
+  lastItem: string;
+  hasMore: boolean;
+  loaded: boolean;
+  loading: boolean;
+  error: string;
+};
 
-/**
- * 展开/收起楼中楼
- * 酷安 API 的楼中楼数据完全内嵌在每条评论的 replyRows 字段中，
- * 无需额外的异步 API 调用
- */
-function toggleExpandSub(floorId: string) {
+const expandedFloorIds = ref<Set<string>>(new Set());
+const subReplyStates = ref<Record<string, SubReplyState>>({});
+
+function subReplyFloorId(floor: any): string {
+  return String(floor?.id ?? '').trim();
+}
+
+function getEmbeddedSubReplies(floor: any): any[] {
+  if (Array.isArray(floor?.replyRows)) return floor.replyRows;
+  if (Array.isArray(floor?.rlist)) return floor.rlist;
+  return [];
+}
+
+function getPositiveNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function getSubReplyTotal(floor: any): number | null {
+  const embedded = getEmbeddedSubReplies(floor);
+  // replynum 是楼中楼总数，replyRowsCount 是当前动态内嵌的条数；不能把
+  // replyRowsMore 当成具体数量，它只是 APK 用来表示“还有更多”的标记。
+  const replyNum = getPositiveNumber(floor?.replynum ?? floor?.replyNum);
+  if (replyNum !== null) return Math.max(embedded.length, replyNum);
+
+  const embeddedCount = getPositiveNumber(floor?.replyRowsCount);
+  return embeddedCount !== null ? Math.max(embedded.length, embeddedCount) : null;
+}
+
+function hasExplicitSubReplyMore(floor: any): boolean {
+  return getPositiveNumber(floor?.replyRowsMore) !== null;
+}
+
+function mergeSubReplyRows(embedded: any[], fetched: any[]): any[] {
+  return mergeReplies(embedded, fetched).map(mergeReplyDetail);
+}
+
+function getSubReplyRows(floor: any): any[] {
+  const floorId = subReplyFloorId(floor);
+  const state = floorId ? subReplyStates.value[floorId] : undefined;
+  return mergeSubReplyRows(getEmbeddedSubReplies(floor), state?.items || []);
+}
+
+function ensureSubReplyState(floor: any): SubReplyState | null {
+  const floorId = subReplyFloorId(floor);
+  if (!floorId) return null;
+  const existing = subReplyStates.value[floorId];
+  if (existing) return existing;
+
+  const embedded = getEmbeddedSubReplies(floor);
+  const total = getSubReplyTotal(floor);
+  const state: SubReplyState = {
+    items: [],
+    nextPage: 1,
+    lastItem: '',
+    hasMore: total === null
+      ? hasExplicitSubReplyMore(floor)
+      : embedded.length < total || hasExplicitSubReplyMore(floor),
+    loaded: false,
+    loading: false,
+    error: '',
+  };
+  subReplyStates.value = { ...subReplyStates.value, [floorId]: state };
+  return state;
+}
+
+function updateSubReplyState(floorId: string, patch: Partial<SubReplyState>) {
+  const current = subReplyStates.value[floorId];
+  if (!current) return;
+  subReplyStates.value = {
+    ...subReplyStates.value,
+    [floorId]: { ...current, ...patch },
+  };
+}
+
+function hasSubReplyMore(floor: any): boolean {
+  const floorId = subReplyFloorId(floor);
+  const rows = getSubReplyRows(floor);
+  const total = getSubReplyTotal(floor);
+  const state = floorId ? subReplyStates.value[floorId] : undefined;
+  if (state?.loaded) return state.hasMore;
+  if (total !== null && rows.length < total) return true;
+
+  return hasExplicitSubReplyMore(floor) || (state ? state.hasMore : false);
+}
+
+function getRemainingSubCount(floor: any): number {
+  const total = getSubReplyTotal(floor);
+  if (total === null) return 0;
+  return Math.max(0, total - getSubReplyRows(floor).length);
+}
+
+function getVisibleSubReplies(floor: any): any[] {
+  const rows = getSubReplyRows(floor);
+  const floorId = subReplyFloorId(floor);
+  const state = floorId ? subReplyStates.value[floorId] : undefined;
+  // APK 直接渲染 replyRows；这里不能再固定截断成前两条。只有点击“展开更多”
+  // 后拿到的远端分页数据，才由 expandedFloorIds 控制是否显示。
+  if (expandedFloorIds.value.has(floorId) || !state?.loaded) return rows;
+  return getEmbeddedSubReplies(floor);
+}
+
+function getSubReplyLoading(floor: any): boolean {
+  const floorId = subReplyFloorId(floor);
+  return floorId ? subReplyStates.value[floorId]?.loading === true : false;
+}
+
+function getSubReplyError(floor: any): string {
+  const floorId = subReplyFloorId(floor);
+  return floorId ? subReplyStates.value[floorId]?.error || '' : '';
+}
+
+function toggleExpandedFloor(floorId: string) {
   const nextSet = new Set(expandedFloorIds.value);
-  if (nextSet.has(floorId)) {
-    nextSet.delete(floorId);
-  } else {
-    nextSet.add(floorId);
-  }
+  if (nextSet.has(floorId)) nextSet.delete(floorId);
+  else nextSet.add(floorId);
   expandedFloorIds.value = nextSet;
 }
 
-function getRemainingSubCount(floor: any) {
-  const total = floor.replyRowsCount || (floor.replyRows ? floor.replyRows.length : 0);
-  const remaining = total - 2;
-  if (remaining > 0) return remaining;
-  return floor.replyRows ? Math.max(0, floor.replyRows.length - 2) : 0;
+async function toggleExpandSub(floor: any) {
+  const floorId = subReplyFloorId(floor);
+  if (!floorId) return;
+  if (expandedFloorIds.value.has(floorId)) {
+    toggleExpandedFloor(floorId);
+    return;
+  }
+
+  toggleExpandedFloor(floorId);
+  const state = ensureSubReplyState(floor);
+  if (state && !state.loaded && hasSubReplyMore(floor)) await loadSubReplies(floor, true);
+  else if (state && !state.loaded) updateSubReplyState(floorId, { loaded: true, hasMore: false });
 }
 
-function getVisibleSubReplies(floor: any) {
-  if (!floor.replyRows || !floor.replyRows.length) return [];
-  const floorId = String(floor.id);
-  if (expandedFloorIds.value.has(floorId)) {
-    return floor.replyRows;
+async function loadSubReplies(floor: any, reset: boolean) {
+  const floorId = subReplyFloorId(floor);
+  const feedId = String(props.feedId || '').trim();
+  if (!floorId || !feedId) return;
+
+  const state = ensureSubReplyState(floor);
+  if (!state || state.loading) return;
+  if (!reset && !state.hasMore) return;
+
+  const page = reset ? 1 : state.nextPage;
+  const requestedFeedId = feedId;
+  updateSubReplyState(floorId, { loading: true, error: '' });
+
+  try {
+    const response: any = await CoolapkTauriAPI.getSubReplies(feedId, floorId, page, {
+      lastItem: reset ? '' : state.lastItem,
+    });
+    if (String(props.feedId || '').trim() !== requestedFeedId) return;
+    const pageRows = Array.isArray(response?.data) ? response.data : [];
+    const previousRows = mergeSubReplyRows(getEmbeddedSubReplies(floor), state.items);
+    const fetchedRows = reset ? pageRows : mergeReplies(state.items, pageRows);
+    const loadedRows = mergeSubReplyRows(getEmbeddedSubReplies(floor), fetchedRows);
+    const total = getSubReplyTotal(floor);
+    const cursor = getReplyPageCursor(pageRows);
+    const hasMore = hasMoreReplyPages(pageRows, previousRows, loadedRows, total);
+
+    updateSubReplyState(floorId, {
+      items: fetchedRows,
+      nextPage: page + 1,
+      lastItem: cursor.lastItem || state.lastItem,
+      hasMore,
+      loaded: true,
+      loading: false,
+      error: '',
+    });
+    scheduleReplyDetails(collectReplyIds(pageRows));
+  } catch (error) {
+    if (String(props.feedId || '').trim() !== requestedFeedId) return;
+    updateSubReplyState(floorId, {
+      loading: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
-  return floor.replyRows.slice(0, 2);
 }
+
+function loadMoreSubReplies(floor: any) {
+  if (!expandedFloorIds.value.has(subReplyFloorId(floor))) return;
+  void loadSubReplies(floor, false);
+}
+
+function retrySubReplies(floor: any) {
+  const floorId = subReplyFloorId(floor);
+  const state = floorId ? subReplyStates.value[floorId] : undefined;
+  void loadSubReplies(floor, !state || state.nextPage <= 1);
+}
+
+watch(
+  () => String(props.feedId || ''),
+  () => {
+    expandedFloorIds.value = new Set();
+    subReplyStates.value = {};
+  },
+);
 
 function toggleEmojiPicker() {
   showEmojiPicker.value = !showEmojiPicker.value;
@@ -1150,11 +1437,25 @@ onMounted(() => {
     });
   }
   void restoreDraft();
+  void nextTick(refreshLoadMoreObserver);
 });
 
-onActivated(bindGlobalListeners);
-onDeactivated(unbindGlobalListeners);
-onUnmounted(unbindGlobalListeners);
+function handleActivated() {
+  bindGlobalListeners();
+  void nextTick(refreshLoadMoreObserver);
+}
+
+function handleDeactivated() {
+  unbindGlobalListeners();
+  disconnectLoadMoreObserver();
+}
+
+onActivated(handleActivated);
+onDeactivated(handleDeactivated);
+onUnmounted(() => {
+  unbindGlobalListeners();
+  disconnectLoadMoreObserver();
+});
 
 function handleCommentTextClick(e: MouseEvent, c: any) {
   // 选中文本准备复制时，不触发点击回复
@@ -1277,12 +1578,23 @@ const nestedComments = computed(() => {
     }
   });
 
+  // 楼中楼接口返回的数据保存在组件本地，不能直接改写只读 props；
+  // 在树构建阶段合并，保证楼主筛选、详情补齐和渲染都能看到已加载的子回复。
+  topList.forEach((floor) => {
+    const floorId = subReplyFloorId(floor);
+    const state = floorId ? subReplyStates.value[floorId] : undefined;
+    if (state?.items.length) {
+      floor.replyRows = mergeSubReplyRows(floor.replyRows, state.items);
+    }
+  });
+
   return topList;
 });
 
 const sortedComments = computed(() => {
   const visibleComments = authorOnly.value ? filterAuthorOnlyComments(nestedComments.value) : nestedComments.value;
-  return sortComments(visibleComments, commentSortMode.value);
+  // APK 的楼主筛选由 fromFeedAuthor=1 决定顺序，不叠加当前排序按钮的本地排序。
+  return authorOnly.value ? visibleComments : sortComments(visibleComments, commentSortMode.value);
 });
 
 const commentCount = computed(() => {
@@ -1293,6 +1605,19 @@ const commentCount = computed(() => {
   }
   return nestedComments.value.length;
 });
+
+watch(
+  [
+    () => props.hasMoreComments,
+    () => props.loadingMoreComments,
+    () => props.loadMoreError,
+    () => sortedComments.value.length,
+  ],
+  () => {
+    void nextTick(refreshLoadMoreObserver);
+  },
+  { flush: 'post' },
+);
 
 async function handleSend() {
   const rawMsg = inputMsg.value.trim();
@@ -1778,6 +2103,35 @@ async function handleSend() {
   gap: 14px;
 }
 
+.comment-load-more {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0 2px;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.comment-loading-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comment-load-more-hint,
+.comment-load-more-error {
+  color: var(--text-tertiary);
+}
+
+.comment-load-more-error {
+  border: 0;
+  padding: 4px 10px;
+  background: var(--brand-soft);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
 .comment-row {
   display: flex;
   gap: 12px;
@@ -2112,6 +2466,23 @@ async function handleSend() {
 .sub-more-btn-wrap {
   margin-top: 4px;
   padding-left: 4px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sub-reply-status,
+.sub-reply-error {
+  margin: 4px 0 0 4px;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+}
+
+.sub-reply-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* 可点击的展开/收起按钮样式 */
@@ -2132,6 +2503,11 @@ async function handleSend() {
 
 .sub-more-btn:hover {
   background: var(--brand-soft);
+}
+
+.sub-collapse-btn {
+  color: var(--text-tertiary);
+  font-weight: 500;
 }
 
 .icon-arrow {

@@ -2550,214 +2550,218 @@ impl CoolapkClient {
         reply_id: &str,
         page: u32,
     ) -> Result<Value, String> {
-        let full_url = format!(
-            "https://api.coolapk.com/v6/feed/replyList?id={}&rid={}&page={}",
-            feed_id, reply_id, page
-        );
-        let token = self.get_token()?;
-
-        let res = self
-            .client
-            .get(&full_url)
-            .header("X-App-Token", token)
-            .send()
+        self.get_sub_replies_paged(feed_id, reply_id, page, "")
             .await
-            .map_err(|e| e.to_string())?;
+    }
 
-        let json_data = response_json(res).await?;
+    /// 获取指定一级评论的楼中楼。
+    ///
+    /// 动态评论点击“查看会话”后，APK 的 `FeedReplyDetailFragment` 调用
+    /// `au1.m14568 -> kb1.m52086`：把父评论 ID 放在 `id`，使用
+    /// `feedType=feed_reply`，再用 `firstItem` / `lastItem` 继续分页。这里复用
+    /// 公共请求层，使登录 Cookie、游客设备码和设备请求头与一级评论保持一致。
+    pub async fn get_sub_replies_paged(
+        &self,
+        _feed_id: &str,
+        reply_id: &str,
+        page: u32,
+        last_item: &str,
+    ) -> Result<Value, String> {
+        let target_reply_id = reply_id.trim();
+        if target_reply_id.is_empty() {
+            return Err("评论 ID 不能为空".to_string());
+        }
+
+        let mut query = vec![
+            ("id", target_reply_id.to_string()),
+            ("listType", String::new()),
+            ("page", page.to_string()),
+            ("discussMode", "0".to_string()),
+            ("feedType", "feed_reply".to_string()),
+            ("blockStatus", "0".to_string()),
+            ("fromFeedAuthor", "0".to_string()),
+        ];
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.trim().to_string()));
+        }
+
+        let raw = self.api_get("/v6/feed/replyList", &query).await?;
+        let normalized = wrap_api_data(raw)?;
+        let data_arr = normalized
+            .get("data")
+            .and_then(Value::as_array)
+            .ok_or_else(|| "酷安返回的楼中楼数据格式不正确".to_string())?;
 
         let mut cleaned_replies = Vec::new();
-        if let Some(data_arr) = json_data.get("data").and_then(|v| v.as_array()) {
-            for r in data_arr {
-                if let Some(obj) = r.as_object() {
-                    let user_info = obj.get("userInfo").or_else(|| obj.get("user"));
-                    let username = obj
-                        .get("username")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| {
-                            user_info
-                                .and_then(|u| u.get("username"))
-                                .and_then(|v| v.as_str())
-                        })
-                        .unwrap_or("");
+        for r in data_arr {
+            let Some(obj) = r.as_object() else {
+                continue;
+            };
 
-                    if username.is_empty() {
-                        continue;
-                    }
-
-                    let raw_avatar = obj
-                        .get("userAvatar")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| {
-                            user_info
-                                .and_then(|u| u.get("userAvatar"))
-                                .and_then(|v| v.as_str())
-                        })
-                        .unwrap_or("");
-
-                    let avatar = if raw_avatar.starts_with("http") {
-                        raw_avatar.to_string()
-                    } else if !raw_avatar.is_empty() {
-                        format!(
-                            "https://image.coolapk.com/{}",
-                            raw_avatar.trim_start_matches('/')
-                        )
-                    } else {
-                        String::new()
-                    };
-
-                    let message = obj
-                        .get("message")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| obj.get("description").and_then(|v| v.as_str()))
-                        .unwrap_or("");
-
-                    let device_title = obj
-                        .get("device_title")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| obj.get("deviceTitle").and_then(|v| v.as_str()))
-                        .or_else(|| obj.get("device_name").and_then(|v| v.as_str()))
-                        .or_else(|| obj.get("device").and_then(|v| v.as_str()))
-                        .unwrap_or("");
-
-                    let user_level = user_info
-                        .and_then(|u| u.get("level"))
-                        .or_else(|| obj.get("level"))
-                        .map(value_to_string)
-                        .unwrap_or_default();
-
-                    let item_id = obj
-                        .get("id")
-                        .and_then(|v| {
-                            v.as_str()
-                                .map(|s| s.to_string())
-                                .or_else(|| v.as_u64().map(|n| n.to_string()))
-                        })
-                        .unwrap_or_default();
-                    let item_rid = obj.get("rid").map(value_to_string).unwrap_or_default();
-                    let item_rrid = obj.get("rrid").map(value_to_string).unwrap_or_default();
-
-                    // 严格过滤：只有当 rid 或 rrid 属于 reply_id 时才是该楼层的子回复，排除无关的主楼层评论
-                    if item_id == reply_id || (item_rid != reply_id && item_rrid != reply_id) {
-                        continue;
-                    }
-
-                    let user_action_like = obj
-                        .get("userAction")
-                        .and_then(|ua| ua.get("like"))
-                        .and_then(|v| v.as_i64())
-                        .unwrap_or(0);
-
-                    cleaned_replies.push(json!({
-                        "id": item_id,
-                        "rid": item_rid,
-                        "rrid": item_rrid,
-                        "uid": obj.get("uid").map(value_to_string).or_else(|| user_info.and_then(|u| u.get("uid")).map(value_to_string)).unwrap_or_default(),
-                        "username": username,
-                        "rusername": obj.get("rusername").and_then(|v| v.as_str()).unwrap_or(""),
-                        "userAvatar": avatar,
-                        "userLevel": user_level,
-                        "verifyTitle": user_info.and_then(|u| u.get("verify_title")).and_then(|v| v.as_str()).or_else(|| obj.get("verify_title").and_then(|v| v.as_str())).unwrap_or(""),
-                        "deviceTitle": device_title,
-                        "message": message,
-                        "pic": obj.get("pic").and_then(|v| v.as_str()).unwrap_or(""),
-                        "picArr": obj.get("picArr").cloned().unwrap_or(json!([])),
-                        "images": obj.get("images").cloned().unwrap_or(json!([])),
-                        "dateline": obj.get("dateline").cloned().unwrap_or(json!(0)),
-                        "infoHtml": obj.get("dateline_text").and_then(|v| v.as_str()).or_else(|| obj.get("infoHtml").and_then(|v| v.as_str())).unwrap_or(""),
-                        "floor": obj.get("floor").map(value_to_string).or_else(|| obj.get("rank").map(value_to_string)).unwrap_or_default(),
-                        "ipLocation": obj.get("ipLocation").and_then(|v| v.as_str()).or_else(|| obj.get("ip_location").and_then(|v| v.as_str())).or_else(|| obj.get("location").and_then(|v| v.as_str())).unwrap_or(""),
-                        "isFeedAuthor": obj.get("isFeedAuthor").cloned().unwrap_or(json!(0)),
-                        "feedUid": obj.get("feedUid").map(value_to_string).unwrap_or_default(),
-                        "likenum": obj.get("likenum").and_then(|v| v.as_u64()).unwrap_or(0),
-                        "userAction": { "like": user_action_like },
-                        "replyRowsCount": obj.get("replynum").and_then(|v| v.as_u64()).or_else(|| obj.get("replyRowsCount").and_then(|v| v.as_u64())).unwrap_or(0)
-                    }));
-                }
+            let item_id = obj.get("id").map(value_to_string).unwrap_or_default();
+            if item_id.is_empty() || item_id == target_reply_id {
+                continue;
             }
+
+            let item_rid = obj.get("rid").map(value_to_string).unwrap_or_default();
+            let item_rrid = obj.get("rrid").map(value_to_string).unwrap_or_default();
+            // 接口已经按 rid 限定了范围；保留无层级字段的有效评论，同时排除
+            // 明确属于其他父评论的卡片。
+            if (item_rid != target_reply_id && item_rrid != target_reply_id)
+                && (!item_rid.is_empty() || !item_rrid.is_empty())
+            {
+                continue;
+            }
+
+            let user_info = obj.get("userInfo").or_else(|| obj.get("user"));
+            let username = obj
+                .get("username")
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    user_info
+                        .and_then(|u| u.get("username"))
+                        .and_then(|v| v.as_str())
+                })
+                .unwrap_or("");
+
+            let raw_avatar = obj
+                .get("userAvatar")
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    user_info
+                        .and_then(|u| u.get("userAvatar"))
+                        .and_then(|v| v.as_str())
+                })
+                .unwrap_or("");
+
+            let avatar = if raw_avatar.starts_with("http") {
+                raw_avatar.to_string()
+            } else if !raw_avatar.is_empty() {
+                format!(
+                    "https://image.coolapk.com/{}",
+                    raw_avatar.trim_start_matches('/')
+                )
+            } else {
+                String::new()
+            };
+
+            let message = obj
+                .get("message")
+                .and_then(|v| v.as_str())
+                .or_else(|| obj.get("description").and_then(|v| v.as_str()))
+                .unwrap_or("");
+
+            let device_title = obj
+                .get("device_title")
+                .and_then(|v| v.as_str())
+                .or_else(|| obj.get("deviceTitle").and_then(|v| v.as_str()))
+                .or_else(|| obj.get("device_name").and_then(|v| v.as_str()))
+                .or_else(|| obj.get("device").and_then(|v| v.as_str()))
+                .unwrap_or("");
+
+            let user_level = user_info
+                .and_then(|u| u.get("level"))
+                .or_else(|| obj.get("level"))
+                .map(value_to_string)
+                .unwrap_or_default();
+
+            let user_action_like = obj
+                .get("userAction")
+                .and_then(|ua| ua.get("like"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0);
+
+            cleaned_replies.push(json!({
+                "id": item_id,
+                "fid": obj.get("fid").map(value_to_string).unwrap_or_default(),
+                "rid": item_rid,
+                "rrid": item_rrid,
+                "uid": obj.get("uid").map(value_to_string).or_else(|| user_info.and_then(|u| u.get("uid")).map(value_to_string)).unwrap_or_default(),
+                "username": username,
+                "rusername": obj.get("rusername").and_then(|v| v.as_str()).unwrap_or(""),
+                "replyUsername": obj.get("rusername").and_then(|v| v.as_str()).unwrap_or(""),
+                "userAvatar": avatar,
+                "userLevel": user_level,
+                "verifyTitle": user_info.and_then(|u| u.get("verify_title")).and_then(|v| v.as_str()).or_else(|| obj.get("verify_title").and_then(|v| v.as_str())).unwrap_or(""),
+                "deviceTitle": device_title,
+                "message": message,
+                "pic": obj.get("pic").and_then(|v| v.as_str()).unwrap_or(""),
+                "picArr": obj.get("picArr").cloned().unwrap_or(json!([])),
+                "images": obj.get("images").cloned().unwrap_or(json!([])),
+                "dateline": obj.get("dateline").cloned().unwrap_or(json!(0)),
+                "infoHtml": obj.get("dateline_text").and_then(|v| v.as_str()).or_else(|| obj.get("infoHtml").and_then(|v| v.as_str())).unwrap_or(""),
+                "floor": obj.get("floor").map(value_to_string).or_else(|| obj.get("rank").map(value_to_string)).unwrap_or_default(),
+                "ipLocation": obj.get("ipLocation").and_then(|v| v.as_str()).or_else(|| obj.get("ip_location").and_then(|v| v.as_str())).or_else(|| obj.get("location").and_then(|v| v.as_str())).unwrap_or(""),
+                "isFeedAuthor": obj.get("isFeedAuthor").cloned().unwrap_or(json!(0)),
+                "feedUid": obj.get("feedUid").map(value_to_string).unwrap_or_default(),
+                "likenum": obj.get("likenum").and_then(|v| v.as_u64()).unwrap_or(0),
+                "userAction": { "like": user_action_like },
+                "replyRows": obj.get("replyRows").cloned().unwrap_or(json!([])),
+                "replyRowsCount": obj.get("replynum").and_then(|v| v.as_u64()).or_else(|| obj.get("replyRowsCount").and_then(|v| v.as_u64())).unwrap_or(0),
+                "replyRowsMore": obj.get("replyRowsMore").cloned().unwrap_or(json!(0)),
+                "targetRow": obj.get("targetRow").cloned().unwrap_or(json!(null))
+            }));
         }
 
         Ok(json!({ "code": 200, "data": cleaned_replies }))
     }
 
-    // 8. 楼层评论：按扩展实测参数获取完整评论，热门评论仅作最后兜底。
+    // 8. 楼层评论：对应 APK 的 GET /v6/feed/replyList 分页请求。
+    // 每一页只走主接口；登录时由公共请求层附带 Cookie，未登录时使用游客设备身份。
+    // 空页原样返回给上层作为分页结束信号，不切换公开主机、备用主机，也不把热门评论
+    // 混入普通评论分页。
     pub async fn get_feed_replies(&self, feed_id: &str, page: u32) -> Result<Value, String> {
-        let query = [
-            ("id", feed_id.to_string()),
-            ("listType", "dateline_desc".to_string()),
-            ("page", page.to_string()),
+        self.get_feed_replies_paged(feed_id, page, "", "", "lastupdate_desc", 0)
+            .await
+    }
+
+    pub async fn get_feed_replies_paged(
+        &self,
+        feed_id: &str,
+        page: u32,
+        first_item: &str,
+        last_item: &str,
+        list_type: &str,
+        from_feed_author: u32,
+    ) -> Result<Value, String> {
+        let requested_list_type = list_type.trim();
+        if !requested_list_type.is_empty()
+            && !matches!(
+                requested_list_type,
+                "lastupdate_desc" | "dateline_desc" | "popular"
+            )
+        {
+            return Err(format!("不支持的评论排序类型：{requested_list_type}"));
+        }
+        if from_feed_author > 1 {
+            return Err(format!("不支持的楼主评论筛选值：{from_feed_author}"));
+        }
+
+        // APK 的 AUTHOR 筛选会把 listType 置空，仅使用 fromFeedAuthor=1；普通请求
+        // 缺省时则使用 ReplyListV13 的默认排序 lastupdate_desc。
+        let effective_list_type = if requested_list_type.is_empty() && from_feed_author == 0 {
+            "lastupdate_desc"
+        } else {
+            requested_list_type
+        };
+        let mut query = vec![("id", feed_id.to_string())];
+        if !effective_list_type.is_empty() {
+            query.push(("listType", effective_list_type.to_string()));
+        }
+        query.push(("page", page.to_string()));
+        if !first_item.trim().is_empty() {
+            query.push(("firstItem", first_item.to_string()));
+        }
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.to_string()));
+        }
+        query.extend([
             ("discussMode", "1".to_string()),
             ("feedType", "feed".to_string()),
             ("blockStatus", "0".to_string()),
-            ("fromFeedAuthor", "0".to_string()),
-        ];
-
-        let login_result = self.api_get("/v6/feed/replyList", &query).await;
-        let public_result = match &login_result {
-            Ok(value)
-                if value
-                    .get("data")
-                    .and_then(Value::as_array)
-                    .is_some_and(|items| !items.is_empty()) =>
-            {
-                None
-            }
-            _ => Some(
-                self.public_api_get_from("https://api.coolapk.com", "/v6/feed/replyList", &query)
-                    .await,
-            ),
-        };
-
-        let full_result = match public_result {
-            None => login_result,
-            Some(Ok(value))
-                if value
-                    .get("data")
-                    .and_then(Value::as_array)
-                    .is_some_and(|items| !items.is_empty()) =>
-            {
-                Ok(value)
-            }
-            Some(_) => {
-                self.public_api_get_from("https://api2.coolapk.com", "/v6/feed/replyList", &query)
-                    .await
-            }
-        };
-
-        let raw = match full_result {
-            Ok(value)
-                if value
-                    .get("data")
-                    .and_then(Value::as_array)
-                    .is_some_and(|items| !items.is_empty()) =>
-            {
-                value
-            }
-            full_empty_or_error => {
-                let hot_result = self
-                    .api_get(
-                        "/v6/feed/hotReplyList",
-                        &[
-                            ("id", feed_id.to_string()),
-                            ("page", page.to_string()),
-                            ("discussMode", "1".to_string()),
-                        ],
-                    )
-                    .await;
-
-                match hot_result {
-                    Ok(value) => value,
-                    Err(hot_error) => match full_empty_or_error {
-                        Ok(value) => value,
-                        Err(full_error) => {
-                            return Err(format!(
-                                "完整评论加载失败：{full_error}；热门评论加载失败：{hot_error}"
-                            ));
-                        }
-                    },
-                }
-            }
-        };
+            ("fromFeedAuthor", from_feed_author.to_string()),
+        ]);
+        let raw = self.api_get("/v6/feed/replyList", &query).await?;
 
         let mut cleaned_replies = Vec::new();
         if let Some(data_arr) = raw.get("data").and_then(|v| v.as_array()) {
@@ -2832,7 +2836,10 @@ impl CoolapkClient {
                     let reply_rows_count = obj
                         .get("replyRowsCount")
                         .and_then(|v| v.as_u64())
+                        .or_else(|| reply_rows.as_array().map(|rows| rows.len() as u64))
                         .unwrap_or(0);
+                    let reply_num = obj.get("replynum").cloned().unwrap_or(json!(0));
+                    let reply_rows_more = obj.get("replyRowsMore").cloned().unwrap_or(json!(0));
 
                     let user_action_like = obj
                         .get("userAction")
@@ -2866,6 +2873,8 @@ impl CoolapkClient {
             "userAction": { "like": user_action_like },
             "replyRows": reply_rows,
             "replyRowsCount": reply_rows_count,
+            "replynum": reply_num,
+            "replyRowsMore": reply_rows_more,
             "targetRow": obj.get("targetRow").cloned().unwrap_or(json!(null))
         }));
                 }

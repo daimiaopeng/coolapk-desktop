@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  COMMENT_PAGE_SIZE,
   COMMENT_SORT_OPTIONS,
   DEFAULT_COMMENT_SORT_MODE,
   formatCommentAbsoluteTime,
   formatCommentTime,
+  getCommentReplyRequestOptions,
   getCommentDeviceTitle,
   getCommentImages,
   getCommentLocation,
   getCommentUserLevel,
   getCommentVerifyTitle,
+  getExpectedCommentCount,
+  getReplyPageCursor,
+  hasMoreReplyPages,
   mergeReplies,
   sortComments,
 } from '../commentList';
@@ -23,6 +28,30 @@ describe('评论列表处理', () => {
   it('合并热门和普通评论时保留普通评论并按编号去重', () => {
     const result = mergeReplies([comments[2]], comments);
     expect(result.map((item) => item.id)).toEqual(['103', '101', '102']);
+  });
+
+  it('短页但总数未知时仍继续分页，避免提前截断评论', () => {
+    const firstPage = Array.from({ length: 5 }, (_, index) => ({ id: String(index) }));
+    expect(COMMENT_PAGE_SIZE).toBe(10);
+    expect(hasMoreReplyPages(firstPage, [], firstPage)).toBe(true);
+    expect(hasMoreReplyPages(firstPage, [], firstPage, 5)).toBe(false);
+  });
+
+  it('首屏有完整一页且总数未知时保留下一页触发条件', () => {
+    const firstPage = Array.from({ length: COMMENT_PAGE_SIZE }, (_, index) => ({ id: String(index) }));
+    expect(hasMoreReplyPages(firstPage, [], firstPage)).toBe(true);
+    expect(hasMoreReplyPages(firstPage, [], firstPage, 10)).toBe(false);
+    expect(hasMoreReplyPages([{ id: 'last' }], firstPage, [...firstPage, { id: 'last' }])).toBe(true);
+    expect(hasMoreReplyPages(firstPage, firstPage, firstPage)).toBe(false);
+  });
+
+  it('生成 APK replyList 所需的首尾评论游标并解析有效总数', () => {
+    expect(getReplyPageCursor([{ id: 101 }, { entityId: '102', id: 999 }])).toEqual({
+      firstItem: '101',
+      lastItem: '102',
+    });
+    expect(getExpectedCommentCount('625')).toBe(625);
+    expect(getExpectedCommentCount(0)).toBeNull();
   });
 
   it('热门评论缺少时间时从完整评论补齐，同时保持热门顺序', () => {
@@ -48,13 +77,32 @@ describe('评论列表处理', () => {
     expect(sortComments(comments, 'earliest').map((item) => item.id)).toEqual(['101', '103', '102']);
   });
 
-  it('排序按钮包含最新、最早和热门，并默认使用热门', () => {
+  it('排序按钮包含 APK 的默认、最新和热门', () => {
     expect(COMMENT_SORT_OPTIONS.map((option) => option.label)).toEqual([
+      '默认',
       '最新',
-      '最早',
       '热门',
     ]);
-    expect(DEFAULT_COMMENT_SORT_MODE).toBe('likes');
+    expect(DEFAULT_COMMENT_SORT_MODE).toBe('default');
+  });
+
+  it('把 APK 排序映射为 replyList 请求参数', () => {
+    expect(getCommentReplyRequestOptions('default')).toEqual({
+      listType: 'lastupdate_desc',
+      fromFeedAuthor: 0,
+    });
+    expect(getCommentReplyRequestOptions('latest')).toEqual({
+      listType: 'dateline_desc',
+      fromFeedAuthor: 0,
+    });
+    expect(getCommentReplyRequestOptions('likes')).toEqual({
+      listType: 'popular',
+      fromFeedAuthor: 0,
+    });
+    expect(getCommentReplyRequestOptions('default', true)).toEqual({
+      listType: '',
+      fromFeedAuthor: 1,
+    });
   });
 
   it('忽略热门接口的回复文案并根据时间戳显示评论时间', () => {

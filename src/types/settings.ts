@@ -3,7 +3,6 @@ export type FeedDensity = 'comfortable' | 'standard' | 'compact';
 export type FeedLayout = 'single' | 'double';
 export type ImageQuality = 'standard' | 'hd' | 'raw';
 export type AccentColor = 'green' | 'blue' | 'violet' | 'orange';
-export type CommentSort = 'hot' | 'latest';
 export type HomeTabKey = string;
 export type ExternalLinkMode = 'internal' | 'system';
 export type TimeDisplayMode = 'relative' | 'absolute';
@@ -113,7 +112,6 @@ export interface AppSettings {
   reduceMotion: boolean;
   accentColor: AccentColor;
   collapseLines: number;
-  commentSort: CommentSort;
   autoPlayGif: boolean;
   autoPlayLivePhotoSound: boolean;
   suppressUnsupportedLivePhotoCodecPrompt: boolean;
