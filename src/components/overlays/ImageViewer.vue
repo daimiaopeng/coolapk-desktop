@@ -60,6 +60,7 @@
           <img
             v-if="displaySrc"
             :src="displaySrc"
+            :data-original-url="originalUrl || undefined"
             alt="Viewer Image"
             class="viewer-img"
             :style="mediaTransformStyle"

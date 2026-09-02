@@ -9,9 +9,10 @@
       :alt="alt"
       :style="{ objectFit: fit }"
       referrerpolicy="no-referrer"
+      v-bind="$attrs"
+      :data-original-url="contextImageUrl || undefined"
       @load="handleLoad"
       @error="handleError"
-      v-bind="$attrs"
     />
     <div v-else-if="loading && !hideSpinner" class="image-placeholder">
       <i class="fa-solid fa-spinner fa-spin"></i>
@@ -23,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useSettingsStore } from '../../stores/settings';
 import { sanitizeImageUrl } from '../../utils/image';
@@ -46,6 +47,7 @@ const emit = defineEmits<{
 }>();
 
 const settingsStore = useSettingsStore();
+const contextImageUrl = computed(() => props.src ? normalizeResourceUrl(props.src) : '');
 
 // 同步尝试命中内存缓存
 const initialCached = getMemoryCachedResourceSync(props.src);
