@@ -3,19 +3,39 @@
     <!-- 顶部状态栏 -->
     <div class="aside-header">
       <div v-if="feed" class="active-feed-brief">
-        <div class="author-avatar-wrap">
-          <img
-            v-if="authorAvatar"
-            :src="authorAvatar"
-            class="author-avatar"
-            alt="avatar"
-          />
-          <div v-else class="author-avatar-fallback">👤</div>
-        </div>
+        <UserHoverCard
+          :uid="authorUid"
+          :avatar="effectiveAvatar"
+          :username="authorName"
+          :level="authorLevel"
+          :verify-title="authorVerifyTitle"
+          :device="deviceTitle"
+        >
+          <div class="author-avatar-wrap clickable" @click.stop="handleUserClick">
+            <AppAvatar
+              :src="effectiveAvatar"
+              :plugin-url="effectivePluginUrl"
+              :size="32"
+            />
+          </div>
+        </UserHoverCard>
+
         <div class="author-info">
           <div class="author-row">
-            <span class="author-name">{{ authorName }}</span>
+            <UserHoverCard
+              :uid="authorUid"
+              :avatar="effectiveAvatar"
+              :username="authorName"
+              :level="authorLevel"
+              :verify-title="authorVerifyTitle"
+              :device="deviceTitle"
+            >
+              <span class="author-name clickable" @click.stop="handleUserClick">{{ authorName }}</span>
+            </UserHoverCard>
             <span v-if="authorLevel" class="author-level">Lv.{{ authorLevel }}</span>
+            <span v-if="authorVerifyTitle" class="author-verify-badge" :title="authorVerifyTitle">
+              <i class="fas fa-check-circle"></i>
+            </span>
           </div>
           <div class="author-sub-meta">
             <span class="feed-time">{{ formattedFeedTime }}</span>
@@ -72,10 +92,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import FeedCommentSection from '../feed/FeedCommentSection.vue';
-import { getUserUid } from '../../utils/userRoute';
+import AppAvatar from '../common/AppAvatar.vue';
+import UserHoverCard from '../user/UserHoverCard.vue';
+import { getUserUid, normalizeUserUid } from '../../utils/userRoute';
 import {
   DEFAULT_COMMENT_SORT_MODE,
   getCommentReplyRequestOptions,
@@ -87,6 +110,11 @@ import {
   type CommentSortMode,
   type CommentSortSelection,
 } from '../../utils/commentList';
+import {
+  preloadUserProfile,
+  reactiveUserProfileMap,
+  getCachedUserProfileSync,
+} from '../../utils/userProfilePreloader';
 
 const props = defineProps<{
   feed?: any;
@@ -96,6 +124,7 @@ defineEmits<{
   (e: 'close'): void;
 }>();
 
+const router = useRouter();
 const comments = ref<any[]>([]);
 const loading = ref(false);
 const error = ref('');
@@ -109,25 +138,98 @@ let commentsFirstItem = '';
 let commentsLastItem = '';
 let commentsRequestVersion = 0;
 
-const authorName = computed(() => {
-  if (!props.feed) return '';
-  return props.feed.username || props.feed.userInfo?.username || '酷友';
-});
-
-const authorAvatar = computed(() => {
-  if (!props.feed) return '';
-  return props.feed.userAvatar || props.feed.userInfo?.userAvatar || props.feed.pic || '';
-});
-
-const authorLevel = computed(() => {
-  if (!props.feed) return 0;
-  return Number(props.feed.userInfo?.level || props.feed.userLevel || 0);
-});
-
 const authorUid = computed(() => {
   if (!props.feed) return '';
   return getUserUid(props.feed);
 });
+
+const currentUid = computed(() => normalizeUserUid(authorUid.value));
+
+const preloadedProfile = computed(() => {
+  if (!currentUid.value) return null;
+  return reactiveUserProfileMap[currentUid.value] || getCachedUserProfileSync(currentUid.value);
+});
+
+onMounted(() => {
+  if (currentUid.value) {
+    preloadUserProfile(currentUid.value);
+  }
+  if (props.feed?.id) {
+    loadComments();
+  }
+});
+
+watch(currentUid, (newUid) => {
+  if (newUid) {
+    preloadUserProfile(newUid);
+  }
+});
+
+// 动态详情有时只带用户 ID，头像需要从预加载的用户资料补齐。
+// 不能把 feed.pic 当作头像：它是动态正文配图，失败时会直接显示破图。
+const effectiveAvatar = computed(() => {
+  if (!props.feed) return '';
+  const feed = props.feed;
+  const p = preloadedProfile.value;
+  const candidates = [
+    feed.userAvatar,
+    feed.avatar,
+    feed.user_avatar,
+    feed.userBigAvatar,
+    feed.userSmallAvatar,
+    feed.userInfo?.userAvatar,
+    feed.userInfo?.avatar,
+    feed.userInfo?.user_avatar,
+    feed.userInfo?.userBigAvatar,
+    feed.userInfo?.userSmallAvatar,
+    p?.userAvatar,
+    p?.avatar,
+    p?.user_avatar,
+    p?.userBigAvatar,
+    p?.userSmallAvatar,
+    p?.userInfo?.userAvatar,
+    p?.userInfo?.avatar,
+    p?.userInfo?.user_avatar,
+    p?.userInfo?.userBigAvatar,
+    p?.userInfo?.userSmallAvatar,
+  ];
+  const value = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim());
+  return value ? String(value).trim() : '';
+});
+
+// 头像挂件（支持原生字段与预加载自动补全）
+const effectivePluginUrl = computed(() => {
+  if (!props.feed) return '';
+  const feed = props.feed;
+  const direct =
+    feed.avatar_plugin_url ||
+    feed.userInfo?.avatar_plugin_url ||
+    feed.userAvatarPluginUrl;
+  if (direct && String(direct).trim()) return String(direct).trim();
+  const p = preloadedProfile.value;
+  return p?.avatar_plugin_url || p?.userInfo?.avatar_plugin_url || p?.userAvatarPluginUrl || '';
+});
+
+const authorName = computed(() => {
+  if (!props.feed) return '';
+  return props.feed.username || props.feed.userInfo?.username || preloadedProfile.value?.username || '酷友';
+});
+
+const authorLevel = computed(() => {
+  if (!props.feed) return 0;
+  return Number(props.feed.userInfo?.level || props.feed.userLevel || preloadedProfile.value?.level || 0);
+});
+
+const authorVerifyTitle = computed(() => {
+  if (!props.feed) return '';
+  return props.feed.userInfo?.verify_title || props.feed.verify_title || preloadedProfile.value?.verify_title || '';
+});
+
+function handleUserClick() {
+  if (currentUid.value && router) {
+    router.push(`/user/${currentUid.value}`);
+  }
+}
 
 const deviceTitle = computed(() => {
   if (!props.feed) return '';
@@ -326,27 +428,14 @@ watch(
 }
 
 .author-avatar-wrap {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-
-.author-avatar {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.author-avatar-fallback {
-  width: 100%;
-  height: 100%;
-  background: var(--background-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.author-avatar-wrap.clickable {
+  cursor: pointer;
 }
 
 .author-info {
@@ -370,6 +459,22 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.author-name.clickable {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.author-name.clickable:hover {
+  color: var(--brand-primary, #10b981);
+}
+
+.author-verify-badge {
+  font-size: 11px;
+  color: #ff9800;
+  display: inline-flex;
+  align-items: center;
 }
 
 .author-level {

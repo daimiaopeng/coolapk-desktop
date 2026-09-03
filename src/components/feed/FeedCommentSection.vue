@@ -200,14 +200,14 @@
         <!-- 1. 一级评论人头像 -->
         <UserHoverCard
           :uid="c.uid || c.userId || c.userInfo?.uid"
-          :avatar="c.userAvatar || c.avatar || c.userInfo?.userAvatar"
+          :avatar="getCommentAvatar(c)"
           :username="c.username || c.userInfo?.username"
           :level="getCommentUserLevel(c)"
           :verify-title="getCommentVerifyTitle(c)"
         >
           <AppAvatar
             class="comment-avatar"
-            :src="c.userAvatar || c.avatar || c.userInfo?.userAvatar"
+            :src="getCommentAvatar(c)"
             :plugin-url="getCommentPluginUrl(c)"
             :size="32"
             alt="头像"
@@ -221,7 +221,7 @@
           <div class="comment-meta">
             <UserHoverCard
               :uid="c.uid || c.userId || c.userInfo?.uid"
-              :avatar="c.userAvatar || c.avatar || c.userInfo?.userAvatar"
+              :avatar="getCommentAvatar(c)"
               :username="c.username || c.userInfo?.username"
               :level="getCommentUserLevel(c)"
               :verify-title="getCommentVerifyTitle(c)"
@@ -332,14 +332,14 @@
               <!-- 子回复头像 -->
               <UserHoverCard
                 :uid="sub.uid || sub.fromUid || sub.userId || sub.userInfo?.uid"
-                :avatar="sub.userAvatar || sub.avatar || sub.userInfo?.userAvatar"
+                :avatar="getCommentAvatar(sub)"
                 :username="sub.username || sub.fromUserName"
                 :level="getCommentUserLevel(sub)"
                 :verify-title="getCommentVerifyTitle(sub)"
               >
                 <AppAvatar
                   class="sub-reply-avatar"
-                  :src="sub.userAvatar || sub.avatar || sub.userInfo?.userAvatar"
+                  :src="getCommentAvatar(sub)"
                   :plugin-url="getCommentPluginUrl(sub)"
                   :size="28"
                   alt="头像"
@@ -350,7 +350,7 @@
                 <div class="sub-reply-meta">
                   <UserHoverCard
                     :uid="sub.uid || sub.fromUid || sub.userId || sub.userInfo?.uid"
-                    :avatar="sub.userAvatar || sub.avatar || sub.userInfo?.userAvatar"
+                    :avatar="getCommentAvatar(sub)"
                     :username="sub.username || sub.fromUserName"
                     :level="getCommentUserLevel(sub)"
                     :verify-title="getCommentVerifyTitle(sub)"
@@ -782,6 +782,39 @@ function toggleCommentTime(item: any) {
 function getCommentFloor(item: any): string {
   const value = item?.floor ?? item?.rank ?? '';
   return String(value).trim();
+}
+
+function getCommentAvatar(item: any): string {
+  const direct =
+    item?.userAvatar ||
+    item?.avatar ||
+    item?.user_avatar ||
+    item?.userSmallAvatar ||
+    item?.userBigAvatar ||
+    item?.userInfo?.userAvatar ||
+    item?.userInfo?.avatar ||
+    item?.userInfo?.user_avatar ||
+    item?.userInfo?.userSmallAvatar ||
+    item?.userInfo?.userBigAvatar;
+  if (direct && typeof direct === 'string' && direct.trim()) {
+    return direct.trim();
+  }
+  const uid = String(item?.uid || item?.fromUid || item?.userId || item?.userInfo?.uid || '').trim();
+  if (uid) {
+    const p = reactiveUserProfileMap[uid] || getCachedUserProfileSync(uid);
+    const candidate =
+      p?.userAvatar ||
+      p?.avatar ||
+      p?.user_avatar ||
+      p?.userSmallAvatar ||
+      p?.userBigAvatar ||
+      p?.userInfo?.userAvatar ||
+      p?.userInfo?.avatar;
+    if (candidate && typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return '';
 }
 
 function getCommentPluginUrl(item: any): string {
