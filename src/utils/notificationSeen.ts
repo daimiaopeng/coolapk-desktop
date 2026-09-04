@@ -66,6 +66,18 @@ export function hasSeenNotificationItems(uid: string | number, category: Notific
   return Object.keys(readSeenItems(uid, category)).length > 0;
 }
 
+/** 服务端已确认清除通知后，丢弃本机为旧通知保存的抵消记录。 */
+export function clearSeenNotificationState(uid: string | number, category: NotificationCategory): void {
+  if (!String(uid).trim()) return;
+
+  try {
+    localStorage.removeItem(getStorageKey(uid, category));
+    localStorage.removeItem(getCountStorageKey(uid, category));
+  } catch (error) {
+    console.warn('清除已读通知记录失败:', error);
+  }
+}
+
 /**
  * 服务端不支持点赞分类已读时，保存本机已确认的数量，供下次启动先抵消旧 badge。
  * 数量只在服务端总通知真正归零后清空，避免重启反复提示同一批点赞。

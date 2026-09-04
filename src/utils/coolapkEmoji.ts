@@ -38,11 +38,34 @@ const COOLAPK_EMOJI_MAP: Record<string, string> = {
   '新酷币5€': 'coolapk_emotion_80.png'
 };
 
+import { NIUNIU_EMOJI_MAP } from './niuniuEmojiData';
+import { COOLAPK_EXTRA_EMOJI_MAP } from './coolapkExtraEmojiData';
+
+// 合并官方 APK 中提取的 10 个补充官方主表情及别名（针不戳、列文虎克、真正的音乐、感知不强、给我整一个、yyds、夏阁艾迪剑、下次一定、酷安土豆、头条通知书等）
+Object.assign(COOLAPK_EMOJI_MAP, COOLAPK_EXTRA_EMOJI_MAP);
+
+// 合并官方 APK 中的 32 个牛牛表情及常用别名
+Object.assign(COOLAPK_EMOJI_MAP, NIUNIU_EMOJI_MAP, {
+  点赞: NIUNIU_EMOJI_MAP['牛牛点赞'],
+  爆赞: NIUNIU_EMOJI_MAP['牛牛爆赞'],
+  真香: NIUNIU_EMOJI_MAP['牛牛真香'],
+  阿巴: NIUNIU_EMOJI_MAP['牛牛阿巴'],
+});
+
 export const EMOJI_MAP = COOLAPK_EMOJI_MAP;
 export const EMOJI_BASE = EMOJI_BASE_URL;
 
+export function getEmojiUrl(name: string): string {
+  const target = COOLAPK_EMOJI_MAP[name];
+  if (!target) return '';
+  if (target.startsWith('data:') || target.startsWith('http://') || target.startsWith('https://') || target.startsWith('/')) {
+    return target;
+  }
+  return `${EMOJI_BASE_URL}${target}`;
+}
+
 export const renderCoolapkEmoji = (html: string) => html.replace(/\[([^\]\r\n]{1,20})\]/g, (match, name: string) => {
-  const filename = COOLAPK_EMOJI_MAP[name];
-  if (!filename) return match;
-  return `<img class="coolapk-emoji" src="${EMOJI_BASE_URL}${filename}" alt="${match}" title="${name}">`;
+  const url = getEmojiUrl(name);
+  if (!url) return match;
+  return `<img class="coolapk-emoji" src="${url}" alt="${match}" title="${name}">`;
 });

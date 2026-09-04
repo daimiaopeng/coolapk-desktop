@@ -103,23 +103,31 @@
               <span>表情</span>
             </button>
 
-            <!-- 酷安表情浮层 -->
+            <!-- 酷安表情浮层 (参考微信：无顶部条，最近使用 + 所有表情) -->
             <div
               v-if="showEmojiPicker"
               class="emoji-picker-popover custom-scrollbar"
               @click.stop
             >
-              <div class="emoji-picker-header">
-                <span>酷安表情</span>
-                <button
-                  type="button"
-                  class="emoji-picker-close"
-                  title="关闭表情面板"
-                  @click="showEmojiPicker = false"
-                >
-                  <i class="fa-solid fa-xmark"></i>
-                </button>
-              </div>
+              <!-- 最近使用 -->
+              <template v-if="recentEmojis.length">
+                <div class="emoji-section-title">最近使用</div>
+                <div class="emoji-grid emoji-grid-recent">
+                  <button
+                    v-for="name in recentEmojis"
+                    :key="'recent-' + name"
+                    type="button"
+                    class="emoji-item-btn"
+                    :title="String(name)"
+                    @click="insertEmoji(String(name))"
+                  >
+                    <img :src="getEmojiUrl(String(name))" :alt="String(name)" loading="lazy" />
+                  </button>
+                </div>
+              </template>
+
+              <!-- 所有表情 -->
+              <div class="emoji-section-title">所有表情</div>
               <div class="emoji-grid">
                 <button
                   v-for="(filename, name) in EMOJI_MAP"
@@ -129,7 +137,7 @@
                   :title="String(name)"
                   @click="insertEmoji(String(name))"
                 >
-                  <img :src="`${EMOJI_BASE}${filename}`" :alt="String(name)" loading="lazy" />
+                  <img :src="getEmojiUrl(String(name))" :alt="String(name)" loading="lazy" />
                 </button>
               </div>
             </div>
@@ -511,7 +519,8 @@ import FeedImageGrid from './FeedImageGrid.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
-import { EMOJI_MAP, EMOJI_BASE } from '../../utils/coolapkEmoji';
+import { EMOJI_MAP, EMOJI_BASE, getEmojiUrl } from '../../utils/coolapkEmoji';
+import { useRecentEmojis } from '../../utils/recentEmojis';
 import { clearCommentDraft, loadCommentDraft, saveCommentDraft } from '../../utils/commentDrafts';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import { showToast } from '../../utils/toast';
@@ -670,12 +679,13 @@ const uploadedCount = ref(0);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 const showEmojiPicker = ref(false);
 const emojiContainerRef = ref<HTMLElement | null>(null);
+const { recentEmojis, addRecent } = useRecentEmojis();
 let restoringDraft = false;
 
-function createEmojiImg(name: string, filename?: string): HTMLImageElement {
+function createEmojiImg(name: string, _filename?: string): HTMLImageElement {
   const img = document.createElement('img');
   img.className = 'coolapk-emoji';
-  img.src = `${EMOJI_BASE}${filename || EMOJI_MAP[name] || 'coolapk_emotion_1_hahaha.png'}`;
+  img.src = getEmojiUrl(name) || `${EMOJI_BASE}coolapk_emotion_1_hahaha.png`;
   img.alt = `[${name}]`;
   img.title = name;
   img.setAttribute('data-emoji', `[${name}]`);
@@ -687,9 +697,9 @@ function parseTextToEditorNodes(text: string): Node[] {
   if (!text) return [];
   const container = document.createElement('div');
   const rendered = text.replace(/\[([^\]\r\n]{1,20})\]/g, (match, name: string) => {
-    const filename = EMOJI_MAP[name];
-    if (!filename) return match;
-    return `<img class="coolapk-emoji" src="${EMOJI_BASE}${filename}" alt="${match}" title="${name}" data-emoji="${match}" contenteditable="false" />`;
+    const url = getEmojiUrl(name);
+    if (!url) return match;
+    return `<img class="coolapk-emoji" src="${url}" alt="${match}" title="${name}" data-emoji="${match}" contenteditable="false" />`;
   });
   container.innerHTML = rendered.replace(/\n/g, '<br>');
   return Array.from(container.childNodes);
@@ -1266,6 +1276,7 @@ function toggleEmojiPicker() {
 }
 
 function insertEmoji(name: string) {
+  addRecent(name);
   const filename = EMOJI_MAP[name];
   const el = inputRef.value;
   const emojiCode = `[${name}]`;
@@ -2024,42 +2035,31 @@ async function handleSend() {
   bottom: calc(100% + 8px);
   left: 0;
   z-index: 120;
-  width: 320px;
-  max-height: 240px;
+  width: 324px;
+  max-height: 280px;
   overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card, 12px);
   box-shadow: var(--shadow-lg, 0 10px 25px rgba(0, 0, 0, 0.15));
-  padding: 10px;
+  padding: 8px 10px 10px 10px;
 }
 
-.emoji-picker-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-light);
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.emoji-picker-close {
-  border: none;
-  background: transparent;
+.emoji-section-title {
+  font-size: 0.75rem;
   color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 2px 4px;
-  font-size: 0.85rem;
-  display: inline-flex;
-  align-items: center;
-  transition: color var(--duration-fast);
+  padding: 4px 4px 6px 4px;
+  user-select: none;
+  font-weight: 500;
+  line-height: 1;
 }
 
-.emoji-picker-close:hover {
-  color: var(--text-primary);
+.emoji-section-title:not(:first-child) {
+  margin-top: 8px;
+}
+
+.emoji-grid-recent {
+  margin-bottom: 2px;
 }
 
 .emoji-grid {

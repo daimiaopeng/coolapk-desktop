@@ -1,6 +1,16 @@
 <template>
   <div class="feed-content-wrapper">
-    <h3 v-if="shouldShowTitle" class="feed-title">{{ title }}</h3>
+    <h3 v-if="shouldShowTitle || questionMode || answerMode" class="feed-title">
+      <span v-if="questionMode" class="question-title-badge" title="提问" aria-label="提问">
+        <i class="fas fa-circle-question" aria-hidden="true"></i>
+        <span>提问</span>
+      </span>
+      <span v-if="answerMode" class="answer-title-badge" title="回答" aria-label="回答">
+        <i class="fas fa-comment-dots" aria-hidden="true"></i>
+        <span>回答</span>
+      </span>
+      <span v-if="shouldShowTitle">{{ title }}</span>
+    </h3>
     <div
       ref="bodyRef"
       :class="['feed-body', { 'is-collapsed': shouldCollapse }]"
@@ -35,6 +45,8 @@ const props = defineProps<{
   forceExpanded?: boolean;
   maxLines?: number;
   highlightKeyword?: string;
+  questionMode?: boolean;
+  answerMode?: boolean;
 }>();
 
 const settingsStore = useSettingsStore();
@@ -198,6 +210,28 @@ watch(
   margin-bottom: 8px;
   line-height: 1.4;
   letter-spacing: -0.2px;
+}
+
+.answer-title-badge,
+.question-title-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 7px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  color: var(--brand-primary, #10b981);
+  background: var(--brand-soft, rgba(16, 185, 129, 0.1));
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+
+.answer-title-badge i,
+.question-title-badge i {
+  font-size: 11px;
 }
 
 .feed-body {

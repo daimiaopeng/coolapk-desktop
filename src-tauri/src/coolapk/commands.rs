@@ -223,6 +223,18 @@ pub async fn change_product_wish_status(
 }
 
 #[tauri::command]
+pub async fn change_product_follow_status(
+    state: State<'_, AppState>,
+    product_id: String,
+    status: i32,
+) -> Result<Value, String> {
+    state
+        .client
+        .change_product_follow_status(&product_id, status)
+        .await
+}
+
+#[tauri::command]
 pub async fn get_product_wish_list(
     state: State<'_, AppState>,
     product_id: String,
@@ -666,10 +678,18 @@ pub async fn get_question_answers(
     feed_id: String,
     sort: String,
     page: u32,
+    first_item: Option<String>,
+    last_item: Option<String>,
 ) -> Result<Value, String> {
     state
         .client
-        .get_question_answers(&feed_id, &sort, page)
+        .get_question_answers(
+            &feed_id,
+            &sort,
+            page,
+            first_item.as_deref().unwrap_or(""),
+            last_item.as_deref().unwrap_or(""),
+        )
         .await
 }
 
@@ -1441,6 +1461,25 @@ pub async fn create_feed(
     state
         .client
         .create_feed(&message, pic.as_deref(), post_token.as_deref())
+        .await
+}
+
+#[tauri::command]
+pub async fn create_answer(
+    state: State<'_, AppState>,
+    question_id: String,
+    message: String,
+    pic: Option<String>,
+    post_token: Option<String>,
+) -> Result<Value, String> {
+    state
+        .client
+        .create_answer(
+            &question_id,
+            &message,
+            pic.as_deref(),
+            post_token.as_deref(),
+        )
         .await
 }
 

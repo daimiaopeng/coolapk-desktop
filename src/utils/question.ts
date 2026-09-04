@@ -5,6 +5,8 @@ import { getUserUid } from './userRoute';
 export type QuestionSort = 'reply' | 'like' | 'dateline';
 
 const QUESTION_PAGE_SIZE = 20;
+const QUESTION_TAB_EXACT_VALUES = new Set(['question', 'answer', 'ask', 'qa', '问答', '提问', '回答']);
+const QUESTION_TAB_MARKER_PATTERN = /(?:[\/_\.?#=&-]|^)(question|answer|ask|qa)(?:[\/_\.?#=&-]|$)/i;
 
 function asRecord(value: unknown): Record<string, any> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
@@ -28,6 +30,68 @@ function firstNumber(record: Record<string, any>, keys: string[]): number {
     if (Number.isFinite(value) && value >= 0) return value;
   }
   return 0;
+}
+
+/**
+ * 判断首页服务端页签是否真的属于问答频道。
+ *
+ * ConfigPage 的 page_name/url 可能是 V9_HOME_TAB_QUESTION 这类键名，
+ * 但普通页签也可能包含相似的字符，不能再用 includes('ask') 这类模糊匹配。
+ */
+export function isQuestionHomeTab(tab: unknown): boolean {
+  if (!tab || typeof tab !== 'object' || Array.isArray(tab)) return false;
+  const source = tab as Record<string, unknown>;
+  const explicitValues = [
+    source.feedType,
+    source.feed_type,
+    source.type,
+    source.searchType,
+    source.search_type,
+    source.category,
+    source.tabType,
+    source.tab_type,
+    source.entityType,
+    source.entity_type,
+  ].map((value) => textValue(value).toLowerCase());
+  if (explicitValues.some((value) => QUESTION_TAB_EXACT_VALUES.has(value))) return true;
+
+  const descriptorValues = [
+    source.title,
+    source.page_name,
+    source.url,
+    source.key,
+    source.tabKey,
+    source.tab_key,
+  ].map((value) => textValue(value).toLowerCase());
+  return descriptorValues.some((value) => QUESTION_TAB_EXACT_VALUES.has(value) || QUESTION_TAB_MARKER_PATTERN.test(value));
+}
+
+/** 首页问答栏目只把服务端明确标记为问题的实体交给问题卡，普通 feed 不得靠栏目名称误判。 */
+export function isQuestionFeedEntity(value: unknown): boolean {
+  const source = asRecord(value);
+  if (!Object.keys(source).length) return false;
+  const markers = [
+    source.entityType,
+    source.entity_type,
+    source.feedType,
+    source.feed_type,
+    source.feedTypeName,
+    source.feed_type_name,
+    source.type,
+    source.questionType,
+    source.question_type,
+    source.entityTemplate,
+    source.entity_template,
+    source.template,
+  ].map((item) => textValue(item).toLowerCase());
+  if (markers.some((item) => item.includes('answer') || item.includes('回答'))) return false;
+  return markers.some((item) =>
+    item === 'question'
+    || item === 'feed_question'
+    || item === 'feedquestion'
+    || item.includes('question')
+    || item.includes('提问')
+  ) || Boolean(source.question && typeof source.question === 'object');
 }
 
 function isTruthyFlag(value: unknown): boolean {
@@ -62,6 +126,7 @@ export function normalizeQuestionDetail(value: unknown, fallbackId: string): Fee
     id,
     entityId: source.entityId || source.entity_id || id,
     entityType: source.entityType || source.entity_type || 'question',
+    feedType: source.feedType || source.feed_type || 'question',
     title,
     message,
     uid: uid || source.uid,
@@ -87,12 +152,14 @@ export function normalizeQuestionAnswer(value: unknown, index: number): FeedItem
   const uid = getUserUid(source) || getUserUid(userInfo);
   const id = firstText(source, ['id', 'entityId', 'entity_id', 'replyId', 'reply_id', 'answerId', 'answer_id']) || `question-answer-${index}`;
   const message = firstText(source, ['message', 'message_raw_output', 'content', 'text', 'description', 'note']);
+  const title = firstText(source, ['message_title', 'messageTitle', 'title', 'answerTitle', 'answer_title']);
   return {
     ...source,
     id,
     entityId: source.entityId || source.entity_id || id,
     entityType: source.entityType || source.entity_type || 'reply',
     feedType: source.feedType || source.feed_type || 'answer',
+    title,
     message,
     uid: uid || source.uid,
     username: firstText(source, ['username', 'user_name', 'userName', 'replyUserName', 'reply_user_name']) || firstText(userInfo, ['username', 'user_name', 'userName', 'name']),
@@ -104,6 +171,24 @@ export function normalizeQuestionAnswer(value: unknown, index: number): FeedItem
 export function getQuestionTitle(question: unknown): string {
   const source = asRecord(question);
   return firstText(source, ['title', 'message_title', 'messageTitle', 'questionTitle']) || '未命名问题';
+}
+
+function comparableQuestionText(value: string): string {
+  return value
+    .replace(/<br\s*\/?>/gi, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/[\s.,!?;:'"(){}<>，。！？；：、（）【】《》“”‘’…—_-]+/gu, '')
+    .toLowerCase();
+}
+
+/** 问题详情同时返回标题和相同正文时，只保留标题，避免界面重复显示。 */
+export function getQuestionMessage(question: unknown): string {
+  const source = asRecord(question);
+  const title = firstText(source, ['title', 'message_title', 'messageTitle', 'questionTitle']);
+  const message = firstText(source, ['message', 'message_raw_output', 'content', 'text', 'note']);
+  if (!message || !title) return message;
+  return comparableQuestionText(title) === comparableQuestionText(message) ? '' : message;
 }
 
 export function getQuestionAnswerCount(question: unknown): number {

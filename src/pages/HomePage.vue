@@ -214,26 +214,53 @@
 
         <div v-else-if="!isDyhTab" :class="['feed-list-padding', { 'is-double-column': isDoubleColumn }]">
           <template v-if="isDoubleColumn">
+            <template v-for="entry in feedEntries" :key="entry.item.id || entry.index">
+              <QuestionAnswerCard
+                v-if="isQuestionTab && isAnswerHomeItem(entry.item)"
+                :answer="entry.item"
+                :class="{ 'feed-card-focused': entry.index === navIndex }"
+                :ref="(el) => setCardRef(el, entry.index)"
+              />
+              <QuestionFeedCard
+                v-else-if="isQuestionTab && isQuestionHomeItem(entry.item)"
+                :question="entry.item"
+                :rank-index="isHotTab ? entry.index + 1 : undefined"
+                :class="{ 'feed-card-focused': entry.index === navIndex }"
+                :ref="(el) => setCardRef(el, entry.index)"
+              />
+              <FeedCard
+                v-else
+                :feed="entry.item"
+                :rank-index="isHotTab ? entry.index + 1 : undefined"
+                :class="{ 'feed-card-focused': entry.index === navIndex }"
+                :ref="(el) => setCardRef(el, entry.index)"
+                @deleted="handleFeedDeleted"
+              />
+            </template>
+          </template>
+          <template v-else v-for="(item, idx) in feeds" :key="item.id || idx">
+            <QuestionAnswerCard
+              v-if="isQuestionTab && isAnswerHomeItem(item)"
+              :answer="item"
+              :class="{ 'feed-card-focused': idx === navIndex }"
+              :ref="(el) => setCardRef(el, idx)"
+            />
+            <QuestionFeedCard
+              v-else-if="isQuestionTab && isQuestionHomeItem(item)"
+              :question="item"
+              :rank-index="isHotTab ? idx + 1 : undefined"
+              :class="{ 'feed-card-focused': idx === navIndex }"
+              :ref="(el) => setCardRef(el, idx)"
+            />
             <FeedCard
-              v-for="entry in feedEntries"
-              :key="entry.item.id || entry.index"
-              :feed="entry.item"
-              :rank-index="isHotTab ? entry.index + 1 : undefined"
-              :class="{ 'feed-card-focused': entry.index === navIndex }"
-              :ref="(el) => setCardRef(el, entry.index)"
+              v-else
+              :feed="item"
+              :rank-index="isHotTab ? idx + 1 : undefined"
+              :class="{ 'feed-card-focused': idx === navIndex }"
+              :ref="(el) => setCardRef(el, idx)"
               @deleted="handleFeedDeleted"
             />
           </template>
-          <FeedCard
-            v-else
-            v-for="(item, idx) in feeds"
-            :key="item.id || idx"
-            :feed="item"
-            :rank-index="isHotTab ? idx + 1 : undefined"
-            :class="{ 'feed-card-focused': idx === navIndex }"
-            :ref="(el) => setCardRef(el, idx)"
-            @deleted="handleFeedDeleted"
-          />
 
           <div v-if="loadingMore" class="loading-more">
             <LoadingState text="加载更多动态..." />
@@ -252,6 +279,8 @@ import { useRoute, useRouter } from 'vue-router';
 import FeedTabs from '../components/feed/FeedTabs.vue';
 import FeedLayoutToggle from '../components/feed/FeedLayoutToggle.vue';
 import FeedCard from '../components/feed/FeedCard.vue';
+import QuestionAnswerCard from '../components/question/QuestionAnswerCard.vue';
+import QuestionFeedCard from '../components/question/QuestionFeedCard.vue';
 import DiscoveryEntityCard from '../components/discovery/DiscoveryEntityCard.vue';
 import DiscoverySkeleton from '../components/discovery/DiscoverySkeleton.vue';
 import FeedSkeleton from '../components/feed/FeedSkeleton.vue';
@@ -269,7 +298,8 @@ import { decodeDiscoveryRouteSegment, getEntityKey, parseDiscoveryPage, resolveD
 import type { FeedLayout, ConfigPageTab } from '../types/settings';
 import type { DiscoveryEntity } from '../types/discovery';
 import { resolvePreferredHomeTab } from '../utils/homeTabs';
-import { extractHotSearchKeywords } from '../utils/searchEntities';
+import { extractHotSearchKeywords, isAnswerSearchEntity } from '../utils/searchEntities';
+import { isQuestionFeedEntity, isQuestionHomeTab } from '../utils/question';
 
 const settingsStore = useSettingsStore();
 
@@ -384,6 +414,10 @@ const isLiveTab = computed(() => {
 });
 
 const isPageEntityTab = computed(() => isTopicPageTab.value || isNewDevicePageTab.value || isLiveTab.value);
+
+const isQuestionTab = computed(() => {
+  return isQuestionHomeTab(currentActiveTabObj.value) || isQuestionHomeTab({ page_name: activeTab.value });
+});
 
 const isDoubleColumn = computed(() => feedLayout.value === 'double' && !isDyhTab.value);
 
@@ -1109,7 +1143,31 @@ const navIndex = ref(-1);
 const cardEls: (HTMLElement | null)[] = [];
 
 function setCardRef(el: unknown, idx: number) {
-  cardEls[idx] = (el as HTMLElement | null) || null;
+  const candidate = el as any;
+  const element = candidate?.$el instanceof HTMLElement ? candidate.$el : candidate;
+  cardEls[idx] = element instanceof HTMLElement ? element : null;
+}
+
+function isAnswerHomeItem(item: unknown): boolean {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const source = item as Record<string, unknown>;
+  const explicitMarkers = [
+    source.feedType,
+    source.feed_type,
+    source.entityType,
+    source.entity_type,
+    source.type,
+    source.answerType,
+    source.answer_type,
+  ].map((value) => String(value ?? '').trim().toLowerCase());
+  // 首页问答频道中的普通问题有时还会携带 answerId/回答统计字段，
+  // 只有服务端明确把实体标成 answer 时才使用回答卡，避免把问题误画成“回答”。
+  return explicitMarkers.some((value) => value === 'answer' || value === 'feed_answer' || value === 'question_answer')
+    && isAnswerSearchEntity(source as any);
+}
+
+function isQuestionHomeItem(item: unknown): boolean {
+  return isQuestionFeedEntity(item);
 }
 
 function handleFeedNav(delta: number) {

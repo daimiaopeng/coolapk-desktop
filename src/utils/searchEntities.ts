@@ -6,20 +6,31 @@ function textValue(value: unknown): string {
   return typeof value === 'string' ? value.trim() : value === null || value === undefined ? '' : String(value).trim();
 }
 
+function firstTextValue(...values: unknown[]): string {
+  for (const value of values) {
+    const text = textValue(value);
+    if (text) return text;
+  }
+  return '';
+}
+
 export function getSearchEntityType(entity: SearchEntity): string {
-  return textValue(entity.entityType ?? entity.entity_type ?? entity.type).toLowerCase();
+  return firstTextValue(entity.entityType, entity.entity_type, entity.type).toLowerCase();
 }
 
 export function getSearchEntityTemplate(entity: SearchEntity): string {
-  return textValue(entity.entityTemplate ?? entity.entity_template ?? entity.template).toLowerCase();
+  return firstTextValue(entity.entityTemplate, entity.entity_template, entity.template).toLowerCase();
 }
 
 export function getSearchEntityId(entity: SearchEntity): string {
-  return textValue(entity.id ?? entity.entityId ?? entity.entity_id ?? entity.feedId ?? entity.feed_id);
+  if (isAnswerSearchEntity(entity)) {
+    return firstTextValue(entity.id, entity.entityId, entity.entity_id, entity.answerId, entity.answer_id, entity.feedId, entity.feed_id);
+  }
+  return firstTextValue(entity.questionId, entity.question_id, entity.id, entity.entityId, entity.entity_id, entity.feedId, entity.feed_id);
 }
 
 export function getSearchEntityTitle(entity: SearchEntity): string {
-  return textValue(entity.title ?? entity.shorttitle ?? entity.name ?? entity.username ?? entity.entityTitle ?? entity.label ?? entity.searchValue);
+  return firstTextValue(entity.title, entity.message_title, entity.messageTitle, entity.questionTitle, entity.shorttitle, entity.name, entity.username, entity.entityTitle, entity.label, entity.searchValue);
 }
 
 export function getSearchEntitySubtitle(entity: SearchEntity): string {
@@ -78,6 +89,26 @@ function getSearchEntityTopicTag(entity: SearchEntity): string {
 
 export function getSearchEntityUrl(entity: SearchEntity): string {
   return textValue(entity.url ?? entity.actionUrl ?? entity.action_url ?? entity.link);
+}
+
+export interface SearchEntitySearchTarget {
+  keyword: string;
+  searchType: string;
+}
+
+/** 解析 APK 联想词的 searchTab://<searchType>?keyword=<keyword> 动作。 */
+export function getSearchEntitySearchTarget(entity: SearchEntity): SearchEntitySearchTarget | null {
+  const rawUrl = getSearchEntityUrl(entity);
+  if (!rawUrl) return null;
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol.toLowerCase() !== 'searchtab:') return null;
+    const keyword = textValue(url.searchParams.get('keyword'));
+    const searchType = textValue(url.hostname || url.host).toLowerCase();
+    return keyword && searchType ? { keyword, searchType } : null;
+  } catch {
+    return null;
+  }
 }
 
 export function isSponsorSearchEntity(entity: SearchEntity): boolean {
@@ -168,11 +199,59 @@ export function extractHotSearchKeywords(response: unknown): string[] {
 export function isQuestionSearchEntity(entity: SearchEntity): boolean {
   const type = getSearchEntityType(entity);
   const template = getSearchEntityTemplate(entity);
-  const feedType = textValue(entity.feedType ?? entity.feed_type ?? entity.searchType ?? entity.search_type).toLowerCase();
-  return [type, template, feedType].some((value) => value.includes('question') || value.includes('ask') || value === 'qa');
+  if (isAnswerSearchEntity(entity)) return false;
+  const markers = [
+    type,
+    template,
+    entity.feedType,
+    entity.feed_type,
+    entity.feedTypeName,
+    entity.feed_type_name,
+    entity.searchType,
+    entity.search_type,
+    entity.questionType,
+    entity.question_type,
+  ].map((value) => textValue(value).toLowerCase());
+  return markers.some((value) => value.includes('question') || value.includes('提问') || value.includes('问答') || value === 'qa' || value === 'ask')
+    || Boolean(firstTextValue(entity.questionId, entity.question_id));
 }
 
-export function getSearchEntityKind(entity: SearchEntity): 'hot' | 'user' | 'topic' | 'app' | 'feed' | 'question' | 'product' | 'generic' {
+/** APK 将回答作为 feedType=answer 的 Feed，不能和 feedQuestion 问题实体混用。 */
+export function isAnswerSearchEntity(entity: SearchEntity): boolean {
+  const markers = [
+    getSearchEntityType(entity),
+    getSearchEntityTemplate(entity),
+    entity.feedType,
+    entity.feed_type,
+    entity.feedTypeName,
+    entity.feed_type_name,
+    entity.answerType,
+    entity.answer_type,
+  ].map((value) => textValue(value).toLowerCase());
+  return markers.some((value) => value === 'answer' || value.includes('answer') || value.includes('回答'))
+    || Boolean(firstTextValue(entity.answerId, entity.answer_id));
+}
+
+/** APK 的 feedQuestion 使用 item_question_title_view，只显示问题标题和统计数。 */
+export function isQuestionTitleSearchEntity(entity: SearchEntity): boolean {
+  if (!isQuestionSearchEntity(entity)) return false;
+  const type = getSearchEntityType(entity);
+  const template = getSearchEntityTemplate(entity);
+  if ([type, template].some((value) => value === 'feedquestion' || value.includes('questiontitle'))) return true;
+  const hasBody = Boolean(textValue(entity.message ?? entity.message_raw_output ?? entity.content ?? entity.text));
+  const hasQuestionCount = ['question_answer_num', 'questionAnswerNum', 'question_follow_num', 'questionFollowNum']
+    .some((key) => entity[key] !== undefined);
+  return !hasBody && hasQuestionCount;
+}
+
+/** 搜索接口的 ask 页签有时返回普通 feed 实体，保留页签语义供后续路由和渲染使用。 */
+export function normalizeSearchEntityForTab(entity: SearchEntity, searchType: string): SearchEntity {
+  const normalizedType = textValue(searchType).toLowerCase();
+  if (!['ask', 'question', 'qa'].includes(normalizedType)) return entity;
+  return { ...entity, searchType: 'ask' };
+}
+
+export function getSearchEntityKind(entity: SearchEntity): 'hot' | 'user' | 'topic' | 'app' | 'feed' | 'question' | 'answer' | 'product' | 'generic' {
   const type = getSearchEntityType(entity);
   const template = getSearchEntityTemplate(entity);
   if (template.includes('searchhot') || type.includes('searchhot')) return 'hot';
@@ -180,6 +259,7 @@ export function getSearchEntityKind(entity: SearchEntity): 'hot' | 'user' | 'top
   if (type.includes('topic') || template.includes('topic')) return 'topic';
   if (type.includes('apk') || type.includes('app') || type.includes('game') || getSearchEntityPackageName(entity)) return 'app';
   if (type.includes('product') || template.includes('product')) return 'product';
+  if (isAnswerSearchEntity(entity)) return 'answer';
   if (isQuestionSearchEntity(entity)) return 'question';
   if (type.includes('feed') || type.includes('reply') || type.includes('article') || type.includes('dyh') || type.includes('ershou') || entity.message || entity.feed_id || entity.feedId) return 'feed';
   return 'generic';
@@ -195,11 +275,15 @@ export function isNavigableSearchEntity(entity: SearchEntity): boolean {
   if (kind === 'topic') return Boolean(getSearchEntityTopicTag(entity));
   if (kind === 'app') return Boolean(getSearchEntityPackageName(entity));
   if (kind === 'product' || typeIncludes(entity, 'dyh') || typeIncludes(entity, 'album') || typeIncludes(entity, 'goods')) return Boolean(getSearchEntityId(entity));
-  return kind === 'feed' || kind === 'question' ? Boolean(getSearchEntityId(entity)) : Boolean(getSearchEntityUrl(entity));
+  return kind === 'feed' || kind === 'question' || kind === 'answer' ? Boolean(getSearchEntityId(entity)) : Boolean(getSearchEntityUrl(entity));
 }
 
 export function getSearchEntityRoute(entity: SearchEntity): string | null {
   if (isSponsorSearchEntity(entity)) return null;
+  const searchTarget = getSearchEntitySearchTarget(entity);
+  if (searchTarget) {
+    return `/search?q=${encodeURIComponent(searchTarget.keyword)}&tab=${encodeURIComponent(searchTarget.searchType)}`;
+  }
   const kind = getSearchEntityKind(entity);
   const id = getSearchEntityId(entity);
   if (kind === 'user' && getSearchEntityUid(entity)) return `/user/${encodeURIComponent(getSearchEntityUid(entity))}`;
@@ -210,6 +294,7 @@ export function getSearchEntityRoute(entity: SearchEntity): string | null {
   if (kind === 'app' && getSearchEntityPackageName(entity)) return `/app/${encodeURIComponent(getSearchEntityPackageName(entity))}`;
   if (kind === 'product' && id) return `/product/${encodeURIComponent(id)}`;
   if (kind === 'question' && id) return `/question/${encodeURIComponent(id)}`;
+  if (kind === 'answer' && id) return `/feed/${encodeURIComponent(id)}`;
   if (typeIncludes(entity, 'dyh') && id) return `/dyh/${encodeURIComponent(id)}`;
   if (typeIncludes(entity, 'album') && id) return `/album/${encodeURIComponent(id)}`;
   if (typeIncludes(entity, 'goods') && id) return `/goods?tab=detail&id=${encodeURIComponent(id)}`;

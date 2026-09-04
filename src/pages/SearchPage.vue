@@ -28,6 +28,21 @@
             <i v-if="tab.icon" :class="tab.icon"></i><span>{{ tab.label }}</span>
           </button>
         </div>
+
+        <div v-if="queryStr && !isTopicScopedSearch && isAskTab" class="search-ask-filter" role="tablist" aria-label="问答类型">
+          <button
+            v-for="option in askFeedTypeOptions"
+            :key="option.key"
+            type="button"
+            role="tab"
+            :class="['search-ask-filter-item', { active: askFeedType === option.key }]"
+            :aria-selected="askFeedType === option.key"
+            @click="switchAskFeedType(option.key)"
+          >
+            <i :class="option.icon" aria-hidden="true"></i>
+            <span>{{ option.label }}</span>
+          </button>
+        </div>
       </div>
 
       <div class="search-scroll-container custom-scrollbar" @scroll="handleScroll">
@@ -71,7 +86,7 @@ import { useAuthStore } from '../stores/auth';
 import type { SearchEntity, SearchTabDefinition, SearchTabState } from '../types/search';
 import { DEFAULT_SEARCH_TABS } from '../types/search';
 import { addSearchHistory, clearSearchHistory, loadSearchHistory, removeSearchHistory, searchHistory } from '../utils/searchHistory';
-import { extractSearchEntities, extractSearchTabs, getSearchEntityId, getSearchEntityTitle, isSponsorSearchEntity } from '../utils/searchEntities';
+import { extractSearchEntities, extractSearchTabs, getSearchEntityId, getSearchEntitySearchTarget, getSearchEntityTitle, isSponsorSearchEntity, normalizeSearchEntityForTab } from '../utils/searchEntities';
 
 const route = useRoute();
 const router = useRouter();
@@ -88,6 +103,12 @@ const queryStr = ref(readQueryString(route.query.q));
 const searchQuery = ref(queryStr.value);
 const searchTabs = ref<SearchTabDefinition[]>(DEFAULT_SEARCH_TABS);
 const activeTab = ref(initialTopicSearch ? 'feed' : readQueryString(route.query.tab) || 'all');
+const askFeedTypeOptions = [
+  { key: 'all', label: '全部', icon: 'fas fa-layer-group' },
+  { key: 'question', label: '提问', icon: 'fas fa-circle-question' },
+  { key: 'answer', label: '回答', icon: 'fas fa-comment-dots' },
+];
+const askFeedType = ref(normalizeAskFeedType(readQueryString(route.query.feedType)));
 const hotItems = ref<SearchEntity[]>([]);
 const tabStates = reactive<Record<string, SearchTabState>>({});
 const showSuggestions = ref(false);
@@ -126,6 +147,26 @@ function ensureTabState(key: string): SearchTabState {
 }
 
 const activeState = computed(() => ensureTabState(activeTab.value));
+
+const isAskTab = computed(() => {
+  const tab = searchTabs.value.find((item) => item.key === activeTab.value);
+  return tab?.searchType === 'ask' || activeTab.value === 'ask';
+});
+
+function normalizeAskFeedType(value: string): string {
+  return ['all', 'question', 'answer'].includes(value.toLowerCase()) ? value.toLowerCase() : 'all';
+}
+
+function switchAskFeedType(value: string) {
+  if (!isAskTab.value) return;
+  const nextFeedType = normalizeAskFeedType(value);
+  if (askFeedType.value === nextFeedType && readQueryString(route.query.feedType) === nextFeedType) return;
+  askFeedType.value = nextFeedType;
+  void router.push({
+    path: '/search',
+    query: { q: queryStr.value, tab: activeTab.value, feedType: nextFeedType },
+  });
+}
 
 function entityKey(entity: SearchEntity, index: number): string {
   return `${getSearchEntityId(entity) || getSearchEntityTitle(entity) || 'entity'}-${index}`;
@@ -203,11 +244,13 @@ async function fetchTab(tabKey: string, loadMore = false) {
       lastItem: loadMore ? state.cursor.lastItem : '',
       pageType: scoped ? 'tag' : tab.searchType === 'feed' ? 'search' : '',
       pageParam: scoped ? scopedTopicTag.value : '',
-      feedType: tab.searchType === 'feed' ? 'all' : '',
+      feedType: tab.searchType === 'ask' ? askFeedType.value : tab.searchType === 'feed' ? 'all' : '',
       sort: tab.searchType === 'feed' ? 'default' : '',
     });
     if (requestVersion !== state.requestVersion || sequence !== searchSequence) return;
-    const rows = extractSearchEntities(response).filter((item) => !isSponsorSearchEntity(item));
+    const rows = extractSearchEntities(response)
+      .map((item) => normalizeSearchEntityForTab(item, tab.searchType))
+      .filter((item) => !isSponsorSearchEntity(item));
     const existing = new Set(state.items.map((item) => entityKey(item, 0)));
     const uniqueRows = rows.filter((item, index) => {
       const key = entityKey(item, index);
@@ -260,11 +303,16 @@ function removeHistory(value: string) { removeSearchHistory(value); }
 function clearHistory() { clearSearchHistory(); showHistory.value = false; }
 
 function selectSuggestion(item: SearchEntity) {
+  const searchTarget = getSearchEntitySearchTarget(item);
+  if (searchTarget) {
+    doSearch(searchTarget.keyword, searchTarget.searchType);
+    return;
+  }
   const title = getSearchEntityTitle(item);
   if (title) doSearch(title);
 }
 
-function doSearch(value: string) {
+function doSearch(value: string, requestedSearchType = '') {
   const trimmed = value.trim();
   if (!trimmed) return;
   showSuggestions.value = false;
@@ -276,7 +324,11 @@ function doSearch(value: string) {
     query.pageType = 'tag';
     query.pageParam = scopedTopicTag.value;
   } else {
-    query.tab = activeTab.value;
+    const requestedTab = searchTabs.value.find((tab) => tab.key === requestedSearchType || tab.searchType === requestedSearchType);
+    const targetTab = requestedTab?.key || (requestedSearchType && DEFAULT_SEARCH_TABS.some((tab) => tab.key === requestedSearchType) ? requestedSearchType : activeTab.value);
+    query.tab = targetTab;
+    const targetDefinition = searchTabs.value.find((tab) => tab.key === targetTab);
+    if (targetDefinition?.searchType === 'ask' || targetTab === 'ask') query.feedType = askFeedType.value;
   }
   void router.push({ path: '/search', query });
 }
@@ -285,7 +337,10 @@ function switchTab(key: string) {
   if (isTopicScopedSearch.value) return;
   if (activeTab.value === key) return;
   activeTab.value = key;
-  void router.push({ path: '/search', query: { q: queryStr.value, tab: key } });
+  const targetTab = searchTabs.value.find((tab) => tab.key === key);
+  const query: Record<string, string> = { q: queryStr.value, tab: key };
+  if (targetTab?.searchType === 'ask' || key === 'ask') query.feedType = askFeedType.value;
+  void router.push({ path: '/search', query });
 }
 
 function removeEntity(id: string | number) {
@@ -347,10 +402,12 @@ watch(() => [
   readQueryString(route.query.tab),
   readQueryString(route.query.pageType),
   readQueryString(route.query.pageParam),
-], ([nextQuery, nextTab]) => {
+  readQueryString(route.query.feedType),
+], ([nextQuery, nextTab, , , nextFeedType]) => {
   const normalizedQuery = nextQuery;
   queryStr.value = normalizedQuery;
   searchQuery.value = normalizedQuery;
+  askFeedType.value = normalizeAskFeedType(nextFeedType);
   if (isTopicScopedSearch.value) {
     activeTab.value = 'feed';
   } else if (configLoaded) {
@@ -409,6 +466,10 @@ onUnmounted(() => {
 .search-tab-item { display: inline-flex; align-items: center; gap: 7px; position: relative; flex: 0 0 auto; min-height: 44px; padding: 0 8px; color: var(--text-secondary); font-size: var(--font-size-sub); font-weight: var(--font-weight-medium); white-space: nowrap; background: transparent; border: 0; cursor: pointer; }
 .search-tab-item.active { color: var(--brand-primary); font-weight: var(--font-weight-bold); }
 .search-tab-item.active::after { position: absolute; right: 8px; bottom: 0; left: 8px; height: 3px; content: ''; background: var(--brand-primary); border-radius: 3px 3px 0 0; }
+.search-ask-filter { display: flex; gap: 8px; padding: 8px 20px 10px; overflow-x: auto; background: var(--surface); border-top: 1px solid var(--border-light, rgba(0, 0, 0, .06)); scrollbar-width: none; }
+.search-ask-filter::-webkit-scrollbar { display: none; }
+.search-ask-filter-item { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px; color: var(--text-secondary); font-size: var(--font-size-caption); white-space: nowrap; background: transparent; border: 0; border-radius: 999px; cursor: pointer; }
+.search-ask-filter-item.active { color: var(--brand-primary); font-weight: var(--font-weight-bold); background: var(--brand-soft); }
 .search-scroll-container { flex: 1; min-height: 0; overflow-y: auto; background: var(--background-secondary); }
 .search-results-section, .search-welcome { width: 100%; box-sizing: border-box; padding: 16px 20px 28px; }
 .search-result-list { display: flex; flex-direction: column; gap: 12px; width: 100%; }
@@ -423,6 +484,7 @@ onUnmounted(() => {
   .search-tabs { gap: 4px; padding: 0 12px; }
   .search-tab-item { min-height: 42px; padding: 0 7px; }
   .search-tab-item.active::after { right: 7px; left: 7px; }
+  .search-ask-filter { padding: 8px 12px 10px; }
   .search-results-section, .search-welcome { padding: 12px 12px 24px; }
 }
 </style>

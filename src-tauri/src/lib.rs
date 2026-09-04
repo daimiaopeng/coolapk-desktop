@@ -3,9 +3,9 @@ pub mod coolapk;
 use coolapk::client::CoolapkClient;
 use coolapk::commands::{
     AppState, add_config_compare, add_goods_to_goods_list, add_to_black_list, add_to_ignore_list,
-    bind_feed_to_goods_list, change_product_wish_status, change_rating_status, check_login_info,
+    bind_feed_to_goods_list, change_product_follow_status, change_product_wish_status, change_rating_status, check_login_info,
     check_login_status, check_update, clean_expired_cache, clear_app_cache, clear_user_cookie,
-    close_login_window, create_feed, create_forward, create_goods_list, create_product_album,
+    close_login_window, create_answer, create_feed, create_forward, create_goods_list, create_product_album,
     delete_feed, delete_goods_list_items, delete_reply, download_update, edit_goods_list,
     edit_goods_list_item, export_json_file, favorite_apk, favorite_feed, fetch_external_page,
     follow_collection, follow_dyh, follow_live, follow_tag, follow_user, get_album_detail, get_album_list,
@@ -784,6 +784,7 @@ pub fn run() {
             get_product_list,
             get_product_brand_products,
             get_product_media_list,
+            change_product_follow_status,
             change_product_wish_status,
             get_product_wish_list,
             get_product_buy_list,
@@ -853,6 +854,7 @@ pub fn run() {
             special_follow_user,
             cancel_follower,
             update_user_remark,
+            create_answer,
             create_feed,
             save_cookie_securely,
             check_login_status,

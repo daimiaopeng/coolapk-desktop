@@ -306,6 +306,7 @@ import { getMessageUnreadCount, getSelfMessageUnreadCount } from '../../utils/me
 import { getNotificationActor } from '../../utils/notificationItem';
 import {
   addSeenNotificationCount,
+  clearSeenNotificationState,
   hasSeenNotificationItems,
   markNotificationItemsSeen,
   takeSeenNotificationCount,
@@ -458,13 +459,17 @@ async function fetchNotificationCount(): Promise<boolean | null> {
   }
   if (notificationRequestRunning) return null;
   notificationRequestRunning = true;
+  const requestStateVersion = notificationStore.notificationStateVersion;
   try {
     const res: any = await CoolapkTauriAPI.getNotificationCount();
+    // 清除通知期间返回的旧 checkCount 不能再写回红点，否则本地刚消失的角标会被竞态恢复。
+    if (requestStateVersion !== notificationStore.notificationStateVersion) return true;
     const previousMessageCount = notificationStore.messageCount;
     const applied = notificationStore.applyServerResponse(res);
     let { previous, count, increasedCategories } = applied;
 
     await restoreSeenLikeNotifications();
+    if (requestStateVersion !== notificationStore.notificationStateVersion) return true;
     count = notificationStore.unreadCount;
 
     // checkCount 只返回数量，服务端偶尔会把自己发出的最后一条私信也算进去。
@@ -748,6 +753,7 @@ async function openNotificationPreview(preview: NotificationPreview) {
     addSeenNotificationCount(authStore.user.uid, preview.category, 1);
     markNotificationItemsSeen(authStore.user.uid, preview.category, [preview.item], 1);
   }
+  void clearFeedNotifications();
   notificationPreviews.value = notificationPreviews.value.filter((item) => item.key !== preview.key);
   isNotificationPopoverVisible.value = false;
   const externalUrl = getNotificationExternalUrl(preview.item);
@@ -769,6 +775,23 @@ async function openNotificationPreview(preview: NotificationPreview) {
     return;
   }
   void router.push({ path: '/notifications', query: { tab: preview.apiType } });
+}
+
+async function clearFeedNotifications(): Promise<void> {
+  notificationStore.beginNotificationClear();
+  try {
+    // v18 服务端对 type=feed 会返回 200 但不改变 badge；官方 APK 的通知中心使用 type=all。
+    // 只有在当前已知没有私信时才调用 all，保留桌面端铃铛与私信入口的分离语义。
+    const clearType = notificationStore.messageCount > 0 ? 'feed' : 'all';
+    await CoolapkTauriAPI.clearNotificationCount(clearType);
+    notificationStore.markNotificationsCleared();
+    if (authStore.user?.uid) clearSeenNotificationState(authStore.user.uid, 'like');
+    notificationPreviews.value = [];
+    notificationPreviewLoadedAt = 0;
+  } catch (error) {
+    // 保留本地即时反馈；下次轮询仍会以服务端状态为准。
+    console.warn('清除服务端通知未读数失败:', error);
+  }
 }
 
 function getNotificationPollIntervalMs(): number {

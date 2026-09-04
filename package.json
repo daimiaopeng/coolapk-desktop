@@ -36,6 +36,7 @@
     "@tauri-apps/plugin-store": "^2.0.0",
     "@tauri-apps/plugin-stronghold": "^2.0.0",
     "pinia": "^2.1.7",
+    "qrcode": "^1.5.4",
     "vue": "^3.4.21",
     "vue-router": "^4.3.0"
   },

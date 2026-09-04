@@ -51,4 +51,24 @@ describe('动态正文展开', () => {
     expect(wrapper.text()).toContain('后台已经准备好的完整正文');
     expect(mocks.getFeedDetail).toHaveBeenCalledTimes(1);
   });
+
+  it('回答卡片在标题前显示明确的回答标识', () => {
+    const wrapper = mount(FeedContent, {
+      props: { title: '回答标题', message: '回答正文', answerMode: true },
+      global: { plugins: [createPinia()] },
+    });
+
+    expect(wrapper.find('.answer-title-badge').text()).toBe('回答');
+    expect(wrapper.find('.feed-title').text()).toContain('回答标题');
+  });
+
+  it('提问卡片在标题前显示明确的提问标识', () => {
+    const wrapper = mount(FeedContent, {
+      props: { title: '问题标题', message: '问题正文', questionMode: true },
+      global: { plugins: [createPinia()] },
+    });
+
+    expect(wrapper.find('.question-title-badge').text()).toBe('提问');
+    expect(wrapper.find('.feed-title').text()).toContain('问题标题');
+  });
 });

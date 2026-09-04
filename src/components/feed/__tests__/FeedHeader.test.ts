@@ -38,6 +38,26 @@ describe('动态头部信息布局', () => {
     expect(wrapper.find('.meta-row').element.firstElementChild?.classList.contains('dateline')).toBe(true);
   });
 
+  it('问答动态在头部右侧显示明确的问答标识', () => {
+    setActivePinia(createPinia());
+    const wrapper = mount(FeedHeader, {
+      props: {
+        username: '问答用户',
+        questionMode: true,
+      },
+      global: {
+        stubs: {
+          AppAvatar: true,
+          AppIconButton: true,
+        },
+      },
+    });
+
+    const badge = wrapper.find('.header-actions .question-badge');
+    expect(badge.text()).toBe('问答');
+    expect(badge.attributes('aria-label')).toBe('问答');
+  });
+
   it('将头条返回的数字字符串时间转换为相对时间', () => {
     vi.setSystemTime(new Date(1787311908 * 1000));
     setActivePinia(createPinia());

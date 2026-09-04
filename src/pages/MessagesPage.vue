@@ -185,12 +185,26 @@
                 <i class="far fa-face-smile"></i>
               </button>
 
-              <!-- 酷安 Emoji 表情包浮动面板 -->
-              <div v-if="showEmojiPicker" class="emoji-picker-popover" @click.stop>
-                <div class="emoji-picker-header">
-                  <span>酷安表情</span>
-                  <button class="close-picker-btn" @click="showEmojiPicker = false">&times;</button>
-                </div>
+              <!-- 酷安 Emoji 表情包浮动面板 (参考微信：无顶部条，最近使用 + 所有表情) -->
+              <div v-if="showEmojiPicker" class="emoji-picker-popover custom-scrollbar" @click.stop>
+                <!-- 最近使用 -->
+                <template v-if="recentEmojis.length">
+                  <div class="emoji-section-title">最近使用</div>
+                  <div class="emoji-grid emoji-grid-recent">
+                    <button
+                      v-for="name in recentEmojis"
+                      :key="'recent-' + name"
+                      class="emoji-item-btn"
+                      :title="String(name)"
+                      @click="insertEmoji(String(name))"
+                    >
+                      <img :src="getEmojiUrl(String(name))" :alt="String(name)" />
+                    </button>
+                  </div>
+                </template>
+
+                <!-- 所有表情 -->
+                <div class="emoji-section-title">所有表情</div>
                 <div class="emoji-grid">
                   <button
                     v-for="(filename, name) in EMOJI_MAP"
@@ -199,7 +213,7 @@
                     :title="String(name)"
                     @click="insertEmoji(String(name))"
                   >
-                    <img :src="`${EMOJI_BASE}${filename}`" :alt="String(name)" />
+                    <img :src="getEmojiUrl(String(name))" :alt="String(name)" />
                   </button>
                 </div>
               </div>
@@ -283,7 +297,8 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import AppButton from '../components/common/AppButton.vue';
-import { EMOJI_MAP, EMOJI_BASE } from '../utils/coolapkEmoji';
+import { EMOJI_MAP, EMOJI_BASE, getEmojiUrl } from '../utils/coolapkEmoji';
+import { useRecentEmojis } from '../utils/recentEmojis';
 import { renderCoolapkRichText } from '../utils/richText';
 import { coolapkHtmlToPlainText } from '../utils/sanitizeHtml';
 import { handleAnchorClick } from '../utils/anchorClick';
@@ -378,15 +393,16 @@ async function copyBubbleText(msg: any) {
 
 const showEmojiPicker = ref(false);
 const emojiContainerRef = ref<HTMLElement | null>(null);
+const { recentEmojis, addRecent } = useRecentEmojis();
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const editorRef = ref<HTMLDivElement | null>(null);
 const chatAreaRef = ref<HTMLElement | null>(null);
 
 // --- 酷安富文本表情输入框工具函数 ---
-function createEmojiImg(name: string, filename?: string): HTMLImageElement {
+function createEmojiImg(name: string, _filename?: string): HTMLImageElement {
   const img = document.createElement('img');
   img.className = 'coolapk-emoji';
-  img.src = `${EMOJI_BASE}${filename || EMOJI_MAP[name] || 'coolapk_emotion_1_hahaha.png'}`;
+  img.src = getEmojiUrl(name) || `${EMOJI_BASE}coolapk_emotion_1_hahaha.png`;
   img.alt = `[${name}]`;
   img.title = name;
   img.setAttribute('data-emoji', `[${name}]`);
@@ -398,9 +414,9 @@ function parseTextToEditorNodes(text: string): Node[] {
   if (!text) return [];
   const container = document.createElement('div');
   const rendered = text.replace(/\[([^\]\r\n]{1,20})\]/g, (match, name: string) => {
-    const filename = EMOJI_MAP[name];
-    if (!filename) return match;
-    return `<img class="coolapk-emoji" src="${EMOJI_BASE}${filename}" alt="${match}" title="${name}" data-emoji="${match}" contenteditable="false" />`;
+    const url = getEmojiUrl(name);
+    if (!url) return match;
+    return `<img class="coolapk-emoji" src="${url}" alt="${match}" title="${name}" data-emoji="${match}" contenteditable="false" />`;
   });
   container.innerHTML = rendered.replace(/\n/g, '<br>');
   return Array.from(container.childNodes);
@@ -1275,6 +1291,7 @@ const toggleEmojiPicker = () => {
 };
 
 const insertEmoji = (emojiName: string) => {
+  addRecent(emojiName);
   const filename = EMOJI_MAP[emojiName];
   const el = editorRef.value;
   const emojiCode = `[${emojiName}]`;
@@ -2372,16 +2389,16 @@ onUnmounted(() => {
   position: absolute;
   bottom: 36px;
   left: 0;
-  width: 320px;
-  max-height: 240px;
+  width: 324px;
+  max-height: 280px;
   background: var(--surface);
   border: 1px solid var(--border-light);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
   border-radius: var(--radius-card);
   z-index: 100;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  display: block;
+  overflow-y: auto;
+  padding: 8px 10px 10px 10px;
   animation: emojiSpringPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
   transform-origin: bottom left;
 }
@@ -2401,42 +2418,27 @@ onUnmounted(() => {
   }
 }
 
-.emoji-picker-header {
-  padding: var(--space-2) var(--space-3);
-  background: var(--background-secondary, #f8f9fa);
-  border-bottom: 1px solid var(--border-light);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
-}
-
-.close-picker-btn {
-  background: transparent;
-  border: none;
-  font-size: 18px;
-  cursor: pointer;
+.emoji-section-title {
+  font-size: 0.75rem;
   color: var(--text-tertiary);
-  transition: transform 0.15s ease, color 0.15s ease;
+  padding: 4px 4px 6px 4px;
+  user-select: none;
+  font-weight: 500;
+  line-height: 1;
 }
 
-.close-picker-btn:hover {
-  color: var(--text-primary);
-  transform: scale(1.15);
+.emoji-section-title:not(:first-child) {
+  margin-top: 8px;
 }
 
-.close-picker-btn:active {
-  transform: scale(0.9);
+.emoji-grid-recent {
+  margin-bottom: 2px;
 }
 
 .emoji-grid {
-  padding: var(--space-2);
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: var(--space-1);
-  overflow-y: auto;
-  max-height: 190px;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
 }
 
 .emoji-item-btn {

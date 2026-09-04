@@ -287,7 +287,7 @@ describe('评论完整信息展示', () => {
     expect(wrapper.text()).toContain('小米 17 Ultra');
   });
 
-  it('支持表情面板展开与表情插入', async () => {
+  it('支持表情面板展开与表情插入，并支持最近使用与移除顶部栏', async () => {
     const wrapper = mountSection();
     expect(wrapper.find('.emoji-picker-popover').exists()).toBe(false);
 
@@ -297,6 +297,9 @@ describe('评论完整信息展示', () => {
     await emojiBtn!.trigger('click');
 
     expect(wrapper.find('.emoji-picker-popover').exists()).toBe(true);
+    // 顶部条已去除（参考微信设计）
+    expect(wrapper.find('.emoji-picker-header').exists()).toBe(false);
+    expect(wrapper.find('.emoji-section-title').text()).toBe('所有表情');
 
     // 点击某一个表情
     const firstEmoji = wrapper.find('.emoji-item-btn');
@@ -305,6 +308,11 @@ describe('评论完整信息展示', () => {
 
     const textarea = wrapper.find<HTMLTextAreaElement>('.comment-textarea');
     expect(textarea.element.value).toMatch(/^\[.+\]$/);
+
+    // 再次渲染时应包含“最近使用”区块
+    const titles = wrapper.findAll('.emoji-section-title').map(t => t.text());
+    expect(titles).toContain('最近使用');
+    expect(wrapper.find('.emoji-grid-recent').exists()).toBe(true);
   });
 
   it('点击回复酷友时显示回复目标栏且支持一键取消', async () => {

@@ -35,6 +35,85 @@ describe('动态卡片编辑记录', () => {
     setActivePinia(createPinia());
   });
 
+  it('将生成长图放入头部的更多菜单', async () => {
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: { id: 'menu-feed', uid: '456', username: '测试用户', message: '动态正文' },
+      },
+      global: {
+        stubs: {
+          FeedHeader: {
+            template: '<button class="stub-more" @click="$emit(\'more\')">更多</button>',
+          },
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedActionBar: true,
+          FeedCommentSection: true,
+          ForwardDialog: true,
+          FeedShareImageDialog: {
+            props: ['show'],
+            template: '<div class="stub-share-image-dialog" :data-open="String(show)"></div>',
+          },
+          FeedInteractionListDialog: true,
+          FeedCollectionPickerDialog: true,
+          AppDialog: true,
+          LoadingState: true,
+        },
+      },
+    });
+
+    await wrapper.find('.stub-more').trigger('click');
+    expect(wrapper.find('.more-menu').text()).toContain('生成长图');
+
+    await wrapper.find('.more-menu-item').trigger('click');
+    expect(wrapper.find('.more-menu').exists()).toBe(false);
+    expect(wrapper.find('.stub-share-image-dialog').attributes('data-open')).toBe('true');
+  });
+
+  it('提问卡显示 APK 的回答/关注统计并沿用问答头部标识', async () => {
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: {
+          id: 'question-card',
+          feedType: 'question',
+          title: '问题标题',
+          message: '问题正文',
+          question_answer_num: 3,
+          question_follow_num: 4,
+        },
+      },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          FeedHeader: {
+            props: ['questionMode'],
+            template: '<div class="stub-feed-header" :data-question-mode="String(questionMode)"></div>',
+          },
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedVideoCard: true,
+          FeedActionBar: true,
+          FeedCommentSection: true,
+          ForwardDialog: true,
+          FeedShareImageDialog: true,
+          FeedInteractionListDialog: true,
+          FeedCollectionPickerDialog: true,
+          AppDialog: true,
+          LoadingState: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.stub-feed-header').attributes('data-question-mode')).toBe('true');
+    expect(wrapper.find('.question-stats').text()).toContain('3人回答');
+    expect(wrapper.find('.question-stats').text()).toContain('4人关注');
+
+    await wrapper.setProps({ feed: { id: 'answer-card', feedType: 'answer', title: '回答标题', message: '回答正文' } });
+    expect(wrapper.find('.stub-feed-header').attributes('data-question-mode')).toBe('true');
+    expect(wrapper.find('.question-stats').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('已编辑动态显示标识，点击后打开编辑记录', async () => {
     mocks.getFeedChangeHistory.mockResolvedValue({
       data: [

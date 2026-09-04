@@ -98,6 +98,7 @@ import {
   extractHotSearchKeywords,
   extractSearchEntities,
   getSearchEntityKind,
+  getSearchEntitySearchTarget,
   getSearchEntitySubtitle,
   getSearchEntityTitle,
   isNavigableSearchEntity,
@@ -173,6 +174,12 @@ function applySearch(tag: string) {
 }
 
 function selectSuggestion(item: SearchEntity) {
+  const searchTarget = getSearchEntitySearchTarget(item);
+  if (searchTarget) {
+    searchSuggestions.value = [];
+    handleEnterSearch(searchTarget.keyword, searchTarget.searchType);
+    return;
+  }
   const title = getSearchEntityTitle(item);
   if (!title) return;
   query.value = title;
@@ -180,11 +187,14 @@ function selectSuggestion(item: SearchEntity) {
   handleEnterSearch();
 }
 
-function handleEnterSearch() {
-  if (!query.value.trim()) return;
-  addSearchHistory(query.value);
+function handleEnterSearch(value = query.value, searchType = '') {
+  const trimmed = value.trim();
+  if (!trimmed) return;
+  addSearchHistory(trimmed);
   appStore.closeSearch();
-  router.push({ path: '/search', query: { q: query.value.trim() } });
+  const routeQuery: Record<string, string> = { q: trimmed };
+  if (searchType) routeQuery.tab = searchType;
+  void router.push({ path: '/search', query: routeQuery });
 }
 
 function handleInputKeydown(e: KeyboardEvent) {

@@ -10,6 +10,8 @@ describe('动态互动入口', () => {
       props: { feedId: '42', likenum: 12, sharenum: 3 },
     });
 
+    expect(wrapper.find('.like-btn span').exists()).toBe(false);
+    expect(wrapper.find('.share-btn span').exists()).toBe(false);
     expect(wrapper.find('[title="查看点赞用户"]').text()).toBe('12');
     expect(wrapper.find('[title="查看转发列表"]').text()).toBe('3');
 
@@ -25,5 +27,7 @@ describe('动态互动入口', () => {
 
     expect(wrapper.find('[title="查看点赞用户"]').exists()).toBe(false);
     expect(wrapper.find('[title="查看转发列表"]').exists()).toBe(false);
+    expect(wrapper.find('.comment-btn').text()).toBe('');
+    expect(wrapper.find('.fav-btn').text()).toBe('');
   });
 });

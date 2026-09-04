@@ -273,10 +273,20 @@ fn build_create_feed_form(
     pic: Option<&str>,
     post_token: Option<&str>,
 ) -> Vec<(&'static str, String)> {
+    build_create_feed_form_for_type(message, pic, post_token, "feed", "")
+}
+
+fn build_create_feed_form_for_type(
+    message: &str,
+    pic: Option<&str>,
+    post_token: Option<&str>,
+    feed_type: &str,
+    fid: &str,
+) -> Vec<(&'static str, String)> {
     let mut form = vec![
         ("id", String::new()),
         ("message", message.to_string()),
-        ("type", "feed".to_string()),
+        ("type", feed_type.to_string()),
         ("pic", pic.unwrap_or_default().to_string()),
         ("status", "1".to_string()),
         ("publish_status", "0".to_string()),
@@ -298,7 +308,7 @@ fn build_create_feed_form(
         ("original_type", "0".to_string()),
         ("is_editInDyh", "0".to_string()),
         ("forwardid", String::new()),
-        ("fid", String::new()),
+        ("fid", fid.to_string()),
         ("dyhId", String::new()),
         ("targetType", String::new()),
         ("productId", String::new()),
@@ -1744,6 +1754,9 @@ impl CoolapkClient {
         copy_first_field(&mut cleaned, obj, "relationRows", &["relationRows", "relation_rows"]);
         copy_first_field(&mut cleaned, obj, "extraRows", &["extraRows", "extra_rows"]);
         copy_first_field(&mut cleaned, obj, "productRows", &["productRows", "product_rows"]);
+        // 回答动态的 fid 是所属问题 ID；首页清洗时必须保留，否则点击回答只能退化到 /feed/:id。
+        copy_first_field(&mut cleaned, obj, "questionId", &["questionId", "question_id", "fid", "f_id"]);
+        copy_first_field(&mut cleaned, obj, "answerId", &["answerId", "answer_id"]);
         copy_first_field(&mut cleaned, obj, "imageUriList", &["imageUriList", "image_uri_list"]);
         if cleaned.get("imageUriList").is_none() {
             if let Some(arr) = obj.get("picArr").and_then(|value| value.as_array()) {
@@ -4316,24 +4329,32 @@ impl CoolapkClient {
     }
 
     /// 问答（Q&A）列表
-    /// 数据来源: GET /v6/question/answerList?id={feedId}&sort={sort}&page={page}
+    /// 数据来源: GET /v6/question/answerList?id={feedId}&sort={sort}&page={page}&firstItem={firstItem}&lastItem={lastItem}
     pub async fn get_question_answers(
         &self,
         feed_id: &str,
         sort: &str,
         page: u32,
+        first_item: &str,
+        last_item: &str,
     ) -> Result<Value, String> {
-        let raw = self
-            .api_get(
-                "/v6/question/answerList",
-                &[
-                    ("id", feed_id.to_string()),
-                    ("sort", sort.to_string()),
-                    ("page", page.to_string()),
-                ],
-            )
-            .await?;
-        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+        let mut query = vec![
+            ("id", feed_id.to_string()),
+            ("sort", sort.to_string()),
+            ("page", page.max(1).to_string()),
+        ];
+        if !first_item.trim().is_empty() {
+            query.push(("firstItem", first_item.trim().to_string()));
+        }
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.trim().to_string()));
+        }
+
+        let raw = self.api_get("/v6/question/answerList", &query).await?;
+        let data = Self::extract_cleaned_list(&raw);
+        let first = data.first().map(topic_hub_cursor).unwrap_or_default();
+        let last = data.last().map(topic_hub_cursor).unwrap_or_default();
+        Ok(json!({ "code": 200, "data": data, "firstItem": first, "lastItem": last }))
     }
 
     /// 关注问题。对应 APK 的 GET /v6/question/follow?id={questionId}。
@@ -5841,21 +5862,12 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": clean_list }))
     }
 
-    /// 发布动态（需登录）
-    /// 官方客户端要求 POST application/x-www-form-urlencoded：
-    /// message / type=feed / is_html_article=0 / pic / _v2_post_token。
-    pub async fn create_feed(
+    async fn submit_create_feed_form(
         &self,
-        message: &str,
-        pic: Option<&str>,
-        post_token: Option<&str>,
+        form: Vec<(&'static str, String)>,
+        failure_prefix: &str,
     ) -> Result<Value, String> {
-        // createFeed 在 `PostToken.List` 内，官方建议携带网易易盾 _v2_post_token。
-        // 实测服务端对该字段并非强制（无 token 亦能发布成功），因此 token 为可选，
-        // 仅在调用方（前端）提供时附加；缺失时仍正常提交，若服务端拒绝再提示验证。
         let token = self.get_token()?;
-        let form = build_create_feed_form(message, pic, post_token);
-
         let mut request = self.apply_device_profile(
             self.client
                 .request(
@@ -5881,8 +5893,8 @@ impl CoolapkClient {
 
         let response = request.send().await.map_err(|e| e.to_string())?;
         let wrapped = wrap_api_data(response_json(response).await?)?;
-        // 发布成功时服务端必须返回新建动态对象（含 id）；data 缺失/为空说明
-        // 服务端虽然返回了 200 信封但并未真正创建动态，必须视为失败
+        // 发布成功时服务端必须返回新建实体（含 id）；data 缺失/为空说明
+        // 服务端虽然返回了 200 信封但并未真正创建内容，必须视为失败。
         let created = wrapped
             .get("data")
             .and_then(|d| d.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
@@ -5893,9 +5905,51 @@ impl CoolapkClient {
                     .map(|n| n.to_string())
             });
         if created.is_none() {
-            return Err("发布动态失败：服务端未返回发布结果，请重试".to_string());
+            return Err(format!("{failure_prefix}服务端未返回发布结果，请重试"));
         }
         Ok(wrapped)
+    }
+
+    /// 发布动态（需登录）
+    /// 官方客户端要求 POST application/x-www-form-urlencoded：
+    /// message / type=feed / is_html_article=0 / pic / _v2_post_token。
+    pub async fn create_feed(
+        &self,
+        message: &str,
+        pic: Option<&str>,
+        post_token: Option<&str>,
+    ) -> Result<Value, String> {
+        // createFeed 在 `PostToken.List` 内，官方建议携带网易易盾 _v2_post_token。
+        // 实测服务端对该字段并非强制（无 token 亦能发布成功），因此 token 为可选，
+        // 仅在调用方（前端）提供时附加；缺失时仍正常提交，若服务端拒绝再提示验证。
+        self.submit_create_feed_form(
+            build_create_feed_form(message, pic, post_token),
+            "发布动态失败：",
+        )
+        .await
+    }
+
+    /// 回答问题（需登录）。APK 仍使用 createFeed，只是 type=answer 且 fid 为问题 ID。
+    pub async fn create_answer(
+        &self,
+        question_id: &str,
+        message: &str,
+        pic: Option<&str>,
+        post_token: Option<&str>,
+    ) -> Result<Value, String> {
+        let question_id = question_id.trim();
+        if question_id.is_empty() {
+            return Err("问题 ID 不能为空".to_string());
+        }
+        let message = message.trim();
+        if message.is_empty() {
+            return Err("回答内容不能为空".to_string());
+        }
+        self.submit_create_feed_form(
+            build_create_feed_form_for_type(message, pic, post_token, "answer", question_id),
+            "发布回答失败：",
+        )
+        .await
     }
 
     /// 转发动态（需登录）
@@ -6485,6 +6539,26 @@ impl CoolapkClient {
         wrap_api_data(
             self.api_post(
                 "/v6/product/changeWishStatus",
+                &[],
+                &[
+                    ("id", product_id.to_string()),
+                    ("status", status.to_string()),
+                ],
+            )
+            .await?,
+        )
+    }
+
+    /// 修改产品关注状态（需登录）。
+    /// 数据来源: POST /v6/product/changeFollowStatus?id={id}&status={status}
+    pub async fn change_product_follow_status(&self, product_id: &str, status: i32) -> Result<Value, String> {
+        let product_id = product_id.trim();
+        if product_id.is_empty() {
+            return Err("产品 ID 不能为空".to_string());
+        }
+        wrap_api_data(
+            self.api_post(
+                "/v6/product/changeFollowStatus",
                 &[],
                 &[
                     ("id", product_id.to_string()),

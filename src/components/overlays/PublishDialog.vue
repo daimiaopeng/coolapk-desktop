@@ -39,17 +39,39 @@
         @change="handleImageSelected"
       />
 
-      <!-- 表情面板 -->
+      <!-- 表情面板 (参考微信：最近使用 + 所有表情) -->
       <div v-if="showEmojiPanel" class="emoji-panel custom-scrollbar">
-        <button
-          v-for="(fileName, name) in EMOJI_MAP"
-          :key="name"
-          class="emoji-item"
-          :title="name"
-          @click="insertEmoji(name)"
-        >
-          <img :src="EMOJI_BASE + fileName" :alt="name" />
-        </button>
+        <!-- 最近使用 -->
+        <template v-if="recentEmojis.length">
+          <div class="emoji-section-title">最近使用</div>
+          <div class="emoji-grid emoji-grid-recent">
+            <button
+              v-for="name in recentEmojis"
+              :key="'recent-' + name"
+              type="button"
+              class="emoji-item"
+              :title="name"
+              @click="insertEmoji(name)"
+            >
+              <img :src="getEmojiUrl(String(name))" :alt="name" />
+            </button>
+          </div>
+        </template>
+
+        <!-- 所有表情 -->
+        <div class="emoji-section-title">所有表情</div>
+        <div class="emoji-grid">
+          <button
+            v-for="(fileName, name) in EMOJI_MAP"
+            :key="name"
+            type="button"
+            class="emoji-item"
+            :title="name"
+            @click="insertEmoji(name)"
+          >
+            <img :src="getEmojiUrl(String(name))" :alt="name" />
+          </button>
+        </div>
       </div>
 
       <!-- 话题面板 -->
@@ -120,7 +142,8 @@ import { useAppStore } from '../../stores/app';
 import { useSettingsStore } from '../../stores/settings';
 import { useAuthStore } from '../../stores/auth';
 import { CoolapkTauriAPI } from '../../api/coolapk';
-import { renderCoolapkEmoji, EMOJI_MAP, EMOJI_BASE } from '../../utils/coolapkEmoji';
+import { renderCoolapkEmoji, EMOJI_MAP, EMOJI_BASE, getEmojiUrl } from '../../utils/coolapkEmoji';
+import { useRecentEmojis } from '../../utils/recentEmojis';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { clearPublishDraft, loadPublishDraft, savePublishDraft } from '../../utils/publishDrafts';
 import { verifyWithCaptcha, extractCaptchaParamsFromResponse } from '../../utils/neteaseCaptcha';
@@ -138,6 +161,7 @@ const uploadedCount = ref(0);
 const submitting = ref(false);
 const errorMessage = ref('');
 const showEmojiPanel = ref(false);
+const { recentEmojis, addRecent } = useRecentEmojis();
 const showTopicPanel = ref(false);
 const topics = ref<any[]>([]);
 const topicsLoading = ref(false);
@@ -194,6 +218,7 @@ function insertAtCursor(text: string) {
 }
 
 function insertEmoji(name: string) {
+  addRecent(name);
   insertAtCursor(`[${name}]`);
 }
 
@@ -508,16 +533,36 @@ async function handlePublish() {
 }
 
 .emoji-panel {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
-  gap: 4px;
   margin-top: var(--space-3);
-  max-height: 180px;
+  max-height: 220px;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: var(--space-2);
+  padding: 8px 10px 10px 10px;
   background-color: var(--background);
+}
+
+.emoji-section-title {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  padding: 4px 4px 6px 4px;
+  user-select: none;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.emoji-section-title:not(:first-child) {
+  margin-top: 8px;
+}
+
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 4px;
+}
+
+.emoji-grid-recent {
+  margin-bottom: 2px;
 }
 
 .emoji-item {

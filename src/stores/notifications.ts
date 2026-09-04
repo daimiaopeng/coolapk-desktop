@@ -40,6 +40,7 @@ export const useNotificationStore = defineStore('notifications', () => {
   });
   const locallyViewed = reactive(createCategoryCounts());
   const locallyViewedWithoutCategory = ref(0);
+  const notificationStateVersion = ref(0);
 
   const notificationCount = computed(() => Math.max(0, unreadCount.value - categoryCounts.message));
   const messageCount = computed(() => categoryCounts.message);
@@ -209,6 +210,27 @@ export const useNotificationStore = defineStore('notifications', () => {
     return suppressed;
   }
 
+  /** 开始清除通知，阻止已经发出的旧 checkCount 响应覆盖当前状态。 */
+  function beginNotificationClear(): void {
+    notificationStateVersion.value += 1;
+  }
+
+  /** 服务端确认清除站内通知后丢弃旧的本地抵消，避免吞掉下一条新通知。 */
+  function markNotificationsCleared(): void {
+    notificationStateVersion.value += 1;
+    const remainingMessageCount = categoryCounts.message;
+    for (const category of CATEGORY_NAMES) {
+      if (category === 'message') continue;
+      categoryCounts[category] = 0;
+      serverCategoryCounts[category] = 0;
+      locallyViewed[category] = 0;
+    }
+    locallyViewedWithoutCategory.value = 0;
+    unreadCount.value = remainingMessageCount;
+    // feed 清除后，当前已知的服务端基线只剩私信，后续新通知从 0 正常计入。
+    serverTotal.value = remainingMessageCount;
+  }
+
   /** 显式执行全部已读时清除站内通知，私信未读保持不变。 */
   function markAllNotificationsViewed(): number {
     const count = notificationCount.value;
@@ -229,6 +251,7 @@ export const useNotificationStore = defineStore('notifications', () => {
   }
 
   function reset() {
+    notificationStateVersion.value += 1;
     unreadCount.value = 0;
     serverTotal.value = null;
     locallyViewedWithoutCategory.value = 0;
@@ -244,12 +267,15 @@ export const useNotificationStore = defineStore('notifications', () => {
     categoryCounts,
     notificationCount,
     messageCount,
+    notificationStateVersion,
     applyServerResponse,
     applyCategoryCount,
     markViewed,
     markCategoryViewed,
     suppressNotificationCount,
     suppressMessageCount,
+    beginNotificationClear,
+    markNotificationsCleared,
     markAllNotificationsViewed,
     reset,
   };

@@ -102,6 +102,7 @@ onUnmounted(unbindGlobalListeners);
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  max-width: calc(100vw - 32px);
   max-height: 85vh;
   overflow: hidden;
 }

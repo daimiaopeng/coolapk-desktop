@@ -8,6 +8,15 @@
         :message="error"
         @retry="fetchDetail"
       />
+      <QuestionAnswerCard
+        v-else-if="feedDetail && isAnswerDetail"
+        :answer="feedDetail"
+        detail-mode
+        :auto-open-comments="!loading"
+        :question-id="answerQuestionId"
+        :question-title="answerQuestionTitle"
+        :show-related-content="false"
+      />
       <FeedCard
         v-else-if="feedDetail"
         :feed="feedDetail"
@@ -24,9 +33,11 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAppStore } from '../stores/app';
 import FeedCard from '../components/feed/FeedCard.vue';
+import QuestionAnswerCard from '../components/question/QuestionAnswerCard.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
+import { isAnswerSearchEntity } from '../utils/searchEntities';
 
 defineOptions({ name: 'FeedDetailPage' });
 
@@ -51,6 +62,23 @@ function normalizeContextFeed(item: any): any {
 }
 
 const feedDetail = ref<any>(normalizeContextFeed(appStore.getFeedDetailContext(feedId.value)));
+const isAnswerDetail = computed(() => Boolean(feedDetail.value && isAnswerSearchEntity(feedDetail.value)));
+const answerQuestionId = computed(() => String(
+  feedDetail.value?.questionId
+    ?? feedDetail.value?.question_id
+    ?? feedDetail.value?.fid
+    ?? feedDetail.value?.feedId
+    ?? feedDetail.value?.feed_id
+    ?? feedDetail.value?.targetRow?.id
+    ?? feedDetail.value?.target_row?.id
+    ?? '',
+).trim());
+const answerQuestionTitle = computed(() => String(
+  feedDetail.value?.questionTitle
+    ?? feedDetail.value?.question_title
+    ?? feedDetail.value?.question?.title
+    ?? '',
+).trim());
 // 有通知摘要时也先等待完整动态返回，再自动加载评论，避免拿摘要字段请求出空列表。
 const loading = ref(Boolean(feedId.value));
 const error = ref('');
@@ -113,5 +141,15 @@ watch(feedId, (nextFeedId) => {
   border-top: none;
   box-shadow: none;
   margin-bottom: 0;
+}
+
+.feed-detail-shell :deep(.question-answer-card) {
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 0;
+  border-radius: 0;
+  border-right: none;
+  border-left: none;
+  box-shadow: none;
 }
 </style>

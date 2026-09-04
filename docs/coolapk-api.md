@@ -363,9 +363,13 @@ TS 方法：`followTag(tag)` / `unfollowTag(tag)`
 | id | num | 必要 | 问题 ID |
 | sort | str | 非必要 | 排序方式 |
 | page | num | 必要 | 页数，从 1 起 |
+| firstItem | str | 非必要 | APK 分页首项游标 |
+| lastItem | str | 非必要 | APK 分页末项游标 |
 
-Rust 方法：`get_question_answers(id, page)`
-TS 方法：`getQuestionAnswers(id, page)`
+排序值：`reply`（热门）、`like`（高赞）、`dateline`（最新）。
+
+Rust 方法：`get_question_answers(id, sort, page, first_item, last_item)`
+TS 方法：`getQuestionAnswers(id, sort, page, { firstItem, lastItem })`
 
 ### GET `/v6/vote/commentList` — 投票评论 ✅ 可用 · 🆕 新接入
 

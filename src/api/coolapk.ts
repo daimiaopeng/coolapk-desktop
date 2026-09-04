@@ -201,6 +201,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('change_product_wish_status', { productId, status });
   }
 
+  static async changeProductFollowStatus(productId: string, status: number) {
+    return await invokeNative('change_product_follow_status', { productId, status }, { retry: false, kind: 'feed' });
+  }
+
   static async getProductWishList(productId: string, page: number = 1) {
     return await invokeNative('get_product_wish_list', { productId, page });
   }
@@ -877,8 +881,16 @@ export class CoolapkTauriAPI {
     });
   }
 
-  static async getQuestionAnswers(feedId: string, sort: string = 'reply', page: number = 1) {
-    return await invokeNative('get_question_answers', { feedId, sort, page }, { retry: true, kind: 'feed' });
+  static async getQuestionAnswers(
+    feedId: string,
+    sort: string = 'reply',
+    page: number = 1,
+    options: { firstItem?: string; lastItem?: string } = {},
+  ) {
+    const args: Record<string, unknown> = { feedId, sort, page };
+    if (options.firstItem) args.firstItem = options.firstItem;
+    if (options.lastItem) args.lastItem = options.lastItem;
+    return await invokeNative('get_question_answers', args, { retry: true, kind: 'feed' });
   }
 
   static async followQuestion(questionId: string) {
@@ -891,6 +903,13 @@ export class CoolapkTauriAPI {
 
   static async inviteQuestionAnswer(questionId: string, uid: string) {
     return await invokeNative('invite_question_answer', { questionId, uid }, { retry: false, kind: 'feed' });
+  }
+
+  static async createAnswer(questionId: string, message: string, pic?: string, postToken?: string) {
+    const args: Record<string, string> = { questionId, message };
+    if (pic) args.pic = pic;
+    if (postToken) args.postToken = postToken;
+    return await invokeNative('create_answer', args, { retry: false, kind: 'feed' });
   }
 
   static async getVoteComments(feedId: string, page: number = 1) {

@@ -1,12 +1,12 @@
 <template>
   <article
     ref="cardRef"
-    :class="['feed-card', { 'is-detail-mode': detailMode, 'has-user-cover': !!userCoverUrl }]"
+    :class="['feed-card', { 'is-detail-mode': detailMode, 'has-user-cover': !!userCoverUrl, 'is-question-card': isQuestionCard, 'is-answer-card': isAnswerCard }]"
     :data-feed-id="feed.id"
-      :data-feed-text="feed.message || feed.message_raw_output || ''"
-      :data-feed-images="JSON.stringify(feedImages)"
-      @click="handleCardClick"
-    >
+    :data-feed-text="feed.message || feed.message_raw_output || ''"
+    :data-feed-images="JSON.stringify(feedImages)"
+    @click="handleCardClick"
+  >
     <!-- 卡片顶部沉浸式个性空间背景图 -->
     <div v-if="userCoverUrl" class="card-cover-backdrop" aria-hidden="true">
       <AppImage :src="userCoverUrl" image-class="card-cover-image" fit="cover" />
@@ -30,6 +30,7 @@
       :show-device-info="showDeviceInfo"
       :entity-type="feed.entityType"
       :entity-id="feed.entityId || feed.id"
+      :question-mode="isQuestionCard || isAnswerCard"
       :is-edited="isEdited"
       @more="toggleMoreMenu"
       @edit-history="openHistoryDialog"
@@ -37,6 +38,9 @@
 
     <div v-if="moreMenuOpen" class="more-menu-backdrop" @click.stop="moreMenuOpen = false"></div>
     <div v-if="moreMenuOpen" class="more-menu" @click.stop>
+      <button class="more-menu-item" @click="handleShareImage">
+        <i class="fas fa-image"></i> 生成长图
+      </button>
       <button v-if="isMyFeed" class="more-menu-item is-danger" @click="handleDeleteFeed">
         <i class="fas fa-trash-alt"></i> 删除动态
       </button>
@@ -44,12 +48,14 @@
 
     <FeedContent
       :feed-id="feed.id"
-      :title="feed.title"
+      :title="feed.title || feed.message_title || feed.messageTitle"
       :message="feed.message || feed.message_raw_output"
       :username="feed.username || feed.userInfo?.username"
       :force-expanded="detailMode"
       :max-lines="maxLines"
       :highlight-keyword="highlightKeyword"
+      :question-mode="isQuestionCard"
+      :answer-mode="isAnswerCard"
     />
 
     <VoteCard v-if="feed.vote" :feed-id="feed.id" :vote="feed.vote" />
@@ -113,6 +119,12 @@
       </div>
     </div>
 
+    <div v-if="hasQuestionStats" class="question-stats" aria-label="问答统计">
+      <span><i class="fas fa-comment-dots" aria-hidden="true"></i>{{ questionAnswerCount }}人回答</span>
+      <span aria-hidden="true">·</span>
+      <span><i class="fas fa-user-group" aria-hidden="true"></i>{{ questionFollowCount }}人关注</span>
+    </div>
+
     <FeedActionBar
       :feed-id="feed.id"
       :likenum="feed.likenum"
@@ -124,7 +136,6 @@
       @open-comment="toggleComments"
       @toggle-fav="toggleFav"
       @forward="openForwardDialog"
-      @share-image="shareImageOpen = true"
       @open-like-list="openLikeList"
       @open-forward-list="openForwardList"
     />
@@ -269,6 +280,8 @@ import { requestConfirmation } from '../../utils/confirm';
 import { getErrorMessage } from '../../utils/errors';
 import { extractFeedImageInputs, type FeedImageInput } from '../../utils/livePhoto';
 import { normalizeCoolapkNativeRoute, normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../../utils/coolapkRoute';
+import { isAnswerSearchEntity, isQuestionSearchEntity } from '../../utils/searchEntities';
+import { getQuestionAnswerCount, getQuestionFollowCount } from '../../utils/question';
 import {
   getFeedRelationImage,
   getFeedRelationKey,
@@ -294,7 +307,20 @@ const props = defineProps<{
   maxLines?: number;
   highlightKeyword?: string;
   disableInlineComments?: boolean;
+  questionMode?: boolean;
+  answerMode?: boolean;
 }>();
+
+const isAnswerCard = computed(() => Boolean(props.answerMode) || isAnswerSearchEntity(props.feed as any));
+const isQuestionCard = computed(() => !isAnswerCard.value && (Boolean(props.questionMode) || isQuestionSearchEntity(props.feed as any)));
+const hasQuestionStats = computed(() => {
+  if (!isQuestionCard.value) return false;
+  const feed = props.feed as any;
+  return ['question_answer_num', 'questionAnswerNum', 'question_follow_num', 'questionFollowNum']
+    .some((key) => feed[key] !== undefined && feed[key] !== null);
+});
+const questionAnswerCount = computed(() => getQuestionAnswerCount(props.feed));
+const questionFollowCount = computed(() => getQuestionFollowCount(props.feed));
 
 const authorUid = computed(() => {
   return getUserUid(props.feed);
@@ -527,8 +553,12 @@ function closeInteractionDialog(show: boolean) {
 }
 
 function toggleMoreMenu() {
-  if (!isMyFeed.value) return;
   moreMenuOpen.value = !moreMenuOpen.value;
+}
+
+function handleShareImage() {
+  moreMenuOpen.value = false;
+  shareImageOpen.value = true;
 }
 
 async function openHistoryDialog() {
@@ -1133,6 +1163,9 @@ function handleCardClick(e: MouseEvent) {
     return;
   }
 
+  if (openQuestionDetail()) return;
+  if (openAnswerDetail()) return;
+
   const entityType = props.feed.entityType;
   if (entityType === 'product') {
     const productId = props.feed.entityId || props.feed.id;
@@ -1157,6 +1190,30 @@ function handleCardClick(e: MouseEvent) {
   }
 
   toggleComments();
+}
+
+function openQuestionDetail(): boolean {
+  if (!isQuestionCard.value) return false;
+  const feed = props.feed as any;
+  const questionId = [feed.questionId, feed.question_id, feed.id, feed.entityId, feed.entity_id, feed.feedId, feed.feed_id]
+    .map((value) => String(value ?? '').trim())
+    .find(Boolean) || '';
+  if (!questionId) return false;
+  appStore.setFeedDetailContext(questionId, props.feed);
+  void router.push(`/question/${encodeURIComponent(questionId)}`);
+  return true;
+}
+
+function openAnswerDetail(): boolean {
+  if (!isAnswerCard.value) return false;
+  const feed = props.feed as any;
+  const answerId = [feed.answerId, feed.answer_id, feed.id, feed.entityId, feed.entity_id, feed.feedId, feed.feed_id]
+    .map((value) => String(value ?? '').trim())
+    .find(Boolean) || '';
+  if (!answerId) return false;
+  appStore.setFeedDetailContext(answerId, props.feed);
+  void router.push(`/feed/${encodeURIComponent(answerId)}`);
+  return true;
 }
 
 function normalizeImg(url: string) {
@@ -1248,6 +1305,25 @@ function formatRichText(text: string) {
 .feed-card.is-detail-mode:hover {
   background-color: var(--surface);
   border-color: var(--border);
+}
+
+.question-stats {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 2px 0 10px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption, 12px);
+}
+
+.question-stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.question-stats i {
+  color: var(--brand-primary);
 }
 
 .quoted-feed-box {

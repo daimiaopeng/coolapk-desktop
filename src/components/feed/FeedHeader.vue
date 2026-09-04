@@ -65,6 +65,10 @@
 
     <div class="header-actions">
       <slot name="actions">
+        <span v-if="questionMode" class="question-badge" title="问答" aria-label="问答">
+          <i class="fas fa-circle-question" aria-hidden="true"></i>
+          <span>问答</span>
+        </span>
         <AppIconButton
           icon="fas fa-ellipsis-h"
           size="sm"
@@ -105,6 +109,7 @@ const props = withDefaults(defineProps<{
   showDeviceInfo?: boolean;
   entityType?: string;
   entityId?: string | number;
+  questionMode?: boolean;
   isEdited?: boolean;
 }>(), {
   showDeviceInfo: true,
@@ -225,6 +230,13 @@ function normalizeTimestamp(value: number | string): number | null {
   margin-bottom: 10px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
 .user-info {
   flex: 1;
   display: flex;
@@ -263,6 +275,22 @@ function normalizeTimestamp(value: number | string): number | null {
 
 .username.clickable:hover {
   color: var(--brand-primary);
+}
+
+.question-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  color: var(--brand-primary, #10b981);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.question-badge i {
+  font-size: 14px;
 }
 
 .verify-badge {

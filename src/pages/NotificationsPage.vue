@@ -101,7 +101,7 @@ import {
   getNotificationCategoryCountsFromItems,
   type NotificationCategory,
 } from '../utils/notificationCount';
-import { addSeenNotificationCount, markNotificationItemsSeen } from '../utils/notificationSeen';
+import { addSeenNotificationCount, clearSeenNotificationState, markNotificationItemsSeen } from '../utils/notificationSeen';
 import { getNotificationActor } from '../utils/notificationItem';
 import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
@@ -170,8 +170,8 @@ function loadMoreWhenNearBottom(container = pageContainerRef.value) {
 }
 
 // 获取数据
-async function fetchNotifications() {
-  if (loading.value) return;
+async function fetchNotifications(): Promise<boolean> {
+  if (loading.value) return false;
   loading.value = true;
   notificationError.value = '';
   let fetchSucceeded = false;
@@ -211,19 +211,21 @@ async function fetchNotifications() {
     if (page.value > 1) page.value -= 1;
   } finally {
     loading.value = false;
-    if (!fetchSucceeded) return;
-    // “@ 提及”等分类可能只有一两条，首屏没有滚动条时不会触发 scroll。
-    // DOM 更新后检查一次并继续加载，直到内容足以滚动或接口明确到底。
-    await nextTick();
-    loadMoreWhenNearBottom();
+    if (fetchSucceeded) {
+      // “@ 提及”等分类可能只有一两条，首屏没有滚动条时不会触发 scroll。
+      // DOM 更新后检查一次并继续加载，直到内容足以滚动或接口明确到底。
+      await nextTick();
+      loadMoreWhenNearBottom();
+    }
   }
+  return fetchSucceeded;
 }
 
-async function refreshNotifications() {
-  if (loading.value) return;
+async function refreshNotifications(): Promise<boolean> {
+  if (loading.value) return false;
   page.value = 1;
   hasMore.value = true;
-  await fetchNotifications();
+  return await fetchNotifications();
 }
 
 function handleNotificationCountIncrease() {
@@ -393,6 +395,21 @@ function markCurrentTabViewed(): number {
   return viewedCount;
 }
 
+async function clearFeedNotifications(): Promise<void> {
+  notificationStore.beginNotificationClear();
+  try {
+    // v18 服务端对 type=feed 会返回 200 但不改变 badge；官方 APK 的通知中心使用 type=all。
+    // 有私信未读时不调用 all，避免进入通知中心误清私信。
+    const clearType = notificationStore.messageCount > 0 ? 'feed' : 'all';
+    await CoolapkTauriAPI.clearNotificationCount(clearType);
+    notificationStore.markNotificationsCleared();
+    if (authStore.user?.uid) clearSeenNotificationState(authStore.user.uid, 'like');
+  } catch (error) {
+    // 通知列表已经正常展示，本地状态保持即时反馈，下一次轮询继续校正。
+    console.warn('清除服务端通知未读数失败:', error);
+  }
+}
+
 function renderSafeHtml(text: string): string {
   return renderCoolapkRichText(text);
 }
@@ -434,10 +451,11 @@ async function handleNotifyClick(e: Event, item: any) {
 
 onActivated(() => {
   window.addEventListener('coolapk-notification-count-increased', handleNotificationCountIncrease);
-  // 打开通知中心只刷新当前分类；首屏成功后由 fetchNotifications 确认当前分类已读。
   const requestedTab = String(route.query.tab || '');
   if (tabs.some((tab) => tab.value === requestedTab)) currentTab.value = requestedTab;
-  void refreshNotifications();
+  void refreshNotifications().then((loaded) => {
+    if (loaded) void clearFeedNotifications();
+  });
 });
 
 onDeactivated(() => {

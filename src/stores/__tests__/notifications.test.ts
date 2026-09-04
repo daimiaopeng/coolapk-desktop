@@ -128,6 +128,28 @@ describe('通知状态', () => {
     expect(store.unreadCount).toBe(1);
   });
 
+  it('服务端确认清除站内通知后，下一条新通知不会被旧抵消吞掉', () => {
+    const store = useNotificationStore();
+    store.applyServerResponse({
+      data: {
+        badge: 4,
+        commentme: 1,
+        feedlike: 2,
+        message: 1,
+      },
+    });
+
+    store.markViewed('comment');
+    store.markNotificationsCleared();
+    expect(store.notificationCount).toBe(0);
+    expect(store.messageCount).toBe(1);
+
+    // 清除请求成功后，服务端基线按仅剩私信处理；下一条点赞应重新出现。
+    store.applyServerResponse({ data: { badge: 2, message: 1, feedlike: 1 } });
+    expect(store.notificationCount).toBe(1);
+    expect(store.categoryCounts.like).toBe(1);
+  });
+
   it('扣除服务端误报的自己发送私信后，下一轮轮询不会恢复红点', () => {
     const store = useNotificationStore();
     store.applyServerResponse({ data: { badge: 1, message: 1 } });

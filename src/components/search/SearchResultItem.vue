@@ -1,5 +1,25 @@
 <template>
-  <FeedCard v-if="!isSponsor && kind === 'feed' && entityId" :feed="entity as any" :highlight-keyword="highlightKeyword" @deleted="$emit('deleted', $event)" />
+  <QuestionSearchCard
+    v-if="!isSponsor && kind === 'question' && isQuestionTitleEntity && entityId"
+    :entity="entity"
+  />
+  <QuestionFeedCard
+    v-else-if="!isSponsor && kind === 'question' && entityId"
+    :question="feedEntity as any"
+    :highlight-keyword="highlightKeyword"
+  />
+  <QuestionAnswerCard
+    v-else-if="!isSponsor && kind === 'answer' && entityId"
+    :answer="feedEntity as any"
+    :question-id="getAnswerQuestionId(feedEntity)"
+    :question-title="getAnswerQuestionTitle(feedEntity)"
+  />
+  <FeedCard
+    v-else-if="!isSponsor && kind === 'feed' && entityId"
+    :feed="feedEntity as any"
+    :highlight-keyword="highlightKeyword"
+    @deleted="$emit('deleted', $event)"
+  />
   <SearchHotListCard v-else-if="!isSponsor && kind === 'hot'" :entity="entity" @search="$emit('search', $event)" />
   <article v-else-if="!isSponsor" class="search-entity-card" role="button" tabindex="0" @click="openEntity" @keydown.enter.prevent="openEntity">
     <AppAvatar v-if="kind === 'user'" :src="image" :alt="title" size="md" />
@@ -33,6 +53,9 @@ import AppAvatar from '../common/AppAvatar.vue';
 import AppButton from '../common/AppButton.vue';
 import AppImage from '../common/AppImage.vue';
 import FeedCard from '../feed/FeedCard.vue';
+import QuestionAnswerCard from '../question/QuestionAnswerCard.vue';
+import QuestionFeedCard from '../question/QuestionFeedCard.vue';
+import QuestionSearchCard from '../question/QuestionSearchCard.vue';
 import SearchHotListCard from './SearchHotListCard.vue';
 import type { SearchEntity } from '../../types/search';
 import {
@@ -42,6 +65,7 @@ import {
   getSearchEntityPackageName,
   getSearchEntitySubtitle,
   getSearchEntityTitle,
+  isQuestionTitleSearchEntity,
   isSponsorSearchEntity,
   navigateSearchEntity,
 } from '../../utils/searchEntities';
@@ -61,8 +85,26 @@ const image = computed(() => getSearchEntityImage(props.entity));
 const packageName = computed(() => getSearchEntityPackageName(props.entity));
 const entityId = computed(() => getSearchEntityId(props.entity));
 const isSponsor = computed(() => isSponsorSearchEntity(props.entity));
-const kindLabel = computed(() => ({ user: '用户', topic: '话题', app: '应用', product: '数码', feed: '动态', question: '问答', hot: '热搜', generic: '结果' } as Record<string, string>)[kind.value] || '结果');
-const kindIcon = computed(() => ({ user: 'fas fa-user', topic: 'fas fa-hashtag', app: 'fas fa-cube', product: 'fas fa-mobile-screen-button', feed: 'fas fa-align-left', question: 'fas fa-circle-question', hot: 'fas fa-fire', generic: 'fas fa-link' } as Record<string, string>)[kind.value] || 'fas fa-cube');
+const isQuestionTitleEntity = computed(() => isQuestionTitleSearchEntity(props.entity));
+const feedEntity = computed(() => {
+  if (!entityId.value) return props.entity;
+  const entity = { ...props.entity };
+  if (!String(entity.id ?? '').trim()) entity.id = entityId.value;
+  if (!String(entity.entityId ?? entity.entity_id ?? '').trim()) entity.entityId = entityId.value;
+  if (kind.value === 'question' && !String(entity.feedType ?? entity.feed_type ?? '').trim()) entity.feedType = 'question';
+  if (kind.value === 'answer' && !String(entity.feedType ?? entity.feed_type ?? '').trim()) entity.feedType = 'answer';
+  return entity;
+});
+
+function getAnswerQuestionId(entity: Record<string, any>): string {
+  return String(entity.questionId ?? entity.question_id ?? entity.fid ?? entity.feedId ?? entity.feed_id ?? '').trim();
+}
+
+function getAnswerQuestionTitle(entity: Record<string, any>): string {
+  return String(entity.questionTitle ?? entity.question_title ?? entity.question?.title ?? '').trim();
+}
+const kindLabel = computed(() => ({ user: '用户', topic: '话题', app: '应用', product: '数码', feed: '动态', question: '问答', answer: '回答', hot: '热搜', generic: '结果' } as Record<string, string>)[kind.value] || '结果');
+const kindIcon = computed(() => ({ user: 'fas fa-user', topic: 'fas fa-hashtag', app: 'fas fa-cube', product: 'fas fa-mobile-screen-button', feed: 'fas fa-align-left', question: 'fas fa-circle-question', answer: 'fas fa-comment-dots', hot: 'fas fa-fire', generic: 'fas fa-link' } as Record<string, string>)[kind.value] || 'fas fa-cube');
 
 function formatNumber(value: unknown): string {
   const number = Number(value);

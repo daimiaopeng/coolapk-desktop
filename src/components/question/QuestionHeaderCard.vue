@@ -12,15 +12,12 @@
       entity-type="question"
       :entity-id="question.id"
     >
-      <template #actions>
-        <span class="question-type-badge"><i class="fas fa-circle-question"></i> 问答</span>
-      </template>
     </FeedHeader>
 
     <FeedContent
       :feed-id="question.id"
       :title="question.title"
-      :message="question.message || question.message_raw_output"
+      :message="questionMessage"
       :username="question.username || question.userInfo?.username"
       force-expanded
     />
@@ -32,12 +29,34 @@
       content-type="feed"
     />
 
+    <QuestionRelatedContent :content="question" />
+
     <div class="question-header-footer">
       <div class="question-counts">
-        <span><i class="fas fa-comment-dots"></i> {{ answerCount }} 个回答</span>
-        <span><i class="fas fa-user-group"></i> {{ followCount }} 人关注</span>
+        <button
+          type="button"
+          class="question-count-item question-count-clickable"
+          title="点击查看回答列表"
+          @click="$emit('view-answers')"
+        >
+          <i class="fas fa-comment-dots" aria-hidden="true"></i>
+          <span>{{ answerCount }} 个回答</span>
+        </button>
+        <span class="count-divider" aria-hidden="true">·</span>
+        <span class="question-count-item">
+          <i class="fas fa-user-group" aria-hidden="true"></i>
+          <span>{{ followCount }} 人关注</span>
+        </span>
       </div>
       <div class="question-header-actions">
+        <button
+          type="button"
+          class="question-action question-invite-action"
+          @click="$emit('invite')"
+        >
+          <i class="fas fa-user-plus" aria-hidden="true"></i>
+          邀请回答
+        </button>
         <button
           type="button"
           :class="['question-action', 'question-follow-action', { active: isFollowed }]"
@@ -45,12 +64,16 @@
           :aria-pressed="isFollowed"
           @click="$emit('toggle-follow')"
         >
-          <i :class="isFollowed ? 'fas fa-check' : 'fas fa-plus'"></i>
+          <i :class="isFollowed ? 'fas fa-check' : 'fas fa-plus'" aria-hidden="true"></i>
           {{ isFollowed ? '已关注' : '关注问题' }}
         </button>
-        <button type="button" class="question-action question-invite-action" @click="$emit('invite')">
-          <i class="fas fa-user-plus"></i>
-          邀请回答
+        <button
+          type="button"
+          class="question-action question-add-answer"
+          @click="$emit('add-answer')"
+        >
+          <i class="fas fa-pen-to-square" aria-hidden="true"></i>
+          写回答
         </button>
       </div>
     </div>
@@ -63,7 +86,8 @@ import type { FeedItem } from '../../types/feed';
 import FeedContent from '../feed/FeedContent.vue';
 import FeedHeader from '../feed/FeedHeader.vue';
 import FeedImageGrid from '../feed/FeedImageGrid.vue';
-import { getQuestionAnswerCount, getQuestionAnswerImages } from '../../utils/question';
+import QuestionRelatedContent from './QuestionRelatedContent.vue';
+import { getQuestionAnswerCount, getQuestionAnswerImages, getQuestionMessage } from '../../utils/question';
 import { getUserUid } from '../../utils/userRoute';
 
 const props = defineProps<{
@@ -77,30 +101,24 @@ const props = defineProps<{
 defineEmits<{
   (event: 'toggle-follow'): void;
   (event: 'invite'): void;
+  (event: 'view-answers'): void;
+  (event: 'add-answer'): void;
 }>();
 
 const authorUid = computed(() => getUserUid(props.question));
 const questionImages = computed(() => getQuestionAnswerImages(props.question));
+const questionMessage = computed(() => getQuestionMessage(props.question));
 const answerCount = computed(() => props.answerCount || getQuestionAnswerCount(props.question));
 const followCount = computed(() => Math.max(0, Number(props.followCount) || 0));
 </script>
 
 <style scoped>
 .question-header-card {
-  padding: 18px 20px 16px;
+  padding: 20px 22px 18px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card, 14px);
   box-shadow: var(--shadow-card, 0 2px 8px rgba(15, 23, 42, .04));
-}
-
-.question-type-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--brand-primary);
-  font-size: var(--font-size-caption, 12px);
-  font-weight: 600;
 }
 
 .question-header-footer {
@@ -108,30 +126,53 @@ const followCount = computed(() => Math.max(0, Number(props.followCount) || 0));
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  margin-top: 14px;
   padding-top: 14px;
   border-top: 1px solid var(--border-light);
 }
 
-.question-counts,
-.question-header-actions {
+.question-counts {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.question-counts {
+  gap: 8px;
   color: var(--text-tertiary);
-  font-size: var(--font-size-caption, 12px);
+  font-size: var(--font-size-caption, 13px);
 }
 
-.question-counts span {
+.question-count-item {
   display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
+.question-count-clickable {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption, 13px);
+  cursor: pointer;
+  transition: color var(--duration-fast, 0.15s) ease;
+}
+
+.question-count-clickable:hover {
+  color: var(--brand-primary);
+}
+
 .question-counts i {
   color: var(--brand-primary);
+  font-size: 13px;
+}
+
+.count-divider {
+  color: var(--border-light, var(--border));
+  user-select: none;
+}
+
+.question-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .question-action {
@@ -140,15 +181,15 @@ const followCount = computed(() => Math.max(0, Number(props.followCount) || 0));
   justify-content: center;
   gap: 6px;
   min-height: 32px;
-  padding: 0 12px;
+  padding: 0 13px;
   border: 1px solid var(--border);
   border-radius: var(--radius-pill, 999px);
   background: var(--surface);
   color: var(--text-secondary);
-  font-size: var(--font-size-caption, 12px);
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-default);
+  transition: all var(--duration-fast, 0.15s) var(--ease-default, ease);
 }
 
 .question-action:hover:not(:disabled) {
@@ -162,14 +203,52 @@ const followCount = computed(() => Math.max(0, Number(props.followCount) || 0));
   cursor: not-allowed;
 }
 
-.question-follow-action.active {
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-  background: var(--brand-soft);
+/* 邀请回答 */
+.question-invite-action {
+  color: var(--text-secondary);
 }
 
-.question-invite-action {
+.question-invite-action i {
+  color: var(--text-tertiary);
+  transition: color var(--duration-fast, 0.15s) ease;
+}
+
+.question-invite-action:hover:not(:disabled) i {
   color: var(--brand-primary);
+}
+
+/* 关注问题 */
+.question-follow-action.active {
+  border-color: var(--brand-soft);
+  color: var(--brand-primary);
+  background: var(--brand-soft);
+  font-weight: 600;
+}
+
+/* 写回答（主要 CTA 按钮） */
+.question-add-answer {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.22);
+}
+
+.question-add-answer:hover:not(:disabled) {
+  background: var(--brand-primary-hover, #059669);
+  border-color: var(--brand-primary-hover, #059669);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.32);
+  transform: translateY(-1px);
+}
+
+.question-add-answer:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.2);
+}
+
+.question-add-answer i {
+  color: #fff;
 }
 
 @media (max-width: 640px) {
@@ -181,8 +260,9 @@ const followCount = computed(() => Math.max(0, Number(props.followCount) || 0));
   }
 
   .question-header-footer {
-    align-items: flex-start;
+    align-items: stretch;
     flex-direction: column;
+    gap: 12px;
   }
 
   .question-header-actions {
@@ -191,6 +271,8 @@ const followCount = computed(() => Math.max(0, Number(props.followCount) || 0));
 
   .question-action {
     flex: 1;
+    padding: 0 8px;
+    font-size: 12px;
   }
 }
 </style>

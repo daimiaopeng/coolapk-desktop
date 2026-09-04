@@ -3,7 +3,10 @@ import {
   extractQuestionAnswers,
   getQuestionAnswerCount,
   getQuestionFollowCount,
+  getQuestionMessage,
   isQuestionFollowed,
+  isQuestionFeedEntity,
+  isQuestionHomeTab,
   normalizeInviteUids,
   normalizeQuestionDetail,
 } from '../question';
@@ -26,6 +29,11 @@ describe('问答数据归一化', () => {
     expect(isQuestionFollowed(question)).toBe(true);
   });
 
+  it('标题和正文相同时只返回一次正文', () => {
+    expect(getQuestionMessage({ title: '小米15 Ultra哪个系统版本好啊?', message: '小米15 Ultra哪个系统版本好啊' })).toBe('');
+    expect(getQuestionMessage({ title: '如何选显示器', message: '预算 3000 元，主要用于办公' })).toBe('预算 3000 元，主要用于办公');
+  });
+
   it('从 answerList 包装中补齐回答作者和 ID', () => {
     const answers = extractQuestionAnswers({
       data: {
@@ -42,5 +50,24 @@ describe('问答数据归一化', () => {
 
   it('邀请用户只接受非零数字 UID 并去重', () => {
     expect(normalizeInviteUids('10086, 20014，10086 abc 0')).toEqual(['10086', '20014']);
+  });
+
+  it('只识别明确的问答首页页签，不误伤普通动态页', () => {
+    expect(isQuestionHomeTab({ title: '问答', page_name: 'V9_HOME_TAB_QUESTION' })).toBe(true);
+    expect(isQuestionHomeTab({ title: '回答', url: '/main/answer' })).toBe(true);
+    expect(isQuestionHomeTab({ title: '动态', page_name: 'V9_HOME_TAB_TASK', url: '/main/task' })).toBe(false);
+    expect(isQuestionHomeTab({ title: '动态', page_name: 'mask', url: '/main/mask' })).toBe(false);
+  });
+
+  it('问答栏目只识别明确的问题实体，不把普通 feed 变成问题', () => {
+    expect(isQuestionFeedEntity({ entityType: 'feedQuestion', id: '1', title: '问题' })).toBe(true);
+    expect(isQuestionFeedEntity({ feedType: 'question', id: '2', title: '问题' })).toBe(true);
+    expect(isQuestionFeedEntity({
+      entityType: 'feed',
+      feedType: 'feed',
+      message: '普通动态',
+      question_answer_num: 0,
+      question_follow_num: 0,
+    })).toBe(false);
   });
 });

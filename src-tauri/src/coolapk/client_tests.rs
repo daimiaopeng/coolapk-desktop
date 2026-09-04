@@ -248,6 +248,20 @@ fn test_create_feed_form_includes_pic_and_publish_state() {
 }
 
 #[test]
+fn test_create_answer_form_uses_answer_type_and_question_fid() {
+    let form = build_create_feed_form_for_type("回答内容", None, None, "answer", "question-42");
+    let value = |key: &str| {
+        form.iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, value)| value.as_str())
+    };
+
+    assert_eq!(value("type"), Some("answer"));
+    assert_eq!(value("fid"), Some("question-42"));
+    assert_eq!(value("message"), Some("回答内容"));
+}
+
+#[test]
 fn test_hot_rank_routes_use_statistics_api() {
     assert_eq!(
         rank_feed_url("month"),
@@ -331,6 +345,22 @@ fn test_clean_feed_preserves_relation_and_video_fields() {
     assert_eq!(cleaned["mediaInfo"], "{\"mediaType\":\"video\",\"duration\":952183}");
     assert_eq!(cleaned["mediaType"], "2");
     assert_eq!(cleaned["feedType"], "video");
+}
+
+#[test]
+fn test_clean_answer_keeps_parent_question_id() {
+    let raw = json!({
+        "id": 123,
+        "uid": 456,
+        "username": "回答用户",
+        "feedType": "answer",
+        "fid": 789,
+        "message": "回答正文"
+    });
+
+    let cleaned = CoolapkClient::clean_single_feed(&raw, 0).expect("回答动态应能正常清洗");
+    assert_eq!(cleaned["feedType"], "answer");
+    assert_eq!(cleaned["questionId"], 789);
 }
 
 #[test]
