@@ -81,6 +81,8 @@
       :user-action="feed.userAction"
       @open-comment="toggleComments"
       @toggle-fav="toggleFav"
+      @open-like-list="openLikeList"
+      @open-forward-list="openForwardList"
     />
 
     <!-- 评论区域折叠展示 -->
@@ -135,6 +137,14 @@
       @close="closeCollectionPicker"
       @confirm="confirmCollectionSelection"
     />
+
+    <FeedInteractionListDialog
+      :show="interactionMode !== null"
+      :mode="interactionMode || 'likes'"
+      :feed-id="feed.id"
+      :feed-type="interactionFeedType"
+      @update:show="closeInteractionDialog"
+    />
   </article>
 </template>
 
@@ -145,6 +155,7 @@ import FeedImageGrid from './FeedImageGrid.vue';
 import FeedActionBar from './FeedActionBar.vue';
 import FeedCollectionPickerDialog from './FeedCollectionPickerDialog.vue';
 import FeedCommentSection from './FeedCommentSection.vue';
+import FeedInteractionListDialog from './FeedInteractionListDialog.vue';
 import AppImage from '../common/AppImage.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkRichText } from '../../utils/richText';
@@ -185,6 +196,9 @@ const collectionPickerLoading = ref(false);
 const collectionPickerSubmitting = ref(false);
 const collectionOptions = ref<any[]>([]);
 const collectionInitialSelectedIds = ref<string[]>([]);
+const interactionMode = ref<'likes' | 'forwards' | null>(null);
+
+const interactionFeedType = computed(() => String(props.feed.feedType || props.feed.feed_type || props.feed.entityType || 'feed'));
 
 const showComments = ref(false);
 const comments = ref<any[]>([]);
@@ -267,6 +281,18 @@ function closeCollectionPicker() {
   collectionPickerOpen.value = false;
   collectionOptions.value = [];
   collectionInitialSelectedIds.value = [];
+}
+
+function openLikeList() {
+  interactionMode.value = 'likes';
+}
+
+function openForwardList() {
+  interactionMode.value = 'forwards';
+}
+
+function closeInteractionDialog(show: boolean) {
+  if (!show) interactionMode.value = null;
 }
 
 async function confirmCollectionSelection(selectedIds: string[]) {

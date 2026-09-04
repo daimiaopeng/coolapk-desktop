@@ -1,19 +1,43 @@
 <template>
   <div class="feed-action-bar">
-    <button :class="['action-btn', 'like-btn', { 'is-liked': isLiked }]" @click.stop="toggleLike" title="点赞">
-      <i :class="[isLiked ? 'fas fa-heart' : 'far fa-heart', 'action-icon']"></i>
-      <span>{{ formatCount(likeCount, '点赞') }}</span>
-    </button>
+    <div class="action-group">
+      <button :class="['action-btn', 'like-btn', { 'is-liked': isLiked }]" @click.stop="toggleLike" title="点赞">
+        <i :class="[isLiked ? 'fas fa-heart' : 'far fa-heart', 'action-icon']"></i>
+        <span>点赞</span>
+      </button>
+      <button
+        v-if="likeCount > 0"
+        type="button"
+        class="interaction-count-btn"
+        title="查看点赞用户"
+        aria-label="查看点赞用户"
+        @click.stop="$emit('open-like-list')"
+      >
+        {{ formatCount(likeCount) }}
+      </button>
+    </div>
 
     <button class="action-btn comment-btn" @click.stop="$emit('open-comment')" title="评论">
       <i class="far fa-comment action-icon"></i>
       <span>{{ formatCount(replyCount, '评论') }}</span>
     </button>
 
-    <button class="action-btn share-btn" @click.stop="shareFeed" title="转发">
-      <i class="fas fa-retweet action-icon"></i>
-      <span>{{ formatCount(shareCount, '转发') }}</span>
-    </button>
+    <div class="action-group">
+      <button class="action-btn share-btn" @click.stop="shareFeed" title="转发">
+        <i class="fas fa-retweet action-icon"></i>
+        <span>转发</span>
+      </button>
+      <button
+        v-if="shareCount > 0"
+        type="button"
+        class="interaction-count-btn"
+        title="查看转发列表"
+        aria-label="查看转发列表"
+        @click.stop="$emit('open-forward-list')"
+      >
+        {{ formatCount(shareCount) }}
+      </button>
+    </div>
 
     <button class="action-btn share-image-btn" @click.stop="$emit('share-image')" title="生成长图">
       <i class="fas fa-image action-icon"></i>
@@ -55,6 +79,8 @@ const emit = defineEmits<{
   (e: 'toggle-fav'): void;
   (e: 'forward'): void;
   (e: 'share-image'): void;
+  (e: 'open-like-list'): void;
+  (e: 'open-forward-list'): void;
 }>();
 
 const isLiked = ref(props.userAction?.like === 1);
@@ -204,6 +230,35 @@ function shareFeed() {
 .share-btn:hover {
   color: #3b82f6;
   background-color: rgba(59, 130, 246, 0.08);
+}
+
+.action-group {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.action-group .action-btn {
+  flex: 1 1 auto;
+}
+
+.interaction-count-btn {
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding: 6px 3px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.interaction-count-btn:hover {
+  background: var(--background-secondary, rgba(0, 0, 0, 0.04));
+  color: var(--brand-primary);
 }
 
 .share-image-btn:hover {

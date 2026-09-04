@@ -907,6 +907,18 @@ fn test_extract_product_entity_list_preserves_brands() {
 }
 
 #[test]
+fn test_interaction_response_preserves_user_only_rows() {
+    let raw = json!({
+        "code": 200,
+        "data": [{"uid": "10086", "username": "点赞用户"}]
+    });
+
+    let wrapped = wrap_api_data(raw).expect("互动列表响应应能正常包装");
+    assert_eq!(wrapped["data"][0]["uid"], "10086");
+    assert_eq!(wrapped["data"][0]["username"], "点赞用户");
+}
+
+#[test]
 fn test_extract_product_entity_list_flattens_nested_entities() {
     let raw = json!({
         "code": 200,

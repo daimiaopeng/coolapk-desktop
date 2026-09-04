@@ -4205,7 +4205,7 @@ impl CoolapkClient {
                 ],
             )
             .await?;
-        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+        wrap_api_data(raw)
     }
 
     /// 动态点赞列表
@@ -4221,7 +4221,7 @@ impl CoolapkClient {
                 ],
             )
             .await?;
-        Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
+        wrap_api_data(raw)
     }
 
     /// 动态修改历史

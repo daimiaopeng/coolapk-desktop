@@ -125,6 +125,8 @@
       @toggle-fav="toggleFav"
       @forward="openForwardDialog"
       @share-image="shareImageOpen = true"
+      @open-like-list="openLikeList"
+      @open-forward-list="openForwardList"
     />
 
     <div v-if="showComments" class="inline-comment-wrapper" @click.stop>
@@ -172,6 +174,14 @@
     <ForwardDialog v-model:show="forwardOpen" :feed="feed" @success="handleForwardSuccess" />
 
     <FeedShareImageDialog v-model:show="shareImageOpen" :feed="feed" :images="feedImages" />
+
+    <FeedInteractionListDialog
+      :show="interactionMode !== null"
+      :mode="interactionMode || 'likes'"
+      :feed-id="feed.id"
+      :feed-type="interactionFeedType"
+      @update:show="closeInteractionDialog"
+    />
 
     <AppDialog :is-open="historyDialogOpen" title="编辑记录" :width="680" @close="historyDialogOpen = false">
       <div class="history-dialog" @click.stop>
@@ -230,6 +240,7 @@ import FeedVideoCard from './FeedVideoCard.vue';
 import FeedActionBar from './FeedActionBar.vue';
 import FeedCollectionPickerDialog from './FeedCollectionPickerDialog.vue';
 import FeedCommentSection from './FeedCommentSection.vue';
+import FeedInteractionListDialog from './FeedInteractionListDialog.vue';
 import ForwardDialog from '../overlays/ForwardDialog.vue';
 import FeedShareImageDialog from '../overlays/FeedShareImageDialog.vue';
 import LoadingState from '../common/LoadingState.vue';
@@ -481,12 +492,15 @@ function openQuotedFeed() {
 }
 
 const forwardOpen = ref(false);
+const interactionMode = ref<'likes' | 'forwards' | null>(null);
 const moreMenuOpen = ref(false);
 const historyDialogOpen = ref(false);
 const historyLoading = ref(false);
 const historyError = ref('');
 const historyList = ref<any[]>([]);
 const historyLoaded = ref(false);
+
+const interactionFeedType = computed(() => String((props.feed as any).feedType || (props.feed as any).feed_type || (props.feed as any).entityType || 'feed'));
 
 function openForwardDialog() {
   if (!authStore.isLoggedIn) {
@@ -498,6 +512,18 @@ function openForwardDialog() {
 
 function handleForwardSuccess() {
   props.feed.sharenum = (Number(props.feed.sharenum) || 0) + 1;
+}
+
+function openLikeList() {
+  interactionMode.value = 'likes';
+}
+
+function openForwardList() {
+  interactionMode.value = 'forwards';
+}
+
+function closeInteractionDialog(show: boolean) {
+  if (!show) interactionMode.value = null;
 }
 
 function toggleMoreMenu() {
@@ -656,7 +682,7 @@ const commentsAuthorOnly = ref(false);
 let commentsFirstItem = '';
 let commentsLastItem = '';
 let commentsRequestVersion = 0;
-const hasBlockingOverlay = computed(() => Boolean(appStore.activeImageViewer || appStore.isSearchOpen || appStore.isPublishOpen || authStore.isLoginModalOpen || forwardOpen.value || historyDialogOpen.value || collectionPickerOpen.value || moreMenuOpen.value));
+const hasBlockingOverlay = computed(() => Boolean(appStore.activeImageViewer || appStore.isSearchOpen || appStore.isPublishOpen || authStore.isLoginModalOpen || forwardOpen.value || interactionMode.value || historyDialogOpen.value || collectionPickerOpen.value || moreMenuOpen.value));
 
 async function toggleFav() {
   if (!authStore.isLoggedIn) {
