@@ -127,6 +127,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_discovery_page_data', args, { retry: true, kind: 'feed' });
   }
 
+  static async getLiveDetail(liveId: string) {
+    return await invokeNative('get_live_detail', { liveId }, { retry: true, kind: 'feed' });
+  }
+
   // 1.2 搜索候选词（输入联想）
   static async getSearchSuggestions(query: string) {
     return await invokeNative('get_search_suggestions', { query });
@@ -832,6 +836,14 @@ export class CoolapkTauriAPI {
     return await invokeNative('unfollow_dyh', { dyhId });
   }
 
+  static async followLive(liveId: string) {
+    return await invokeNative('follow_live', { liveId }, { retry: false, kind: 'feed' });
+  }
+
+  static async unfollowLive(liveId: string) {
+    return await invokeNative('unfollow_live', { liveId }, { retry: false, kind: 'feed' });
+  }
+
   static async getFeedForwardList(feedId: string, feedType: string = 'feed', page: number = 1) {
     return await invokeNative('get_feed_forward_list', { feedId, feedType, page });
   }
@@ -1183,16 +1195,21 @@ export class CoolapkTauriAPI {
 
   static async openLoginWebview() {
     try {
-      await invoke('open_login_webview');
-    } catch {
-      window.open('https://account.coolapk.com/auth/loginByCoolapk', '_blank', 'noopener,noreferrer');
+      return await invoke('open_login_webview');
+    } catch (error) {
+      console.error('[login-debug] open_login_webview failed', error);
+      throw error;
     }
   }
 
   static async closeLoginWebview() {
     try {
       await invoke('close_login_window');
-    } catch {}
+      return true;
+    } catch (error) {
+      console.warn('[login-debug] close_login_window failed', error);
+      return false;
+    }
   }
 
   static async saveCookieSecurely(cookieStr: string) {

@@ -93,7 +93,8 @@ impl CoolapkAuth {
         let salt: [u8; 16] = salt_bytes
             .try_into()
             .map_err(|bytes: Vec<u8>| format!("invalid bcrypt salt length: {}", bytes.len()))?;
-        let hash = hash_with_salt(password.as_bytes(), 10, salt)
+        // 酷安当前 Token V3 校验使用 bcrypt cost=4；cost=10 会导致登录校验返回“登录信息有误”。
+        let hash = hash_with_salt(password.as_bytes(), 4, salt)
             .map_err(|e| format!("bcrypt failed: {e}"))?
             .format_for_version(Version::TwoY);
 

@@ -24,6 +24,12 @@ describe('酷安站内路由', () => {
     expect(normalizeCoolapkRoute('/page?url=%2Fproduct%2FfeedList')).toBe('/page?url=%2Fproduct%2FfeedList');
   });
 
+  it('将酷安直播详情链接转换为桌面端直播详情页', () => {
+    expect(normalizeCoolapkRoute('/live/12345')).toBe('/live/12345');
+    expect(normalizeCoolapkRoute('https://www.coolapk.com/live/12345')).toBe('/live/12345');
+    expect(normalizeCoolapkRoute('/live/detail?id=12345')).toBe('/live/12345');
+  });
+
   it('将动态里的话题入口转换为话题页，而不是通用头条页', () => {
     expect(normalizeCoolapkRoute('/feed/multiTagFeedList?tag=Android%2016')).toBe('/topic/Android%2016');
     expect(normalizeCoolapkRoute('/topic/tagFeedList?title=桌面改造')).toBe('/topic/%E6%A1%8C%E9%9D%A2%E6%94%B9%E9%80%A0');

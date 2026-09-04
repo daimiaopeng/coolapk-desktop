@@ -192,12 +192,14 @@ function navigateNative(target: string, title: string) {
   const product = clean.match(/^\/product\/([^/?#]+)/);
   const topic = clean.match(/^\/topic\/([^/?#]+)/);
   const dyh = clean.match(/^\/dyh\/([^/?#]+)/);
+  const live = clean.match(/^\/live\/([^/?#]+)/);
   if (user) void router.push(`/user/${user[1]}`);
   else if (feed) void router.push(`/feed/${feed[1]}`);
   else if (app) void router.push(`/app/${encodeURIComponent(decodeDiscoveryRouteSegment(app[1]))}`);
   else if (product) void router.push(`/product/${product[1]}`);
   else if (topic) void router.push(`/topic/${encodeURIComponent(decodeDiscoveryRouteSegment(topic[1]))}`);
   else if (dyh) void router.push(`/dyh/${dyh[1]}`);
+  else if (live && !/^detail$/i.test(live[1])) void router.push(`/live/${live[1]}`);
   else navigateDataList(target, title);
 }
 

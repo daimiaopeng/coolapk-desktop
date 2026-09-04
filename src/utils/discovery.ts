@@ -161,14 +161,18 @@ export function parseDiscoveryPage(response: unknown, page: number): DiscoveryPa
   const config = configCard ? parseExtraData(configCard) : {};
   const firstItem = firstString(root.firstItem, root.first_item, meta.firstItem, meta.first_item, config.firstItem, config.first_item, entityCursor(items[0]));
   const lastItem = firstString(root.lastItem, root.last_item, meta.lastItem, meta.last_item, config.lastItem, config.last_item, entityCursor(items[items.length - 1]));
+  const lastEntity = items[items.length - 1];
+  const lastExtra = lastEntity ? parseExtraData(lastEntity) : {};
+  const pageContext = firstString(root.pageContext, root.page_context, meta.pageContext, meta.page_context, config.pageContext, config.page_context, lastEntity?.pageContext, lastEntity?.page_context, lastExtra.pageContext, lastExtra.page_context);
   const total = Number(root.total ?? meta.total ?? config.total ?? 0);
   const current = Number(root.current ?? meta.current ?? config.current ?? page);
   const explicitMore = root.hasMore ?? root.has_more ?? meta.hasMore ?? meta.has_more
     ?? (total > 0 ? current < total : undefined);
+  const contentCount = items.reduce((count, item) => count + (Array.isArray(item.entities) ? item.entities.length : 1), 0);
   const hasMore = typeof explicitMore === 'boolean'
     ? explicitMore
-    : items.length >= 20;
-  return { items, page, hasMore, firstItem, lastItem, raw: response };
+    : contentCount >= 20;
+  return { items, page, hasMore, firstItem, lastItem, pageContext, raw: response };
 }
 
 export function getEntityKey(entity: DiscoveryEntity, index: number): string {
@@ -271,14 +275,16 @@ export function getEntityText(entity: DiscoveryEntity): string {
 
 export function resolveDiscoveryRoute(entity: DiscoveryEntity): DiscoveryRoute | null {
   const extra = parseExtraData(entity);
-  const type = `${asString(entity.entityType)} ${asString(entity.entityTemplate)}`.toLowerCase();
+  const type = `${asString(entity.entityType)} ${asString(entity.entityTemplate)}`.toLowerCase().trim();
   const entityUrl = asString(entity.url);
   const productId = entity.productId ?? entity.product_id;
   const isProductEntity = type.includes('product') || productId !== undefined && productId !== null && productId !== '';
+  const isLiveEntity = type.includes('livetopic') || type.includes('liveimagetextcard') || type.includes('livelistcard') || type === 'live';
+  const liveId = firstString(entity.liveId, entity.live_id, entity.id, entity.entityId);
   const explicitTarget = /^https?:\/\//i.test(entityUrl)
     ? entityUrl
     : firstString(entity.webUrl, entity.web_url, extra.webUrl, extra.web_url, entityUrl, entity.targetUrl, entity.target_url);
-  const target = explicitTarget || (isProductEntity && (productId || entity.id || entity.entityId) ? `/product/${asString(productId ?? entity.id ?? entity.entityId)}` : '');
+  const target = explicitTarget || (isProductEntity && (productId || entity.id || entity.entityId) ? `/product/${asString(productId ?? entity.id ?? entity.entityId)}` : '') || (isLiveEntity && liveId ? `/live/${liveId}` : '');
   if (!target) return null;
   if (/^https?:\/\//i.test(target)) return { kind: 'web', target, title: asString(entity.title) };
   const apkDetail = target.match(/^\/?apk\/detail\?(?:[^#]*&)?packageName=([^&#]+)/i);
@@ -288,6 +294,9 @@ export function resolveDiscoveryRoute(entity: DiscoveryEntity): DiscoveryRoute |
   const productDetail = target.match(/^\/?product\/detail\?(?:[^#]*&)?(?:id|productId)=([^&#]+)/i);
   if (productDetail) {
     return { kind: 'native', target: `/product/${decodeURIComponent(productDetail[1])}`, title: asString(entity.title) };
+  }
+  if (/^#?\/live\/[^/?#]+/i.test(target)) {
+    return { kind: 'native', target: target.replace(/^#/, ''), title: asString(entity.title) };
   }
   if (/^\/(user|dyh)\/\d+/i.test(target) || /^\/(feed|product)\/\d+/i.test(target)) {
     return { kind: 'native', target, title: asString(entity.title) };

@@ -92,6 +92,11 @@ pub async fn get_discovery_page_data(
 }
 
 #[tauri::command]
+pub async fn get_live_detail(state: State<'_, AppState>, live_id: String) -> Result<Value, String> {
+    state.client.get_live_detail(&live_id).await
+}
+
+#[tauri::command]
 pub async fn get_search_suggestions(
     state: State<'_, AppState>,
     query: String,
@@ -580,6 +585,16 @@ pub async fn follow_dyh(state: State<'_, AppState>, dyh_id: String) -> Result<Va
 #[tauri::command]
 pub async fn unfollow_dyh(state: State<'_, AppState>, dyh_id: String) -> Result<Value, String> {
     state.client.unfollow_dyh(&dyh_id).await
+}
+
+#[tauri::command]
+pub async fn follow_live(state: State<'_, AppState>, live_id: String) -> Result<Value, String> {
+    state.client.follow_live(&live_id).await
+}
+
+#[tauri::command]
+pub async fn unfollow_live(state: State<'_, AppState>, live_id: String) -> Result<Value, String> {
+    state.client.unfollow_live(&live_id).await
 }
 
 #[tauri::command]
@@ -1875,17 +1890,75 @@ fn get_app_origin(app: &tauri::AppHandle) -> String {
 
 /// 从回跳 URL 中提取 ck 参数（完整 cookie 字符串），例如
 /// `http://127.0.0.1:17520/#/auth_callback?ck=uid%3D...%3BSESSID%3D...`
-fn extract_ck_from_url(url: &str) -> Option<String> {
-    let after_hash = url.split('#').nth(1)?;
-    let after_q = after_hash.split('?').nth(1)?;
-    for pair in after_q.split('&') {
-        let mut it = pair.splitn(2, '=');
-        if it.next()? == "ck" {
-            let val = it.next()?;
-            return Some(percent_decode(val));
+fn extract_callback_param(url: &str, key: &str) -> Option<String> {
+    let queries = [
+        url.split_once('?')
+            .map(|(_, value)| value.split('#').next().unwrap_or(value)),
+        url.split_once('#')
+            .and_then(|(_, value)| value.split_once('?').map(|(_, query)| query)),
+    ];
+    for query in queries.into_iter().flatten() {
+        for pair in query.split('&') {
+            let mut parts = pair.splitn(2, '=');
+            let name = percent_decode(parts.next().unwrap_or_default());
+            if name == key {
+                return Some(percent_decode(parts.next().unwrap_or_default()));
+            }
         }
     }
     None
+}
+
+/// 从回跳 URL 中提取完整 Cookie 字符串。
+fn extract_ck_from_url(url: &str) -> Option<String> {
+    extract_callback_param(url, "ck")
+}
+
+/// 合并回调参数和 WebView2 Cookie 存储中的 Cookie，后者覆盖同名旧值。
+fn merge_cookie_headers(first: Option<&str>, second: Option<&str>) -> Option<String> {
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    for source in [first.unwrap_or_default(), second.unwrap_or_default()] {
+        for item in source.split(';') {
+            let mut parts = item.trim().splitn(2, '=');
+            let name = parts.next().unwrap_or_default().trim();
+            let value = parts.next().unwrap_or_default().trim();
+            if name.is_empty() {
+                continue;
+            }
+            if let Some(existing) = pairs.iter_mut().find(|(key, _)| key == name) {
+                existing.1 = value.to_string();
+            } else {
+                pairs.push((name.to_string(), value.to_string()));
+            }
+        }
+    }
+    if pairs.is_empty() {
+        None
+    } else {
+        Some(pairs.into_iter().map(|(name, value)| format!("{name}={value}")).collect::<Vec<_>>().join("; "))
+    }
+}
+
+/// 从 WebView2 Cookie 存储读取酷安所有子域的 Cookie，包含 HttpOnly Cookie。
+fn get_login_webview_cookie<R: tauri::Runtime>(win: &tauri::WebviewWindow<R>) -> Result<String, String> {
+    let cookies = win.cookies().map_err(|e| e.to_string())?;
+    Ok(cookies
+        .into_iter()
+        .filter(|cookie| {
+            let domain = cookie.domain().unwrap_or_default().trim_start_matches('.');
+            domain == "coolapk.com" || domain.ends_with(".coolapk.com")
+        })
+        .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
+        .collect::<Vec<_>>()
+        .join("; "))
+}
+
+/// APK 只在 ac=access_token 时把 code 交给 /account/accessToken。
+fn extract_access_code_from_url(url: &str) -> Option<String> {
+    if extract_callback_param(url, "ac").as_deref() != Some("access_token") {
+        return None;
+    }
+    extract_callback_param(url, "code").filter(|code| !code.trim().is_empty())
 }
 
 /// 日志脱敏：只保留 scheme+host+path，剥离 query/hash（避免 ck 等凭据参数泄露到终端）
@@ -1907,6 +1980,11 @@ fn percent_decode(s: &str) -> String {
                 continue;
             }
         }
+        if bytes[i] == b'+' {
+            out.push(b' ');
+            i += 1;
+            continue;
+        }
         out.push(bytes[i]);
         i += 1;
     }
@@ -1923,10 +2001,13 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     }
 
     let app_origin = get_app_origin(&app);
-    let target_login = format!(
-        "https://account.coolapk.com/auth/loginByCoolapk?forward={}/#/auth_callback",
-        app_origin
-    );
+    let callback_url = format!("{}/#/auth_callback", app_origin);
+    let target_login = reqwest::Url::parse_with_params(
+        "https://account.coolapk.com/auth/login",
+        &[("type", "coolapk"), ("forward", callback_url.as_str())],
+    )
+    .map_err(|e| e.to_string())?
+    .to_string();
     // 先发起 logout 清理网页底层 Cookie 旧会话，防止服务端自动 302 静默跳回旧账号，强制弹出全新登录框
     let login_url = reqwest::Url::parse_with_params(
         "https://account.coolapk.com/auth/logout",
@@ -1936,72 +2017,44 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
 
     eprintln!("[login-debug] open_login_webview url={}", login_url);
 
-    // 远程域 IPC 在 Tauri 2 中受限，注入脚本侦测到有效 SESSID 后跳回本地回调页 {app_origin}/#/auth_callback?ck=<cookie>，
-    // 由回调页及 Rust monitor 提取保存凭据并关窗。
+    // 登录完成后由 Rust monitor 读取 WebView2 Cookie 存储，避免 document.cookie 丢失 HttpOnly 和跨域 Cookie。
     let js_script = r#"
         (function() {
             var APP_ORIGIN = "__APP_ORIGIN__";
-            var saved = false;
+
+            function isLogoutPage() {
+                var href = window.location.href || "";
+                return href.indexOf('auth/logout') !== -1;
+            }
+
+            function clearCoolapkCookies() {
+                var expires = "Thu, 01 Jan 1970 00:00:00 GMT";
+                var names = (document.cookie || "").split(';');
+                for (var i = 0; i < names.length; i++) {
+                    var name = (names[i].split('=')[0] || "").trim();
+                    if (!name) continue;
+                    document.cookie = name + "=; expires=" + expires + "; path=/; domain=.coolapk.com";
+                    document.cookie = name + "=; expires=" + expires + "; path=/";
+                }
+            }
 
             function checkLogoutPage() {
                 var text = (document.body && document.body.innerText) || "";
                 // 必须等待退出页面真正加载完成，不能只看到 auth/logout URL 就跳转，
                 // 否则会取消服务端清理 Cookie 的请求，旧账号会被登录页再次自动识别。
                 if (text.indexOf('已经退出登录') !== -1) {
-                    window.location.replace("https://account.coolapk.com/auth/loginByCoolapk?forward=" + encodeURIComponent(APP_ORIGIN + "/#/auth_callback"));
+                    clearCoolapkCookies();
+                    window.location.replace("https://account.coolapk.com/auth/login?type=coolapk&forward=" + encodeURIComponent(APP_ORIGIN + "/#/auth_callback"));
                     return true;
                 }
-                return false;
+                return isLogoutPage();
             }
 
-            function hasValidSessId(cookies) {
-                if (!cookies) return false;
-                var sm = cookies.match(/(?:^|;\s*)SESSID=([^;]+)/i);
-                var um = cookies.match(/(?:^|;\s*)uid=([^;]+)/i);
-                var sOk = sm && sm[1].trim().length > 5 && sm[1].indexOf('deleted') === -1 && sm[1].indexOf('expired') === -1;
-                var uOk = um && um[1].trim() !== '0' && um[1].trim() !== '10000' && um[1].trim().length > 0;
-                return Boolean(sOk && uOk);
-            }
-
-            function relayBack() {
-                if (saved) return;
-                var cookies = document.cookie || "";
-                if (!hasValidSessId(cookies)) return;
-                saved = true;
-                window.location.replace(APP_ORIGIN + "/#/auth_callback?ck=" + encodeURIComponent(cookies));
-            }
-
-            if (checkLogoutPage()) return;
+            if (checkLogoutPage() && !isLogoutPage()) return;
 
             document.addEventListener('DOMContentLoaded', function() {
-                if (!checkLogoutPage()) {
-                    relayBack();
-                }
+                checkLogoutPage();
             });
-
-            // 1. XHR 拦截：validateLogin / 登录 API 响应完成后等待 Cookie 写入立刻检查并回跳
-            try {
-                var oldOpen = XMLHttpRequest.prototype.open;
-                var oldSend = XMLHttpRequest.prototype.send;
-                XMLHttpRequest.prototype.open = function(method, url) {
-                    this._reqUrl = url || "";
-                    return oldOpen.apply(this, arguments);
-                };
-                XMLHttpRequest.prototype.send = function() {
-                    this.addEventListener('load', function() {
-                        if (this._reqUrl && (this._reqUrl.indexOf('validateLogin') !== -1 || this._reqUrl.indexOf('loginByCoolapk') !== -1 || this._reqUrl.indexOf('/account/login') !== -1)) {
-                            setTimeout(relayBack, 250);
-                        }
-                    });
-                    return oldSend.apply(this, arguments);
-                };
-            } catch(e) {}
-
-            // 2. 轮询侦测真实有效的 SESSID 与 uid Cookie（绝不误判访客 uid=0）
-            setInterval(function() {
-                if (checkLogoutPage()) return;
-                relayBack();
-            }, 300);
         })();
     "#
     .replace("__APP_ORIGIN__", &app_origin);
@@ -2022,6 +2075,9 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     // 在 Rust 侧使用原生 Task 监控 Webview URL 重定向状态
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
+        let mut last_monitor_url: Option<String> = None;
+        let mut processed_callback_url: Option<String> = None;
+        let mut attempted_landing_cookie: Option<String> = None;
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(400)).await;
             if let Some(win) = app_handle.get_webview_window("login_window") {
@@ -2029,26 +2085,50 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                     let url_str = url.as_str();
                     let app_origin = get_app_origin(&app_handle);
 
-                    eprintln!("[login-debug:monitor] url_origin={}", redact_url(url_str));
+                    if last_monitor_url.as_deref() != Some(url_str) {
+                        eprintln!("[login-debug:monitor] url_origin={}", redact_url(url_str));
+                        last_monitor_url = Some(url_str.to_string());
+                    }
 
-                    // 已回到本地回调页：凭据随 URL 带回，Rust 直接解析 ck 写入会话并关窗
-                    if url_str.starts_with(&format!("{}/", app_origin)) {
-                        eprintln!("[login-debug:monitor] reached app-origin callback");
+                    let is_account_callback = url_str.starts_with("https://account.coolapk.com/auth/callback");
+                    let is_app_callback = url_str.starts_with(&format!("{}/", app_origin));
+                    // 官方回调和本地回调都在 Rust 侧处理，避免回调页重复保存 Cookie 或覆盖完整会话。
+                    if (is_account_callback || is_app_callback) && processed_callback_url.as_deref() != Some(url_str) {
+                        let callback_code = extract_access_code_from_url(url_str);
+                        let callback_cookie = extract_ck_from_url(url_str);
+                        let webview_cookie = get_login_webview_cookie(&win).ok();
+                        let effective_cookie = merge_cookie_headers(callback_cookie.as_deref(), webview_cookie.as_deref());
+                        eprintln!(
+                            "[login-debug:monitor] reached {} callback, has_access_code={}, has_cookie={}, cookie_has_session={}",
+                            if is_account_callback { "official" } else { "app-origin" },
+                            callback_code.is_some(),
+                            effective_cookie.as_ref().map(|value| !value.trim().is_empty()).unwrap_or(false),
+                            effective_cookie.as_ref().map(|value| CoolapkClient::has_valid_session_cookie(value)).unwrap_or(false)
+                        );
+                        let state = app_handle.state::<AppState>();
                         let mut valid = false;
-                        if let Some(ck) = extract_ck_from_url(url_str) {
-                            if !ck.trim().is_empty() {
-                                let state = app_handle.state::<AppState>();
-                                if state.client.set_user_cookie(ck.clone()).is_ok() {
-                                    if state.client.check_login_info().await.is_ok() {
-                                        valid = true;
-                                        eprintln!(
-                                            "[login-debug:monitor] cookie captured and validated, len={}",
-                                            ck.len()
-                                        );
-                                    }
+                        if let Some(code) = callback_code {
+                            match state.client.login_by_access_code(&code, effective_cookie.as_deref()).await {
+                                Ok(result) => {
+                                    valid = true;
+                                    let data = result.get("data").unwrap_or(&result);
+                                    let uid = data.get("uid").or_else(|| data.get("id")).map(|value| value.to_string()).unwrap_or_default();
+                                    eprintln!("[login-debug:monitor] access code exchanged and login info saved, uid={}", uid.trim_matches('"'));
                                 }
+                                Err(error) => eprintln!("[login-debug:monitor] access code exchange failed: {}", error),
+                            }
+                        } else if let Some(cookie) = effective_cookie {
+                            match state.client.login_by_webview_cookie(&cookie).await {
+                                Ok(result) => {
+                                    valid = true;
+                                    let data = result.get("data").unwrap_or(&result);
+                                    let uid = data.get("uid").or_else(|| data.get("id")).map(|value| value.to_string()).unwrap_or_default();
+                                    eprintln!("[login-debug:monitor] WebView Cookie validated and login info saved, uid={}", uid.trim_matches('"'));
+                                }
+                                Err(error) => eprintln!("[login-debug:monitor] WebView Cookie validation failed: {}", error),
                             }
                         }
+                        processed_callback_url = Some(url_str.to_string());
                         if valid {
                             let _ = win.close();
                             use tauri::Emitter;
@@ -2057,17 +2137,37 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                         }
                     }
 
-                    // 登录落地页（www.coolapk.com / m.coolapk.com）：严禁抓取 uid=0 或空 SESSID
+                    // 登录落地页：读取 account.coolapk.com 的 Cookie 存储，而不是读取 www 域的 document.cookie。
                     if (url_str.contains("www.coolapk.com")
                         || url_str.contains("m.coolapk.com")
                         || url_str.contains("coolapk.com"))
                         && !url_str.contains("account.coolapk.com/auth")
                     {
-                        let eval_script = format!(
-                            "(function() {{ var c = document.cookie || ''; var sm = c.match(/(?:^|;\\s*)SESSID=([^;]+)/i); var um = c.match(/(?:^|;\\s*)uid=([^;]+)/i); var sOk = sm && sm[1].trim().length > 5 && sm[1].indexOf('deleted') === -1; var uOk = um && um[1].trim() !== '0' && um[1].trim() !== '10000' && um[1].trim().length > 0; if (sOk && uOk) {{ window.location.replace('{}/#/auth_callback?ck=' + encodeURIComponent(c)); }} }})()",
-                            app_origin
-                        );
-                        let _ = win.eval(&eval_script);
+                        if let Ok(cookie) = get_login_webview_cookie(&win) {
+                            if !cookie.is_empty() && attempted_landing_cookie.as_deref() != Some(cookie.as_str()) {
+                                attempted_landing_cookie = Some(cookie.clone());
+                                eprintln!(
+                                    "[login-debug:monitor] landing Cookie store, has_session={}, cookie_len={}",
+                                    CoolapkClient::has_valid_session_cookie(&cookie),
+                                    cookie.len()
+                                );
+                                if CoolapkClient::has_valid_session_cookie(&cookie) {
+                                    let state = app_handle.state::<AppState>();
+                                    match state.client.login_by_webview_cookie(&cookie).await {
+                                        Ok(result) => {
+                                            let data = result.get("data").unwrap_or(&result);
+                                            let uid = data.get("uid").or_else(|| data.get("id")).map(|value| value.to_string()).unwrap_or_default();
+                                            eprintln!("[login-debug:monitor] landing Cookie validated and login info saved, uid={}", uid.trim_matches('"'));
+                                            let _ = win.close();
+                                            use tauri::Emitter;
+                                            let _ = app_handle.emit("login-window-closed", ());
+                                            break;
+                                        }
+                                        Err(error) => eprintln!("[login-debug:monitor] landing Cookie not ready, waiting for updated Cookie: {}", error),
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             } else {
@@ -2077,6 +2177,34 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod login_callback_tests {
+    use super::{extract_access_code_from_url, extract_callback_param, extract_ck_from_url};
+
+    #[test]
+    fn extracts_access_code_and_cookie_from_hash_callback() {
+        let url = "http://127.0.0.1:17520/#/auth_callback?ac=access_token&code=one%2Btime&ck=SESSID%3Dsession%3B%20uid%3D0";
+        assert_eq!(extract_callback_param(url, "ac").as_deref(), Some("access_token"));
+        assert_eq!(extract_access_code_from_url(url).as_deref(), Some("one+time"));
+        assert_eq!(
+            extract_ck_from_url(url).as_deref(),
+            Some("SESSID=session; uid=0")
+        );
+    }
+
+    #[test]
+    fn extracts_access_code_from_account_query_callback() {
+        let url = "https://account.coolapk.com/auth/callback?ac=access_token&code=server-code";
+        assert_eq!(extract_access_code_from_url(url).as_deref(), Some("server-code"));
+    }
+
+    #[test]
+    fn rejects_non_access_token_callback() {
+        let url = "https://account.coolapk.com/auth/callback?ac=login&code=server-code";
+        assert_eq!(extract_access_code_from_url(url), None);
+    }
 }
 
 /// 后台静默下载更新安装包，实时向前端广播下载进度；

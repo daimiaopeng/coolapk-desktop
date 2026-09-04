@@ -62,6 +62,21 @@ describe('discovery dynamic configuration', () => {
     expect(result.lastItem).toBe('42');
   });
 
+  it('keeps page context and counts nested timeline entities for pagination', () => {
+    const result = parseDiscoveryPage({
+      data: [{
+        entityId: 'timeline-card',
+        entityTemplate: 'productTimelineListCard',
+        pageContext: 'timeline-context',
+        entities: Array.from({ length: 20 }, (_, index) => ({ entityTemplate: 'productTimeline', entityId: `product-${index}` })),
+      }],
+    }, 1);
+
+    expect(result.pageContext).toBe('timeline-context');
+    expect(result.items).toHaveLength(1);
+    expect(result.hasMore).toBe(true);
+  });
+
   it('resolves web, native and data-list routes', () => {
     expect(resolveDiscoveryRoute({ url: 'https://www.coolapk.com/page' })?.kind).toBe('web');
     expect(resolveDiscoveryRoute({ url: '/user/123' })?.kind).toBe('native');
@@ -71,6 +86,7 @@ describe('discovery dynamic configuration', () => {
     expect(resolveDiscoveryRoute({ url: '/apk/detail?packageName=com.example.app' })?.target).toBe('/apk/com.example.app');
     expect(resolveDiscoveryRoute({ entityType: 'Product', id: 2967 })?.target).toBe('/product/2967');
     expect(resolveDiscoveryRoute({ product_id: 2968 })?.target).toBe('/product/2968');
+    expect(resolveDiscoveryRoute({ entityType: 'liveTopic', id: 2969 })?.target).toBe('/live/2969');
   });
 
   it('decodes discovery route segments only once', () => {

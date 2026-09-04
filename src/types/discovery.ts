@@ -67,6 +67,7 @@ export interface DiscoveryPageResult {
   hasMore: boolean;
   firstItem: string;
   lastItem: string;
+  pageContext?: string;
   raw: unknown;
 }
 

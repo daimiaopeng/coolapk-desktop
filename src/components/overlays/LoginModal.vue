@@ -117,7 +117,7 @@
                 调起官方授权登录
               </AppButton>
               
-              <button class="btn-hero-sync" @click="handleCheckWebLogin">
+              <button class="btn-hero-sync" @click="handleCheckWebLogin()">
                 <i class="fas fa-rotate"></i> 已在窗口完成登录？点击同步凭据
               </button>
             </div>
@@ -231,38 +231,75 @@ const authStore = useAuthStore();
 const activeTab = ref<'cookie'>('cookie');
 const showAdvanced = ref(false);
 
-function handleOpenWebAuth() {
-  console.log('[login-debug] handleOpenWebAuth -> openLoginWebview()');
-  debugStatus.value = '已调用 open_login_webview，等待登录窗口';
-  CoolapkTauriAPI.openLoginWebview();
-  successMessage.value = '已调起客户端嵌入式官方登录窗口。登录完成后窗口将自动关闭并完成凭据同步！';
-  debugStatus.value = '登录窗口已调起，请在官方窗口完成登录后再同步';
+let statusPollTimer: ReturnType<typeof setInterval> | null = null;
+let closeModalTimer: ReturnType<typeof setTimeout> | null = null;
+let statusPollInFlight = false;
+let webLoginCompleted = false;
+
+function stopStatusPolling() {
+  if (statusPollTimer) clearInterval(statusPollTimer);
+  statusPollTimer = null;
 }
 
-async function handleCheckWebLogin() {
-  console.log('[login-debug] handleCheckWebLogin start');
-  debugStatus.value = '开始同步校验...';
-  isLoading.value = true;
+function completeWebLogin() {
+  if (webLoginCompleted) return;
+  webLoginCompleted = true;
+  stopStatusPolling();
+  successMessage.value = '🎉 酷安账号凭据同步成功！欢迎回来，' + (authStore.user?.username || '酷友');
+  debugStatus.value = '登录成功，已同步身份信息';
+  void CoolapkTauriAPI.closeLoginWebview();
+  if (closeModalTimer) clearTimeout(closeModalTimer);
+  closeModalTimer = setTimeout(() => {
+    authStore.closeLoginModal();
+    closeModalTimer = null;
+  }, 800);
+}
+
+async function handleOpenWebAuth() {
+  console.log('[login-debug] handleOpenWebAuth -> openLoginWebview()');
+  webLoginCompleted = false;
+  debugStatus.value = '已调用 open_login_webview，等待登录窗口';
   errorMessage.value = '';
+  try {
+    await CoolapkTauriAPI.openLoginWebview();
+    successMessage.value = '已调起客户端嵌入式官方登录窗口。登录完成后会自动同步身份信息！';
+    debugStatus.value = '登录窗口已调起，等待官方回调并校验身份';
+  } catch (error: any) {
+    debugStatus.value = '登录窗口调起失败';
+    errorMessage.value = '无法打开官方登录窗口：' + (error?.message || String(error));
+  }
+}
+
+async function handleCheckWebLogin(showFailure = true): Promise<boolean> {
+  console.log('[login-debug] handleCheckWebLogin start');
+  if (statusPollInFlight) return false;
+  statusPollInFlight = true;
+  if (showFailure) {
+    debugStatus.value = '开始同步校验...';
+    isLoading.value = true;
+    errorMessage.value = '';
+  }
   try {
     const isLoggedIn = await authStore.checkStatus();
     console.log('[login-debug] checkStatus result =', isLoggedIn);
-    debugStatus.value = `checkStatus=${isLoggedIn ? 'true' : 'false'}`;
     if (isLoggedIn) {
-      successMessage.value = '🎉 酷安账号凭据同步成功！欢迎回来，' + (authStore.user?.username || '酷友');
-      setTimeout(() => {
-        authStore.closeLoginModal();
-      }, 1000);
-    } else {
+      completeWebLogin();
+      return true;
+    }
+    if (showFailure) {
+      debugStatus.value = 'checkStatus=false';
       showAdvanced.value = true;
       activeTab.value = 'cookie';
       errorMessage.value = '未检测到成功登录会话。若您已在窗口中完成登录，请点击上方的“已在窗口完成登录？点击同步凭据”；或在下方备用选项直接粘贴 Cookie 登录。';
     }
+    return false;
   } catch (e: any) {
     console.log('[login-debug] checkStatus error =', e?.message || e);
-    errorMessage.value = '同步校验失败: ' + (e?.message || e);
+    if (showFailure) errorMessage.value = '同步校验失败: ' + (e?.message || e);
+    return false;
   } finally {
-    isLoading.value = false;
+    statusPollInFlight = false;
+    if (showFailure) isLoading.value = false;
   }
 }
 
@@ -272,10 +309,10 @@ import('@tauri-apps/api/event').then(({ listen }) => {
   listen('login-window-closed', () => {
     console.log('[login-debug] received login-window-closed event');
     debugStatus.value = '收到 login-window-closed 事件，触发同步校验';
-    handleCheckWebLogin();
+    void handleCheckWebLogin(false);
   }).then(unlisten => {
     unlistenFn = unlisten;
-  });
+  }).catch(error => console.warn('[login-debug] listen login-window-closed failed', error));
 });
 
 // 手机号登录表单
@@ -367,6 +404,12 @@ watch(
   () => authStore.isLoginModalOpen,
   (isOpen) => {
     if (isOpen) {
+      webLoginCompleted = false;
+      stopStatusPolling();
+      if (closeModalTimer) {
+        clearTimeout(closeModalTimer);
+        closeModalTimer = null;
+      }
       errorMessage.value = '';
       successMessage.value = '';
       isRebinding.value = false;
@@ -375,6 +418,8 @@ watch(
       removingUid.value = '';
       pendingRemovalAccount.value = null;
       authStore.loadAccounts();
+    } else {
+      stopStatusPolling();
     }
   }
 );
@@ -386,6 +431,12 @@ function switchTab(tab: 'cookie') {
 }
 
 function handleClose() {
+  webLoginCompleted = true;
+  stopStatusPolling();
+  if (closeModalTimer) {
+    clearTimeout(closeModalTimer);
+    closeModalTimer = null;
+  }
   pendingRemovalAccount.value = null;
   authStore.closeLoginModal();
 }
@@ -421,6 +472,8 @@ async function handleLogout() {
 }
 
 onUnmounted(() => {
+  stopStatusPolling();
+  if (closeModalTimer) clearTimeout(closeModalTimer);
   if (unlistenFn) unlistenFn();
 });
 </script>

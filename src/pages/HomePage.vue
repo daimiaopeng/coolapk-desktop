@@ -125,6 +125,32 @@
         <!-- 选机中心子栏目专属：直接内嵌展示选机页面 -->
         <ProductSelectorPage v-if="isProductSelectorActive" />
 
+        <!-- 服务端页面实体栏目：话题/新机/直播返回的是卡片与实体，不能按动态流清洗和渲染 -->
+        <div v-else-if="isPageEntityTab && loading && pageEntities.length === 0" class="skeleton-padding">
+          <DiscoverySkeleton />
+        </div>
+
+        <div v-else-if="isPageEntityTab && error && pageEntities.length === 0" class="error-padding">
+          <ErrorState title="加载页面内容失败" :message="error" @retry="loadFeeds(true)" />
+        </div>
+
+        <div v-else-if="isPageEntityTab && pageEntities.length === 0" class="empty-padding">
+          <EmptyState title="暂无内容" />
+        </div>
+
+        <div v-else-if="isPageEntityTab" class="home-page-entity-list">
+          <DiscoveryEntityCard
+            v-for="(entity, index) in pageEntities"
+            :key="getEntityKey(entity, index)"
+            :entity="entity"
+            @open="openPageEntity"
+          />
+          <div v-if="loadingMore" class="loading-more">
+            <LoadingState text="加载更多..." />
+          </div>
+          <div v-else-if="noMore" class="page-entity-no-more">没有更多内容了</div>
+        </div>
+
         <!-- 动态列表与 Loading/Error/Empty 状态 -->
         <div v-else-if="!isDyhTab && loading && feeds.length === 0" class="skeleton-padding">
           <FeedSkeleton :count="4" />
@@ -227,6 +253,7 @@ import FeedTabs from '../components/feed/FeedTabs.vue';
 import FeedLayoutToggle from '../components/feed/FeedLayoutToggle.vue';
 import FeedCard from '../components/feed/FeedCard.vue';
 import DiscoveryEntityCard from '../components/discovery/DiscoveryEntityCard.vue';
+import DiscoverySkeleton from '../components/discovery/DiscoverySkeleton.vue';
 import FeedSkeleton from '../components/feed/FeedSkeleton.vue';
 import RightSidebar from '../components/layout/RightSidebar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -238,7 +265,9 @@ import ProductSelectorPage from './ProductSelectorPage.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useSettingsStore } from '../stores/settings';
 import { hasFeedRenderableContent, shouldHideFeed } from '../utils/feedFilter';
+import { decodeDiscoveryRouteSegment, getEntityKey, parseDiscoveryPage, resolveDiscoveryRoute } from '../utils/discovery';
 import type { FeedLayout, ConfigPageTab } from '../types/settings';
+import type { DiscoveryEntity } from '../types/discovery';
 import { resolvePreferredHomeTab } from '../utils/homeTabs';
 import { extractHotSearchKeywords } from '../utils/searchEntities';
 
@@ -256,6 +285,8 @@ const activeTab = ref('');
 let isInitializingHome = true;
 const page = ref(1);
 const feeds = ref<any[]>([]);
+const pageEntities = ref<DiscoveryEntity[]>([]);
+const pageEntityCursor = reactive({ firstItem: '', lastItem: '', pageContext: '' });
 const feedScrollContainer = ref<HTMLElement | null>(null);
 const subChannelsContainer = ref<HTMLElement | null>(null);
 const loading = ref(false);
@@ -333,6 +364,26 @@ const isDyhTab = computed(() => {
   if (!t) return activeTab.value === 'dyh';
   return t.page_name === 'dyh' || t.url === '/user/dyhSubscribe' || t.title === '看看号';
 });
+
+const isTopicPageTab = computed(() => {
+  const t = currentActiveTabObj.value;
+  if (!t) return activeTab.value === 'V9_HOME_TAB_TOPIC';
+  return t.page_name === 'V9_HOME_TAB_TOPIC' || t.url.includes('V9_HOME_TAB_TOPIC') || t.title === '话题';
+});
+
+const isNewDevicePageTab = computed(() => {
+  const t = currentActiveTabObj.value;
+  if (!t) return activeTab.value === 'V11_HOME_NEW';
+  return t.page_name === 'V11_HOME_NEW' || t.url.includes('V11_HOME_NEW') || t.title === '新机';
+});
+
+const isLiveTab = computed(() => {
+  const t = currentActiveTabObj.value;
+  if (!t) return activeTab.value === 'V9_HOME_TAB_LIVE' || activeTab.value === 'live';
+  return t.page_name === 'V9_HOME_TAB_LIVE' || t.url.includes('V9_HOME_TAB_LIVE') || t.title === '直播';
+});
+
+const isPageEntityTab = computed(() => isTopicPageTab.value || isNewDevicePageTab.value || isLiveTab.value);
 
 const isDoubleColumn = computed(() => feedLayout.value === 'double' && !isDyhTab.value);
 
@@ -763,6 +814,18 @@ async function fetchTabApi(tabKey: string, p: number) {
 
   const targetUrl = matchedTab ? (matchedTab.url || matchedTab.page_name || '') : tabKey;
 
+  if (isPageEntityTab.value) {
+    return await CoolapkTauriAPI.getDiscoveryPageData({
+      url: targetUrl,
+      title: matchedTab?.title || '',
+      subTitle: matchedTab?.subTitle || '',
+      page: p,
+      firstItem: p <= 1 ? pageEntityCursor.firstItem : '',
+      lastItem: p <= 1 ? '' : pageEntityCursor.lastItem,
+      pageContext: p <= 1 ? '' : pageEntityCursor.pageContext,
+    });
+  }
+
   // 1. 如果匹配到具体 URL，调用通用板块/页面数据流
   if (targetUrl) {
     return await CoolapkTauriAPI.getBoardFeeds(targetUrl, p);
@@ -773,7 +836,7 @@ async function fetchTabApi(tabKey: string, p: number) {
 }
 
 async function prefetchNextPage() {
-  if (isHeadlineTab.value || isPrefetching.value || noMore.value) return;
+  if (isHeadlineTab.value || isPageEntityTab.value || isPrefetching.value || noMore.value) return;
   isPrefetching.value = true;
   try {
     const nextP = page.value;
@@ -799,6 +862,10 @@ async function loadFeeds(isRefresh: boolean = false) {
     page.value = 1;
     noMore.value = false;
     feeds.value = [];
+    pageEntities.value = [];
+    pageEntityCursor.firstItem = '';
+    pageEntityCursor.lastItem = '';
+    pageEntityCursor.pageContext = '';
     prefetchBuffer.value = [];
     if (isHeadlineTab.value) resetHeadlineCursor({ preserveNested: Boolean(selectedHeadlineNestedSubChannelUrl.value) });
     loading.value = true;
@@ -811,6 +878,24 @@ async function loadFeeds(isRefresh: boolean = false) {
   try {
     let validItems: any[] = [];
     let rawItems: any[] = [];
+
+    if (isPageEntityTab.value) {
+      const res: any = await fetchTabApi(activeTab.value, page.value);
+      const parsed = parseDiscoveryPage(res, page.value);
+      const incoming = parsed.items;
+      if (isRefresh) {
+        pageEntities.value = incoming;
+      } else {
+        const existingKeys = new Set(pageEntities.value.map((item, index) => getEntityKey(item, index)));
+        pageEntities.value = [...pageEntities.value, ...incoming.filter((item, index) => !existingKeys.has(getEntityKey(item, pageEntities.value.length + index)))];
+      }
+      pageEntityCursor.firstItem = parsed.firstItem;
+      pageEntityCursor.lastItem = parsed.lastItem;
+      pageEntityCursor.pageContext = parsed.pageContext || '';
+      page.value += 1;
+      noMore.value = incoming.length === 0 || !parsed.hasMore;
+      return;
+    }
 
     if (!isRefresh && !isHeadlineTab.value && prefetchBuffer.value.length > 0) {
       validItems = prefetchBuffer.value;
@@ -1060,6 +1145,35 @@ function openDyh(dyhId: any) {
   if (dyhId) router.push(`/dyh/${String(dyhId)}`);
 }
 
+function navigatePageEntity(target: string, title: string) {
+  const clean = target.replace(/^#/, '');
+  const user = clean.match(/^\/user\/([^/?#]+)/i);
+  const feed = clean.match(/^\/feed\/([^/?#]+)/i);
+  const app = clean.match(/^\/(?:app|apk)\/([^/?#]+)/i);
+  const product = clean.match(/^\/product\/([^/?#]+)/i);
+  const topic = clean.match(/^\/topic\/([^/?#]+)/i);
+  const dyh = clean.match(/^\/dyh\/([^/?#]+)/i);
+  const live = clean.match(/^\/live\/([^/?#]+)/i);
+  if (user) void router.push(`/user/${user[1]}`);
+  else if (feed) void router.push(`/feed/${feed[1]}`);
+  else if (app) void router.push(`/app/${encodeURIComponent(decodeDiscoveryRouteSegment(app[1]))}`);
+  else if (product) void router.push(`/product/${product[1]}`);
+  else if (topic) void router.push(`/topic/${encodeURIComponent(decodeDiscoveryRouteSegment(topic[1]))}`);
+  else if (dyh) void router.push(`/dyh/${dyh[1]}`);
+  else if (live && !/^detail$/i.test(live[1])) void router.push(`/live/${live[1]}`);
+  else void router.push({ path: '/page', query: { url: target, title, renderer: 'discovery' } });
+}
+
+function openPageEntity(entity: DiscoveryEntity) {
+  const routeInfo = resolveDiscoveryRoute(entity);
+  if (!routeInfo) return;
+  if (routeInfo.kind === 'web') {
+    void CoolapkTauriAPI.openUrl(routeInfo.target, settingsStore.settings.externalLinkMode);
+    return;
+  }
+  navigatePageEntity(routeInfo.target, routeInfo.title || String(entity.title || ''));
+}
+
 async function initializeHome() {
   await fetchTabConfig();
   syncTabFromRoute();
@@ -1272,6 +1386,20 @@ onUnmounted(unbindGlobalListeners);
   flex-direction: column;
   gap: 12px;
   padding: 12px 16px;
+}
+
+.home-page-entity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 16px;
+}
+
+.page-entity-no-more {
+  padding: 12px 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
 }
 
 .headline-ranking-list {

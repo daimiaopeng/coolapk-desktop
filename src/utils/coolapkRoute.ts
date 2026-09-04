@@ -173,6 +173,24 @@ function normalizeCoolapkDirectRoute(href: string): string | null {
   return `/${routeName}/${match[1]}${match[2] ? `?${match[2]}` : ''}`;
 }
 
+/** 将酷安直播详情链接转换为桌面端直播详情页。 */
+function normalizeCoolapkLiveRoute(href: string): string | null {
+  const directMatch = href.match(/^\/live\/([^/?#]+)(?:\?([^#]*))?$/i);
+  if (directMatch && !/^detail$/i.test(directMatch[1])) return `/live/${encodeURIComponent(decodeDiscoverySegment(directMatch[1]))}${directMatch[2] ? `?${directMatch[2]}` : ''}`;
+  const detailMatch = href.match(/^\/live\/detail\/?(?:\?([^#]*))?$/i);
+  if (!detailMatch) return null;
+  const id = new URLSearchParams(detailMatch[1] || '').get('id') || new URLSearchParams(detailMatch[1] || '').get('liveId');
+  return id ? `/live/${encodeURIComponent(id)}` : null;
+}
+
+function decodeDiscoverySegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /** 将酷安站内 URL、Hash 页面和桌面端已有页面统一转换为本地路由。 */
 export function normalizeCoolapkRoute(href: string): string | null {
   const path = extractCoolapkPath(href);
@@ -189,6 +207,7 @@ export function normalizeCoolapkRoute(href: string): string | null {
     normalizeCoolapkUserRoute,
     normalizeCoolapkTopicRoute,
     normalizeCoolapkFeedRoute,
+    normalizeCoolapkLiveRoute,
     normalizeCoolapkDirectRoute,
   ];
   for (const normalize of routeRules) {

@@ -16,6 +16,7 @@ import FollowingPage from '../pages/FollowingPage.vue';
 import UserPage from '../pages/UserPage.vue';
 import UserRelationsPage from '../pages/UserRelationsPage.vue';
 import FeedDetailPage from '../pages/FeedDetailPage.vue';
+import LiveDetailPage from '../pages/LiveDetailPage.vue';
 import BlackListPage from '../pages/BlackListPage.vue';
 import TopicPage from '../pages/TopicPage.vue';
 import TopicsHubPage from '../pages/TopicsHubPage.vue';
@@ -113,6 +114,7 @@ const routes = [
   { path: '/user/:uid', name: 'User', component: UserPage },
   { path: '/user/:uid/relations/:relation(follow|fans)', name: 'UserRelations', component: UserRelationsPage },
   { path: '/feed/:feedId', name: 'FeedDetail', component: FeedDetailPage, props: true },
+  { path: '/live/:liveId', name: 'LiveDetail', component: LiveDetailPage, props: true },
   { path: '/blacklist', name: 'BlackList', component: BlackListPage },
   { path: '/topic/:tag', name: 'Topic', component: TopicPage },
   { path: '/app/:packageName', name: 'AppDetail', component: AppDetailPage },

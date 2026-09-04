@@ -60,6 +60,66 @@ fn cookie_for_request(cookie: &str, _needs_ddid: bool) -> String {
     cookie_without_ddid(cookie)
 }
 
+/// 按酷安客户端 CookieInterceptor 的规则编码账号信息。
+fn encode_login_cookie_value(value: &str) -> String {
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (*byte as char).to_string()
+            }
+            b' ' => "+".to_string(),
+            _ => format!("%{:02X}", byte),
+        })
+        .collect()
+}
+
+/// 覆盖 Cookie 中指定字段，保留 WebView 带回的其它会话与验证字段。
+fn merge_cookie_value(cookie: &str, name: &str, value: &str) -> String {
+    let mut entries = Vec::new();
+    let mut replaced = false;
+    for part in cookie.split(';') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let key = part.split_once('=').map(|(key, _)| key.trim()).unwrap_or(part);
+        if key.eq_ignore_ascii_case(name) {
+            if !replaced {
+                entries.push(format!("{name}={value}"));
+                replaced = true;
+            }
+        } else {
+            entries.push(part.to_string());
+        }
+    }
+    if !replaced {
+        entries.push(format!("{name}={value}"));
+    }
+    entries.join("; ")
+}
+
+/// 清除旧版登录信息字段，保证授权码交换只使用本次 WebView 会话。
+fn remove_cookie_values(cookie: &str, names: &[&str]) -> String {
+    cookie
+        .split(';')
+        .filter_map(|part| {
+            let part = part.trim();
+            if part.is_empty() {
+                return None;
+            }
+            let key = part.split_once('=').map(|(key, _)| key.trim()).unwrap_or(part);
+            if names.iter().any(|name| key.eq_ignore_ascii_case(name)) {
+                None
+            } else {
+                Some(part.to_string())
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
 /// 根据请求路径自动判断需要哪些风控令牌。
 pub fn classify_path(path: &str) -> PathRequirements {
     PathRequirements {
@@ -4102,6 +4162,31 @@ impl CoolapkClient {
         )
     }
 
+    /// 获取酷安直播详情
+    /// 数据来源: GET /v6/live/detail?id={liveId}
+    pub async fn get_live_detail(&self, live_id: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get("/v6/live/detail", &[("id", live_id.to_string())])
+                .await?,
+        )
+    }
+
+    /// 预约/取消预约酷安直播
+    /// 数据来源: GET /v6/live/follow 或 /v6/live/unFollow?id={liveId}
+    pub async fn follow_live(&self, live_id: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get("/v6/live/follow", &[("id", live_id.to_string())])
+                .await?,
+        )
+    }
+
+    pub async fn unfollow_live(&self, live_id: &str) -> Result<Value, String> {
+        wrap_api_data(
+            self.api_get("/v6/live/unFollow", &[("id", live_id.to_string())])
+                .await?,
+        )
+    }
+
     /// 动态转发列表
     /// 数据来源: GET /v6/feed/forwardList?id={feedId}&type={feedType}&page={page}
     pub async fn get_feed_forward_list(
@@ -5855,9 +5940,15 @@ impl CoolapkClient {
         if query_params.is_empty() {
             return Ok(login_info);
         }
-        let res = self.api_get("/v6/user/space", &query_refs).await?;
-        if let Some(data) = res.get("data") {
-            return Ok(json!({ "code": 200, "data": data }));
+        match self.api_get("/v6/user/space", &query_refs).await {
+            Ok(res) => {
+                if let Some(data) = res.get("data") {
+                    return Ok(json!({ "code": 200, "data": data }));
+                }
+            }
+            Err(error) => {
+                eprintln!("[login-debug] user/space failed after login_info succeeded: {}", error);
+            }
         }
         Ok(login_info)
     }
@@ -5965,6 +6056,113 @@ impl CoolapkClient {
         wrap_api_data(res)
     }
 
+    /// 使用官方登录 WebView 的完整 Cookie 校验并保存当前账户。
+    pub async fn login_by_webview_cookie(&self, cookie: &str) -> Result<Value, String> {
+        let cookie = Self::sanitize_cookie(cookie);
+        if !Self::has_valid_session_cookie(&cookie) {
+            return Err("官方登录 WebView 没有返回有效的 SESSID".to_string());
+        }
+        self.set_user_cookie(cookie.clone())?;
+        let result = self.check_login_info().await?;
+        let data = result.get("data").unwrap_or(&result);
+        let uid = data
+            .get("uid")
+            .or_else(|| data.get("id"))
+            .map(value_to_string)
+            .unwrap_or_default();
+        let username = data
+            .get("username")
+            .or_else(|| data.get("userName"))
+            .map(value_to_string)
+            .unwrap_or_default();
+        let avatar = data
+            .get("userAvatar")
+            .or_else(|| data.get("avatar"))
+            .map(value_to_string)
+            .unwrap_or_default();
+        if uid.is_empty() || uid == "0" || uid == "10000" {
+            return Err("官方登录 WebView Cookie 未通过账号校验".to_string());
+        }
+        self.save_account(&uid, &username, &avatar, &cookie).await?;
+        Ok(result)
+    }
+
+    /// 按 APK 登录页的回调流程，用一次性授权码换取 LoginInfo。
+    /// 官方流程是先用 WebView 的 SESSID 调用 accessToken，再把 uid、username、token 写入后续请求。
+    pub async fn login_by_access_code(
+        &self,
+        code: &str,
+        callback_cookie: Option<&str>,
+    ) -> Result<Value, String> {
+        let code = code.trim();
+        if code.is_empty() {
+            return Err("酷安授权码为空".to_string());
+        }
+
+        let raw_cookie = match callback_cookie {
+            Some(value) if !value.trim().is_empty() => Self::sanitize_cookie(value),
+            _ => self
+                .get_user_cookie()
+                .ok_or_else(|| "授权回调没有带回登录 Cookie".to_string())?,
+        };
+        let cookie = remove_cookie_values(&raw_cookie, &["uid", "username", "token"]);
+        if !Self::has_valid_session_cookie(&cookie) {
+            return Err("授权回调没有带回有效的 SESSID".to_string());
+        }
+
+        // accessToken 只应使用本次 WebView 回调的会话，避免把旧账号的 uid/token 带给一次性授权码。
+        self.set_user_cookie(cookie.clone())?;
+        let result = wrap_api_data(
+            self.api_get(
+                "/v6/account/accessToken",
+                &[("code", code.to_string())],
+            )
+            .await?,
+        )?;
+        let data = result.get("data").unwrap_or(&result);
+        let uid = data
+            .get("uid")
+            .or_else(|| data.get("id"))
+            .map(value_to_string)
+            .unwrap_or_default();
+        let username = data
+            .get("username")
+            .or_else(|| data.get("userName"))
+            .map(value_to_string)
+            .unwrap_or_default();
+        // APK 会优先使用 refreshToken 作为后续请求的 token。
+        let token = data
+            .get("refreshToken")
+            .map(value_to_string)
+            .filter(|value| !value.is_empty())
+            .or_else(|| data.get("token").map(value_to_string))
+            .unwrap_or_default();
+        let avatar = data
+            .get("userAvatar")
+            .or_else(|| data.get("avatar"))
+            .map(value_to_string)
+            .unwrap_or_default();
+        if uid.is_empty() || uid == "0" || uid == "10000" || username.is_empty() || token.is_empty()
+        {
+            return Err("酷安授权接口未返回完整登录信息".to_string());
+        }
+
+        let stored_cookie = merge_cookie_value(&cookie, "uid", &encode_login_cookie_value(&uid));
+        let stored_cookie = merge_cookie_value(
+            &stored_cookie,
+            "username",
+            &encode_login_cookie_value(&username),
+        );
+        let stored_cookie = merge_cookie_value(
+            &stored_cookie,
+            "token",
+            &encode_login_cookie_value(&token),
+        );
+        self.save_account(&uid, &username, &avatar, &stored_cookie)
+            .await?;
+        Ok(result)
+    }
+
     fn extract_and_set_session(&self, response: &Value) {
         if let Some(data) = response.get("data") {
             let sessid = data
@@ -6065,7 +6263,7 @@ impl CoolapkClient {
             query.push((key.as_str(), value.clone()));
         }
 
-        wrap_api_data(self.api_get("/v6/page/dataList", &query).await?)
+        wrap_page_data_response(self.api_get("/v6/page/dataList", &query).await?)
     }
 
     /// 搜索候选词（输入联想）
@@ -6659,7 +6857,8 @@ impl CoolapkClient {
             return Err("当前 Cookie 不包含有效会话".to_string());
         }
 
-        let result = wrap_api_data(self.api_get("/v6/account/checkLoginInfo", &[]).await?)?;
+        // 官方客户端会为登录初始化检查显式传入 checkInit=1，缺少该参数时服务端可能返回“登录信息有误”。
+        let result = wrap_api_data(self.api_get("/v6/account/checkLoginInfo", &[("checkInit", "1".to_string())]).await?)?;
         let data = result.get("data").unwrap_or(&result);
         let uid = data
             .get("uid")
@@ -7496,6 +7695,40 @@ fn wrap_api_data(response: Value) -> Result<Value, String> {
 
     let data = response.get("data").cloned().unwrap_or(response);
     Ok(json!({ "code": 200, "data": data }))
+}
+
+/// 包装页面实体数据时保留分页游标，避免丢失卡片列表需要的上下文。
+fn wrap_page_data_response(response: Value) -> Result<Value, String> {
+    let metadata = response
+        .as_object()
+        .map(|object| {
+            [
+                "firstItem",
+                "first_item",
+                "lastItem",
+                "last_item",
+                "pageContext",
+                "page_context",
+                "hasMore",
+                "has_more",
+                "pagination",
+                "pageInfo",
+                "page_info",
+                "total",
+                "current",
+            ]
+            .into_iter()
+            .filter_map(|key| object.get(key).cloned().map(|value| (key, value)))
+            .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut wrapped = wrap_api_data(response)?;
+    if let Some(output) = wrapped.as_object_mut() {
+        for (key, value) in metadata {
+            output.entry(key.to_string()).or_insert(value);
+        }
+    }
+    Ok(wrapped)
 }
 
 /// 将服务端配置中的额外请求参数安全地转成 dataList 查询参数。

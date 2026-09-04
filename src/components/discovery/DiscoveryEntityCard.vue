@@ -3,6 +3,8 @@
     <FeedCard :feed="entity as any" :max-lines="compact ? 6 : undefined" />
   </div>
 
+  <LiveCard v-else-if="isLive" :entity="entity" :compact="compact" />
+
   <article v-else-if="isCarousel" :class="['discovery-carousel-card', { 'is-compact': compact }]">
     <div class="carousel-viewport">
       <AppImage v-if="carouselImage" :src="carouselImage" fit="cover" image-class="discovery-carousel-image" />
@@ -161,6 +163,8 @@
 
   <DigitalProductCard v-else-if="entityKind === 'product'" :product="entity" :layout="compact ? 'compact' : 'vertical'" @open="$emit('open', $event)" />
 
+  <TopicCard v-else-if="entityKind === 'topic'" :topic="entity" layout-mode="card" @select="emitOpen" />
+
   <article v-else-if="entityKind === 'goods'" :class="['discovery-special-card product-card', { 'is-compact': compact, 'is-goods-grid': entityKind === 'goods' }]" @click="emitOpen">
     <AppImage v-if="image" :src="image" fit="cover" image-class="special-card-image" />
     <div class="special-card-copy">
@@ -223,6 +227,8 @@ import { useAuthStore } from '../../stores/auth';
 import FeedCard from '../feed/FeedCard.vue';
 import AppImage from '../common/AppImage.vue';
 import DigitalProductCard from '../digital/DigitalProductCard.vue';
+import TopicCard from '../topic/TopicCard.vue';
+import LiveCard from './LiveCard.vue';
 import type { DiscoveryEntity } from '../../types/discovery';
 import { isDigitalProduct } from '../../utils/digitalProduct';
 import {
@@ -235,6 +241,7 @@ import {
   isImageCard,
   resolveDiscoveryRoute,
 } from '../../utils/discovery';
+import { isLiveEntity } from '../../utils/live';
 
 defineOptions({ name: 'DiscoveryEntityCard' });
 
@@ -253,6 +260,7 @@ const route = computed(() => resolveDiscoveryRoute(props.entity));
 const hasChildren = computed(() => Array.isArray(props.entity.entities) && props.entity.entities.length > 0);
 const isDigitalProductGroup = computed(() => hasChildren.value && props.entity.entities!.every((child) => isDigitalProduct(child)));
 const isFeed = computed(() => isFeedEntity(props.entity) && !hasChildren.value);
+const isLive = computed(() => isLiveEntity(props.entity));
 const isImage = computed(() => isImageCard(props.entity));
 const isGrid = computed(() => isGridCard(props.entity) || (Array.isArray(props.entity.entities) && props.entity.entities.length >= 2));
 const templateName = computed(() => `${String(props.entity.entityTemplate || '').toLowerCase()} ${String(props.entity.entityType || '').toLowerCase()}`.trim());
@@ -352,8 +360,10 @@ const isReviewGroup = computed(() => {
 });
 const entityKind = computed(() => {
   const type = `${String(props.entity.entityType || '').toLowerCase()} ${String(props.entity.entityTemplate || '').toLowerCase()}`;
+  if (type.includes('topic')) return 'topic';
   if (type.includes('apk') || type.includes('app')) return 'app';
   if (type.includes('product') || props.entity.productId || props.entity.product_id) return 'product';
+  if (props.entity.tag || props.entity.tagName || props.entity.tag_name) return 'topic';
   if (type.includes('goods') || type.includes('commodity') || type.includes('merchant') || type.includes('sale') || type.includes('ershou') || type.includes('secondhand')) return 'goods';
   if (type.includes('dyh') || type.includes('official')) return 'dyh';
   if (type.includes('question') || type.includes('qa')) return 'question';

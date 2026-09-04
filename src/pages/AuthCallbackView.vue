@@ -10,70 +10,12 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { CoolapkTauriAPI } from '../api/coolapk';
 
 const statusText = ref('正在验证酷安账号凭据...');
 
-onMounted(async () => {
-  try {
-    let cookies = document.cookie || "";
-
-    // 兜底：部分登录流程把凭据拼进跳转链接（query 或 hash），而 document.cookie 只对当前源可见，
-    // 跳回本地源后酷安域的 cookie 读不到，需要从 URL 提取
-    const query = new URLSearchParams(window.location.search);
-    const hashRaw = window.location.hash.replace(/^#\/?/, '');
-    const hashQuery = hashRaw.includes('?') ? hashRaw.slice(hashRaw.indexOf('?') + 1) : hashRaw;
-    const hash = new URLSearchParams(hashQuery);
-    const pick = (...keys: string[]) => {
-      for (const k of keys) {
-        const v = query.get(k) || hash.get(k);
-        if (v) return v;
-      }
-      return '';
-    };
-
-    // 注入脚本/监控端回跳时把完整 cookie 塞进 ck 参数（URLSearchParams 已自动解码）
-    const rawCk = pick('ck', 'cookies', 'cookie');
-    if (rawCk) {
-      cookies = rawCk;
-    }
-
-    const sessid = pick('SESSID', 'sessid', 'sessionid', 'sesskey');
-    const uid = pick('uid', 'userId', 'user_id');
-    const token = pick('token', 'auth_token');
-
-    if (sessid) {
-      cookies = `SESSID=${sessid}; uid=${uid}; token=${token}; ${cookies}`.replace(/;\s*;/, ';');
-    }
-
-    let validated = false;
-    if (cookies && cookies.trim()) {
-      await CoolapkTauriAPI.saveCookieSecurely(cookies);
-      const result: any = await CoolapkTauriAPI.checkLoginStatus();
-      const data = result?.data || result || {};
-      const currentUid = String(data.uid || data.id || '').trim();
-      validated = Boolean(currentUid && currentUid !== '0' && currentUid !== '10000');
-      if (validated) {
-        await CoolapkTauriAPI.persistCurrentAccount(
-          currentUid,
-          data.username || data.displayUsername || '',
-          data.userAvatar || data.avatar || data.user_avatar || ''
-        );
-      }
-    }
-    statusText.value = validated ? '登录成功，正在同步会话...' : '未完成登录或凭据无效，请重新登录';
-    if (!validated) {
-      await CoolapkTauriAPI.clearCookie();
-    }
-  } catch (e) {
-    console.warn('回调凭据提取警告:', e);
-    statusText.value = '登录凭据验证失败，请重新登录';
-  } finally {
-    // 只有上面的服务端校验通过时才关窗
-    if (statusText.value.startsWith('登录成功')) {
-      setTimeout(() => CoolapkTauriAPI.closeLoginWebview(), 300);
-    }
-  }
+onMounted(() => {
+  const callback = `${window.location.search}${window.location.hash}`;
+  statusText.value = callback.includes('ac=access_token') && callback.includes('code=') ? '正在通过官方授权码获取登录信息...' : '正在从官方窗口同步登录信息...';
 });
 </script>
 

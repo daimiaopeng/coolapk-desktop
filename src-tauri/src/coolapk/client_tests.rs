@@ -44,6 +44,24 @@ fn test_ddid_is_not_sent_when_disabled() {
 }
 
 #[test]
+fn test_login_info_cookie_matches_official_cookie_interceptor() {
+    assert_eq!(encode_login_cookie_value("name with space"), "name+with+space");
+    assert_eq!(encode_login_cookie_value("中文"), "%E4%B8%AD%E6%96%87");
+    let cookie = remove_cookie_values(
+        "SESSID=session; uid=old; username=old-user; token=old-token",
+        &["uid", "username", "token"],
+    );
+    assert_eq!(cookie, "SESSID=session");
+    let cookie = merge_cookie_value(&cookie, "uid", "123");
+    let cookie = merge_cookie_value(&cookie, "username", "cool+user");
+    let cookie = merge_cookie_value(&cookie, "token", "new-token");
+    assert_eq!(
+        cookie,
+        "SESSID=session; uid=123; username=cool+user; token=new-token"
+    );
+}
+
+#[test]
 fn test_product_rating_query_matches_apk_contract() {
     assert_eq!(
         build_product_rating_query("2967", 5),
