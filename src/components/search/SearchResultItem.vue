@@ -61,8 +61,8 @@ const image = computed(() => getSearchEntityImage(props.entity));
 const packageName = computed(() => getSearchEntityPackageName(props.entity));
 const entityId = computed(() => getSearchEntityId(props.entity));
 const isSponsor = computed(() => isSponsorSearchEntity(props.entity));
-const kindLabel = computed(() => ({ user: '用户', topic: '话题', app: '应用', product: '数码', feed: '动态', hot: '热搜', generic: '结果' } as Record<string, string>)[kind.value] || '结果');
-const kindIcon = computed(() => ({ user: 'fas fa-user', topic: 'fas fa-hashtag', app: 'fas fa-cube', product: 'fas fa-mobile-screen-button', feed: 'fas fa-align-left', hot: 'fas fa-fire', generic: 'fas fa-link' } as Record<string, string>)[kind.value] || 'fas fa-cube');
+const kindLabel = computed(() => ({ user: '用户', topic: '话题', app: '应用', product: '数码', feed: '动态', question: '问答', hot: '热搜', generic: '结果' } as Record<string, string>)[kind.value] || '结果');
+const kindIcon = computed(() => ({ user: 'fas fa-user', topic: 'fas fa-hashtag', app: 'fas fa-cube', product: 'fas fa-mobile-screen-button', feed: 'fas fa-align-left', question: 'fas fa-circle-question', hot: 'fas fa-fire', generic: 'fas fa-link' } as Record<string, string>)[kind.value] || 'fas fa-cube');
 
 function formatNumber(value: unknown): string {
   const number = Number(value);

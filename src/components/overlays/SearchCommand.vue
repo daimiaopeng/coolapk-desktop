@@ -221,6 +221,7 @@ function getIcon(item: SearchEntity) {
     case 'user': return 'fas fa-user';
     case 'app': return 'fas fa-cube';
     case 'topic': return 'fas fa-hashtag';
+    case 'question': return 'fas fa-circle-question';
     default: return 'fas fa-align-left';
   }
 }

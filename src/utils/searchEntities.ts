@@ -165,7 +165,14 @@ export function extractHotSearchKeywords(response: unknown): string[] {
   return values;
 }
 
-export function getSearchEntityKind(entity: SearchEntity): 'hot' | 'user' | 'topic' | 'app' | 'feed' | 'product' | 'generic' {
+export function isQuestionSearchEntity(entity: SearchEntity): boolean {
+  const type = getSearchEntityType(entity);
+  const template = getSearchEntityTemplate(entity);
+  const feedType = textValue(entity.feedType ?? entity.feed_type ?? entity.searchType ?? entity.search_type).toLowerCase();
+  return [type, template, feedType].some((value) => value.includes('question') || value.includes('ask') || value === 'qa');
+}
+
+export function getSearchEntityKind(entity: SearchEntity): 'hot' | 'user' | 'topic' | 'app' | 'feed' | 'question' | 'product' | 'generic' {
   const type = getSearchEntityType(entity);
   const template = getSearchEntityTemplate(entity);
   if (template.includes('searchhot') || type.includes('searchhot')) return 'hot';
@@ -173,7 +180,8 @@ export function getSearchEntityKind(entity: SearchEntity): 'hot' | 'user' | 'top
   if (type.includes('topic') || template.includes('topic')) return 'topic';
   if (type.includes('apk') || type.includes('app') || type.includes('game') || getSearchEntityPackageName(entity)) return 'app';
   if (type.includes('product') || template.includes('product')) return 'product';
-  if (type.includes('feed') || type.includes('reply') || type.includes('article') || type.includes('question') || type.includes('ask') || type.includes('dyh') || type.includes('ershou') || entity.message || entity.feed_id || entity.feedId) return 'feed';
+  if (isQuestionSearchEntity(entity)) return 'question';
+  if (type.includes('feed') || type.includes('reply') || type.includes('article') || type.includes('dyh') || type.includes('ershou') || entity.message || entity.feed_id || entity.feedId) return 'feed';
   return 'generic';
 }
 
@@ -187,7 +195,7 @@ export function isNavigableSearchEntity(entity: SearchEntity): boolean {
   if (kind === 'topic') return Boolean(getSearchEntityTopicTag(entity));
   if (kind === 'app') return Boolean(getSearchEntityPackageName(entity));
   if (kind === 'product' || typeIncludes(entity, 'dyh') || typeIncludes(entity, 'album') || typeIncludes(entity, 'goods')) return Boolean(getSearchEntityId(entity));
-  return kind === 'feed' ? Boolean(getSearchEntityId(entity)) : Boolean(getSearchEntityUrl(entity));
+  return kind === 'feed' || kind === 'question' ? Boolean(getSearchEntityId(entity)) : Boolean(getSearchEntityUrl(entity));
 }
 
 export function getSearchEntityRoute(entity: SearchEntity): string | null {
@@ -201,6 +209,7 @@ export function getSearchEntityRoute(entity: SearchEntity): string | null {
   }
   if (kind === 'app' && getSearchEntityPackageName(entity)) return `/app/${encodeURIComponent(getSearchEntityPackageName(entity))}`;
   if (kind === 'product' && id) return `/product/${encodeURIComponent(id)}`;
+  if (kind === 'question' && id) return `/question/${encodeURIComponent(id)}`;
   if (typeIncludes(entity, 'dyh') && id) return `/dyh/${encodeURIComponent(id)}`;
   if (typeIncludes(entity, 'album') && id) return `/album/${encodeURIComponent(id)}`;
   if (typeIncludes(entity, 'goods') && id) return `/goods?tab=detail&id=${encodeURIComponent(id)}`;

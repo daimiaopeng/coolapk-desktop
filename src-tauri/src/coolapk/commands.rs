@@ -674,6 +674,21 @@ pub async fn get_question_answers(
 }
 
 #[tauri::command]
+pub async fn follow_question(state: State<'_, AppState>, question_id: String) -> Result<Value, String> {
+    state.client.follow_question(&question_id).await
+}
+
+#[tauri::command]
+pub async fn unfollow_question(state: State<'_, AppState>, question_id: String) -> Result<Value, String> {
+    state.client.unfollow_question(&question_id).await
+}
+
+#[tauri::command]
+pub async fn invite_question_answer(state: State<'_, AppState>, question_id: String, uid: String) -> Result<Value, String> {
+    state.client.invite_question_answer(&question_id, &uid).await
+}
+
+#[tauri::command]
 pub async fn get_vote_comments(
     state: State<'_, AppState>,
     feed_id: String,

@@ -29,4 +29,11 @@ describe('内容新页路由注册', () => {
   it('我的动态号路由存在', () => {
     expect(router.resolve('/my-dyh').name).toBe('MyDyh');
   });
+
+  it('问答详情路由存在并解析 questionId', () => {
+    const resolved = router.resolve('/question/123456');
+    expect(resolved.matched.length).toBeGreaterThan(0);
+    expect(resolved.name).toBe('QuestionDetail');
+    expect(resolved.params.questionId).toBe('123456');
+  });
 });

@@ -44,8 +44,9 @@ describe('搜索实体归一化', () => {
       { entityType: 'feedTopic', tag: '桌面改造' },
       { entityType: 'apk', packageName: 'com.example.app' },
       { entityType: 'feed', id: '2', message: '动态' },
+      { entityType: 'question', id: '3', title: '如何选择显示器' },
     ];
-    expect(entities.map(getSearchEntityRoute)).toEqual(['/user/1', '/topic/%E6%A1%8C%E9%9D%A2%E6%94%B9%E9%80%A0', '/app/com.example.app', '/feed/2']);
+    expect(entities.map(getSearchEntityRoute)).toEqual(['/user/1', '/topic/%E6%A1%8C%E9%9D%A2%E6%94%B9%E9%80%A0', '/app/com.example.app', '/feed/2', '/question/3']);
     expect(isNavigableSearchEntity({ entityTemplate: 'sponsorForSearch', id: '3' })).toBe(false);
   });
 

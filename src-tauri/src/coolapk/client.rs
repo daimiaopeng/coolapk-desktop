@@ -4336,6 +4336,47 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
+    /// 关注问题。对应 APK 的 GET /v6/question/follow?id={questionId}。
+    pub async fn follow_question(&self, question_id: &str) -> Result<Value, String> {
+        let question_id = question_id.trim();
+        if question_id.is_empty() {
+            return Err("问题 ID 不能为空".to_string());
+        }
+        wrap_api_data(
+            self.api_get("/v6/question/follow", &[("id", question_id.to_string())])
+                .await?,
+        )
+    }
+
+    /// 取消关注问题。对应 APK 的 GET /v6/question/unFollow?id={questionId}。
+    pub async fn unfollow_question(&self, question_id: &str) -> Result<Value, String> {
+        let question_id = question_id.trim();
+        if question_id.is_empty() {
+            return Err("问题 ID 不能为空".to_string());
+        }
+        wrap_api_data(
+            self.api_get("/v6/question/unFollow", &[("id", question_id.to_string())])
+                .await?,
+        )
+    }
+
+    /// 邀请一个或多个用户回答问题。APK 以逗号分隔的 UID 作为 multipart 字段提交。
+    pub async fn invite_question_answer(&self, question_id: &str, uid: &str) -> Result<Value, String> {
+        let question_id = question_id.trim();
+        let uid = uid.trim();
+        if question_id.is_empty() {
+            return Err("问题 ID 不能为空".to_string());
+        }
+        if uid.is_empty() {
+            return Err("邀请用户 UID 不能为空".to_string());
+        }
+        let form = reqwest::multipart::Form::new()
+            .text("uid", uid.to_string())
+            .text("questionId", question_id.to_string());
+        self.request_multipart_api("/v6/question/inviteAnswer", form)
+            .await
+    }
+
     /// 投票评论列表
     /// 数据来源: GET /v6/vote/commentList?fid={feedId}&page={page}
     pub async fn get_vote_comments(&self, feed_id: &str, page: u32) -> Result<Value, String> {

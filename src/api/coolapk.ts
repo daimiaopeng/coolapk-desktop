@@ -877,8 +877,20 @@ export class CoolapkTauriAPI {
     });
   }
 
-  static async getQuestionAnswers(feedId: string, sort: string = 'hot', page: number = 1) {
-    return await invokeNative('get_question_answers', { feedId, sort, page });
+  static async getQuestionAnswers(feedId: string, sort: string = 'reply', page: number = 1) {
+    return await invokeNative('get_question_answers', { feedId, sort, page }, { retry: true, kind: 'feed' });
+  }
+
+  static async followQuestion(questionId: string) {
+    return await invokeNative('follow_question', { questionId }, { retry: false, kind: 'feed' });
+  }
+
+  static async unfollowQuestion(questionId: string) {
+    return await invokeNative('unfollow_question', { questionId }, { retry: false, kind: 'feed' });
+  }
+
+  static async inviteQuestionAnswer(questionId: string, uid: string) {
+    return await invokeNative('invite_question_answer', { questionId, uid }, { retry: false, kind: 'feed' });
   }
 
   static async getVoteComments(feedId: string, page: number = 1) {
