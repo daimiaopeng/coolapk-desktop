@@ -1599,6 +1599,30 @@ pub async fn save_image(
     Ok(target_path.to_string_lossy().to_string())
 }
 
+/// 保存前端生成的 Base64 分享图，目录为空时使用系统下载目录。
+#[tauri::command]
+pub async fn save_image_data_url(
+    app: tauri::AppHandle,
+    data_url: String,
+    file_name: String,
+    dir: Option<String>,
+) -> Result<String, String> {
+    if data_url.len() > 64 * 1024 * 1024 {
+        return Err("分享图数据过大（超过 64MB）".to_string());
+    }
+    let (mime_type, bytes) = decode_image_data_url(&data_url)?;
+    if bytes.len() > 48 * 1024 * 1024 {
+        return Err("分享图文件过大（超过 48MB）".to_string());
+    }
+    let file_name = build_generated_image_file_name(&file_name, mime_type);
+    let target_dir = user_save_dir(&app, dir.as_deref())?;
+    tokio::fs::create_dir_all(&target_dir)
+        .await
+        .map_err(|error| format!("创建分享图保存目录失败：{error}"))?;
+    let target_path = save_image_bytes(&target_dir, &file_name, &bytes).await?;
+    Ok(target_path.to_string_lossy().to_string())
+}
+
 /// 下载图片到应用缓存后交给系统默认图片查看器，避免把 HTTPS 地址交给浏览器。
 #[tauri::command]
 pub async fn open_image_in_system_viewer(
@@ -1735,6 +1759,28 @@ fn build_image_file_name(url: &str, mime_type: &str) -> String {
             .unwrap_or_default()
             .as_secs();
         format!("coolapk_image_{timestamp}")
+    } else {
+        safe_stem
+    };
+    format!("{final_stem}.{}", image_extension(mime_type))
+}
+
+fn build_generated_image_file_name(file_name: &str, mime_type: &str) -> String {
+    let requested_stem = std::path::Path::new(file_name)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    let safe_stem: String = requested_stem
+        .chars()
+        .take(100)
+        .filter(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
+        .collect();
+    let final_stem = if safe_stem.is_empty() {
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        format!("coolapk_share_{timestamp}")
     } else {
         safe_stem
     };
@@ -3064,7 +3110,7 @@ pub async fn bind_feed_to_goods_list(
 #[cfg(test)]
 mod cache_tests {
     use super::{
-        build_image_file_name, decode_image_data_url, next_available_file_path, read_image_cache,
+        build_generated_image_file_name, build_image_file_name, decode_image_data_url, next_available_file_path, read_image_cache,
         save_image_bytes, validate_custom_dir, write_image_cache,
     };
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -3123,6 +3169,18 @@ mod cache_tests {
             root.join("abc123_2.png")
         );
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn generated_image_file_name_is_safe_and_uses_payload_format() {
+        assert_eq!(
+            build_generated_image_file_name("coolapk-feed-42.png", "image/jpeg"),
+            "coolapk-feed-42.jpg"
+        );
+        assert_eq!(
+            build_generated_image_file_name("../unsafe/name.png", "image/png"),
+            "name.png"
+        );
     }
 
     #[test]

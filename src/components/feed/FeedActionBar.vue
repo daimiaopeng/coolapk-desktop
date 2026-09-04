@@ -15,6 +15,11 @@
       <span>{{ formatCount(shareCount, '转发') }}</span>
     </button>
 
+    <button class="action-btn share-image-btn" @click.stop="$emit('share-image')" title="生成长图">
+      <i class="fas fa-image action-icon"></i>
+      <span>长图</span>
+    </button>
+
     <button :class="['action-btn', 'fav-btn', { 'is-fav': isFav }]" @click.stop="toggleFav" title="收藏">
       <i :class="[isFav ? 'fas fa-bookmark' : 'far fa-bookmark', 'action-icon']"></i>
       <span>{{ formatCount(favnum, '收藏') }}</span>
@@ -49,6 +54,7 @@ const emit = defineEmits<{
   (e: 'open-comment'): void;
   (e: 'toggle-fav'): void;
   (e: 'forward'): void;
+  (e: 'share-image'): void;
 }>();
 
 const isLiked = ref(props.userAction?.like === 1);
@@ -198,6 +204,11 @@ function shareFeed() {
 .share-btn:hover {
   color: #3b82f6;
   background-color: rgba(59, 130, 246, 0.08);
+}
+
+.share-image-btn:hover {
+  color: #8b5cf6;
+  background-color: rgba(139, 92, 246, 0.08);
 }
 
 .fav-btn:hover {

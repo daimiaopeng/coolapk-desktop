@@ -154,6 +154,15 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
     expect(invoke).toHaveBeenCalledWith('update_user_profile', { key: 'gender', value: '1' });
   });
 
+  it('保存生成的分享图调用 save_image_data_url', async () => {
+    await CoolapkTauriAPI.saveImageDataUrl('data:image/png;base64,YWJj', 'coolapk-feed-42.png', 'D:/Downloads');
+    expect(invoke).toHaveBeenCalledWith('save_image_data_url', {
+      dataUrl: 'data:image/png;base64,YWJj',
+      fileName: 'coolapk-feed-42.png',
+      dir: 'D:/Downloads',
+    });
+  });
+
   it('头像和背景图修改分别调用对应 Tauri 命令', async () => {
     const imageBytes = new Uint8Array([1, 2, 3]);
     await CoolapkTauriAPI.changeAvatar(imageBytes, 'avatar.png', 'image/png');

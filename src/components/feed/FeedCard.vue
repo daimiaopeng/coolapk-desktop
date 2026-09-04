@@ -124,6 +124,7 @@
       @open-comment="toggleComments"
       @toggle-fav="toggleFav"
       @forward="openForwardDialog"
+      @share-image="shareImageOpen = true"
     />
 
     <div v-if="showComments" class="inline-comment-wrapper" @click.stop>
@@ -169,6 +170,8 @@
     </div>
 
     <ForwardDialog v-model:show="forwardOpen" :feed="feed" @success="handleForwardSuccess" />
+
+    <FeedShareImageDialog v-model:show="shareImageOpen" :feed="feed" :images="feedImages" />
 
     <AppDialog :is-open="historyDialogOpen" title="编辑记录" :width="680" @close="historyDialogOpen = false">
       <div class="history-dialog" @click.stop>
@@ -228,6 +231,7 @@ import FeedActionBar from './FeedActionBar.vue';
 import FeedCollectionPickerDialog from './FeedCollectionPickerDialog.vue';
 import FeedCommentSection from './FeedCommentSection.vue';
 import ForwardDialog from '../overlays/ForwardDialog.vue';
+import FeedShareImageDialog from '../overlays/FeedShareImageDialog.vue';
 import LoadingState from '../common/LoadingState.vue';
 import AppDialog from '../common/AppDialog.vue';
 import AppImage from '../common/AppImage.vue';
@@ -316,6 +320,7 @@ const emit = defineEmits<{
 }>();
 
 const authStore = useAuthStore();
+const shareImageOpen = ref(false);
 
 const isMyFeed = computed(() => {
   if (!authStore.isLoggedIn || !authStore.user) return false;

@@ -1108,6 +1108,10 @@ export class CoolapkTauriAPI {
     return await invoke<string>('save_image', { url, dir: dir || '' });
   }
 
+  static async saveImageDataUrl(dataUrl: string, fileName: string, dir?: string) {
+    return await invoke<string>('save_image_data_url', { dataUrl, fileName, dir: dir || '' });
+  }
+
   static async openImageInSystemViewer(url: string, cacheDir?: string) {
     return await invoke<string>('open_image_in_system_viewer', { url, cacheDir: cacheDir || '' });
   }
