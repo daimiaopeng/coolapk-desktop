@@ -14,7 +14,7 @@
       <ErrorState v-else-if="error && !liveDetail" title="直播详情加载失败" :message="error" @retry="loadDetail" />
       <EmptyState v-else-if="!liveDetail" title="直播不存在" description="这场直播可能已经下线" />
       <section v-else class="live-detail-content">
-        <div class="live-player-shell">
+        <div v-if="!settingsStore.settings.noImageMode" class="live-player-shell">
           <video v-if="videoUrl && !videoFailed" class="live-player" :src="videoUrl" controls playsinline preload="metadata" @error="videoFailed = true"></video>
           <div v-else class="live-player-placeholder">
             <AppImage v-if="image" :src="image" :alt="title || '直播封面'" fit="cover" image-class="live-detail-cover" />
@@ -59,6 +59,7 @@ import ErrorState from '../components/common/ErrorState.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
+import { useSettingsStore } from '../stores/settings';
 import { getErrorMessage } from '../utils/errors';
 import { showToast } from '../utils/toast';
 import type { DiscoveryEntity } from '../types/discovery';
@@ -86,6 +87,7 @@ const props = defineProps<{ liveId?: string }>();
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const settingsStore = useSettingsStore();
 const liveId = computed(() => String(props.liveId || route.params.liveId || '').trim());
 const liveDetail = ref<DiscoveryEntity | null>(null);
 const loading = ref(false);

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="video" class="feed-video-card" @click.stop>
+  <div v-if="video && !settingsStore.settings.noImageMode" class="feed-video-card" @click.stop>
     <div class="feed-video-frame">
       <video
         ref="videoRef"
@@ -37,10 +37,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { useSettingsStore } from '../../stores/settings';
 import AppImage from '../common/AppImage.vue';
 import { formatFeedVideoDuration, getFeedVideo } from '../../utils/feedMedia';
 
 const props = defineProps<{ feed: unknown }>();
+const settingsStore = useSettingsStore();
 const videoRef = ref<HTMLVideoElement | null>(null);
 const hasStarted = ref(false);
 const video = computed(() => getFeedVideo(props.feed));
@@ -56,6 +58,7 @@ const playableUrl = computed(() => {
 });
 
 async function resolveVideo() {
+  if (settingsStore.settings.noImageMode) return;
   const requestParams = video.value?.requestParams;
   if (!requestParams) return;
 
@@ -76,7 +79,14 @@ async function resolveVideo() {
   }
 }
 
-watch(() => video.value?.requestParams, () => {
+watch([() => video.value?.requestParams, () => settingsStore.settings.noImageMode], ([, noImageMode]) => {
+  if (noImageMode) {
+    resolvedUrl.value = '';
+    resolutionFailed.value = false;
+    resolving.value = false;
+    videoError.value = false;
+    return;
+  }
   void resolveVideo();
 }, { immediate: true });
 

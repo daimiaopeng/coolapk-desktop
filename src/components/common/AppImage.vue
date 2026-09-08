@@ -1,5 +1,6 @@
 <template>
   <div
+    v-if="!noImageMode"
     class="app-image-container"
     :class="[imageClass, { 'is-loading': loading, 'is-error': error, 'fit-contain': fit === 'contain' }]"
   >
@@ -47,6 +48,7 @@ const emit = defineEmits<{
 }>();
 
 const settingsStore = useSettingsStore();
+const noImageMode = computed(() => settingsStore.settings.noImageMode);
 const contextImageUrl = computed(() => props.src ? normalizeResourceUrl(props.src) : '');
 
 // 同步尝试命中内存缓存
@@ -60,6 +62,13 @@ let loadSequence = 0;
 
 async function loadImage(url: string | undefined) {
   const sequence = ++loadSequence;
+  if (noImageMode.value) {
+    renderedSrc.value = undefined;
+    error.value = false;
+    loading.value = false;
+    isFallback.value = false;
+    return;
+  }
   if (!url) {
     renderedSrc.value = undefined;
     error.value = false;
@@ -120,12 +129,20 @@ async function loadImage(url: string | undefined) {
   }
 }
 
-watch(() => props.src, (newSrc) => {
-  loadImage(newSrc);
+watch([() => props.src, noImageMode], ([newSrc, disabled]) => {
+  if (disabled) {
+    loadSequence += 1;
+    renderedSrc.value = undefined;
+    error.value = false;
+    loading.value = false;
+    isFallback.value = false;
+    return;
+  }
+  void loadImage(newSrc);
 });
 
 onMounted(() => {
-  loadImage(props.src);
+  void loadImage(props.src);
 });
 
 function handleLoad(event: Event) {

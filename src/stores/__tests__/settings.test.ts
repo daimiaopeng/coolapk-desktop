@@ -41,6 +41,7 @@ describe('settings store', () => {
     autoPlayLivePhotoSound: false,
     suppressUnsupportedLivePhotoCodecPrompt: false,
     autoLoadOriginalImage: true,
+    noImageMode: false,
     imageQuality: 'hd',
   };
 
@@ -53,6 +54,7 @@ describe('settings store', () => {
     expect(store.settings.autoPlayLivePhotoSound).toBe(defaults.autoPlayLivePhotoSound);
     expect(store.settings.suppressUnsupportedLivePhotoCodecPrompt).toBe(defaults.suppressUnsupportedLivePhotoCodecPrompt);
     expect(store.settings.autoLoadOriginalImage).toBe(defaults.autoLoadOriginalImage);
+    expect(store.settings.noImageMode).toBe(defaults.noImageMode);
     expect(store.settings.navVisibility?.albums).toBe(true);
     expect(store.settings.navVisibility?.pictures).toBe(true);
     expect(store.settings.rememberWindowState).toBe(true);
@@ -71,6 +73,7 @@ describe('settings store', () => {
       autoPlayLivePhotoSound: true,
       suppressUnsupportedLivePhotoCodecPrompt: true,
       autoLoadOriginalImage: false,
+      noImageMode: true,
     });
     expect(normalized.theme).toBe('system');
     expect(normalized.fontSize).toBe(20);
@@ -84,6 +87,7 @@ describe('settings store', () => {
     expect(normalized.autoPlayLivePhotoSound).toBe(true);
     expect(normalized.suppressUnsupportedLivePhotoCodecPrompt).toBe(true);
     expect(normalized.autoLoadOriginalImage).toBe(false);
+    expect(normalized.noImageMode).toBe(true);
     expect(normalizeSettings({ rememberWindowState: false }).rememberWindowState).toBe(false);
   });
 
@@ -172,6 +176,16 @@ describe('settings store', () => {
     const app = document.getElementById('app')!;
     expect(app.style.transform).toBe('scale(1.25)');
     expect(app.style.width).toBe('80vw');
+  });
+
+  it('切换无图模式时同步页面根节点', async () => {
+    const store = useSettingsStore();
+    store.settings.noImageMode = true;
+    await nextTick();
+    expect(document.documentElement.getAttribute('data-no-image-mode')).toBe('true');
+    store.settings.noImageMode = false;
+    await nextTick();
+    expect(document.documentElement.hasAttribute('data-no-image-mode')).toBe(false);
   });
 
   it('修改视觉设置时不重复调用原生系统设置', async () => {

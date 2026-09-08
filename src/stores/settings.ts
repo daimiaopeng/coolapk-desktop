@@ -109,6 +109,7 @@ const defaultSettings: AppSettings = {
   autoPlayLivePhotoSound: false,
   suppressUnsupportedLivePhotoCodecPrompt: false,
   autoLoadOriginalImage: true,
+  noImageMode: false,
   showDeviceInfo: true,
   defaultHomeTab: 'digest',
   homeTabOrder: [...DEFAULT_HOME_TAB_ORDER],
@@ -221,6 +222,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.autoPlayLivePhotoSound = readBoolean(source.autoPlayLivePhotoSound, result.autoPlayLivePhotoSound);
   result.suppressUnsupportedLivePhotoCodecPrompt = readBoolean(source.suppressUnsupportedLivePhotoCodecPrompt, result.suppressUnsupportedLivePhotoCodecPrompt);
   result.autoLoadOriginalImage = readBoolean(source.autoLoadOriginalImage, result.autoLoadOriginalImage);
+  result.noImageMode = readBoolean(source.noImageMode, result.noImageMode);
   result.showDeviceInfo = readBoolean(source.showDeviceInfo, result.showDeviceInfo);
   result.downloadPath = readString(source.downloadPath, result.downloadPath);
   result.maxConcurrentDownloads = [1, 2, 3, 4, 5, 6, 8].includes(Number(source.maxConcurrentDownloads)) ? Number(source.maxConcurrentDownloads) : result.maxConcurrentDownloads;
@@ -402,6 +404,7 @@ export const useSettingsStore = defineStore('settings', () => {
   watch(() => settings.value.fontSize, applyFontSize, { immediate: true });
   watch(() => settings.value.zoom, applyZoom, { immediate: true });
   watch(() => settings.value.reduceMotion, applyReduceMotion, { immediate: true });
+  watch(() => settings.value.noImageMode, applyNoImageMode, { immediate: true });
 
   watch(() => settings.value.closeToTray, (enabled) => {
     if (nativeSyncReady) syncCloseToTray(enabled);
@@ -484,6 +487,12 @@ export const useSettingsStore = defineStore('settings', () => {
     document.documentElement.setAttribute('data-reduce-motion', String(enabled));
   }
 
+  function applyNoImageMode(enabled: boolean) {
+    const root = document.documentElement;
+    if (enabled) root.setAttribute('data-no-image-mode', 'true');
+    else root.removeAttribute('data-no-image-mode');
+  }
+
   function applyFontSize(size: number) {
     const safe = Math.min(Math.max(size || 15, 12), 20);
     document.documentElement.style.setProperty('--font-size-body', `${safe}px`);
@@ -513,6 +522,7 @@ export const useSettingsStore = defineStore('settings', () => {
     applyFontSize(settings.value.fontSize);
     applyZoom(settings.value.zoom);
     applyReduceMotion(settings.value.reduceMotion);
+    applyNoImageMode(settings.value.noImageMode);
   }
 
   function syncCloseToTray(enabled: boolean) {

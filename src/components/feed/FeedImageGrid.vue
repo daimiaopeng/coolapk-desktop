@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="processedImages && processedImages.length > 0"
+    v-if="!settingsStore.settings.noImageMode && processedImages && processedImages.length > 0"
     :class="['feed-image-grid', `count-${gridCount}`, `variant-${variant}`]"
   >
     <div

@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <Transition name="fade">
-      <div v-if="viewerData" class="image-viewer-backdrop" @click="handleBackdropClick">
+      <div v-if="viewerData && !noImageMode" class="image-viewer-backdrop" @click="handleBackdropClick">
         <!-- 顶部工具栏 -->
         <div class="viewer-topbar">
           <div class="topbar-left">
@@ -156,6 +156,7 @@ import { detectLiveVideoCodec, getLiveVideoCodecSupport, waitForDecodedVideoFram
 
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
+const noImageMode = computed(() => settingsStore.settings.noImageMode);
 
 const viewerData = computed(() => appStore.activeImageViewer);
 const currentIndex = ref(0);
@@ -229,6 +230,10 @@ const isCurrentOriginalLoading = computed(() => Boolean(originalLoadingMap.value
 
 async function resolveImageData(url: string): Promise<boolean> {
   const sequence = ++resolveSequence;
+  if (noImageMode.value) {
+    displaySrc.value = '';
+    return false;
+  }
   if (!url) {
     displaySrc.value = '';
     return false;
@@ -347,6 +352,10 @@ async function playLiveVideo(forceUnsupportedNotice = false): Promise<boolean> {
 }
 
 async function resolveCurrentLiveVideo(force = false) {
+  if (noImageMode.value) {
+    clearMediaForNoImageMode();
+    return;
+  }
   const item = currentItem.value;
   const sequence = ++liveResolveSequence;
   if (!item?.isLivePhoto) return;
@@ -468,18 +477,51 @@ watch(viewerData, (val) => {
   }
 });
 
-watch(currentItem, () => {
-  resetTransform();
-  resetLiveState();
+function clearMediaForNoImageMode() {
+  resolveSequence += 1;
+  liveResolveSequence += 1;
+  livePlaybackSequence += 1;
+  displaySrc.value = '';
+  originalLoadedMap.value = {};
+  originalLoadingMap.value = {};
+  liveResolving.value = false;
+  liveVideoUrl.value = '';
+  liveVideoPlaying.value = false;
+  liveVideoError.value = false;
+  liveVideoUnsupported.value = null;
+  liveVideoSource.value = 'none';
+  liveVideoFallbackAttempted.value = false;
+  liveUnsupportedNoticeUrl = '';
+  const video = liveVideoRef.value;
+  if (video) video.pause();
+}
+
+function loadCurrentMedia() {
+  if (noImageMode.value) {
+    clearMediaForNoImageMode();
+    return;
+  }
   if (settingsStore.settings.autoLoadOriginalImage) {
     void loadOriginal();
   } else if (currentUrl.value) {
     void resolveImageData(currentUrl.value);
   }
   void resolveCurrentLiveVideo();
+}
+
+watch(currentItem, () => {
+  resetTransform();
+  resetLiveState();
+  loadCurrentMedia();
 }, { immediate: true });
 
+watch(noImageMode, (enabled) => {
+  if (enabled) clearMediaForNoImageMode();
+  else if (viewerData.value) loadCurrentMedia();
+});
+
 async function loadOriginal() {
+  if (noImageMode.value) return;
   const idx = currentIndex.value;
   if (originalLoadedMap.value[idx] || originalLoadingMap.value[idx]) return;
 

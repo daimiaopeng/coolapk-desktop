@@ -23,6 +23,14 @@
       <h4 class="group-title">动态展示</h4>
       <div class="setting-row">
         <div class="row-info">
+          <span class="row-label">无图模式</span>
+          <span class="row-sub">开启后不显示图片、视频及图片占位图，适合专注阅读文字</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.noImageMode" />
+      </div>
+
+      <div class="setting-row">
+        <div class="row-info">
           <span class="row-label">动图自动播放</span>
           <span class="row-sub">关闭后列表中的 GIF 动图将不加载，节省流量</span>
         </div>

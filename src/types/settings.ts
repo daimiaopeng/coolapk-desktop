@@ -116,6 +116,7 @@ export interface AppSettings {
   autoPlayLivePhotoSound: boolean;
   suppressUnsupportedLivePhotoCodecPrompt: boolean;
   autoLoadOriginalImage: boolean;
+  noImageMode: boolean;
   showDeviceInfo: boolean;
   defaultHomeTab: HomeTabKey;
   homeTabOrder: HomeTabKey[];

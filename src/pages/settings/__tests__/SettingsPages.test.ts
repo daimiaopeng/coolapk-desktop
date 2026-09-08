@@ -91,6 +91,9 @@ describe('设置页面交互', () => {
     expect(settings.settings.autoPlayLivePhotoSound).toBe(true);
     expect(settings.settings.suppressUnsupportedLivePhotoCodecPrompt).toBe(true);
     expect(settings.settings.autoLoadOriginalImage).toBe(false);
+    const noImageRow = contentRows.find((row) => row.text().includes('无图模式'))!;
+    await noImageRow.find('.switch-input').setValue(true);
+    expect(settings.settings.noImageMode).toBe(true);
     expect(settings.settings.blockedKeywords).toEqual(['广告']);
     await wrapper.get('.chip-remove').trigger('click');
     expect(settings.settings.blockedKeywords).toEqual([]);
