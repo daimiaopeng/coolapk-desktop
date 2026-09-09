@@ -106,7 +106,6 @@
           :class="{ 'is-active-feed': String(item.id) === String(currentActiveFeedId) }"
           :highlight-keyword="searchKeyword"
           :disable-inline-comments="disableInlineComments"
-          @click="handleFeedCardClick(item)"
           @open-comment="handleFeedCardClick(item)"
           @deleted="handleFeedDeleted"
         />

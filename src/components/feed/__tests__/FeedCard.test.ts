@@ -7,10 +7,11 @@ const mocks = vi.hoisted(() => ({
   getFeedChangeHistory: vi.fn(),
   getHotReplies: vi.fn(),
   getFeedReplies: vi.fn(),
+  routerPush: vi.fn(),
 }));
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mocks.routerPush }),
 }));
 
 vi.mock('../../../router', () => ({
@@ -111,6 +112,47 @@ describe('动态卡片编辑记录', () => {
     await wrapper.setProps({ feed: { id: 'answer-card', feedType: 'answer', title: '回答标题', message: '回答正文' } });
     expect(wrapper.find('.stub-feed-header').attributes('data-question-mode')).toBe('true');
     expect(wrapper.find('.question-stats').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('普通动态带父级 questionId 时仍打开评论，不跳转到问题详情', async () => {
+    const wrapper = mount(FeedCard, {
+      props: {
+        feed: {
+          id: 'normal-feed',
+          entityType: 'feed',
+          feedType: 'feed',
+          questionId: 'parent-feed',
+          uid: '456',
+          username: '普通用户',
+          message: '普通动态正文',
+        },
+        disableInlineComments: true,
+      },
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          FeedHeader: true,
+          FeedContent: true,
+          FeedImageGrid: true,
+          FeedVideoCard: true,
+          FeedActionBar: true,
+          FeedCommentSection: true,
+          ForwardDialog: true,
+          FeedShareImageDialog: true,
+          FeedInteractionListDialog: true,
+          FeedCollectionPickerDialog: true,
+          AppDialog: true,
+          LoadingState: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.feed-card').classes()).not.toContain('is-question-card');
+    await wrapper.find('.feed-card').trigger('click');
+
+    expect(mocks.routerPush).not.toHaveBeenCalled();
+    expect(wrapper.emitted('open-comment')).toHaveLength(1);
     wrapper.unmount();
   });
 

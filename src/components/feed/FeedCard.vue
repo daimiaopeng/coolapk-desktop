@@ -280,8 +280,8 @@ import { requestConfirmation } from '../../utils/confirm';
 import { getErrorMessage } from '../../utils/errors';
 import { extractFeedImageInputs, type FeedImageInput } from '../../utils/livePhoto';
 import { normalizeCoolapkNativeRoute, normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../../utils/coolapkRoute';
-import { isAnswerSearchEntity, isQuestionSearchEntity } from '../../utils/searchEntities';
-import { getQuestionAnswerCount, getQuestionFollowCount } from '../../utils/question';
+import { isAnswerSearchEntity } from '../../utils/searchEntities';
+import { getQuestionAnswerCount, getQuestionFollowCount, isQuestionFeedEntity } from '../../utils/question';
 import {
   getFeedRelationImage,
   getFeedRelationKey,
@@ -312,7 +312,8 @@ const props = defineProps<{
 }>();
 
 const isAnswerCard = computed(() => Boolean(props.answerMode) || isAnswerSearchEntity(props.feed as any));
-const isQuestionCard = computed(() => !isAnswerCard.value && (Boolean(props.questionMode) || isQuestionSearchEntity(props.feed as any)));
+// FeedCard 同时用于话题和普通动态列表，不能用搜索结果里的 questionId 推断问答；这里只接受明确的问答实体标记。
+const isQuestionCard = computed(() => !isAnswerCard.value && (Boolean(props.questionMode) || isQuestionFeedEntity(props.feed)));
 const hasQuestionStats = computed(() => {
   if (!isQuestionCard.value) return false;
   const feed = props.feed as any;
