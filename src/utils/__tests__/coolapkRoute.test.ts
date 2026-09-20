@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeCoolapkAppRoute, normalizeCoolapkDeepLink, normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../coolapkRoute';
+import { normalizeCoolapkAppRoute, normalizeCoolapkDeepLink, normalizeCoolapkFeedLink, normalizeCoolapkPageRoute, normalizeCoolapkRoute } from '../coolapkRoute';
 
 describe('酷安应用路由', () => {
   it('将应用详情查询链接转换为桌面端路由', () => {
@@ -19,6 +19,13 @@ describe('酷安应用路由', () => {
 });
 
 describe('酷安站内路由', () => {
+  it('只把酷安动态详情链接识别为可直达动态', () => {
+    expect(normalizeCoolapkFeedLink('https://www.coolapk.com/#/feed/73789197?rid=12')).toBe('/feed/73789197?rid=12');
+    expect(normalizeCoolapkFeedLink('coolmarket://m.coolapk.com/feed/73789197')).toBe('/feed/73789197');
+    expect(normalizeCoolapkFeedLink('https://www.coolapk.com/topic/Android')).toBeNull();
+    expect(normalizeCoolapkFeedLink('https://example.com/feed/73789197')).toBeNull();
+  });
+
   it('将网页生成的 coolmarket 动态深链转换为桌面端路由并保留查询参数', () => {
     expect(normalizeCoolapkDeepLink('coolmarket://www.coolapk.com/feed/73789197?s=share-token')).toBe('/feed/73789197?s=share-token');
     expect(normalizeCoolapkDeepLink('coolmarket://m.coolapk.com/#/feed/73789197?rid=12')).toBe('/feed/73789197?rid=12');

@@ -20,6 +20,20 @@
             <kbd class="esc-kbd">ESC</kbd>
           </div>
 
+          <button
+            v-if="directFeedRoute"
+            type="button"
+            class="direct-feed-option"
+            @mousedown.prevent="openDirectFeed"
+          >
+            <i class="fas fa-arrow-up-right-from-square direct-feed-icon"></i>
+            <span class="direct-feed-info">
+              <span class="direct-feed-title">打开酷安动态</span>
+              <span class="direct-feed-route">{{ directFeedRoute }}</span>
+            </span>
+            <kbd>Enter</kbd>
+          </button>
+
           <div v-if="searchSuggestions.length > 0 && query" class="suggestion-list custom-scrollbar">
             <div
               v-for="(item, i) in searchSuggestions"
@@ -86,7 +100,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppStore } from '../../stores/app';
 import { CoolapkTauriAPI } from '../../api/coolapk';
@@ -104,6 +118,7 @@ import {
   isNavigableSearchEntity,
   navigateSearchEntity,
 } from '../../utils/searchEntities';
+import { normalizeCoolapkFeedLink } from '../../utils/coolapkRoute';
 
 const appStore = useAppStore();
 const router = useRouter();
@@ -114,6 +129,7 @@ const results = ref<SearchEntity[]>([]);
 const searchSuggestions = ref<SearchEntity[]>([]);
 const searchInput = ref<HTMLInputElement | null>(null);
 const activeResultIndex = ref(-1);
+const directFeedRoute = computed(() => normalizeCoolapkFeedLink(query.value.trim()));
 let searchRequestVersion = 0;
 const suggestions = ref<string[]>([]);
 let hotSearchRequestVersion = 0;
@@ -143,6 +159,7 @@ watch(() => appStore.isSearchOpen, (open) => {
 let timer: any = null;
 watch(query, (val) => {
   if (timer) clearTimeout(timer);
+  const requestVersion = ++searchRequestVersion;
   if (!val.trim()) {
     results.value = [];
     searchSuggestions.value = [];
@@ -150,7 +167,13 @@ watch(query, (val) => {
     return;
   }
   timer = setTimeout(async () => {
-    const requestVersion = ++searchRequestVersion;
+    if (directFeedRoute.value) {
+      results.value = [];
+      searchSuggestions.value = [];
+      activeResultIndex.value = -1;
+      loading.value = false;
+      return;
+    }
     loading.value = true;
     try {
       const [searchRes, suggestRes] = await Promise.all([
@@ -164,7 +187,7 @@ watch(query, (val) => {
     } catch (err) {
       console.error('Search error', err);
     } finally {
-      loading.value = false;
+      if (requestVersion === searchRequestVersion) loading.value = false;
     }
   }, 300);
 });
@@ -200,6 +223,10 @@ function handleEnterSearch(value = query.value, searchType = '') {
 function handleInputKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter') {
     e.preventDefault();
+    if (directFeedRoute.value) {
+      openDirectFeed();
+      return;
+    }
     if (activeResultIndex.value >= 0 && results.value[activeResultIndex.value]) selectResult(results.value[activeResultIndex.value]);
     else handleEnterSearch();
     return;
@@ -215,6 +242,13 @@ function handleInputKeydown(e: KeyboardEvent) {
     e.preventDefault();
     appStore.closeSearch();
   }
+}
+
+function openDirectFeed() {
+  const route = directFeedRoute.value;
+  if (!route) return;
+  appStore.closeSearch();
+  void router.push(route);
 }
 
 function clearHistory() {
@@ -420,6 +454,61 @@ onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown));
   overflow-y: auto;
   padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--border-light);
+}
+
+.direct-feed-option {
+  width: calc(100% - var(--space-8));
+  margin: var(--space-2) var(--space-4) 0;
+  padding: var(--space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 35%, var(--border));
+  border-radius: var(--radius-control);
+  background: var(--brand-soft);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.direct-feed-option:hover {
+  border-color: var(--brand-primary);
+  background: var(--brand-soft-hover);
+}
+
+.direct-feed-icon {
+  color: var(--brand-primary);
+  font-size: 16px;
+}
+
+.direct-feed-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.direct-feed-title {
+  font-size: var(--font-size-sub);
+  font-weight: var(--font-weight-semibold);
+}
+
+.direct-feed-route {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.direct-feed-option kbd {
+  color: var(--text-tertiary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 2px 6px;
+  font-size: 11px;
 }
 
 .suggestion-item {

@@ -77,6 +77,12 @@ export function normalizeCoolapkDeepLink(href: string): string | null {
   }
 }
 
+/** 仅识别酷安动态详情链接，供搜索栏等入口直接跳转使用。 */
+export function normalizeCoolapkFeedLink(href: string): string | null {
+  const route = normalizeCoolapkDeepLink(href) || normalizeCoolapkRoute(href);
+  return route && /^\/feed\/\d+(?:\?[^#]*)?$/i.test(route) ? route : null;
+}
+
 function normalizeCoolapkRatingRoute(href: string): string | null {
   const match = href.match(/^\/feed\/nodeRatingList\/?(?:\?([^#]*))?$/i);
   if (!match) return null;
