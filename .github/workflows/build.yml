@@ -37,10 +37,10 @@ jobs:
           - name: 前端构建检查
             task: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -82,7 +82,7 @@ jobs:
           - name: macOS
             os: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: 安装 Rust
         uses: dtolnay/rust-toolchain@stable
@@ -99,7 +99,7 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -151,10 +151,10 @@ jobs:
             rustTargets: aarch64-apple-darwin,x86_64-apple-darwin
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -229,7 +229,7 @@ jobs:
 
       - name: 上传 Windows 单文件便携版
         if: ${{ runner.os == 'Windows' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: windows-${{ matrix.portableArch }}-portable
           path: src-tauri/target/portable/*.exe
@@ -255,10 +255,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: 安装 Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -270,7 +270,7 @@ jobs:
           java-version: '21'
 
       - name: 安装 Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: 安装 Android 平台与 NDK
         shell: bash
@@ -330,7 +330,7 @@ jobs:
           cp "$aab" "android-release/coolapk-${GITHUB_REF_NAME}-android-arm64.aab"
 
       - name: 上传 Android Release 产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: android-arm64-release
           path: android-release/*
@@ -343,7 +343,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: 下载 Android 产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: android-arm64-release
           path: android-release
@@ -360,7 +360,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: 下载 Windows 单文件产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: windows-*-portable
           path: portable
