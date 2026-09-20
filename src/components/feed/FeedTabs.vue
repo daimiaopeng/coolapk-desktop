@@ -27,9 +27,11 @@
       :visible="showTabManager"
       :tabs="tabs"
       :active-key="activeKey"
+      :active-sub-tab-key="props.activeSubTabKey"
       :selection-only="props.managerMode === 'picker'"
       @close="showTabManager = false"
       @select-tab="$emit('update:activeKey', $event)"
+      @select-sub-tab="$emit('selectSubTab', $event)"
       @updated="$emit('tabOrderUpdated')"
     />
   </div>
@@ -38,6 +40,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import type { ConfigPageTab } from '../../types/settings';
+import type { HomeSubChannelSelection } from '../../utils/homeTabs';
 import TabManagerModal from './TabManagerModal.vue';
 
 const props = withDefaults(defineProps<{
@@ -46,15 +49,18 @@ const props = withDefaults(defineProps<{
   showManage?: boolean;
   managerMode?: 'editable' | 'picker';
   wrap?: boolean;
+  activeSubTabKey?: string;
 }>(), {
   showManage: true,
   managerMode: 'editable',
   wrap: false,
+  activeSubTabKey: '',
 });
 
 defineEmits<{
   (e: 'update:activeKey', key: string): void;
   (e: 'tabOrderUpdated'): void;
+  (e: 'selectSubTab', selection: HomeSubChannelSelection): void;
 }>();
 
 const showTabManager = ref(false);

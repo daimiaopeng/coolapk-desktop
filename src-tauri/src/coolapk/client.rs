@@ -5988,7 +5988,25 @@ impl CoolapkClient {
     }
 
     pub async fn get_following_feeds(&self, page: u32) -> Result<Value, String> {
-        // 1. 优先尝试 page/dataList 关注流接口（全量关注 Feed）
+        // 1. APK 当前首页使用 V15_HOME_TAB_FOLLOW，优先走同一条动态接口。
+        if let Ok(raw) = self
+            .api_get(
+                "/v6/page/dataList",
+                &[
+                    ("url", "V15_HOME_TAB_FOLLOW".to_string()),
+                    ("title", "关注".to_string()),
+                    ("page", page.to_string()),
+                ],
+            )
+            .await
+        {
+            let cleaned = Self::extract_cleaned_list(&raw);
+            if !cleaned.is_empty() {
+                return Ok(json!({ "code": 200, "data": cleaned }));
+            }
+        }
+
+        // 2. 兼容旧版 V9 首页的 page/dataList 关注流接口。
         if let Ok(raw) = self
             .api_get(
                 "/v6/page/dataList",
@@ -6006,7 +6024,7 @@ impl CoolapkClient {
             }
         }
 
-        // 2. 备用尝试 /v6/feed/followFeedList 关注流接口
+        // 3. 备用尝试 /v6/feed/followFeedList 关注流接口
         if let Ok(raw) = self
             .api_get("/v6/feed/followFeedList", &[("page", page.to_string())])
             .await
@@ -6017,7 +6035,7 @@ impl CoolapkClient {
             }
         }
 
-        // 3. 备用尝试主页关注页接口 /v6/main/indexV8?type=follow
+        // 4. 备用尝试主页关注页接口 /v6/main/indexV8?type=follow
         let raw = self
             .api_get(
                 "/v6/main/indexV8",

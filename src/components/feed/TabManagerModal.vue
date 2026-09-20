@@ -91,6 +91,35 @@
           </TransitionGroup>
         </div>
 
+        <!-- 服务端 ConfigPage 的动态子栏目，不把关注分类写死在桌面端。 -->
+        <div v-for="group in dynamicChannelGroups" :key="`sub-${group.key}`" class="channel-section nested-channel-section">
+          <div class="section-header">
+            <div class="section-title-wrap">
+              <span class="section-title">{{ group.title }}</span>
+              <span class="channel-badge">{{ group.channels.length }} 个</span>
+            </div>
+            <span class="nested-channel-parent">{{ group.parent.title }}</span>
+          </div>
+          <div class="channel-grid nested-channel-grid">
+            <button
+              v-for="channel in group.channels"
+              :key="channel.key"
+              type="button"
+              :class="[
+                'channel-tile',
+                'nested-channel-tile',
+                { 'is-current': !isEditing && props.activeKey === group.key && props.activeSubTabKey === channel.key }
+              ]"
+              :disabled="isEditing"
+              @click="handleSubChannelClick(group.key, channel)"
+            >
+              <div class="tile-content">
+                <span class="tile-label">{{ channel.title }}</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
         <!-- 分组 2：更多推荐频道（如果有隐藏/未添加的频道） -->
         <div v-if="!selectionOnly && hiddenChannels.length > 0" class="channel-section hidden-section">
           <div class="section-header">
@@ -150,17 +179,20 @@ import { ref, computed, watch, onUnmounted } from 'vue';
 import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import type { ConfigPageTab } from '../../types/settings';
+import { getHomeSubChannelGroupTitle, getHomeSubChannels, isFollowingHomeTab, type HomeSubChannel, type HomeSubChannelSelection } from '../../utils/homeTabs';
 
 const props = defineProps<{
   visible: boolean;
   tabs: ConfigPageTab[];
   activeKey?: string;
+  activeSubTabKey?: string;
   selectionOnly?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'selectTab', key: string): void;
+  (e: 'selectSubTab', selection: HomeSubChannelSelection): void;
   (e: 'updated'): void;
 }>();
 
@@ -168,6 +200,23 @@ const settingsStore = useSettingsStore();
 const isEditing = ref(false);
 const activeChannels = ref<ConfigPageTab[]>([]);
 const hiddenChannels = ref<ConfigPageTab[]>([]);
+
+const dynamicChannelGroups = computed(() => activeChannels.value.map((parent) => {
+  if (!isFollowingHomeTab(parent, getTabKey(parent))) return null;
+  const channels = getHomeSubChannels(parent);
+  if (channels.length === 0) return null;
+  return {
+    key: getTabKey(parent),
+    parent,
+    title: getHomeSubChannelGroupTitle(parent) || `${parent.title}分组`,
+    channels,
+  };
+}).filter((group): group is {
+  key: string;
+  parent: ConfigPageTab;
+  title: string;
+  channels: HomeSubChannel[];
+} => Boolean(group)));
 
 // 独立浮动克隆层状态（杜绝鼠标与卡片错位漂移）
 const isDragging = ref(false);
@@ -284,6 +333,12 @@ function handleTileClick(tab: ConfigPageTab) {
     emit('selectTab', key);
     emit('close');
   }
+}
+
+function handleSubChannelClick(parentKey: string, subChannel: HomeSubChannel) {
+  if (isEditing.value) return;
+  emit('selectSubTab', { parentKey, subChannel });
+  emit('close');
 }
 
 // 移到隐藏列表
@@ -526,6 +581,25 @@ function saveAndClose() {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.nested-channel-section {
+  padding-top: 4px;
+  border-top: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+}
+
+.nested-channel-parent {
+  color: var(--text-tertiary, #999);
+  font-size: 12px;
+}
+
+.nested-channel-grid {
+  margin-top: -2px;
+}
+
+.nested-channel-tile:disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 
 .section-header {

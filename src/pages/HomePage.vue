@@ -6,8 +6,31 @@
           v-model:active-key="activeTab"
           :tabs="orderedDynamicTabs"
           @tab-order-updated="handleTabOrderUpdated"
+          :active-sub-tab-key="activeFollowSubChannelKey"
+          @select-sub-tab="handleHomeSubChannelSelected"
         />
         <FeedLayoutToggle v-model="feedLayout" />
+      </div>
+
+      <!-- APK ConfigPage 动态下发的关注子栏目。 -->
+      <div v-if="isFollowingTab && followSubChannels.length" class="follow-subchannel-bar">
+        <div
+          ref="followSubChannelsContainer"
+          class="follow-subchannel-list custom-scrollbar"
+          aria-label="关注筛选"
+          @wheel.passive="handleFollowSubChannelsWheel"
+        >
+          <button
+            v-for="channel in followSubChannels"
+            :key="channel.key"
+            type="button"
+            :class="['follow-subchannel-item', { active: isFollowSubChannelSelected(channel) }]"
+            :title="channel.subTitle || channel.title"
+            @click="selectFollowSubChannel(channel)"
+          >
+            <span>{{ channel.title }}</span>
+          </button>
+        </div>
       </div>
 
       <div ref="feedScrollContainer" class="feed-scroll-container custom-scrollbar" @scroll="handleScroll">
@@ -316,7 +339,7 @@ import { decodeDiscoveryRouteSegment, getEntityKey, parseDiscoveryPage, resolveD
 import { normalizeCoolapkRoute } from '../utils/coolapkRoute';
 import type { FeedLayout, ConfigPageTab } from '../types/settings';
 import type { DiscoveryEntity } from '../types/discovery';
-import { resolvePreferredHomeTab } from '../utils/homeTabs';
+import { getHomeSubChannels, isFollowingHomeTab, resolvePreferredHomeTab, type HomeSubChannel, type HomeSubChannelSelection } from '../utils/homeTabs';
 import { extractHotSearchKeywords, isAnswerSearchEntity } from '../utils/searchEntities';
 import { isQuestionFeedEntity, isQuestionHomeTab } from '../utils/question';
 import { isRatingFeedEntity } from '../utils/rating';
@@ -340,11 +363,18 @@ const pageEntityCursor = reactive({ firstItem: '', lastItem: '', pageContext: ''
 const feedCursor = reactive({ firstItem: '', lastItem: '', pageContext: '' });
 const feedScrollContainer = ref<HTMLElement | null>(null);
 const subChannelsContainer = ref<HTMLElement | null>(null);
+const followSubChannelsContainer = ref<HTMLElement | null>(null);
 const loading = ref(false);
 
 function handleSubChannelsWheel(e: WheelEvent) {
   if (subChannelsContainer.value && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
     subChannelsContainer.value.scrollLeft += e.deltaY;
+  }
+}
+
+function handleFollowSubChannelsWheel(e: WheelEvent) {
+  if (followSubChannelsContainer.value && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    followSubChannelsContainer.value.scrollLeft += e.deltaY;
   }
 }
 const loadingMore = ref(false);
@@ -364,6 +394,8 @@ const headlineRankingRows = computed(() => Math.max(1, Math.ceil(headlineUserIte
 
 // 动态服务端下发的 Tab 列表（完全对齐 APK ConfigPage 结构）
 const serverTabs = ref<ConfigPageTab[]>([]);
+const selectedFollowSubChannelKey = ref('');
+const pendingFollowSubChannelKey = ref('');
 
 const orderedDynamicTabs = computed<ConfigPageTab[]>(() => {
   const source = serverTabs.value.filter((tab) => !isHomeTopicConfigTab(tab));
@@ -437,11 +469,18 @@ const isSecondHandPageTab = computed(() => {
 
 const isPageEntityTab = computed(() => isNewDevicePageTab.value || isLiveTab.value || isSecondHandPageTab.value);
 
+// APK 的 HomeFollowV15Fragment 使用关注动态专用列表接口，不能按普通栏目处理。
+const isFollowingTab = computed(() => isFollowingHomeTab(currentActiveTabObj.value, activeTab.value));
+
+const followSubChannels = computed(() => getHomeSubChannels(currentActiveTabObj.value));
+const selectedFollowSubChannel = computed(() => followSubChannels.value.find((channel) => channel.key === selectedFollowSubChannelKey.value));
+const activeFollowSubChannelKey = computed(() => selectedFollowSubChannel.value?.key || followSubChannels.value[0]?.key || '');
+
 // APK 的 DataListFragment 对 ConfigPage 使用 /page/dataList 分页，并携带 lastItem/pageContext。
 // 视频栏目就是这类页面，但它仍然渲染成动态流，不能复用普通 getBoardFeeds 的页码分页。
 const isCursorFeedTab = computed(() => {
   const tab = currentActiveTabObj.value;
-  if (isHeadlineTab.value || isHotTab.value || isPageEntityTab.value) return false;
+  if (isHeadlineTab.value || isHotTab.value || isPageEntityTab.value || isFollowingTab.value) return false;
   const pageName = String(tab?.page_name || activeTab.value).trim();
   const url = String(tab?.url || (tab ? '' : activeTab.value)).trim();
   return /^\/page\?url=/i.test(url) || /^V\d+_/i.test(pageName);
@@ -887,6 +926,20 @@ async function fetchTabApi(tabKey: string, p: number) {
 
   const targetUrl = matchedTab ? (matchedTab.url || matchedTab.page_name || '') : tabKey;
 
+  if (isFollowingTab.value) {
+    const subChannel = selectedFollowSubChannel.value;
+    if (!subChannel || isDefaultFollowSubChannel(subChannel)) {
+      return await CoolapkTauriAPI.getFollowingFeeds(p);
+    }
+    return await CoolapkTauriAPI.getDiscoveryPageData({
+      url: normalizeSubChannelUrl(subChannel.url) || targetUrl,
+      title: subChannel.title || matchedTab?.title || '',
+      subTitle: subChannel.subTitle || matchedTab?.subTitle || '',
+      page: p,
+      requestArgs: subChannel.requestArgs,
+    });
+  }
+
   if (isPageEntityTab.value) {
     return await CoolapkTauriAPI.getDiscoveryPageData({
       url: targetUrl,
@@ -1109,6 +1162,40 @@ function handleTabOrderUpdated() {
   serverTabs.value = [...serverTabs.value];
 }
 
+function isDefaultFollowSubChannel(channel: HomeSubChannel): boolean {
+  if (Object.keys(channel.requestArgs).length > 0) return false;
+  const firstChannel = followSubChannels.value[0];
+  if (firstChannel?.key === channel.key) return true;
+  const channelUrl = normalizeSubChannelUrl(channel.url).replace(/^#/, '');
+  const parentUrl = normalizeSubChannelUrl(currentActiveTabObj.value?.url || activeTab.value).replace(/^#/, '');
+  return !channelUrl
+    || channelUrl === parentUrl
+    || /\/user\/followFeedList(?:\?|$)/i.test(channelUrl);
+}
+
+function isFollowSubChannelSelected(channel: HomeSubChannel): boolean {
+  return activeFollowSubChannelKey.value === channel.key;
+}
+
+function selectFollowSubChannel(channel: HomeSubChannel) {
+  if (selectedFollowSubChannelKey.value === channel.key) return;
+  selectedFollowSubChannelKey.value = channel.key;
+  resetFeedScroll();
+  void loadFeeds(true);
+}
+
+function handleHomeSubChannelSelected(selection: HomeSubChannelSelection) {
+  pendingFollowSubChannelKey.value = selection.subChannel.key;
+  if (activeTab.value !== selection.parentKey) {
+    activeTab.value = selection.parentKey;
+    return;
+  }
+  selectedFollowSubChannelKey.value = selection.subChannel.key;
+  pendingFollowSubChannelKey.value = '';
+  resetFeedScroll();
+  void loadFeeds(true);
+}
+
 function normalizeSubChannelUrl(rawUrl: string): string {
   let url = String(rawUrl || '').trim();
   if (!url) return '';
@@ -1190,7 +1277,16 @@ function openHeadlineUser(item: any) {
 }
 
 watch(activeTab, (nextTab, previousTab) => {
-  if (nextTab !== previousTab) selectedHeadlineSubChannelUrl.value = '';
+  if (nextTab !== previousTab) {
+    selectedHeadlineSubChannelUrl.value = '';
+    const nextTabObj = orderedDynamicTabs.value.find((tab) => (tab.page_name || tab.url || String(tab.id || tab.title)) === nextTab);
+    if (isFollowingHomeTab(nextTabObj, nextTab)) {
+      selectedFollowSubChannelKey.value = pendingFollowSubChannelKey.value;
+    } else {
+      selectedFollowSubChannelKey.value = '';
+    }
+    pendingFollowSubChannelKey.value = '';
+  }
   if (isInitializingHome) return;
   resetFeedScroll();
   loadFeeds(true);
@@ -1394,6 +1490,56 @@ onUnmounted(unbindGlobalListeners);
   flex: 1 1 auto;
   min-width: 0;
   border-bottom: 0;
+}
+
+.follow-subchannel-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 0 16px;
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border-light, rgba(0, 0, 0, 0.06));
+}
+
+.follow-subchannel-list {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.follow-subchannel-list::-webkit-scrollbar {
+  display: none;
+}
+
+.follow-subchannel-item {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 16px;
+  padding: 6px 11px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s ease, background-color .15s ease;
+}
+
+.follow-subchannel-item:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.follow-subchannel-item.active {
+  color: var(--brand-primary, #10b981);
+  background: var(--brand-soft, rgba(16, 185, 129, .1));
+  font-weight: 700;
 }
 
 .feed-scroll-container {
