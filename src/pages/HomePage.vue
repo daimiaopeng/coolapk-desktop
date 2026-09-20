@@ -125,7 +125,7 @@
         <!-- 选机中心子栏目专属：直接内嵌展示选机页面 -->
         <ProductSelectorPage v-if="isProductSelectorActive" />
 
-        <!-- 服务端页面实体栏目：话题/新机/直播返回的是卡片与实体，不能按动态流清洗和渲染 -->
+        <!-- 服务端页面实体栏目：新机/直播返回的是卡片与实体，不能按动态流清洗和渲染 -->
         <div v-else-if="isPageEntityTab && loading && pageEntities.length === 0" class="skeleton-padding">
           <DiscoverySkeleton />
         </div>
@@ -352,7 +352,7 @@ const headlineRankingRows = computed(() => Math.max(1, Math.ceil(headlineUserIte
 const serverTabs = ref<ConfigPageTab[]>([]);
 
 const orderedDynamicTabs = computed<ConfigPageTab[]>(() => {
-  const source = serverTabs.value;
+  const source = serverTabs.value.filter((tab) => !isHomeTopicConfigTab(tab));
   if (!source.length) return [];
   const order = settingsStore.settings.homeTabOrder || [];
   if (!order.length) return source;
@@ -402,12 +402,6 @@ const isDyhTab = computed(() => {
   return t.page_name === 'dyh' || t.url === '/user/dyhSubscribe' || t.title === '看看号';
 });
 
-const isTopicPageTab = computed(() => {
-  const t = currentActiveTabObj.value;
-  if (!t) return activeTab.value === 'V9_HOME_TAB_TOPIC';
-  return t.page_name === 'V9_HOME_TAB_TOPIC' || t.url.includes('V9_HOME_TAB_TOPIC') || t.title === '话题';
-});
-
 const isNewDevicePageTab = computed(() => {
   const t = currentActiveTabObj.value;
   if (!t) return activeTab.value === 'V11_HOME_NEW';
@@ -427,7 +421,7 @@ const isSecondHandPageTab = computed(() => {
   return /(?:ershou|secondhand|good_goods_home|闲置|二手)/i.test(target);
 });
 
-const isPageEntityTab = computed(() => isTopicPageTab.value || isNewDevicePageTab.value || isLiveTab.value || isSecondHandPageTab.value);
+const isPageEntityTab = computed(() => isNewDevicePageTab.value || isLiveTab.value || isSecondHandPageTab.value);
 
 // APK 的 DataListFragment 对 ConfigPage 使用 /page/dataList 分页，并携带 lastItem/pageContext。
 // 视频栏目就是这类页面，但它仍然渲染成动态流，不能复用普通 getBoardFeeds 的页码分页。
@@ -578,6 +572,13 @@ const hotRanks: { key: HotRankType; label: string; icon: string; color: string }
 
 function getTabKey(tab: ConfigPageTab): string {
   return tab.page_name || tab.url || String(tab.id || tab.title);
+}
+
+function isHomeTopicConfigTab(tab: ConfigPageTab): boolean {
+  const pageName = String(tab.page_name || '').trim();
+  const url = String(tab.url || '').trim();
+  const title = String(tab.title || '').trim();
+  return pageName === 'V9_HOME_TAB_TOPIC' || url.includes('V9_HOME_TAB_TOPIC') || title === '话题';
 }
 
 function isHeadlineConfigTab(tab: ConfigPageTab): boolean {
