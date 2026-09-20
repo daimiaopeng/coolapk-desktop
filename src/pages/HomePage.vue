@@ -5,6 +5,7 @@
         <FeedTabs
           v-model:active-key="activeTab"
           :tabs="orderedDynamicTabs"
+          :manager-tabs="serverTabs"
           @tab-order-updated="handleTabOrderUpdated"
           :active-sub-tab-key="activeFollowSubChannelKey"
           @select-sub-tab="handleHomeSubChannelSelected"
@@ -398,7 +399,7 @@ const selectedFollowSubChannelKey = ref('');
 const pendingFollowSubChannelKey = ref('');
 
 const orderedDynamicTabs = computed<ConfigPageTab[]>(() => {
-  const source = serverTabs.value.filter((tab) => !isHomeTopicConfigTab(tab));
+  const source = serverTabs.value;
   if (!source.length) return [];
   const order = settingsStore.settings.homeTabOrder || [];
   if (!order.length) return source;
@@ -407,8 +408,9 @@ const orderedDynamicTabs = computed<ConfigPageTab[]>(() => {
     const key = tab.page_name || tab.url || String(tab.id || tab.title);
     return !order.includes(`__hidden__${key}`);
   });
+  const visibleTabs = visibleSource.length > 0 ? visibleSource : source.slice(0, 1);
 
-  return [...visibleSource].sort((a, b) => {
+  return [...visibleTabs].sort((a, b) => {
     const aKey = a.page_name || a.url || String(a.id || a.title);
     const bKey = b.page_name || b.url || String(b.id || b.title);
     const aIndex = order.indexOf(aKey);
@@ -448,6 +450,12 @@ const isDyhTab = computed(() => {
   return t.page_name === 'dyh' || t.url === '/user/dyhSubscribe' || t.title === '看看号';
 });
 
+const isTopicPageTab = computed(() => {
+  const t = currentActiveTabObj.value;
+  if (!t) return activeTab.value === 'V9_HOME_TAB_TOPIC';
+  return t.page_name === 'V9_HOME_TAB_TOPIC' || t.url.includes('V9_HOME_TAB_TOPIC') || t.title === '话题';
+});
+
 const isNewDevicePageTab = computed(() => {
   const t = currentActiveTabObj.value;
   if (!t) return activeTab.value === 'V11_HOME_NEW';
@@ -467,7 +475,7 @@ const isSecondHandPageTab = computed(() => {
   return /(?:ershou|secondhand|good_goods_home|闲置|二手)/i.test(target);
 });
 
-const isPageEntityTab = computed(() => isNewDevicePageTab.value || isLiveTab.value || isSecondHandPageTab.value);
+const isPageEntityTab = computed(() => isTopicPageTab.value || isNewDevicePageTab.value || isLiveTab.value || isSecondHandPageTab.value);
 
 // APK 的 HomeFollowV15Fragment 使用关注动态专用列表接口，不能按普通栏目处理。
 const isFollowingTab = computed(() => isFollowingHomeTab(currentActiveTabObj.value, activeTab.value));
@@ -625,13 +633,6 @@ const hotRanks: { key: HotRankType; label: string; icon: string; color: string }
 
 function getTabKey(tab: ConfigPageTab): string {
   return tab.page_name || tab.url || String(tab.id || tab.title);
-}
-
-function isHomeTopicConfigTab(tab: ConfigPageTab): boolean {
-  const pageName = String(tab.page_name || '').trim();
-  const url = String(tab.url || '').trim();
-  const title = String(tab.title || '').trim();
-  return pageName === 'V9_HOME_TAB_TOPIC' || url.includes('V9_HOME_TAB_TOPIC') || title === '话题';
 }
 
 function isHeadlineConfigTab(tab: ConfigPageTab): boolean {
@@ -1160,6 +1161,9 @@ function selectHotRank(rankType: HotRankType) {
 
 function handleTabOrderUpdated() {
   serverTabs.value = [...serverTabs.value];
+  if (!orderedDynamicTabs.value.some((tab) => getTabKey(tab) === activeTab.value)) {
+    activeTab.value = resolveInitialTab();
+  }
 }
 
 function isDefaultFollowSubChannel(channel: HomeSubChannel): boolean {

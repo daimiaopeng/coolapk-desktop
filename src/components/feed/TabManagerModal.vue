@@ -55,7 +55,6 @@
                 {
                   'is-current': !isEditing && activeKey === getTabKey(item),
                   'is-editing': isEditing,
-                  'is-fixed': isFixedTab(item),
                   'is-placeholder': draggingItemKey === getTabKey(item),
                 }
               ]"
@@ -70,22 +69,17 @@
               <!-- 频道主体内容 -->
               <div class="tile-content">
                 <span class="tile-label">{{ item.title }}</span>
-                <span v-if="isFixedTab(item) && isEditing" class="fixed-tag">固定</span>
               </div>
 
               <!-- 编辑模式操作角标 -->
               <div v-if="isEditing" class="tile-edit-actions" @pointerdown.stop>
                 <button
-                  v-if="!isFixedTab(item)"
                   class="remove-tag-btn"
                   title="移出我的频道"
                   @click.stop="removeToHidden(idx)"
                 >
                   <i class="fas fa-times"></i>
                 </button>
-                <div v-else class="lock-box">
-                  <i class="fas fa-lock lock-icon" title="核心固定频道"></i>
-                </div>
               </div>
             </div>
           </TransitionGroup>
@@ -180,6 +174,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import type { ConfigPageTab } from '../../types/settings';
 import { getHomeSubChannelGroupTitle, getHomeSubChannels, isFollowingHomeTab, type HomeSubChannel, type HomeSubChannelSelection } from '../../utils/homeTabs';
+import { showToast } from '../../utils/toast';
 
 const props = defineProps<{
   visible: boolean;
@@ -241,15 +236,6 @@ function getTabKey(tab: ConfigPageTab): string {
   return tab.page_name || tab.url || String(tab.id || tab.title);
 }
 
-function isFixedTab(tab: ConfigPageTab): boolean {
-  return (
-    tab.page_fixed === 1 ||
-    tab.page_name === 'V9_HOME_TAB_HEADLINE' ||
-    tab.url === '/main/headline' ||
-    tab.title === '头条'
-  );
-}
-
 const floatingStyle = computed(() => {
   if (!isDragging.value) return {};
   const x = pointerPos.value.x - grabOffset.value.x;
@@ -306,6 +292,12 @@ function initChannels() {
     }
   }
 
+  // 兼容旧设置中误将全部频道隐藏的情况，至少恢复一个可见频道。
+  if (actives.length === 0 && hiddens.length > 0) {
+    const fallback = hiddens.shift();
+    if (fallback) actives.push(fallback);
+  }
+
   activeChannels.value = actives;
   hiddenChannels.value = hiddens;
 }
@@ -344,6 +336,10 @@ function handleSubChannelClick(parentKey: string, subChannel: HomeSubChannel) {
 // 移到隐藏列表
 function removeToHidden(index: number) {
   if (index < 0 || index >= activeChannels.value.length) return;
+  if (activeChannels.value.length <= 1) {
+    showToast('至少保留一个可见频道', 'warning');
+    return;
+  }
   const [removed] = activeChannels.value.splice(index, 1);
   if (removed) {
     hiddenChannels.value.push(removed);
@@ -449,6 +445,10 @@ function resetToDefault() {
 }
 
 function saveAndClose() {
+  if (activeChannels.value.length === 0) {
+    showToast('至少保留一个可见频道', 'warning');
+    return;
+  }
   const resultKeys = activeChannels.value.map(t => getTabKey(t));
   for (const h of hiddenChannels.value) {
     resultKeys.push(`__hidden__${getTabKey(h)}`);
@@ -751,14 +751,6 @@ function saveAndClose() {
   text-overflow: ellipsis;
 }
 
-.fixed-tag {
-  font-size: 10px;
-  color: var(--text-tertiary, #999);
-  background: rgba(0, 0, 0, 0.05);
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-
 /* 编辑模式 */
 .channel-tile.is-editing {
   cursor: grab;
@@ -822,20 +814,6 @@ function saveAndClose() {
 
 .remove-tag-btn:hover {
   transform: scale(1.2);
-}
-
-.lock-box {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  background: var(--surface);
-  border-radius: 50%;
-  padding: 2px;
-}
-
-.lock-icon {
-  font-size: 10px;
-  color: var(--text-tertiary, #aaa);
 }
 
 /* 隐藏待添加频道 */

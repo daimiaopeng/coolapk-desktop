@@ -25,7 +25,7 @@
     <!-- 频道管理弹窗 (九宫格/磁贴网格) -->
     <TabManagerModal
       :visible="showTabManager"
-      :tabs="tabs"
+      :tabs="props.managerTabs || tabs"
       :active-key="activeKey"
       :active-sub-tab-key="props.activeSubTabKey"
       :selection-only="props.managerMode === 'picker'"
@@ -50,6 +50,7 @@ const props = withDefaults(defineProps<{
   managerMode?: 'editable' | 'picker';
   wrap?: boolean;
   activeSubTabKey?: string;
+  managerTabs?: ConfigPageTab[];
 }>(), {
   showManage: true,
   managerMode: 'editable',
