@@ -319,6 +319,7 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     });
 
     const w = await mountMessagesPage();
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const chatArea = w.find('.chat-area');
     const chatAreaElement = chatArea.element as HTMLElement;
     let scrollHeight = 200;
