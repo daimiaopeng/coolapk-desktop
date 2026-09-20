@@ -43,7 +43,6 @@ export interface FeedShareComment {
 }
 
 const DEFAULT_WIDTH = 900;
-const DEFAULT_MAX_IMAGE_HEIGHT = 1600;
 const SHARE_QR_SIZE = 112;
 const SHARE_COMMENT_LIMIT = 3;
 const SHARE_COMMENT_MAX_LENGTH = 180;
@@ -441,10 +440,33 @@ function formatShareDate(value: unknown): string {
   return date.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
+/**
+ * 计算动态分享长图中图片的渲染尺寸。
+ * 默认按原本高宽比完整展示，不截断或压缩高度；
+ * 若指定了 maxImageHeight 且超限，同步等比例缩放宽度与高度，避免图片变形挤压。
+ */
+export function calculateFeedShareImageSize(
+  naturalWidth: number,
+  naturalHeight: number,
+  contentWidth: number,
+  maxImageHeight?: number,
+): { width: number; height: number } {
+  const safeNaturalWidth = naturalWidth > 0 ? naturalWidth : contentWidth;
+  const safeNaturalHeight = naturalHeight > 0 ? naturalHeight : contentWidth;
+  let imageWidth = Math.min(contentWidth, safeNaturalWidth);
+  let imageHeight = Math.max(1, Math.round((imageWidth * safeNaturalHeight) / safeNaturalWidth));
+
+  if (maxImageHeight && maxImageHeight > 0 && imageHeight > maxImageHeight) {
+    imageHeight = Math.floor(maxImageHeight);
+    imageWidth = Math.max(1, Math.round((imageHeight * safeNaturalWidth) / safeNaturalHeight));
+  }
+
+  return { width: imageWidth, height: imageHeight };
+}
+
 /** 生成可预览、可复制和可保存的动态分享长图。 */
 export async function generateFeedShareImage(feed: FeedItem, images: FeedImageInput[] = [], options: FeedShareImageOptions = {}): Promise<FeedShareImageResult> {
   const width = Math.max(640, Math.floor(options.width || DEFAULT_WIDTH));
-  const maxImageHeight = Math.max(480, Math.floor(options.maxImageHeight || DEFAULT_MAX_IMAGE_HEIGHT));
   const normalizedImages = normalizeFeedImageItems(images);
   const loadedImages: Array<{ item: FeedImageItem; image: HTMLImageElement }> = [];
   const failedImageUrls: string[] = [];
@@ -500,9 +522,7 @@ export async function generateFeedShareImage(feed: FeedItem, images: FeedImageIn
   const imageSizes = loadedImages.map(({ image }) => {
     const naturalWidth = image.naturalWidth || image.width || contentWidth;
     const naturalHeight = image.naturalHeight || image.height || contentWidth;
-    const imageWidth = Math.min(contentWidth, naturalWidth);
-    const imageHeight = Math.min(maxImageHeight, Math.max(1, imageWidth * naturalHeight / naturalWidth));
-    return { width: imageWidth, height: imageHeight };
+    return calculateFeedShareImageSize(naturalWidth, naturalHeight, contentWidth, options.maxImageHeight);
   });
 
   const headerHeight = 100;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calculateFeedShareImageSize,
   getFeedShareAuthor,
   getFeedShareCommentAuthor,
   getFeedShareCommentLikes,
@@ -55,5 +56,27 @@ describe('动态分享图内容整理', () => {
     expect(getFeedShareCommentText(comments[1])).toBe('（图片评论）');
     expect(getFeedShareCommentAuthor(comments[1])).toBe('第二位');
     expect(getFeedShareCommentLikes(comments[0])).toBe('28 赞');
+  });
+
+  it('保持原本高宽比计算分享图尺寸，不强制压扁图片', () => {
+    // 手机屏幕截图（如 1080x2400）在 852px 宽度下自适应，高度完整展示
+    const phoneScreenshot = calculateFeedShareImageSize(1080, 2400, 852);
+    expect(phoneScreenshot.width).toBe(852);
+    expect(phoneScreenshot.height).toBe(1893);
+
+    // 超长截图（如 1080x4800）不被 1600px 截断
+    const longScreenshot = calculateFeedShareImageSize(1080, 4800, 852);
+    expect(longScreenshot.width).toBe(852);
+    expect(longScreenshot.height).toBe(3787);
+
+    // 小图（宽小于 contentWidth）居中并保留原始尺寸
+    const smallImage = calculateFeedShareImageSize(400, 300, 852);
+    expect(smallImage.width).toBe(400);
+    expect(smallImage.height).toBe(300);
+
+    // 若显式传入 maxImageHeight，等比例缩放宽和高，避免变形挤压
+    const cappedImage = calculateFeedShareImageSize(1080, 2400, 852, 1200);
+    expect(cappedImage.height).toBe(1200);
+    expect(cappedImage.width).toBe(540); // 1200 * (1080 / 2400) = 540
   });
 });

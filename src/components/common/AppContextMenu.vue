@@ -345,7 +345,7 @@ function createItems(state: ContextState): MenuItem[] {
       item('save-image', '保存图片', 'fas fa-download', () => saveImage(state.imageUrl)),
       item('copy-image', '复制图片', 'far fa-copy', () => copyImage(state.imageUrl)),
       item('copy-image-url', '复制图片地址', 'fas fa-link', () => copyText(state.imageUrl)),
-      item('open-image-system', '使用系统程序打开', 'fas fa-external-link-alt', () => CoolapkTauriAPI.openUrl(state.imageUrl, 'system')),
+      item('open-image-system', '使用系统程序打开', 'fas fa-external-link-alt', () => CoolapkTauriAPI.openImageInSystemViewer(state.imageUrl)),
     ];
   }
 
@@ -435,8 +435,14 @@ async function copyImage(url: string) {
 
 async function saveImage(url: string) {
   try {
-    await CoolapkTauriAPI.saveImage(url, settingsStore.settings.downloadPath);
-    showToast('图片保存成功');
+    const savedPath = url.startsWith('data:image/')
+      ? await CoolapkTauriAPI.saveImageDataUrl(
+          url,
+          `coolapk_image_${Date.now()}.png`,
+          settingsStore.settings.downloadPath
+        )
+      : await CoolapkTauriAPI.saveImage(url, settingsStore.settings.downloadPath);
+    showToast(savedPath ? `图片已保存：${savedPath}` : '图片保存成功');
   } catch (error) {
     showToast(`图片保存失败：${String(error)}`, 'error', 2400);
   }

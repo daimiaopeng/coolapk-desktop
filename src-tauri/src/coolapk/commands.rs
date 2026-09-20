@@ -2269,9 +2269,16 @@ pub async fn save_image(
     url: String,
     dir: Option<String>,
 ) -> Result<String, String> {
-    let data_url = state.client.get_image_data_url(&url).await?;
-    let (mime_type, bytes) = decode_image_data_url(&data_url)?;
-    let file_name = build_image_file_name(&url, mime_type);
+    let (file_name, bytes) = if url.starts_with("data:image/") {
+        let (mime_type, bytes) = decode_image_data_url(&url)?;
+        let file_name = build_generated_image_file_name("coolapk_image", mime_type);
+        (file_name, bytes)
+    } else {
+        let data_url = state.client.get_image_data_url(&url).await?;
+        let (mime_type, bytes) = decode_image_data_url(&data_url)?;
+        let file_name = build_image_file_name(&url, mime_type);
+        (file_name, bytes)
+    };
     let target_dir = user_save_dir(&app, dir.as_deref())?;
 
     tokio::fs::create_dir_all(&target_dir)
@@ -2314,15 +2321,28 @@ pub async fn open_image_in_system_viewer(
     url: String,
     cache_dir: Option<String>,
 ) -> Result<String, String> {
-    let data_url = state.client.get_image_data_url(&url).await?;
-    let (mime_type, bytes) = decode_image_data_url(&data_url)?;
-    let mut hasher = Md5::new();
-    hasher.update(url.as_bytes());
-    let file_name = format!(
-        "system-{}.{}",
-        hex::encode(hasher.finalize()),
-        image_extension(mime_type)
-    );
+    let (file_name, bytes) = if url.starts_with("data:image/") {
+        let (mime_type, bytes) = decode_image_data_url(&url)?;
+        let mut hasher = Md5::new();
+        hasher.update(url.as_bytes());
+        let file_name = format!(
+            "system-{}.{}",
+            hex::encode(hasher.finalize()),
+            image_extension(mime_type)
+        );
+        (file_name, bytes)
+    } else {
+        let data_url = state.client.get_image_data_url(&url).await?;
+        let (mime_type, bytes) = decode_image_data_url(&data_url)?;
+        let mut hasher = Md5::new();
+        hasher.update(url.as_bytes());
+        let file_name = format!(
+            "system-{}.{}",
+            hex::encode(hasher.finalize()),
+            image_extension(mime_type)
+        );
+        (file_name, bytes)
+    };
     let target_dir = image_cache_root(&app, cache_dir.as_deref())?;
     tokio::fs::create_dir_all(&target_dir)
         .await
