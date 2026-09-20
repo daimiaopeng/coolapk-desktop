@@ -270,7 +270,11 @@
       </div>
     </div>
 
-    <RightSidebar />
+    <RightSidebar
+      v-if="settingsStore.settings.showHomeMonthlyRank || settingsStore.settings.showHomeHotTopics"
+      :show-monthly-rank="settingsStore.settings.showHomeMonthlyRank"
+      :show-hot-topics="settingsStore.settings.showHomeHotTopics"
+    />
   </div>
 </template>
 

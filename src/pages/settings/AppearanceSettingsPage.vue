@@ -134,6 +134,27 @@
       </div>
     </div>
 
+    <div class="setting-group">
+      <h4 class="group-title">首页右侧栏</h4>
+      <p class="group-sub">分别控制首页右侧的热榜和热门话题卡片，关闭后不再请求对应数据</p>
+
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">本月热榜</span>
+          <span class="row-sub">显示首页右侧的本月动态热榜</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.showHomeMonthlyRank" />
+      </div>
+
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">热门话题</span>
+          <span class="row-sub">显示首页右侧的热门话题列表</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.showHomeHotTopics" />
+      </div>
+    </div>
+
     <!-- 页面栏目显隐设置区域 -->
     <div class="setting-group">
       <h4 class="group-title">侧边栏页面栏目显隐设置</h4>

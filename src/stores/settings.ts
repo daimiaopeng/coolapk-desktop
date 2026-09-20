@@ -120,6 +120,8 @@ const defaultSettings: AppSettings = {
   autoLoadOriginalImage: true,
   noImageMode: false,
   showDeviceInfo: true,
+  showHomeMonthlyRank: true,
+  showHomeHotTopics: true,
   defaultHomeTab: 'digest',
   homeTabOrder: [...DEFAULT_HOME_TAB_ORDER],
   downloadPath: '',
@@ -247,6 +249,8 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.autoLoadOriginalImage = readBoolean(source.autoLoadOriginalImage, result.autoLoadOriginalImage);
   result.noImageMode = readBoolean(source.noImageMode, result.noImageMode);
   result.showDeviceInfo = readBoolean(source.showDeviceInfo, result.showDeviceInfo);
+  result.showHomeMonthlyRank = readBoolean(source.showHomeMonthlyRank, result.showHomeMonthlyRank);
+  result.showHomeHotTopics = readBoolean(source.showHomeHotTopics, result.showHomeHotTopics);
   result.downloadPath = readString(source.downloadPath, result.downloadPath);
   result.maxConcurrentDownloads = [1, 2, 3, 4, 5, 6, 8].includes(Number(source.maxConcurrentDownloads)) ? Number(source.maxConcurrentDownloads) : result.maxConcurrentDownloads;
   result.autoCleanCache = readBoolean(source.autoCleanCache, result.autoCleanCache);

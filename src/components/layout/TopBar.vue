@@ -145,7 +145,7 @@
           :title="notificationStore.messageCount > 0 ? `${notificationStore.messageCount} 条未读私信` : '私信'"
           aria-label="私信"
           :badge="notificationStore.messageCount"
-          @click="openMessagePopover"
+          @click="openMessagesPage"
         />
 
         <Transition name="popover-fade">

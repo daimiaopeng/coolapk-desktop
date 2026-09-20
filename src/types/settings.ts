@@ -128,6 +128,8 @@ export interface AppSettings {
   autoLoadOriginalImage: boolean;
   noImageMode: boolean;
   showDeviceInfo: boolean;
+  showHomeMonthlyRank: boolean;
+  showHomeHotTopics: boolean;
   defaultHomeTab: HomeTabKey;
   homeTabOrder: HomeTabKey[];
   downloadPath: string;
