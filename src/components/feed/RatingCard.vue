@@ -17,9 +17,9 @@
     />
 
     <!-- 总体星级与机主评分标签 -->
-    <div class="rating-score-banner" v-if="starCount > 0 || feed.star">
+    <div class="rating-score-banner" v-if="hasOverallRating">
       <span class="owner-badge">
-        <i class="fas fa-mobile-alt"></i> 机主评分
+        <i class="fas fa-mobile-alt"></i> {{ isOwnerRating ? '机主评分' : '评分' }}
       </span>
       <div class="star-rating-stars">
         <i 
@@ -35,13 +35,30 @@
     <div class="rating-dimensions-row" v-if="subRatings.length > 0">
       <div v-for="item in subRatings" :key="item.label" class="sub-rating-item">
         <span class="sub-label">{{ item.label }}</span>
-        <span class="sub-stars">{{ item.score }}★</span>
+        <span class="sub-stars" :aria-label="`${item.score} 星`">
+          <i v-for="starIndex in 5" :key="starIndex" :class="['fas', 'fa-star', { active: starIndex <= item.starCount }]" aria-hidden="true"></i>
+        </span>
+        <span class="sub-score">{{ item.score }}</span>
+        <span class="sub-description">{{ item.description }}</span>
       </div>
     </div>
 
+    <span v-if="isFilteredRating" class="filter-rating-badge">不计分</span>
+
     <!-- 点评正文及维度的结构化评语 -->
-    <div class="rating-body">
-      <div v-if="feed.message" class="message-text" v-html="formattedMessage" @click="handleAnchorClick"></div>
+    <FeedContent
+      :feed-id="feed.id"
+      :title="feed.title || feed.message_title || feed.messageTitle"
+      :message="displayedRatingMessage"
+      :username="feed.username || feed.userInfo?.username"
+    />
+
+    <!-- APK 点评卡把优点、一般、缺点作为独立字段展示，不能只显示 message 摘要。 -->
+    <div v-if="ratingComments.length" class="rating-comments">
+      <div v-for="item in ratingComments" :key="item.key" class="rating-comment-item">
+        <span class="rating-comment-label">{{ item.label }}</span>
+        <div class="rating-comment-text" v-html="item.html" @click="handleRatingTextClick"></div>
+      </div>
     </div>
 
     <!-- 点评配图 -->
@@ -54,16 +71,14 @@
     <!-- 关联的数码设备卡片盒子 -->
     <div class="target-device-card" v-if="targetProduct">
       <div class="device-thumb">
-        <AppImage :src="targetProduct.logo || targetProduct.pic" image-class="device-img" />
+        <AppImage :src="targetProduct.logo" image-class="device-img" />
       </div>
       <div class="device-info">
         <h4 class="device-title">{{ targetProduct.title }}</h4>
-        <p class="device-count" v-if="targetProduct.comment_count || targetProduct.hot_num">
-          {{ targetProduct.comment_count || targetProduct.hot_num }} 人点评
-        </p>
+        <p class="device-count" v-if="targetProduct.meta">{{ targetProduct.meta }}</p>
       </div>
-      <div class="device-rating-box" v-if="targetProduct.score || targetProduct.rating">
-        <span class="big-score">{{ targetProduct.score || targetProduct.rating }}</span>
+      <div class="device-rating-box" v-if="targetProduct.score">
+        <span class="big-score">{{ targetProduct.score }}</span>
         <div class="mini-stars">
           <i v-for="i in 5" :key="i" class="fas fa-star active"></i>
         </div>
@@ -151,6 +166,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted, onDeactivated } from 'vue';
 import FeedHeader from './FeedHeader.vue';
+import FeedContent from './FeedContent.vue';
 import FeedImageGrid from './FeedImageGrid.vue';
 import FeedActionBar from './FeedActionBar.vue';
 import FeedCollectionPickerDialog from './FeedCollectionPickerDialog.vue';
@@ -183,13 +199,16 @@ const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
 
 const props = defineProps<{
   feed: any;
+  cloudFavorite?: boolean;
 }>();
 
-const feedImages = computed(() => extractFeedImageInputs(props.feed));
+const emit = defineEmits<{
+  (event: 'favorite-changed', payload: { id: string | number; favorited: boolean }): void;
+}>();
 
 const authStore = useAuthStore();
 
-const isFav = ref(props.feed.userAction?.collect === 1 || props.feed.userAction?.favorite === 1);
+const isFav = ref(props.cloudFavorite === true || props.feed.userAction?.collect === 1 || props.feed.userAction?.favorite === 1);
 const favnum = ref(props.feed.favnum || 0);
 const favoritePending = ref(false);
 const collectionPickerOpen = ref(false);
@@ -238,6 +257,7 @@ async function toggleFav() {
     isFav.value = target;
     favnum.value = Math.max(0, favnum.value + (target ? 1 : -1));
     showToast(target ? '已收藏到云端' : '已取消云端收藏', 'success');
+    emit('favorite-changed', { id: props.feed.id, favorited: target });
   } catch (err) {
     showToast(getErrorMessage(err, target ? '收藏失败' : '取消收藏失败'), 'error');
   } finally {
@@ -321,6 +341,7 @@ async function confirmCollectionSelection(selectedIds: string[]) {
     favnum.value = Math.max(0, favnum.value + (collectionInitialSelectedIds.value.length === 0 ? 1 : 0));
     showToast('已收藏到云端', 'success');
     collectionPickerOpen.value = false;
+    emit('favorite-changed', { id: props.feed.id, favorited: true });
   } catch (err) {
     showToast(getErrorMessage(err, '收藏失败'), 'error');
   } finally {
@@ -329,60 +350,213 @@ async function confirmCollectionSelection(selectedIds: string[]) {
   }
 }
 
-const starCount = computed(() => {
-  const s = props.feed.star || props.feed.rating_score || props.feed.score;
-  if (!s) return 4;
-  const num = Number(s);
-  return num > 5 ? Math.round(num / 2) : Math.round(num);
-});
+function firstValue(source: any, keys: string[]): unknown {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (value !== undefined && value !== null && String(value).trim() !== '') return value;
+  }
+  return undefined;
+}
+
+function textValue(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return '';
+}
+
+function readText(source: any, keys: string[]): string {
+  return textValue(firstValue(source, keys));
+}
+
+function toDisplayScore(value: unknown): number {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 1) return 0;
+  if (number <= 5) return number;
+  // APK 会把 0～10 分按半星阈值映射到 0～5 星，不能直接除以 2。
+  if (number >= 9.2) return 5;
+  if (number >= 8.4) return 4.5;
+  if (number >= 7.6) return 4;
+  if (number >= 6.8) return 3.5;
+  if (number >= 6) return 3;
+  if (number >= 5) return 2.5;
+  if (number >= 4) return 2;
+  if (number >= 3) return 1.5;
+  return 1;
+}
+
+function ratingDescription(score: number): string {
+  const rounded = Math.round(score);
+  if (rounded >= 5) return '非常好';
+  if (rounded === 4) return '不错';
+  if (rounded === 3) return '一般';
+  if (rounded === 2) return '较差';
+  return '很差';
+}
+
+function ratingFlag(value: unknown): boolean {
+  return value === true || value === 1 || value === '1' || value === 'true';
+}
+
+const ratingMessage = computed(() => readText(props.feed, [
+  'message',
+  'message_raw_output',
+  'messageRawOutput',
+  'content',
+  'text',
+]));
+
+const overallScore = computed(() => toDisplayScore(firstValue(props.feed, [
+  'rating_score',
+  'ratingScore',
+  'star',
+  'score',
+])));
+
+const starCount = computed(() => Math.floor(overallScore.value));
+const hasOverallRating = computed(() => overallScore.value > 0);
+const isOwnerRating = computed(() => ratingFlag(firstValue(props.feed, ['is_owner', 'isOwner', 'show_owner', 'showOwner'])));
+const isFilteredRating = computed(() => ratingFlag(firstValue(props.feed, ['filter_rating', 'filterRating'])));
 
 const scoreText = computed(() => {
-  if (props.feed.score_title) return props.feed.score_title;
-  const s = starCount.value;
-  if (s >= 5) return '极好';
-  if (s === 4) return '不错';
-  if (s === 3) return '一般';
-  if (s === 2) return '较差';
-  return '极差';
+  const explicit = readText(props.feed, ['score_title', 'scoreTitle', 'rating_score_title', 'ratingScoreTitle']);
+  return explicit || (hasOverallRating.value ? ratingDescription(overallScore.value) : '');
 });
 
-// 解析多维度评分细节
+function parseRatingItems(value: unknown): any[] {
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(parsed)) return parsed;
+  if (!parsed || typeof parsed !== 'object') return [];
+  const object = parsed as Record<string, unknown>;
+  const nested = object.items || object.data || object.list;
+  if (Array.isArray(nested)) return nested;
+  const hasItemShape = ['name', 'title', 'label', 'item_name', 'itemName'].some((key) => object[key] !== undefined)
+    && ['star', 'score', 'v4_score', 'v4Score', 'rating', 'value'].some((key) => object[key] !== undefined);
+  if (hasItemShape) return [object];
+  return Object.entries(object).map(([label, score]) => ({ label, score }));
+}
+
+function getRatingItemDescription(item: any, score: number): string {
+  const rawDescription = firstValue(item, ['star_desc', 'starDesc']);
+  if (Array.isArray(rawDescription)) {
+    const description = textValue(rawDescription[Math.max(0, Math.round(score) - 1)]);
+    return description || ratingDescription(score);
+  }
+  return textValue(rawDescription) || readText(item, ['description', 'desc']) || ratingDescription(score);
+}
+
+function getRatingItemScore(item: any): number {
+  const rawV4Score = firstValue(item, ['v4_score', 'v4Score']);
+  if (rawV4Score !== undefined) {
+    const score = Number(rawV4Score);
+    return Number.isFinite(score) && score > 0 ? Math.min(5, score / 2) : 0;
+  }
+  return toDisplayScore(firstValue(item, ['star', 'score', 'rating', 'value']));
+}
+
+// APK 只展示接口实际返回的 rating_item_info，不为缺失的维度补造评分。
 const subRatings = computed(() => {
-  if (props.feed.rating_info && Array.isArray(props.feed.rating_info)) {
-    return props.feed.rating_info.map((item: any) => ({
-      label: item.title || item.name,
-      score: item.score || item.star
-    }));
+  const raw = firstValue(props.feed, ['rating_item_info', 'ratingItemInfo', 'rating_info', 'ratingInfo', 'sub_scores', 'subScores']);
+  const items = parseRatingItems(raw);
+  return items.map((item: any, index) => {
+    const label = readText(item, ['name', 'title', 'label', 'item_name', 'itemName']) || `评分${index + 1}`;
+    const score = getRatingItemScore(item);
+    if (score <= 0) return null;
+    return {
+      label,
+      score: Number.isInteger(score) ? String(score) : score.toFixed(1),
+      starCount: Math.floor(score),
+      description: getRatingItemDescription(item, score),
+    };
+  }).filter(Boolean) as Array<{ label: string; score: string; starCount: number; description: string }>;
+});
+
+function parseV4RatingEntries(value: unknown): Array<{ label: string; value: string }> {
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return [];
+    }
   }
-  if (props.feed.sub_scores) {
-    return props.feed.sub_scores;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
+  return Object.entries(parsed)
+    .map(([label, entry]) => ({ label: label.trim(), value: textValue(entry) }))
+    .filter((item) => item.label && item.value);
+}
+
+const ratingComments = computed(() => {
+  const v4Entries = parseV4RatingEntries(firstValue(props.feed, ['v4_rating_message', 'v4RatingMessage']));
+  if (v4Entries.length > 0) {
+    return v4Entries.map((item, index) => ({ key: `v4-${index}-${item.label}`, label: item.label, value: item.value, html: renderCoolapkRichText(item.value) }));
   }
+
+  const addition = readText(props.feed, ['comment_addition', 'commentAddition']);
+  const good = readText(props.feed, ['comment_good', 'commentGood']);
+  const bad = readText(props.feed, ['comment_bad', 'commentBad']);
+  const general = readText(props.feed, ['comment_general', 'commentGeneral']);
+  const generalLabel = good ? '总评' : bad ? '总评' : '点评';
   return [
-    { label: '续航', score: props.feed.star || 4 },
-    { label: '影像', score: props.feed.star || 5 },
-    { label: '性能', score: props.feed.star || 4 },
-    { label: '屏幕', score: props.feed.star || 4 },
-    { label: '外观质感', score: props.feed.star || 4 }
-  ];
+    { key: 'addition', label: '对象', value: addition },
+    { key: 'good', label: '优点', value: good },
+    { key: 'bad', label: '缺点', value: bad },
+    { key: 'general', label: generalLabel, value: general },
+  ].filter((item) => item.value).map((item) => ({ ...item, html: renderCoolapkRichText(item.value) }));
+});
+
+const displayedRatingMessage = computed(() => ratingComments.value.length > 0 ? '' : ratingMessage.value);
+
+function splitRatingImageValues(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap((item) => splitRatingImageValues(item));
+  if (typeof value !== 'string') return [];
+  return value.split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+const feedImages = computed(() => {
+  const directImages = extractFeedImageInputs(props.feed);
+  const rawV4 = firstValue(props.feed, ['v4_rating_message', 'v4RatingMessage']);
+  const rawItems = firstValue(props.feed, ['rating_item_info', 'ratingItemInfo']);
+  const hasApkRatingDetails = Boolean(textValue(rawV4)) || parseRatingItems(rawItems).length > 0;
+  if (hasApkRatingDetails) return directImages;
+  // APK 在没有 v4 评分明细时，会把三个 comment_*_pic 字段合并到点评图片区域。
+  const commentImages = [
+    firstValue(props.feed, ['comment_good_pic', 'commentGoodPic']),
+    firstValue(props.feed, ['comment_bad_pic', 'commentBadPic']),
+    firstValue(props.feed, ['comment_general_pic', 'commentGeneralPic']),
+  ].flatMap(splitRatingImageValues);
+  return commentImages.length > 0 ? commentImages : directImages;
 });
 
 const targetProduct = computed(() => {
-  if (props.feed.target_row) return props.feed.target_row;
-  if (props.feed.target_title) {
-    return {
-      title: props.feed.target_title,
-      logo: props.feed.target_pic || props.feed.pic,
-      score: props.feed.target_score || '8.5',
-      comment_count: props.feed.target_comment_count || 1200
-    };
-  }
-  return null;
+  const rawTarget = firstValue(props.feed, ['targetRow', 'target_row']);
+  const target = rawTarget && typeof rawTarget === 'object' ? rawTarget as any : null;
+  const title = readText(target, ['title', 'name', 'device_title', 'deviceTitle']) || readText(props.feed, ['target_title', 'targetTitle']);
+  if (!title) return null;
+  const commentCount = readText(target, ['comment_num', 'commentNum', 'comment_count', 'commentCount']) || readText(props.feed, ['target_comment_count', 'targetCommentCount']);
+  const hotNum = readText(target, ['hot_num', 'hotNum']) || readText(props.feed, ['target_hot_num', 'targetHotNum']);
+  const discussionCount = readText(target, ['discussion_num', 'discussionNum', 'discussion_count', 'discussionCount']);
+  return {
+    title,
+    logo: readText(target, ['recommendLogo', 'recommend_logo', 'logo', 'pic', 'tpic']) || readText(props.feed, ['target_pic', 'targetPic', 'pic']),
+    score: readText(target, ['score', 'rating_score', 'ratingScore', 'rating', 'ratingAverageScore']) || readText(props.feed, ['target_score', 'targetScore']),
+    meta: [
+      commentCount ? `${commentCount} 人点评` : '',
+      hotNum ? `${hotNum} 热度` : '',
+      discussionCount ? `${discussionCount} 讨论` : '',
+    ].filter(Boolean).join(' · '),
+  };
 });
 
-const formattedMessage = computed(() => {
-  if (!props.feed.message) return '';
-  return renderCoolapkRichText(props.feed.message);
-});
+function handleRatingTextClick(event: Event) {
+  handleAnchorClick(event, props.feed.id);
+}
 
 const cardRef = ref<HTMLElement | null>(null);
 const isCommentsFloatingVisible = ref(false);
@@ -692,14 +866,73 @@ defineExpose({ toggleComments, handleCollapseComments, showComments });
 }
 
 .sub-stars {
-  color: var(--brand-primary, #10b981);
-  font-weight: 600;
+  display: inline-flex;
+  gap: 1px;
+  color: var(--border-strong, #d1d5db);
+  font-size: 10px;
+}
+
+.sub-stars .active {
+  color: #f59e0b;
+}
+
+.sub-score {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.sub-description {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.filter-rating-badge {
+  align-self: flex-end;
+  margin-top: -4px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--danger, #ef4444) 45%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--danger, #ef4444);
+  font-size: 10px;
 }
 
 .rating-body {
   font-size: var(--font-size-body);
   color: var(--text-primary);
   line-height: 1.6;
+}
+
+.rating-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: -4px;
+}
+
+.rating-comment-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: var(--font-size-body, 15px);
+  line-height: 1.6;
+}
+
+.rating-comment-label {
+  flex: 0 0 auto;
+  color: var(--brand-primary, #10b981);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.8;
+}
+
+.rating-comment-text {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.rating-comment-text :deep(a) {
+  color: var(--brand-primary, #10b981);
 }
 
 .target-device-card {

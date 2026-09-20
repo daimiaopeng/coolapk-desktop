@@ -225,7 +225,14 @@
 
         <div v-else class="feed-list">
           <div v-for="item in collectionItems" :key="item.id" class="collection-feed-item">
+            <RatingCard
+              v-if="isRatingFeedEntity(item)"
+              :feed="item"
+              cloud-favorite
+              @favorite-changed="handleFavoriteChanged"
+            />
             <FeedCard
+              v-else
               :feed="item"
               cloud-favorite
               @deleted="handleFeedDeleted"
@@ -378,14 +385,21 @@
         </div>
 
         <div v-else class="feed-list">
-          <FeedCard
-            v-for="item in cloudFeeds"
-            :key="item.id"
-            :feed="item"
-            cloud-favorite
-            @deleted="handleFeedDeleted"
-            @favorite-changed="handleFavoriteChanged"
-          />
+          <template v-for="item in cloudFeeds" :key="item.id">
+            <RatingCard
+              v-if="isRatingFeedEntity(item)"
+              :feed="item"
+              cloud-favorite
+              @favorite-changed="handleFavoriteChanged"
+            />
+            <FeedCard
+              v-else
+              :feed="item"
+              cloud-favorite
+              @deleted="handleFeedDeleted"
+              @favorite-changed="handleFavoriteChanged"
+            />
+          </template>
           <div class="pagination-footer">
             <LoadingState v-if="loadingMore" text="加载更多收藏中..." />
             <div v-else-if="noMore" class="no-more">没有更多收藏了</div>
@@ -463,6 +477,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FeedCard from '../components/feed/FeedCard.vue';
+import RatingCard from '../components/feed/RatingCard.vue';
 import AppButton from '../components/common/AppButton.vue';
 import AppDialog from '../components/common/AppDialog.vue';
 import AppImage from '../components/common/AppImage.vue';
@@ -474,6 +489,7 @@ import { useAuthStore } from '../stores/auth';
 import { requestConfirmation } from '../utils/confirm';
 import { getErrorMessage } from '../utils/errors';
 import { showToast } from '../utils/toast';
+import { isRatingFeedEntity } from '../utils/rating';
 
 const authStore = useAuthStore();
 const route = useRoute();

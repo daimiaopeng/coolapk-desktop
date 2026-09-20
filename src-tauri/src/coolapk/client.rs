@@ -1556,7 +1556,11 @@ impl CoolapkClient {
         let uid = get_str_by_keys(obj, &["uid", "userId", "user_id", "authorUid", "author_uid"])
             .or_else(|| user_info.and_then(|u| u.as_object()).and_then(|info| get_str_by_keys(info, &["uid", "userId", "user_id", "authorUid", "author_uid", "id"])));
 
-        let entity_type = obj.get("entityType").and_then(|v| v.as_str()).unwrap_or("");
+        let entity_type = obj
+            .get("entityType")
+            .or_else(|| obj.get("entity_type"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
         // 过滤 Banner、Card 广告与结构占位卡 (如 "今日酷安" Banner 广告卡、搜索分组头)
         if entity_type == "card"
@@ -1604,6 +1608,7 @@ impl CoolapkClient {
             .get("title")
             .and_then(|v| v.as_str())
             .or_else(|| obj.get("entityTitle").and_then(|v| v.as_str()))
+            .or_else(|| obj.get("message_title").and_then(|v| v.as_str()))
             .unwrap_or("");
 
         let has_pics = ["picArr", "imageUriList", "image_uri_list"]
@@ -1661,8 +1666,37 @@ impl CoolapkClient {
                 "product_rows",
             ],
         );
+        let has_rating = has_any_non_empty_field(
+            obj,
+            &[
+                "rating_score",
+                "ratingScore",
+                "rating_item_info",
+                "ratingItemInfo",
+                "rating_type",
+                "ratingType",
+                "filter_rating",
+                "filterRating",
+                "v4_rating_message",
+                "v4RatingMessage",
+                "comment_addition",
+                "commentAddition",
+                "comment_good",
+                "commentGood",
+                "comment_general",
+                "commentGeneral",
+                "comment_bad",
+                "commentBad",
+                "comment_good_pic",
+                "commentGoodPic",
+                "comment_general_pic",
+                "commentGeneralPic",
+                "comment_bad_pic",
+                "commentBadPic",
+            ],
+        );
 
-        if message.is_empty() && title.is_empty() && !has_pics && !single_pic && !has_video && !has_relation {
+        if message.is_empty() && title.is_empty() && !has_pics && !single_pic && !has_video && !has_relation && !has_rating {
             return None;
         }
 
@@ -1834,8 +1868,42 @@ impl CoolapkClient {
         copy_first_field(&mut cleaned, obj, "mediaPic", &["mediaPic", "media_pic"]);
         copy_first_field(&mut cleaned, obj, "mediaInfo", &["mediaInfo", "media_info"]);
         copy_first_field(&mut cleaned, obj, "mediaType", &["mediaType", "media_type"]);
-        copy_first_field(&mut cleaned, obj, "feedType", &["feedType", "feed_type"]);
+        copy_first_field(&mut cleaned, obj, "feedType", &["feedType", "feed_type", "type"]);
         copy_first_field(&mut cleaned, obj, "feedTypeName", &["feedTypeName", "feed_type_name"]);
+        copy_first_field(&mut cleaned, obj, "type", &["type"]);
+        copy_first_field(&mut cleaned, obj, "message_title", &["message_title", "messageTitle"]);
+        copy_first_field(&mut cleaned, obj, "message_raw_output", &["message_raw_output", "messageRawOutput"]);
+        // APK 点评卡依赖这些评分字段；列表归一化时保留原始结构，前端才能完整展示点评内容。
+        copy_first_field(&mut cleaned, obj, "ratingScore", &["rating_score", "ratingScore"]);
+        copy_first_field(&mut cleaned, obj, "ratingScore1", &["rating_score_1", "ratingScore1"]);
+        copy_first_field(&mut cleaned, obj, "ratingScore2", &["rating_score_2", "ratingScore2"]);
+        copy_first_field(&mut cleaned, obj, "ratingScore3", &["rating_score_3", "ratingScore3"]);
+        copy_first_field(&mut cleaned, obj, "ratingScore4", &["rating_score_4", "ratingScore4"]);
+        copy_first_field(&mut cleaned, obj, "ratingScore5", &["rating_score_5", "ratingScore5"]);
+        copy_first_field(&mut cleaned, obj, "ratingScore6", &["rating_score_6", "ratingScore6"]);
+        copy_first_field(&mut cleaned, obj, "ratingScore7", &["rating_score_7", "ratingScore7"]);
+        copy_first_field(&mut cleaned, obj, "ratingScore8", &["rating_score_8", "ratingScore8"]);
+        copy_first_field(&mut cleaned, obj, "ratingScore9", &["rating_score_9", "ratingScore9"]);
+        copy_first_field(&mut cleaned, obj, "ratingScore10", &["rating_score_10", "ratingScore10"]);
+        copy_first_field(&mut cleaned, obj, "ratingItemInfo", &["rating_item_info", "ratingItemInfo"]);
+        copy_first_field(&mut cleaned, obj, "ratingType", &["rating_type", "ratingType"]);
+        copy_first_field(&mut cleaned, obj, "filterRating", &["filter_rating", "filterRating"]);
+        copy_first_field(&mut cleaned, obj, "v4RatingMessage", &["v4_rating_message", "v4RatingMessage"]);
+        copy_first_field(&mut cleaned, obj, "v4HasRatingScore", &["v4_has_rating_score", "v4HasRatingScore"]);
+        copy_first_field(&mut cleaned, obj, "v4RatingTotalCount", &["v4_rating_total_count", "v4RatingTotalCount"]);
+        copy_first_field(&mut cleaned, obj, "v4RatingOwnerTotalCount", &["v4_rating_owner_total_count", "v4RatingOwnerTotalCount"]);
+        copy_first_field(&mut cleaned, obj, "isOwner", &["is_owner", "isOwner"]);
+        copy_first_field(&mut cleaned, obj, "showOwner", &["show_owner", "showOwner"]);
+        copy_first_field(&mut cleaned, obj, "commentAddition", &["comment_addition", "commentAddition"]);
+        copy_first_field(&mut cleaned, obj, "commentGood", &["comment_good", "commentGood"]);
+        copy_first_field(&mut cleaned, obj, "commentGoodPic", &["comment_good_pic", "commentGoodPic"]);
+        copy_first_field(&mut cleaned, obj, "commentGoodSource", &["comment_good_source", "commentGoodSource"]);
+        copy_first_field(&mut cleaned, obj, "commentGeneral", &["comment_general", "commentGeneral"]);
+        copy_first_field(&mut cleaned, obj, "commentGeneralPic", &["comment_general_pic", "commentGeneralPic"]);
+        copy_first_field(&mut cleaned, obj, "commentGeneralSource", &["comment_general_source", "commentGeneralSource"]);
+        copy_first_field(&mut cleaned, obj, "commentBad", &["comment_bad", "commentBad"]);
+        copy_first_field(&mut cleaned, obj, "commentBadPic", &["comment_bad_pic", "commentBadPic"]);
+        copy_first_field(&mut cleaned, obj, "commentBadSource", &["comment_bad_source", "commentBadSource"]);
         // 投票动态的可选项由 vote 对象提供；列表归一化时必须保留，前端才能渲染并提交投票。
         copy_first_field(&mut cleaned, obj, "vote", &["vote"]);
         copy_first_field(&mut cleaned, obj, "video", &["video"]);

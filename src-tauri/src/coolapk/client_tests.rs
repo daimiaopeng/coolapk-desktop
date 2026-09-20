@@ -334,6 +334,43 @@ fn test_clean_feed_preserves_cloud_collection_state() {
 }
 
 #[test]
+fn test_clean_rating_feed_preserves_apk_rating_fields() {
+    let raw = json!({
+        "id": 123,
+        "uid": 456,
+        "username": "点评用户",
+        "type": "rating",
+        "message": "点评摘要",
+        "v4_rating_message": "{\"性能\":\"性能评语\",\"续航\":\"续航评语\"}",
+        "rating_score": 8,
+        "rating_score_1": 9,
+        "rating_item_info": [{"id": 1, "name": "续航", "star": 4, "starDesc": "不错"}],
+        "filter_rating": 1,
+        "comment_addition": "对象内容",
+        "comment_good": "优点内容",
+        "comment_general": "一般内容",
+        "comment_bad": "缺点内容",
+        "is_owner": 1,
+        "target_row": {"id": 789, "title": "测试手机"}
+    });
+
+    let cleaned = CoolapkClient::clean_single_feed(&raw, 0).expect("只有点评字段的动态也应能正常清洗");
+    assert_eq!(cleaned["feedType"], "rating");
+    assert_eq!(cleaned["type"], "rating");
+    assert_eq!(cleaned["message"], "点评摘要");
+    assert_eq!(cleaned["ratingScore"], 8);
+    assert_eq!(cleaned["ratingScore1"], 9);
+    assert_eq!(cleaned["ratingItemInfo"][0]["name"], "续航");
+    assert_eq!(cleaned["filterRating"], 1);
+    assert_eq!(cleaned["commentAddition"], "对象内容");
+    assert_eq!(cleaned["commentGood"], "优点内容");
+    assert_eq!(cleaned["commentGeneral"], "一般内容");
+    assert_eq!(cleaned["commentBad"], "缺点内容");
+    assert_eq!(cleaned["isOwner"], 1);
+    assert_eq!(cleaned["targetRow"]["title"], "测试手机");
+}
+
+#[test]
 fn test_clean_feed_preserves_relation_and_video_fields() {
     let raw = json!({
         "id": 123,

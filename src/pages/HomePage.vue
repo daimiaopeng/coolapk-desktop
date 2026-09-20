@@ -228,6 +228,12 @@
                 :class="{ 'feed-card-focused': entry.index === navIndex }"
                 :ref="(el) => setCardRef(el, entry.index)"
               />
+              <RatingCard
+                v-else-if="isRatingHomeItem(entry.item)"
+                :feed="entry.item"
+                :class="{ 'feed-card-focused': entry.index === navIndex }"
+                :ref="(el) => setCardRef(el, entry.index)"
+              />
               <FeedCard
                 v-else
                 :feed="entry.item"
@@ -249,6 +255,12 @@
               v-else-if="isQuestionTab && isQuestionHomeItem(item)"
               :question="item"
               :rank-index="isHotTab ? idx + 1 : undefined"
+              :class="{ 'feed-card-focused': idx === navIndex }"
+              :ref="(el) => setCardRef(el, idx)"
+            />
+            <RatingCard
+              v-else-if="isRatingHomeItem(item)"
+              :feed="item"
               :class="{ 'feed-card-focused': idx === navIndex }"
               :ref="(el) => setCardRef(el, idx)"
             />
@@ -284,6 +296,7 @@ import { useRoute, useRouter } from 'vue-router';
 import FeedTabs from '../components/feed/FeedTabs.vue';
 import FeedLayoutToggle from '../components/feed/FeedLayoutToggle.vue';
 import FeedCard from '../components/feed/FeedCard.vue';
+import RatingCard from '../components/feed/RatingCard.vue';
 import QuestionAnswerCard from '../components/question/QuestionAnswerCard.vue';
 import QuestionFeedCard from '../components/question/QuestionFeedCard.vue';
 import DiscoveryEntityCard from '../components/discovery/DiscoveryEntityCard.vue';
@@ -306,6 +319,7 @@ import type { DiscoveryEntity } from '../types/discovery';
 import { resolvePreferredHomeTab } from '../utils/homeTabs';
 import { extractHotSearchKeywords, isAnswerSearchEntity } from '../utils/searchEntities';
 import { isQuestionFeedEntity, isQuestionHomeTab } from '../utils/question';
+import { isRatingFeedEntity } from '../utils/rating';
 
 const settingsStore = useSettingsStore();
 
@@ -1217,6 +1231,10 @@ function isAnswerHomeItem(item: unknown): boolean {
 
 function isQuestionHomeItem(item: unknown): boolean {
   return isQuestionFeedEntity(item);
+}
+
+function isRatingHomeItem(item: unknown): boolean {
+  return isRatingFeedEntity(item);
 }
 
 function handleFeedNav(delta: number) {
