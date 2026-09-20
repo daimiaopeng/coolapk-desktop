@@ -248,6 +248,76 @@ jobs:
           codesign --verify --deep --strict --verbose=4 "$app_path"
           codesign --display --verbose=4 "$app_path"
 
+  ios-build:
+    name: iOS ARM64 未签名 IPA
+    needs: []
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装 Rust iOS 目标
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: 缓存 Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 同步标签版本号
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        run: npm run version:set -- ${GITHUB_REF_NAME#v}
+
+      - name: 设置 CI 纯英文包名 (coolapk-desktop)
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("fs");
+            const conf = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
+            conf.productName = "coolapk-desktop";
+            fs.writeFileSync("src-tauri/tauri.conf.json", JSON.stringify(conf, null, 2));
+          '
+
+      - name: 初始化 iOS 工程
+        run: npm run tauri -- ios init --ci --skip-targets-install
+
+      - name: 构建未签名 IPA
+        run: npm run tauri -- ios build --target aarch64 --no-sign --ci
+
+      - name: 整理并校验 iOS Release 产物
+        shell: bash
+        run: |
+          ipa="$(find src-tauri/gen/apple/build -type f -name '*.ipa' -print -quit)"
+          if [[ -z "$ipa" ]]; then
+            echo "未找到 iOS IPA 产物" >&2
+            exit 1
+          fi
+
+          unzip -t "$ipa"
+          mkdir -p ios-release
+          ref_name="${GITHUB_REF_NAME//\//-}"
+          cp "$ipa" "ios-release/coolapk-${ref_name}-ios-arm64-unsigned.ipa"
+
+      - name: 上传 iOS 未签名 IPA
+        uses: actions/upload-artifact@v6
+        with:
+          name: ios-arm64-unsigned
+          path: ios-release/*.ipa
+          if-no-files-found: error
+
   android-build:
     name: Android ARM64 Release
     needs: []
@@ -352,6 +422,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$GITHUB_REF_NAME" android-release/* --repo "$GITHUB_REPOSITORY" --clobber
+
+  publish-ios:
+    name: 发布 iOS 未签名 IPA
+    needs: [build, ios-build]
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 下载 iOS 产物
+        uses: actions/download-artifact@v7
+        with:
+          name: ios-arm64-unsigned
+          path: ios-release
+
+      - name: 上传到 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" ios-release/*.ipa --repo "$GITHUB_REPOSITORY" --clobber
 
   publish-windows-portable:
     name: 发布 Windows 单文件便携版
