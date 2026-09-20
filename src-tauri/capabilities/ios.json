@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "ios-main-window",
+  "description": "iOS 主窗口所需能力，不包含托盘、开机启动和桌面窗口控制等权限",
+  "windows": ["main"],
+  "platforms": ["iOS"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-set-theme",
+    "core:app:allow-set-app-theme",
+    "dialog:default",
+    "notification:default",
+    "store:default",
+    "deep-link:default"
+  ]
+}
