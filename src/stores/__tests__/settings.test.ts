@@ -44,6 +44,7 @@ describe('settings store', () => {
     autoLoadOriginalImage: true,
     noImageMode: false,
     imageQuality: 'hd',
+    messageEnterBehavior: 'send',
   };
 
   it('loads default settings when localStorage is empty', () => {
@@ -62,6 +63,7 @@ describe('settings store', () => {
     expect(store.settings.navVisibility?.downloads).toBe(true);
     expect(store.settings.rememberWindowState).toBe(true);
     expect(store.settings.myRecentPinned).toBe(false);
+    expect(store.settings.messageEnterBehavior).toBe(defaults.messageEnterBehavior);
   });
 
   it('normalizes malformed values and preserves valid nested settings', () => {
@@ -80,6 +82,7 @@ describe('settings store', () => {
       autoLoadOriginalImage: false,
       noImageMode: true,
       myRecentPinned: true,
+      messageEnterBehavior: 'newline',
     });
     expect(normalized.theme).toBe('system');
     expect(normalized.fontFamily).toBe('Noto Sans SC');
@@ -97,6 +100,7 @@ describe('settings store', () => {
     expect(normalized.autoLoadOriginalImage).toBe(false);
     expect(normalized.noImageMode).toBe(true);
     expect(normalized.myRecentPinned).toBe(true);
+    expect(normalized.messageEnterBehavior).toBe('newline');
     expect(normalizeSettings({ rememberWindowState: false }).rememberWindowState).toBe(false);
   });
 

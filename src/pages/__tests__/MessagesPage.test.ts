@@ -47,6 +47,7 @@ window.URL.revokeObjectURL = mocks.revokeObjectURL;
 
 import MessagesPage from '../MessagesPage.vue';
 import { useAuthStore } from '../../stores/auth';
+import { useSettingsStore } from '../../stores/settings';
 
 describe('MessagesPage 粘贴图片发送功能', () => {
   let wrapper: any;
@@ -250,5 +251,40 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     expect(mocks.sendPrivateImage).toHaveBeenCalledWith('20002', '/message/2026/09/test_image.jpg');
     expect(mocks.sendPrivateMessage).toHaveBeenCalledWith('20002', '请查看此截图');
     expect(w.findAll('.pending-image-card')).toHaveLength(0);
+  });
+
+  it('默认按 Enter 发送私信', async () => {
+    const w = await mountMessagesPage();
+    const editor = w.find('.message-rich-editor');
+    editor.element.textContent = '测试消息';
+    await editor.trigger('input');
+
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    editor.element.dispatchEvent(event);
+    await flushPromises();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(mocks.sendPrivateMessage).toHaveBeenCalledWith('20002', '测试消息');
+  });
+
+  it('切换为换行模式后按 Enter 换行，按 Ctrl+Enter 发送私信', async () => {
+    const w = await mountMessagesPage();
+    const settingsStore = useSettingsStore();
+    settingsStore.settings.messageEnterBehavior = 'newline';
+    const editor = w.find('.message-rich-editor');
+    editor.element.textContent = '测试消息';
+    await editor.trigger('input');
+
+    const newlineEvent = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    editor.element.dispatchEvent(newlineEvent);
+    expect(newlineEvent.defaultPrevented).toBe(false);
+    expect(mocks.sendPrivateMessage).not.toHaveBeenCalled();
+
+    const sendEvent = new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true });
+    editor.element.dispatchEvent(sendEvent);
+    await flushPromises();
+
+    expect(sendEvent.defaultPrevented).toBe(true);
+    expect(mocks.sendPrivateMessage).toHaveBeenCalledWith('20002', '测试消息');
   });
 });

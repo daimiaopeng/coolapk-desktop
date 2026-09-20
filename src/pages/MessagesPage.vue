@@ -311,6 +311,7 @@ import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import { useAppStore } from '../stores/app';
 import { useNotificationStore } from '../stores/notifications';
+import { useSettingsStore } from '../stores/settings';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
@@ -341,6 +342,7 @@ const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
+const settingsStore = useSettingsStore();
 const currentUserUid = computed(() => authStore.user?.uid || '');
 
 const isDeveloperSession = computed(() => {
@@ -1431,9 +1433,14 @@ const handleKeydown = (e: KeyboardEvent) => {
     removePendingImage(pendingImages.value.length - 1);
     return;
   }
-  // Enter发送，Shift+Enter换行
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault(); // 阻止默认的回车换行
+
+  if (e.key !== 'Enter') return;
+  // 根据设置决定 Enter 是发送还是换行；换行模式使用 Ctrl/Command+Enter 发送。
+  const shouldSend = settingsStore.settings.messageEnterBehavior === 'send'
+    ? !e.shiftKey
+    : e.ctrlKey || e.metaKey;
+  if (shouldSend) {
+    e.preventDefault();
     if ((inputText.value.trim() || pendingImages.value.length > 0) && !sending.value && !sendingImage.value) {
       sendMessage();
     }

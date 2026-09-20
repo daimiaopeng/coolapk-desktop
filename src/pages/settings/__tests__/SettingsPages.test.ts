@@ -172,12 +172,14 @@ describe('设置页面交互', () => {
     expect(wrapper.text()).toContain('设备信息');
   });
 
-  it('快捷键页展示全部快捷键', () => {
-    const { wrapper } = mountPage(ShortcutSettingsPage);
-    expect(wrapper.findAll('.setting-row')).toHaveLength(11);
+  it('快捷键页展示全部快捷键并可设置私信回车行为', async () => {
+    const { wrapper, settings } = mountPage(ShortcutSettingsPage);
+    expect(wrapper.findAll('.setting-row')).toHaveLength(12);
     expect(wrapper.text()).toContain('Ctrl+K');
     expect(wrapper.text()).toContain('Esc');
     expect(wrapper.text()).toContain('C');
+    await wrapper.get('select').setValue('newline');
+    expect(settings.settings.messageEnterBehavior).toBe('newline');
   });
 
   it('关于页展示版本信息并支持打开链接和检查更新', async () => {

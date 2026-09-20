@@ -8,6 +8,7 @@ export type AccentColor = 'green' | 'blue' | 'violet' | 'orange';
 export type HomeTabKey = string;
 export type ExternalLinkMode = 'internal' | 'system';
 export type TimeDisplayMode = 'relative' | 'absolute';
+export type MessageEnterBehavior = 'send' | 'newline';
 export type UpdateChannel = 'stable' | 'beta';
 
 /** 官方 ConfigPage 实体模型（对齐 com.coolapk.market.model.ConfigPage） */
@@ -153,6 +154,7 @@ export interface AppSettings {
   notificationPollInterval: number;
   externalLinkMode: ExternalLinkMode;
   timeDisplay: TimeDisplayMode;
+  messageEnterBehavior: MessageEnterBehavior;
   blockedKeywords: string[];
   publishDeviceSignature: boolean;
   deviceSignature: string;

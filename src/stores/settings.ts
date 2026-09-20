@@ -147,6 +147,7 @@ const defaultSettings: AppSettings = {
   notificationPollInterval: 1,
   externalLinkMode: 'internal',
   timeDisplay: 'relative',
+  messageEnterBehavior: 'send',
   blockedKeywords: [],
   publishDeviceSignature: true,
   deviceSignature: '',
@@ -229,6 +230,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   if (isOneOf(source.imageQuality, ['standard', 'hd', 'raw'])) result.imageQuality = source.imageQuality;
   if (isOneOf(source.externalLinkMode, ['internal', 'system'])) result.externalLinkMode = source.externalLinkMode;
   if (isOneOf(source.timeDisplay, ['relative', 'absolute'])) result.timeDisplay = source.timeDisplay;
+  if (isOneOf(source.messageEnterBehavior, ['send', 'newline'])) result.messageEnterBehavior = source.messageEnterBehavior;
   if (isOneOf(source.imageOpenMode, ['internal', 'system'])) result.imageOpenMode = source.imageOpenMode;
   if (isOneOf(source.updateChannel, ['stable', 'beta'])) result.updateChannel = source.updateChannel;
   result.fontSize = readNumber(source.fontSize, result.fontSize, 12, 20);

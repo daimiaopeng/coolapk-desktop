@@ -3,6 +3,20 @@
     <h3 class="section-title">快捷键列表</h3>
 
     <div class="setting-group">
+      <h4 class="group-title">消息输入</h4>
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">私信输入框回车行为</span>
+          <span class="row-sub">自定义在私信对话中按下 Enter 时发送消息或插入换行</span>
+        </div>
+        <select v-model="settingsStore.settings.messageEnterBehavior" class="select-control" aria-label="私信输入框回车行为">
+          <option value="send">Enter 发送，Shift+Enter 换行</option>
+          <option value="newline">Enter 换行，Ctrl/⌘+Enter 发送</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setting-group">
       <div v-for="sc in shortcuts" :key="sc.key" class="setting-row">
         <div class="row-info">
           <span class="row-label">{{ sc.label }}</span>
@@ -17,8 +31,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { usePlatformShortcuts } from '../../utils/shortcuts';
+import { useSettingsStore } from '../../stores/settings';
 
 const { formatShortcut } = usePlatformShortcuts();
+const settingsStore = useSettingsStore();
 const shortcutDefinitions = [
   { label: '全局搜索', desc: '快速唤起搜索框Command Palette', key: 'Ctrl+K' },
   { label: '发布动态', desc: '打开动态发布弹窗', key: 'Ctrl+N' },
@@ -57,6 +73,14 @@ const shortcuts = computed(() => shortcutDefinitions.map((shortcut) => ({
 .setting-group {
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
+}
+
+.group-title {
+  margin: 0;
+  font-size: var(--font-size-title-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
 }
 
 .setting-row {
@@ -91,5 +115,22 @@ const shortcuts = computed(() => shortcutDefinitions.map((shortcut) => ({
   font-size: 13px;
   font-weight: var(--font-weight-semibold);
   color: var(--text-secondary);
+}
+
+.select-control {
+  max-width: 250px;
+  background-color: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 6px 12px;
+  font-size: var(--font-size-sub);
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.select-control:hover,
+.select-control:focus {
+  border-color: var(--brand-primary);
 }
 </style>
