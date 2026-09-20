@@ -1260,8 +1260,13 @@ pub async fn list_chat_history(
     state: State<'_, AppState>,
     ukey: String,
     page: u32,
+    first_item: Option<String>,
+    last_item: Option<String>,
 ) -> Result<Value, String> {
-    state.client.list_chat_history(&ukey, page).await
+    state
+        .client
+        .list_chat_history(&ukey, page, first_item.as_deref().unwrap_or(""), last_item.as_deref().unwrap_or(""))
+        .await
 }
 
 #[tauri::command]

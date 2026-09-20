@@ -637,8 +637,8 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_recent_chat_users', { page });
   }
 
-  static async listChatHistory(ukey: string, page: number = 1) {
-    return await invokeNative('list_chat_history', { ukey, page });
+  static async listChatHistory(ukey: string, page: number = 1, firstItem: string = '', lastItem: string = '') {
+    return await invokeNative('list_chat_history', { ukey, page, firstItem, lastItem });
   }
 
   static async deleteMessageChat(ukey: string) {

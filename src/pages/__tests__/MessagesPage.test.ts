@@ -287,4 +287,51 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     expect(sendEvent.defaultPrevented).toBe(true);
     expect(mocks.sendPrivateMessage).toHaveBeenCalledWith('20002', '测试消息');
   });
+
+  it('向上滚动时按 APK 游标加载更早消息并保持消息顺序', async () => {
+    const historySession = {
+      ukey: '10001_20002',
+      id: '10001_20002',
+      uid: 20002,
+      fromuid: 20002,
+      entityId: 20002,
+      messageUid: 20002,
+      messageUsername: '好友酷友',
+      username: '好友酷友',
+      message: '最新消息',
+      dateline: 3,
+      isNewConversation: false,
+    };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([historySession]));
+    mocks.listMessages.mockResolvedValue({ data: [historySession] });
+    mocks.listChatHistory.mockImplementation(async (_ukey: string, page: number) => {
+      if (page === 1) {
+        return {
+          data: [
+            { id: 'm2', entityId: 'm2', entityType: 'message', message: '中间消息', dateline: 2, fromuid: 20002 },
+            { id: 'm3', entityId: 'm3', entityType: 'message', message: '最新消息', dateline: 3, fromuid: 20002 },
+          ],
+        };
+      }
+      return {
+        data: [{ id: 'm1', entityId: 'm1', entityType: 'message', message: '最早消息', dateline: 1, fromuid: 20002 }],
+      };
+    });
+
+    const w = await mountMessagesPage();
+    const chatArea = w.find('.chat-area');
+    const chatAreaElement = chatArea.element as HTMLElement;
+    let scrollHeight = 200;
+    Object.defineProperty(chatAreaElement, 'scrollHeight', { configurable: true, get: () => scrollHeight });
+    Object.defineProperty(chatAreaElement, 'clientHeight', { configurable: true, value: 100 });
+    chatAreaElement.scrollTop = 0;
+    await chatArea.trigger('scroll');
+    scrollHeight = 300;
+    await flushPromises();
+
+    expect(mocks.listChatHistory).toHaveBeenNthCalledWith(2, '10001_20002', 2, 'm2', '');
+    expect(w.findAll('.message-item')).toHaveLength(3);
+    expect(w.findAll('.msg-text').map((item: any) => item.text())).toEqual(['最早消息', '中间消息', '最新消息']);
+    expect(chatAreaElement.scrollTop).toBe(100);
+  });
 });

@@ -5287,14 +5287,16 @@ impl CoolapkClient {
         )
     }
 
-    pub async fn list_chat_history(&self, ukey: &str, page: u32) -> Result<Value, String> {
-        wrap_api_data(
-            self.api_get(
-                "/v6/message/chat",
-                &[("ukey", ukey.to_string()), ("page", page.to_string())],
-            )
-            .await?,
-        )
+    /// 获取私信记录。APK 向上翻页时会同时携带当前最早消息的 entityId 作为 firstItem。
+    pub async fn list_chat_history(&self, ukey: &str, page: u32, first_item: &str, last_item: &str) -> Result<Value, String> {
+        let mut query = vec![("ukey", ukey.to_string()), ("page", page.to_string())];
+        if !first_item.trim().is_empty() {
+            query.push(("firstItem", first_item.trim().to_string()));
+        }
+        if !last_item.trim().is_empty() {
+            query.push(("lastItem", last_item.trim().to_string()));
+        }
+        wrap_api_data(self.api_get("/v6/message/chat", &query).await?)
     }
 
     /// 删除私信会话（需登录）

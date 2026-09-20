@@ -93,6 +93,10 @@
         </div>
         
         <template v-else>
+          <div v-if="loadingMoreHistory" class="chat-pagination-status">加载更早消息...</div>
+          <button v-else-if="historyLoadMoreError" class="chat-pagination-error" type="button" @click="retryLoadMoreHistory">
+            {{ historyLoadMoreError }}，点击重试
+          </button>
           <template v-for="(msg, index) in chatHistory" :key="msg.id || msg.dateline || index">
             <!-- 酷安官方系统提醒 / 时间分隔项 (entityType === 'messageExtra') -->
             <div v-if="msg.entityType === 'messageExtra'" class="system-notice-item">
@@ -382,8 +386,18 @@ const displaySessionsError = computed(() => {
 const chatHistory = ref<any[]>([]);
 const loadingHistory = ref(false);
 const historyError = ref('');
+const loadingMoreHistory = ref(false);
+const historyLoadMoreError = ref('');
+const hasMoreHistory = ref(true);
 const isChatPositionReady = ref(false);
 const chatHistoryCache = new Map<string, any[]>();
+interface ChatHistoryPaginationState {
+  nextPage: number;
+  firstItem: string;
+  lastItem: string;
+  hasMore: boolean;
+}
+const chatHistoryPagination = new Map<string, ChatHistoryPaginationState>();
 let historyRequestSequence = 0;
 const MESSAGE_POLL_INTERVAL_MS = 10_000;
 let messagePollTimer: number | null = null;
@@ -1082,12 +1096,75 @@ const isSelf = (msg: any) => {
 
 const chatScrollMap = new Map<string, number>();
 
+function getChatHistoryItemId(item: any): string {
+  return String(item?.entityId ?? item?.entity_id ?? item?.id ?? '').trim();
+}
+
+function getChatHistoryItemKey(item: any): string {
+  const itemId = getChatHistoryItemId(item);
+  if (itemId) return itemId;
+  const dateline = String(item?.dateline ?? '');
+  const sender = String(item?.fromuid ?? item?.fromUid ?? item?.uid ?? '');
+  const message = String(item?.message ?? item?.messageText ?? '');
+  const picture = String(item?.message_pic ?? item?.messagePic ?? '');
+  return dateline || sender || message || picture ? `fallback:${dateline}:${sender}:${message}:${picture}` : '';
+}
+
+function sortChatHistory(items: any[]): any[] {
+  return [...items].sort((a, b) => (getDateline(a) || 0) - (getDateline(b) || 0));
+}
+
+function mergeChatHistory(existing: any[], incoming: any[], prepend = false): any[] {
+  const result = prepend ? [...incoming, ...existing] : [...existing, ...incoming];
+  const seen = new Set<string>();
+  return result.filter((item) => {
+    const key = getChatHistoryItemKey(item);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getOldestChatHistoryCursor(items: any[]): string {
+  for (const item of items) {
+    // APK 会跳过关注提示等浮层，只用真实消息或时间项的 entityId 翻页。
+    if (item?.entityType === 'messageExtra' && item?.entityTemplate !== 'time') continue;
+    const itemId = getChatHistoryItemId(item);
+    if (itemId) return itemId;
+  }
+  return '';
+}
+
+function getNewestChatHistoryCursor(items: any[]): string {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.entityType === 'messageExtra' && item?.entityTemplate !== 'time') continue;
+    const itemId = getChatHistoryItemId(item);
+    if (itemId) return itemId;
+  }
+  return '';
+}
+
+function createChatHistoryPagination(items: any[] = [], nextPage = 2): ChatHistoryPaginationState {
+  return { nextPage, firstItem: getOldestChatHistoryCursor(items), lastItem: '', hasMore: items.length > 0 };
+}
+
+function getChatHistoryPagination(sessionKey: string): ChatHistoryPaginationState {
+  const cached = chatHistoryPagination.get(sessionKey);
+  if (cached) return cached;
+  const created = createChatHistoryPagination(chatHistoryCache.get(sessionKey) || []);
+  chatHistoryPagination.set(sessionKey, created);
+  return created;
+}
+
 const handleChatScroll = () => {
   if (!currentSession.value || !chatAreaRef.value) return;
   const ukey = currentSession.value.ukey || currentSession.value.id;
   if (ukey) {
     chatScrollMap.set(String(ukey), chatAreaRef.value.scrollTop);
   }
+  if (chatAreaRef.value.scrollTop <= 72) void loadMoreHistory();
 };
 
 const scrollToBottom = async () => {
@@ -1108,6 +1185,71 @@ const scrollToBottom = async () => {
 const restoreScrollPositionOrBottom = async (ukey?: string) => {
   await scrollToBottom();
 };
+
+async function loadMoreHistory() {
+  const session = currentSession.value;
+  const chatArea = chatAreaRef.value;
+  if (!session || session.isNewConversation || !chatArea || loadingHistory.value || loadingMoreHistory.value || !hasMoreHistory.value || !chatHistory.value.length) return;
+
+  const sessionKey = String(session.ukey || session.id || '').trim();
+  if (!sessionKey) return;
+  const pagination = getChatHistoryPagination(sessionKey);
+  if (!pagination.hasMore || !pagination.firstItem) {
+    pagination.hasMore = false;
+    hasMoreHistory.value = false;
+    return;
+  }
+
+  const requestSequence = historyRequestSequence;
+  const previousScrollTop = chatArea.scrollTop;
+  const previousScrollHeight = chatArea.scrollHeight;
+  loadingMoreHistory.value = true;
+  historyLoadMoreError.value = '';
+
+  try {
+    const res = await withTimeout(
+      CoolapkTauriAPI.listChatHistory(sessionKey, pagination.nextPage, pagination.firstItem, pagination.lastItem),
+      15_000,
+      '更早聊天记录请求超时，请重试',
+    );
+    if (requestSequence !== historyRequestSequence || currentSession.value !== session) return;
+    if (!res?.data || !Array.isArray(res.data)) throw new Error('聊天记录返回格式不正确');
+
+    const incoming = sortChatHistory(res.data);
+    const existingKeys = new Set(chatHistory.value.map(getChatHistoryItemKey).filter(Boolean));
+    const olderMessages = incoming.filter((item) => {
+      const key = getChatHistoryItemKey(item);
+      return !key || !existingKeys.has(key);
+    });
+    if (!olderMessages.length) {
+      pagination.hasMore = false;
+      hasMoreHistory.value = false;
+    } else {
+      chatHistory.value = mergeChatHistory(chatHistory.value, olderMessages, true);
+      pagination.nextPage += 1;
+      pagination.firstItem = getOldestChatHistoryCursor(chatHistory.value);
+      pagination.hasMore = true;
+      hasMoreHistory.value = true;
+      chatHistoryCache.set(sessionKey, [...chatHistory.value]);
+    }
+
+    await nextTick();
+    if (requestSequence === historyRequestSequence && currentSession.value === session && chatAreaRef.value) {
+      chatAreaRef.value.scrollTop = previousScrollTop + (chatAreaRef.value.scrollHeight - previousScrollHeight);
+    }
+  } catch (err) {
+    if (requestSequence !== historyRequestSequence || currentSession.value !== session) return;
+    console.error('加载更早聊天记录失败', err);
+    historyLoadMoreError.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    if (requestSequence === historyRequestSequence && currentSession.value === session) loadingMoreHistory.value = false;
+  }
+}
+
+function retryLoadMoreHistory() {
+  historyLoadMoreError.value = '';
+  void loadMoreHistory();
+}
 
 // --- 数据加载 ---
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -1269,6 +1411,9 @@ const selectSession = async (session: any) => {
   const requestSequence = ++historyRequestSequence;
   currentSession.value = session;
   isChatPositionReady.value = false;
+  loadingMoreHistory.value = false;
+  historyLoadMoreError.value = '';
+  hasMoreHistory.value = false;
   // 进入会话即先清理本地角标，不等待聊天记录和下一轮轮询返回。
   if (markSessionRead(session)) notificationStore.markViewed('message');
   await restoreDraft(session);
@@ -1282,6 +1427,7 @@ const selectSession = async (session: any) => {
     loadingHistory.value = false;
     chatHistory.value = [];
     historyError.value = '';
+    chatHistoryPagination.delete(String(session.ukey || session.id || ''));
     isChatPositionReady.value = true;
     return;
   }
@@ -1291,6 +1437,7 @@ const selectSession = async (session: any) => {
     loadingHistory.value = false;
     chatHistory.value = [];
     historyError.value = '该会话缺少聊天标识，请刷新会话列表后重试';
+    hasMoreHistory.value = false;
     isChatPositionReady.value = true;
     return;
   }
@@ -1309,32 +1456,43 @@ const selectSession = async (session: any) => {
     });
 
   // 1. 如果缓存中已存在历史记录，直接使用，实现 0 延迟秒切无转圈
+  const cachedHistory = chatHistoryCache.get(sessionKey) || [];
+  const hasCachedHistory = cachedHistory.length > 0;
   if (chatHistoryCache.has(sessionKey)) {
-    chatHistory.value = chatHistoryCache.get(sessionKey) || [];
+    chatHistory.value = cachedHistory;
+    const cachedPagination = getChatHistoryPagination(sessionKey);
+    hasMoreHistory.value = cachedPagination.hasMore;
     loadingHistory.value = false;
     await scrollToBottom();
   } else {
+    chatHistoryPagination.set(sessionKey, createChatHistoryPagination());
+    hasMoreHistory.value = true;
     loadingHistory.value = true;
     chatHistory.value = [];
   }
 
   // 2. 静默发送 API 请求抓取最新记录并同步更新缓存
   try {
+    const refreshLastItem = hasCachedHistory ? getNewestChatHistoryCursor(cachedHistory) : '';
     const res = await withTimeout(
-      CoolapkTauriAPI.listChatHistory(sessionKey, 1),
+      CoolapkTauriAPI.listChatHistory(sessionKey, 1, '', refreshLastItem),
       15_000,
       '聊天记录请求超时，请重试'
     );
     if (requestSequence !== historyRequestSequence) return;
     if (res?.data && Array.isArray(res.data)) {
-      const list = [...res.data];
-      list.sort((a, b) => {
-        const timeA = getDateline(a) || 0;
-        const timeB = getDateline(b) || 0;
-        return timeA - timeB;
-      });
+      const incoming = sortChatHistory(res.data);
+      const existingHistory = hasCachedHistory ? chatHistory.value : [];
+      const list = hasCachedHistory ? sortChatHistory(mergeChatHistory(existingHistory, incoming)) : incoming;
       chatHistory.value = list;
       chatHistoryCache.set(sessionKey, list);
+      const cachedPagination = hasCachedHistory ? chatHistoryPagination.get(sessionKey) : null;
+      const pagination = cachedPagination
+        ? { ...cachedPagination, firstItem: getOldestChatHistoryCursor(list), lastItem: '' }
+        : createChatHistoryPagination(list);
+      chatHistoryPagination.set(sessionKey, pagination);
+      hasMoreHistory.value = pagination.hasMore;
+      historyLoadMoreError.value = '';
     } else {
       throw new Error('聊天记录返回格式不正确');
     }
@@ -1381,6 +1539,7 @@ async function deleteSession(detail: { ukey?: string; id?: string; isNew?: boole
     if (index >= 0) sessions.value.splice(index, 1);
     if (sessionKey) {
       chatHistoryCache.delete(sessionKey);
+      chatHistoryPagination.delete(sessionKey);
       chatScrollMap.delete(sessionKey);
     }
     if (currentSession.value === session) {
@@ -2133,6 +2292,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  position: relative;
   opacity: 0;
   transition: opacity 0.12s ease-out;
 }
@@ -2145,6 +2305,27 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
   padding: var(--space-4);
+}
+
+.chat-pagination-status,
+.chat-pagination-error {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 2;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-hover);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-caption);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.chat-pagination-error {
+  cursor: pointer;
+  color: var(--brand-primary);
 }
 
 .system-notice-item {
