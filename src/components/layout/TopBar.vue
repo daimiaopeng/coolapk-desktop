@@ -1034,6 +1034,7 @@ function handleUserClick() {
 
 <style scoped>
 .top-bar {
+  --macos-traffic-light-safe-width: 86px;
   position: relative;
   height: var(--topbar-height);
   min-height: var(--topbar-height);
@@ -1060,6 +1061,14 @@ function handleUserClick() {
   min-width: 0;
   padding-left: 20px;
   color: var(--text-primary);
+}
+
+/*
+ * macOS 的 Overlay 标题栏会把原生红黄绿按钮放在 WebView 上方。
+ * 品牌内容必须跳过这块安全区，否则会与窗口按钮重叠。
+ */
+.top-bar.is-macos .titlebar-brand {
+  padding-left: var(--macos-traffic-light-safe-width);
 }
 
 .titlebar-brand-logo {
@@ -1093,7 +1102,11 @@ function handleUserClick() {
 }
 
 .top-bar.is-macos .titlebar-sidebar-offset.is-collapsed {
-  flex-basis: 86px;
+  flex-basis: var(--macos-traffic-light-safe-width);
+}
+
+.top-bar.is-macos .titlebar-sidebar-offset.is-collapsed .titlebar-brand {
+  display: none;
 }
 
 .top-bar-center {
@@ -1407,7 +1420,11 @@ function handleUserClick() {
   }
 
   .top-bar.is-macos .titlebar-sidebar-offset {
-    flex-basis: 86px;
+    flex-basis: var(--macos-traffic-light-safe-width);
+  }
+
+  .top-bar.is-macos .titlebar-sidebar-offset .titlebar-brand {
+    display: none;
   }
 
   .top-bar-center {
