@@ -34,6 +34,20 @@
             <kbd>Enter</kbd>
           </button>
 
+          <button
+            v-else-if="directCollectionRoute"
+            type="button"
+            class="direct-feed-option"
+            @mousedown.prevent="openDirectCollection"
+          >
+            <i class="fas fa-arrow-up-right-from-square direct-feed-icon"></i>
+            <span class="direct-feed-info">
+              <span class="direct-feed-title">打开酷安收藏单</span>
+              <span class="direct-feed-route">{{ directCollectionRoute }}</span>
+            </span>
+            <kbd>Enter</kbd>
+          </button>
+
           <div v-if="searchSuggestions.length > 0 && query" class="suggestion-list custom-scrollbar">
             <div
               v-for="(item, i) in searchSuggestions"
@@ -118,7 +132,7 @@ import {
   isNavigableSearchEntity,
   navigateSearchEntity,
 } from '../../utils/searchEntities';
-import { normalizeCoolapkFeedLink } from '../../utils/coolapkRoute';
+import { normalizeCoolapkCollectionLink, normalizeCoolapkFeedLink } from '../../utils/coolapkRoute';
 
 const appStore = useAppStore();
 const router = useRouter();
@@ -130,6 +144,7 @@ const searchSuggestions = ref<SearchEntity[]>([]);
 const searchInput = ref<HTMLInputElement | null>(null);
 const activeResultIndex = ref(-1);
 const directFeedRoute = computed(() => normalizeCoolapkFeedLink(query.value.trim()));
+const directCollectionRoute = computed(() => normalizeCoolapkCollectionLink(query.value.trim()));
 let searchRequestVersion = 0;
 const suggestions = ref<string[]>([]);
 let hotSearchRequestVersion = 0;
@@ -167,7 +182,7 @@ watch(query, (val) => {
     return;
   }
   timer = setTimeout(async () => {
-    if (directFeedRoute.value) {
+    if (directFeedRoute.value || directCollectionRoute.value) {
       results.value = [];
       searchSuggestions.value = [];
       activeResultIndex.value = -1;
@@ -227,6 +242,10 @@ function handleInputKeydown(e: KeyboardEvent) {
       openDirectFeed();
       return;
     }
+    if (directCollectionRoute.value) {
+      openDirectCollection();
+      return;
+    }
     if (activeResultIndex.value >= 0 && results.value[activeResultIndex.value]) selectResult(results.value[activeResultIndex.value]);
     else handleEnterSearch();
     return;
@@ -246,6 +265,13 @@ function handleInputKeydown(e: KeyboardEvent) {
 
 function openDirectFeed() {
   const route = directFeedRoute.value;
+  if (!route) return;
+  appStore.closeSearch();
+  void router.push(route);
+}
+
+function openDirectCollection() {
+  const route = directCollectionRoute.value;
   if (!route) return;
   appStore.closeSearch();
   void router.push(route);

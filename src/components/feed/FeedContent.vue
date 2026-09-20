@@ -9,7 +9,7 @@
         <i class="fas fa-comment-dots" aria-hidden="true"></i>
         <span>回答</span>
       </span>
-      <span v-if="shouldShowTitle">{{ title }}</span>
+      <span v-if="shouldShowTitle" v-html="formattedTitle"></span>
     </h3>
     <div
       ref="bodyRef"
@@ -131,6 +131,11 @@ const shouldShowTitle = computed(() => {
   if (trimmed.endsWith('的动态')) return false;
   if (props.username && (trimmed === `${props.username}的动态` || trimmed === `${props.username} 的动态`)) return false;
   return true;
+});
+
+const formattedTitle = computed(() => {
+  if (!props.title) return '';
+  return renderCoolapkRichText(props.title, props.highlightKeyword);
 });
 
 const formattedMessage = computed(() => {

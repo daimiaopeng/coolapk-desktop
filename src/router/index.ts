@@ -77,6 +77,7 @@ const routes = [
   { path: '/downloads', name: 'Downloads', component: DownloadsPage },
   { path: '/topics', name: 'Topics', component: TopicsHubPage },
   { path: '/favorites', name: 'Favorites', component: FavoritesPage },
+  { path: '/collection/:collectionId', redirect: (to: any) => ({ path: '/favorites', query: { collectionId: to.params.collectionId } }) },
   { path: '/my-likes', name: 'MyLikes', component: MyLikesPage },
   { path: '/more', name: 'More', component: MorePage },
   { path: '/my', name: 'My', component: MoreWorkspacePage },

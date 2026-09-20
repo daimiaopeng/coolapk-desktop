@@ -44,6 +44,106 @@
           <i class="fas fa-plus"></i>
           <span>新建收藏单</span>
         </button>
+
+        <div class="collection-display-toolbar" aria-label="收藏单显示设置">
+          <div class="collection-view-switch" role="group" aria-label="收藏单视图">
+            <button
+              v-for="mode in collectionViewModes"
+              :key="mode.key"
+              type="button"
+              :class="['collection-view-btn', { active: collectionViewMode === mode.key }]"
+              :title="mode.label"
+              @click="setCollectionViewMode(mode.key)"
+            >
+              <i :class="mode.icon"></i>
+              <span>{{ mode.label }}</span>
+            </button>
+          </div>
+          <div ref="collectionSortPickerRef" class="collection-sort-picker">
+            <div class="collection-sort-group">
+              <button
+                type="button"
+                class="collection-sort-trigger"
+                title="选择排序字段"
+                aria-haspopup="listbox"
+                :aria-expanded="collectionSortMenuOpen === 'mode'"
+                @click.stop="toggleCollectionSortMenu('mode')"
+                @keydown.esc="closeCollectionSortMenu"
+              >
+                <i class="fas fa-sort-amount-down"></i>
+                <span>{{ currentCollectionSortLabel }}</span>
+                <i :class="['fas', collectionSortMenuOpen === 'mode' ? 'fa-chevron-up' : 'fa-chevron-down', 'collection-sort-arrow']"></i>
+              </button>
+              <transition name="menu-pop">
+                <div v-if="collectionSortMenuOpen === 'mode'" class="collection-sort-menu" role="listbox" aria-label="收藏单排序方式" @click.stop>
+                  <button
+                    v-for="mode in collectionSortModes"
+                    :key="mode.key"
+                    type="button"
+                    role="option"
+                    :aria-selected="collectionSortMode === mode.key"
+                    :class="['collection-sort-option', { active: collectionSortMode === mode.key }]"
+                    @click="selectCollectionSortMode(mode.key)"
+                  >
+                    <span>{{ mode.label }}</span>
+                    <i v-if="collectionSortMode === mode.key" class="fas fa-check"></i>
+                  </button>
+                </div>
+              </transition>
+            </div>
+
+            <div class="collection-sort-group">
+              <button
+                type="button"
+                class="collection-sort-trigger collection-sort-direction-trigger"
+                title="切换排序方向"
+                aria-haspopup="listbox"
+                :aria-expanded="collectionSortMenuOpen === 'direction'"
+                @click.stop="toggleCollectionSortMenu('direction')"
+                @keydown.esc="closeCollectionSortMenu"
+              >
+                <i :class="['fas', collectionSortDirection === 'asc' ? 'fa-arrow-up' : 'fa-arrow-down']"></i>
+                <span>{{ currentCollectionSortDirectionLabel }}</span>
+                <i :class="['fas', collectionSortMenuOpen === 'direction' ? 'fa-chevron-up' : 'fa-chevron-down', 'collection-sort-arrow']"></i>
+              </button>
+              <transition name="menu-pop">
+                <div v-if="collectionSortMenuOpen === 'direction'" class="collection-sort-menu collection-sort-menu--direction" role="listbox" aria-label="收藏单排序方向" @click.stop>
+                  <button
+                    v-for="direction in collectionSortDirections"
+                    :key="direction.key"
+                    type="button"
+                    role="option"
+                    :aria-selected="collectionSortDirection === direction.key"
+                    :class="['collection-sort-option', { active: collectionSortDirection === direction.key }]"
+                    @click="selectCollectionSortDirection(direction.key)"
+                  >
+                    <span>{{ direction.label }}</span>
+                    <i v-if="collectionSortDirection === direction.key" class="fas fa-check"></i>
+                  </button>
+                </div>
+              </transition>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-else-if="activeSubTab === 'all'" class="toolbar-actions">
+        <div class="filter-search-wrap favorite-content-search-wrap">
+          <i class="fas fa-search search-icon"></i>
+          <input
+            v-model.trim="favoriteContentSearchKeyword"
+            type="text"
+            placeholder="搜索收藏正文（本地索引）..."
+            class="filter-search-input"
+            @keydown.esc="favoriteContentSearchKeyword = ''"
+          />
+          <button v-if="favoriteContentSearchKeyword" class="search-clear-btn" title="清空正文搜索" @click="favoriteContentSearchKeyword = ''">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <button class="favorite-index-refresh" type="button" :disabled="favoriteContentIndexing" @click="refreshFavoriteContentIndex(true)">
+          <i :class="favoriteContentIndexing ? 'fas fa-spinner fa-spin' : 'fas fa-rotate'"></i>
+          <span>{{ favoriteContentIndexing ? '更新索引中' : '更新正文索引' }}</span>
+        </button>
       </div>
     </div>
 
@@ -184,13 +284,25 @@
                   <button
                     type="button"
                     class="dropdown-menu-item"
-                    :disabled="collectionCleanupPending"
-                    @click="handleMenuCleanup"
+                    @click="handleShareCollection"
                   >
-                    <i v-if="collectionCleanupPending" class="fas fa-spinner fa-spin"></i>
-                    <i v-else class="fas fa-broom"></i>
-                    <span>清理失效内容</span>
+                    <i class="fas fa-share-nodes"></i>
+                    <span>分享收藏单</span>
                   </button>
+
+                  <template v-if="isOwnerCollection(collectionDetail)">
+                    <div class="dropdown-menu-divider"></div>
+                    <button
+                      type="button"
+                      class="dropdown-menu-item"
+                      :disabled="collectionCleanupPending"
+                      @click="handleMenuCleanup"
+                    >
+                      <i v-if="collectionCleanupPending" class="fas fa-spinner fa-spin"></i>
+                      <i v-else class="fas fa-broom"></i>
+                      <span>清理失效内容</span>
+                    </button>
+                  </template>
 
                   <template v-if="canManageCollection(collectionDetail)">
                     <div class="dropdown-menu-divider"></div>
@@ -211,6 +323,20 @@
           </div>
         </div>
 
+        <div class="collection-content-search">
+          <div class="filter-search-wrap collection-content-search-input">
+            <i class="fas fa-search search-icon"></i>
+            <input v-model.trim="collectionContentSearchKeyword" type="text" placeholder="搜索此收藏单内容..." class="filter-search-input" @keydown.esc="collectionContentSearchKeyword = ''" />
+            <button v-if="collectionContentSearchKeyword" class="search-clear-btn" title="清空收藏单搜索" @click="collectionContentSearchKeyword = ''">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <span v-if="collectionContentSearchKeyword" class="collection-content-search-hint">
+            <i v-if="collectionContentSearchLoading" class="fas fa-spinner fa-spin"></i>
+            <span v-else>已匹配 {{ filteredCollectionItems.length }} 条已加载内容</span>
+          </span>
+        </div>
+
         <div v-if="collectionItemsLoading && collectionItems.length === 0" class="loading-wrapper">
           <LoadingState text="正在获取收藏单内容..." />
         </div>
@@ -223,18 +349,24 @@
           <EmptyState title="收藏单暂无内容" description="在此收藏单中收藏的动态将显示在这里" />
         </div>
 
+        <div v-else-if="collectionContentSearchKeyword && filteredCollectionItems.length === 0" class="empty-wrapper">
+          <EmptyState title="此收藏单中未找到匹配内容" description="可继续下滑加载更多内容，或清空搜索词" />
+        </div>
+
         <div v-else class="feed-list">
-          <div v-for="item in collectionItems" :key="item.id" class="collection-feed-item">
+          <div v-for="item in filteredCollectionItems" :key="item.id" class="collection-feed-item">
             <RatingCard
               v-if="isRatingFeedEntity(item)"
               :feed="item"
               cloud-favorite
+              :highlight-keyword="collectionContentSearchKeyword"
               @favorite-changed="handleFavoriteChanged"
             />
             <FeedCard
               v-else
               :feed="item"
               cloud-favorite
+              :highlight-keyword="collectionContentSearchKeyword"
               @deleted="handleFeedDeleted"
               @favorite-changed="handleFavoriteChanged"
             />
@@ -259,6 +391,7 @@
         </div>
       </div>
 
+
       <!-- 收藏单列表视图 (卡片网格) -->
       <div v-else-if="activeSubTab === 'collections'" class="collection-grid-view">
         <div v-if="collectionsLoading" class="loading-wrapper">
@@ -276,14 +409,14 @@
           />
         </div>
 
-        <div v-else class="collection-cards">
+        <div v-else :class="['collection-cards', `collection-cards--${collectionViewMode}`]">
           <div
             v-for="collection in filteredCollections"
             :key="collection.id"
-            class="collection-card"
+            :class="['collection-card', `collection-card--${collectionViewMode}`]"
             @click="openCollection(collection)"
           >
-            <div class="collection-cover-wrapper">
+            <div v-if="collectionViewMode !== 'no-image'" class="collection-cover-wrapper">
               <AppImage
                 v-if="collectionCover(collection)"
                 :src="collectionCover(collection)"
@@ -317,7 +450,7 @@
               <!-- 封面条目数角标 (右下角) -->
               <div class="cover-count-pill">
                 <i class="fas fa-layer-group"></i>
-                <span>{{ collection.itemNum ?? 0 }}</span>
+                <span>{{ getCollectionItemCount(collection) }}</span>
               </div>
 
               <!-- 悬浮操作按钮组 (右上角，悬停浮现) -->
@@ -347,22 +480,38 @@
                 <span class="collection-title" :title="collection.title">{{ collection.title }}</span>
               </div>
 
+              <!-- 无图模式下的状态徽章 (行内) -->
+              <div v-if="collectionViewMode === 'no-image'" class="collection-inline-status">
+                <span v-if="isDefaultCollection(collection)" class="inline-status is-default">
+                  <i class="fas fa-crown"></i> 默认
+                </span>
+                <span v-else-if="collection.isOpen === 1 || collection.isOpen === true" class="inline-status is-public">
+                  <i class="fas fa-globe"></i> 公开
+                </span>
+                <span v-else-if="collection.isOpen === 0 || collection.isOpen === false" class="inline-status is-private">
+                  <i class="fas fa-lock"></i> 私密
+                </span>
+              </div>
+
               <p v-if="collection.description" class="collection-desc" :title="collection.description">
                 {{ collection.description }}
               </p>
 
               <div class="collection-meta-row">
-                <span class="meta-item">
-                  <i class="far fa-file-lines"></i>
-                  <span>{{ collection.itemNum ? `${collection.itemNum} 条` : '0 条内容' }}</span>
+                <!-- 仅在无图模式下展示条目数，其他模式封面右下角已有角标 -->
+                <span v-if="collectionViewMode === 'no-image'" class="meta-item meta-item--items">
+                  <i class="fas fa-layer-group"></i>
+                  <span>{{ getCollectionItemCount(collection) }} 条内容</span>
                 </span>
-                <span v-if="collection.favnum || collection.favNum" class="meta-item">
-                  <i class="far fa-heart"></i>
-                  <span>{{ collection.favnum || collection.favNum }}</span>
+                <!-- 关注数：大图、单栏、双栏、无图下均展示 -->
+                <span v-if="hasCollectionFollowers(collection)" class="meta-item meta-item--followers">
+                  <i class="fas fa-user-plus"></i>
+                  <span>{{ getCollectionFollowerCount(collection) }} 关注</span>
                 </span>
-                <span v-if="collection.follownum || collection.followNum" class="meta-item">
-                  <i class="far fa-user"></i>
-                  <span>{{ collection.follownum || collection.followNum }}</span>
+                <!-- 收藏数：有收藏数时展示 -->
+                <span v-if="hasCollectionFavorites(collection)" class="meta-item meta-item--favorites">
+                  <i class="fas fa-heart"></i>
+                  <span>{{ getCollectionFavoriteCount(collection) }} 收藏</span>
                 </span>
               </div>
             </div>
@@ -372,39 +521,59 @@
 
       <!-- 全部收藏视图 -->
       <template v-else>
-        <div v-if="loading && cloudFeeds.length === 0" class="loading-wrapper">
-          <LoadingState text="正在获取云端收藏..." />
-        </div>
-
-        <div v-else-if="cloudError && cloudFeeds.length === 0" class="error-wrapper">
-          <ErrorState title="收藏加载失败" :message="cloudError" @retry="fetchCloudFavorites(true)" />
-        </div>
-
-        <div v-else-if="cloudFeeds.length === 0 && !loading" class="empty-wrapper">
-          <EmptyState title="暂无云端收藏" description="在酷安上收藏过的动态将显示在这里" />
-        </div>
-
-        <div v-else class="feed-list">
-          <template v-for="item in cloudFeeds" :key="item.id">
-            <RatingCard
-              v-if="isRatingFeedEntity(item)"
-              :feed="item"
-              cloud-favorite
-              @favorite-changed="handleFavoriteChanged"
-            />
-            <FeedCard
-              v-else
-              :feed="item"
-              cloud-favorite
-              @deleted="handleFeedDeleted"
-              @favorite-changed="handleFavoriteChanged"
-            />
-          </template>
-          <div class="pagination-footer">
-            <LoadingState v-if="loadingMore" text="加载更多收藏中..." />
-            <div v-else-if="noMore" class="no-more">没有更多收藏了</div>
+        <template v-if="favoriteContentSearchKeyword">
+          <div v-if="favoriteContentSearchLoading" class="loading-wrapper">
+            <LoadingState text="正在检索本地收藏正文..." />
           </div>
-        </div>
+          <div v-else-if="favoriteContentSearchError" class="error-wrapper">
+            <ErrorState title="本地正文检索失败" :message="favoriteContentSearchError" @retry="runFavoriteContentSearch" />
+          </div>
+          <div v-else-if="favoriteContentSearchResults.length === 0" class="empty-wrapper">
+            <EmptyState title="未找到匹配的收藏正文" :description="favoriteContentIndexing ? '正文索引正在后台更新，请稍后再试' : '可点击“更新正文索引”补齐或刷新本地缓存'" />
+          </div>
+          <div v-else class="feed-list">
+            <div class="favorite-content-search-summary"><i class="fas fa-database"></i> 已索引 {{ favoriteContentIndexCount }} 条收藏正文，命中 {{ favoriteContentSearchResults.length }} 条<span v-if="favoriteContentIndexing">，索引更新中</span></div>
+            <template v-for="entry in favoriteContentSearchResults" :key="entry.feedId">
+              <RatingCard v-if="isRatingFeedEntity(entry.feed)" :feed="entry.feed" cloud-favorite :highlight-keyword="favoriteContentSearchKeyword" @favorite-changed="handleFavoriteChanged" />
+              <FeedCard v-else :feed="entry.feed" cloud-favorite :highlight-keyword="favoriteContentSearchKeyword" @deleted="handleFeedDeleted" @favorite-changed="handleFavoriteChanged" />
+            </template>
+          </div>
+        </template>
+        <template v-else>
+          <div v-if="loading && cloudFeeds.length === 0" class="loading-wrapper">
+            <LoadingState text="正在获取云端收藏..." />
+          </div>
+
+          <div v-else-if="cloudError && cloudFeeds.length === 0" class="error-wrapper">
+            <ErrorState title="收藏加载失败" :message="cloudError" @retry="fetchCloudFavorites(true)" />
+          </div>
+
+          <div v-else-if="cloudFeeds.length === 0 && !loading" class="empty-wrapper">
+            <EmptyState title="暂无云端收藏" description="在酷安上收藏过的动态将显示在这里" />
+          </div>
+
+          <div v-else class="feed-list">
+            <template v-for="item in cloudFeeds" :key="item.id">
+              <RatingCard
+                v-if="isRatingFeedEntity(item)"
+                :feed="item"
+                cloud-favorite
+                @favorite-changed="handleFavoriteChanged"
+              />
+              <FeedCard
+                v-else
+                :feed="item"
+                cloud-favorite
+                @deleted="handleFeedDeleted"
+                @favorite-changed="handleFavoriteChanged"
+              />
+            </template>
+            <div class="pagination-footer">
+              <LoadingState v-if="loadingMore" text="加载更多收藏中..." />
+              <div v-else-if="noMore" class="no-more">没有更多收藏了</div>
+            </div>
+          </div>
+        </template>
       </template>
     </template>
 
@@ -474,7 +643,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FeedCard from '../components/feed/FeedCard.vue';
 import RatingCard from '../components/feed/RatingCard.vue';
@@ -486,10 +655,24 @@ import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
+import { useSettingsStore } from '../stores/settings';
+import type {
+  FavoriteCollectionViewMode,
+  FavoriteCollectionSortMode,
+  FavoriteCollectionSortDirection,
+} from '../types/settings';
 import { requestConfirmation } from '../utils/confirm';
 import { getErrorMessage } from '../utils/errors';
 import { showToast } from '../utils/toast';
 import { isRatingFeedEntity } from '../utils/rating';
+import {
+  getFavoriteContentIndexCount,
+  normalizeFavoriteSearchText,
+  removeFavoriteContentIndexEntry,
+  searchFavoriteContentIndex,
+  syncFavoriteContentIndex,
+  type FavoriteContentIndexEntry,
+} from '../utils/favoriteContentIndex';
 
 const authStore = useAuthStore();
 const route = useRoute();
@@ -505,6 +688,14 @@ const page = ref(1);
 const noMore = ref(false);
 const firstItem = ref('');
 const lastItem = ref('');
+const favoriteContentSearchKeyword = ref('');
+const favoriteContentSearchResults = ref<FavoriteContentIndexEntry[]>([]);
+const favoriteContentSearchLoading = ref(false);
+const favoriteContentSearchError = ref('');
+const favoriteContentIndexing = ref(false);
+const favoriteContentIndexCount = ref(0);
+let favoriteContentSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let favoriteContentSearchVersion = 0;
 
 const collections = ref<any[]>([]);
 const collectionsLoading = ref(false);
@@ -517,19 +708,213 @@ const collectionItemsLoadingMore = ref(false);
 const collectionItemsError = ref('');
 const collectionItemsPage = ref(1);
 const collectionItemsNoMore = ref(false);
+const collectionContentSearchKeyword = ref('');
+const collectionContentSearchIds = ref<Set<string>>(new Set());
+const collectionContentSearchLoading = ref(false);
+let collectionContentSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let collectionContentSearchVersion = 0;
 const collectionDetail = ref<any>({});
 const collectionFavnum = ref(0);
 const collectionFollownum = ref(0);
 const collectionItemNum = ref(0);
 const collectionFollowed = ref(false);
 
+const settingsStore = useSettingsStore();
+
+const collectionViewModes: Array<{ key: FavoriteCollectionViewMode; label: string; icon: string }> = [
+  { key: 'large', label: '大图', icon: 'fas fa-th-large' },
+  { key: 'single', label: '单栏', icon: 'fas fa-list' },
+  { key: 'double', label: '双栏', icon: 'fas fa-columns' },
+  { key: 'no-image', label: '无图', icon: 'fas fa-align-left' },
+];
+
+const collectionSortModes: Array<{ key: FavoriteCollectionSortMode; label: string }> = [
+  { key: 'default', label: '默认顺序' },
+  { key: 'name', label: '按名称' },
+  { key: 'item-count', label: '按内容数' },
+  { key: 'favorite-count', label: '按收藏数' },
+  { key: 'follower-count', label: '按关注数' },
+];
+
+const collectionSortDirections: Array<{ key: FavoriteCollectionSortDirection; label: string }> = [
+  { key: 'asc', label: '升序' },
+  { key: 'desc', label: '降序' },
+];
+
+const collectionViewMode = computed<FavoriteCollectionViewMode>({
+  get: () => settingsStore.settings.favoriteCollectionViewMode,
+  set: (value) => { settingsStore.settings.favoriteCollectionViewMode = value; },
+});
+
+const collectionSortMode = computed<FavoriteCollectionSortMode>({
+  get: () => settingsStore.settings.favoriteCollectionSortMode,
+  set: (value) => { settingsStore.settings.favoriteCollectionSortMode = value; },
+});
+
+const collectionSortDirection = computed<FavoriteCollectionSortDirection>({
+  get: () => settingsStore.settings.favoriteCollectionSortDirection,
+  set: (value) => { settingsStore.settings.favoriteCollectionSortDirection = value; },
+});
+
+const currentCollectionSortLabel = computed(() => collectionSortModes.find(mode => mode.key === collectionSortMode.value)?.label || '默认顺序');
+const currentCollectionSortDirectionLabel = computed(() => collectionSortDirections.find(direction => direction.key === collectionSortDirection.value)?.label || '升序');
+
+const collectionSortMenuOpen = ref<'mode' | 'direction' | null>(null);
+const collectionSortPickerRef = ref<HTMLElement | null>(null);
+
+function setCollectionViewMode(mode: FavoriteCollectionViewMode) {
+  collectionViewMode.value = mode;
+}
+
+function toggleCollectionSortMenu(type: 'mode' | 'direction') {
+  collectionSortMenuOpen.value = collectionSortMenuOpen.value === type ? null : type;
+}
+
+function closeCollectionSortMenu() {
+  collectionSortMenuOpen.value = null;
+}
+
+function selectCollectionSortMode(mode: FavoriteCollectionSortMode) {
+  collectionSortMode.value = mode;
+  closeCollectionSortMenu();
+}
+
+function selectCollectionSortDirection(direction: FavoriteCollectionSortDirection) {
+  collectionSortDirection.value = direction;
+  closeCollectionSortMenu();
+}
+
+function favoriteAccountId(): string {
+  return String(authStore.user?.uid || '').trim();
+}
+
+async function runCollectionContentSearch() {
+  const keyword = collectionContentSearchKeyword.value.trim();
+  const accountId = favoriteAccountId();
+  const requestVersion = ++collectionContentSearchVersion;
+  if (!keyword || !accountId) {
+    collectionContentSearchIds.value = new Set();
+    collectionContentSearchLoading.value = false;
+    return;
+  }
+  collectionContentSearchLoading.value = true;
+  try {
+    const results = await searchFavoriteContentIndex(accountId, keyword, 10_000);
+    if (requestVersion !== collectionContentSearchVersion) return;
+    collectionContentSearchIds.value = new Set(results.map(entry => entry.feedId));
+  } catch (error) {
+    if (requestVersion === collectionContentSearchVersion) console.warn('搜索收藏单正文索引失败:', error);
+  } finally {
+    if (requestVersion === collectionContentSearchVersion) collectionContentSearchLoading.value = false;
+  }
+}
+
+function scheduleCollectionContentSearch() {
+  if (collectionContentSearchTimer) clearTimeout(collectionContentSearchTimer);
+  collectionContentSearchTimer = setTimeout(() => {
+    collectionContentSearchTimer = null;
+    void runCollectionContentSearch();
+  }, 180);
+}
+
+async function runFavoriteContentSearch() {
+  const keyword = favoriteContentSearchKeyword.value.trim();
+  const accountId = favoriteAccountId();
+  const requestVersion = ++favoriteContentSearchVersion;
+  if (!keyword || !accountId) {
+    favoriteContentSearchResults.value = [];
+    favoriteContentSearchError.value = '';
+    favoriteContentSearchLoading.value = false;
+    return;
+  }
+  favoriteContentSearchLoading.value = true;
+  favoriteContentSearchError.value = '';
+  try {
+    const [results, count] = await Promise.all([
+      searchFavoriteContentIndex(accountId, keyword),
+      getFavoriteContentIndexCount(accountId),
+    ]);
+    if (requestVersion !== favoriteContentSearchVersion) return;
+    favoriteContentSearchResults.value = results;
+    favoriteContentIndexCount.value = count;
+  } catch (error) {
+    if (requestVersion !== favoriteContentSearchVersion) return;
+    favoriteContentSearchResults.value = [];
+    favoriteContentSearchError.value = getErrorMessage(error, '本地正文索引不可用');
+  } finally {
+    if (requestVersion === favoriteContentSearchVersion) favoriteContentSearchLoading.value = false;
+  }
+}
+
+function scheduleFavoriteContentSearch() {
+  if (favoriteContentSearchTimer) clearTimeout(favoriteContentSearchTimer);
+  favoriteContentSearchTimer = setTimeout(() => {
+    favoriteContentSearchTimer = null;
+    void runFavoriteContentSearch();
+  }, 180);
+}
+
+async function refreshFavoriteContentIndex(showResult: boolean) {
+  const accountId = favoriteAccountId();
+  if (!accountId || favoriteContentIndexing.value) return;
+  favoriteContentIndexing.value = true;
+  try {
+    const result = await syncFavoriteContentIndex(accountId);
+    favoriteContentIndexCount.value = result.total;
+    if (favoriteContentSearchKeyword.value.trim()) await runFavoriteContentSearch();
+    if (showResult) {
+      const status = result.complete ? '完成' : '部分完成';
+      showToast(`正文索引${status}：${result.total} 条，新增 ${result.indexed} 条，更新 ${result.updated} 条`, 'success');
+    }
+  } catch (error) {
+    if (showResult) showToast(getErrorMessage(error, '更新正文索引失败'), 'error');
+    else console.warn('后台更新收藏正文索引失败:', error);
+  } finally {
+    favoriteContentIndexing.value = false;
+  }
+}
+
 const filteredCollections = computed(() => {
   const keyword = collectionFilterKeyword.value.trim().toLowerCase();
-  if (!keyword) return collections.value;
-  return collections.value.filter((item) => {
-    const title = String(item?.title || item?.name || '').toLowerCase();
-    const desc = String(item?.description || item?.summary || '').toLowerCase();
-    return title.includes(keyword) || desc.includes(keyword);
+  let list = collections.value;
+  if (keyword) {
+    list = list.filter((item) => {
+      const title = String(item?.title || item?.name || '').toLowerCase();
+      const desc = String(item?.description || item?.summary || '').toLowerCase();
+      return title.includes(keyword) || desc.includes(keyword);
+    });
+  }
+
+  const mode = collectionSortMode.value;
+  const direction = collectionSortDirection.value;
+  if (mode === 'default') return list;
+
+  return [...list].sort((a, b) => {
+    let result = 0;
+    if (mode === 'name') {
+      const nameA = String(a?.title || a?.name || '').trim();
+      const nameB = String(b?.title || b?.name || '').trim();
+      result = nameA.localeCompare(nameB, 'zh-CN');
+    } else if (mode === 'item-count') {
+      result = getCollectionItemCount(a) - getCollectionItemCount(b);
+    } else if (mode === 'favorite-count') {
+      result = getCollectionFavoriteCount(a) - getCollectionFavoriteCount(b);
+    } else if (mode === 'follower-count') {
+      result = getCollectionFollowerCount(a) - getCollectionFollowerCount(b);
+    }
+    return direction === 'desc' ? -result : result;
+  });
+});
+
+const filteredCollectionItems = computed(() => {
+  const query = normalizeFavoriteSearchText(collectionContentSearchKeyword.value);
+  if (!query) return collectionItems.value;
+  const keywords = query.split(' ').filter(Boolean);
+  return collectionItems.value.filter((item) => {
+    const itemId = String(item?.id || item?.feedId || '').trim();
+    if (itemId && collectionContentSearchIds.value.has(itemId)) return true;
+    const summary = normalizeFavoriteSearchText(`${item?.title || ''}\n${item?.message || item?.description || ''}`);
+    return keywords.every(keyword => summary.includes(keyword));
   });
 });
 
@@ -558,6 +943,7 @@ function handleFeedDeleted(id: string | number) {
   const filter = (list: any[]) => list.filter((f: any) => String(f.id) !== String(id));
   cloudFeeds.value = filter(cloudFeeds.value);
   collectionItems.value = filter(collectionItems.value);
+  void removeFavoriteContentIndexEntry(favoriteAccountId(), id).catch((error) => console.warn('移除删除动态的正文索引失败:', error));
 }
 
 function handleFavoriteChanged(payload: { id: string | number; favorited: boolean }) {
@@ -565,6 +951,8 @@ function handleFavoriteChanged(payload: { id: string | number; favorited: boolea
   const filter = (list: any[]) => list.filter((f: any) => String(f.id) !== String(payload.id));
   cloudFeeds.value = filter(cloudFeeds.value);
   collectionItems.value = filter(collectionItems.value);
+  favoriteContentSearchResults.value = favoriteContentSearchResults.value.filter(entry => entry.feedId !== String(payload.id));
+  void removeFavoriteContentIndexEntry(favoriteAccountId(), payload.id).catch((error) => console.warn('移除取消收藏的正文索引失败:', error));
 }
 const collectionLiked = ref(false);
 const collectionFollowPending = ref(false);
@@ -592,6 +980,28 @@ function toBool(value: any) {
 
 function collectionId(collection: any): string { return String(collection?.id || collection?.collectionId || collection?.entityId || '').trim(); }
 function collectionCover(collection: any): string { return String(firstValue(collection, ['cover', 'coverPic', 'cover_pic', 'pic', 'logo']) || '').trim(); }
+
+function getCollectionItemCount(collection: any): number {
+  return Number(firstValue(collection, ['itemNum', 'item_num', 'itemnum', 'feedNum', 'feed_num', 'count']) ?? 0);
+}
+
+function getCollectionFollowerCount(collection: any): number {
+  return Number(firstValue(collection, ['follownum', 'followNum', 'follow_num']) ?? 0);
+}
+
+function hasCollectionFollowers(collection: any): boolean {
+  const val = firstValue(collection, ['follownum', 'followNum', 'follow_num']);
+  return val !== undefined && val !== null;
+}
+
+function getCollectionFavoriteCount(collection: any): number {
+  return Number(firstValue(collection, ['favnum', 'favNum', 'fav_num', 'likeNum', 'like_num']) ?? 0);
+}
+
+function hasCollectionFavorites(collection: any): boolean {
+  const val = firstValue(collection, ['favnum', 'favNum', 'fav_num', 'likeNum', 'like_num']);
+  return val !== undefined && val !== null && Number(val) > 0;
+}
 function isDefaultCollection(collection: any): boolean {
   if (toBool(firstValue(collection, ['defaultCollected', 'default_collected', 'isDefault', 'is_default', 'isDefaultCollection']))) return true;
   const title = String(collection?.title || collection?.name || '').trim().toLowerCase();
@@ -616,8 +1026,49 @@ function canManageCollection(collection: any): boolean {
 }
 
 const hasCollectionMoreActions = computed(() => {
-  return isOwnerCollection(collectionDetail.value);
+  return Boolean(activeCollectionId.value);
 });
+
+async function handleShareCollection() {
+  collectionMoreMenuOpen.value = false;
+  const col = collectionDetail.value;
+  const colId = activeCollectionId.value;
+  if (!colId) return;
+
+  const isOpen = col.isOpen ?? col.is_open;
+  if (isOpen === 0 || isOpen === false) {
+    showToast('该收藏单为私密收藏单，无法分享', 'warning');
+    return;
+  }
+
+  const shareUrl = col.url
+    ? (col.url.startsWith('http') ? col.url : `https://www.coolapk.com${col.url}`)
+    : `https://www.coolapk.com/collection/${colId}`;
+  const authorName = col.username || col.userInfo?.username || authStore.user?.username || '酷安用户';
+  const title = col.title || activeCollectionTitle.value || '收藏单';
+  const shareText = `推荐酷安用户@${authorName} 的收藏单：${title} ${shareUrl} 分享自【酷安App】`;
+
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: `酷安收藏单 - ${title}`,
+        text: shareText,
+        url: shareUrl,
+      });
+      showToast('分享成功', 'success');
+      return;
+    }
+  } catch (err: any) {
+    if (err?.name === 'AbortError') return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(shareText);
+    showToast('收藏单分享链接已复制到剪贴板', 'success');
+  } catch {
+    showToast('复制链接失败，请重试', 'error');
+  }
+}
 
 function handleMenuCleanup() {
   collectionMoreMenuOpen.value = false;
@@ -825,6 +1276,7 @@ async function removeCollectionItem(item: any) {
 function openCollection(collection: any) {
   const id = collectionId(collection);
   if (!id) return;
+  activateCollection(collection);
   void router.push({
     path: route.path,
     query: {
@@ -837,11 +1289,13 @@ function openCollection(collection: any) {
 
 function activateCollection(collection: any) {
   activeCollectionId.value = collectionId(collection);
+  collectionContentSearchKeyword.value = '';
+  collectionContentSearchIds.value = new Set();
   activeCollectionTitle.value = collection.title || '收藏单';
   collectionDetail.value = { ...collection };
-  collectionFavnum.value = Number(firstValue(collection, ['favnum', 'favNum']) ?? 0);
-  collectionFollownum.value = Number(firstValue(collection, ['follownum', 'followNum']) ?? 0);
-  collectionItemNum.value = Number(firstValue(collection, ['itemNum', 'feedNum']) ?? 0);
+  collectionFavnum.value = getCollectionFavoriteCount(collection);
+  collectionFollownum.value = getCollectionFollowerCount(collection);
+  collectionItemNum.value = getCollectionItemCount(collection);
   collectionFollowed.value = toBool(firstValue(collection, ['isFollowed', 'isFollow', 'is_followed']));
   collectionLiked.value = toBool(firstValue(collection, ['isLiked', 'isLike', 'is_liked']));
   void fetchCollectionDetail();
@@ -860,23 +1314,25 @@ function resetCollectionState() {
   collectionItems.value = [];
   collectionItemsPage.value = 1;
   collectionItemsNoMore.value = false;
+  collectionContentSearchKeyword.value = '';
+  collectionContentSearchIds.value = new Set();
   collectionMoreMenuOpen.value = false;
 }
 
 watch(
   () => route.query.collectionId,
   (value) => {
-    const collectionId = Array.isArray(value) ? value[0] : value;
-    if (!collectionId) {
+    const collectionIdValue = Array.isArray(value) ? value[0] : value;
+    if (!collectionIdValue) {
       if (activeCollectionId.value) resetCollectionState();
       return;
     }
-    if (activeCollectionId.value === String(collectionId)) return;
+    if (activeCollectionId.value === String(collectionIdValue)) return;
 
     const titleValue = route.query.collectionTitle;
     const collectionTitle = Array.isArray(titleValue) ? titleValue[0] : titleValue;
-    const source = collections.value.find(item => String(item.id) === String(collectionId)) || {
-      id: String(collectionId),
+    const source = collections.value.find(item => collectionId(item) === String(collectionIdValue)) || {
+      id: String(collectionIdValue),
       title: collectionTitle || '收藏单',
     };
     activeSubTab.value = 'collections';
@@ -887,25 +1343,42 @@ watch(
 
 function applyCollectionDetail(detail: any, fallback: any) {
   const source = detail && Object.keys(detail).length > 0 ? detail : fallback;
-  collectionFavnum.value = Number(firstValue(source, ['favnum', 'favNum']) ?? collectionFavnum.value);
-  collectionFollownum.value = Number(firstValue(source, ['follownum', 'followNum']) ?? collectionFollownum.value);
-  collectionItemNum.value = Number(firstValue(source, ['itemNum']) ?? collectionItemNum.value);
+  const fav = firstValue(source, ['fav_num', 'favnum', 'favNum', 'like_num', 'likeNum'])
+    ?? firstValue(fallback, ['fav_num', 'favnum', 'favNum', 'like_num', 'likeNum']);
+  if (fav !== undefined && fav !== null) {
+    collectionFavnum.value = Number(fav);
+  }
+
+  const follow = firstValue(source, ['follow_num', 'follownum', 'followNum'])
+    ?? firstValue(fallback, ['follow_num', 'follownum', 'followNum']);
+  if (follow !== undefined && follow !== null) {
+    collectionFollownum.value = Number(follow);
+  }
+
+  const itemNum = firstValue(source, ['item_num', 'itemNum', 'itemnum', 'feed_num', 'feedNum', 'count'])
+    ?? firstValue(fallback, ['item_num', 'itemNum', 'itemnum', 'feed_num', 'feedNum', 'count']);
+  if (itemNum !== undefined && itemNum !== null) {
+    collectionItemNum.value = Number(itemNum);
+  }
+
   collectionFollowed.value = toBool(
     firstValue(source, ['isFollowed', 'isFollow', 'is_followed']) ??
-    firstValue(source.userAction, ['isFollowed', 'isFollow'])
+    firstValue(source?.userAction, ['isFollowed', 'isFollow']) ??
+    firstValue(fallback, ['isFollowed', 'isFollow', 'is_followed'])
   );
   collectionLiked.value = toBool(
     firstValue(source, ['isLiked', 'isLike', 'is_liked']) ??
-    firstValue(source.userAction, ['isLiked', 'isLike'])
+    firstValue(source?.userAction, ['isLiked', 'isLike']) ??
+    firstValue(fallback, ['isLiked', 'isLike', 'is_liked'])
   );
-  if (!collectionDetail.value.title && source.title) {
-    collectionDetail.value = { ...collectionDetail.value, title: source.title };
+  if (!collectionDetail.value.title && (source?.title || fallback?.title)) {
+    collectionDetail.value = { ...collectionDetail.value, title: source?.title || fallback?.title };
   }
-  if (!collectionDetail.value.description && source.description) {
-    collectionDetail.value = { ...collectionDetail.value, description: source.description };
+  if (!collectionDetail.value.description && (source?.description || fallback?.description)) {
+    collectionDetail.value = { ...collectionDetail.value, description: source?.description || fallback?.description };
   }
-  if (!collectionCover(collectionDetail.value) && collectionCover(source)) {
-    collectionDetail.value = { ...collectionDetail.value, cover: collectionCover(source) };
+  if (!collectionCover(collectionDetail.value) && (collectionCover(source) || collectionCover(fallback))) {
+    collectionDetail.value = { ...collectionDetail.value, cover: collectionCover(source) || collectionCover(fallback) };
   }
 }
 
@@ -915,10 +1388,10 @@ async function fetchCollectionDetail() {
     const res = await CoolapkTauriAPI.getCollectionDetail(activeCollectionId.value);
     const detail = res && res.data ? res.data : {};
     collectionDetail.value = { ...collectionDetail.value, ...detail };
-    applyCollectionDetail(detail, collections.value.find(c => String(c.id) === activeCollectionId.value) || {});
+    applyCollectionDetail(detail, collections.value.find(c => collectionId(c) === activeCollectionId.value) || {});
   } catch (err) {
     console.warn('获取收藏单详情失败', err);
-    applyCollectionDetail({}, collections.value.find(c => String(c.id) === activeCollectionId.value) || {});
+    applyCollectionDetail({}, collections.value.find(c => collectionId(c) === activeCollectionId.value) || {});
   }
 }
 
@@ -1065,15 +1538,25 @@ watch(
     if (authStore.isLoggedIn) {
       void fetchCloudFavorites(true);
       void fetchCollections();
+      void refreshFavoriteContentIndex(false);
     }
   }
 );
+
+watch(favoriteContentSearchKeyword, () => scheduleFavoriteContentSearch());
+watch(collectionContentSearchKeyword, () => scheduleCollectionContentSearch());
 
 onMounted(() => {
   if (authStore.isLoggedIn) {
     void fetchCloudFavorites(true);
     void fetchCollections();
+    void refreshFavoriteContentIndex(false);
   }
+});
+
+onBeforeUnmount(() => {
+  if (favoriteContentSearchTimer) clearTimeout(favoriteContentSearchTimer);
+  if (collectionContentSearchTimer) clearTimeout(collectionContentSearchTimer);
 });
 </script>
 
@@ -1149,6 +1632,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
 .filter-search-wrap {
@@ -1184,6 +1668,13 @@ onMounted(() => {
   box-shadow: 0 0 0 3px var(--brand-soft);
 }
 
+.filter-search-input::-webkit-search-cancel-button,
+.filter-search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
 .search-clear-btn {
   position: absolute;
   right: 8px;
@@ -1197,6 +1688,53 @@ onMounted(() => {
 
 .search-clear-btn:hover {
   color: var(--text-primary);
+}
+
+.favorite-content-search-wrap {
+  width: min(300px, 48vw);
+}
+
+.favorite-index-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.favorite-index-refresh:hover:not(:disabled) {
+  background: var(--brand-soft);
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+.favorite-index-refresh:disabled {
+  opacity: 0.62;
+  cursor: wait;
+}
+
+.favorite-content-search-summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 var(--space-3);
+  padding: 8px 11px;
+  border: 1px solid var(--border-light, var(--border));
+  border-radius: var(--radius-control);
+  background: var(--brand-soft);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.favorite-content-search-summary i {
+  color: var(--brand-primary);
 }
 
 .btn-create-collection {
@@ -1226,7 +1764,142 @@ onMounted(() => {
   transform: translateY(0);
 }
 
-/* 收藏单卡片网格 */
+/* 收藏单工具栏：视图切换与排序选择 */
+.collection-display-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.collection-view-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.collection-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.collection-view-btn:hover {
+  color: var(--text-primary);
+  background: var(--hover-surface, rgba(0, 0, 0, 0.04));
+}
+
+.collection-view-btn.active {
+  color: #ffffff;
+  background: var(--brand-primary);
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+}
+
+.collection-sort-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.collection-sort-group {
+  position: relative;
+  display: inline-flex;
+}
+
+.collection-sort-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.collection-sort-trigger:hover {
+  color: var(--text-primary);
+  border-color: var(--border-hover, var(--brand-primary));
+}
+
+.collection-sort-direction-trigger {
+  padding: 0 10px;
+}
+
+.collection-sort-arrow {
+  font-size: 10px;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+.collection-sort-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 140px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.collection-sort-menu--direction {
+  left: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+}
+
+.collection-sort-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.14s ease;
+}
+
+.collection-sort-option:hover {
+  color: var(--text-primary);
+  background: var(--hover-surface, rgba(0, 0, 0, 0.04));
+}
+
+.collection-sort-option.active {
+  color: var(--brand-primary);
+  font-weight: 600;
+  background: var(--brand-soft);
+}
+
+/* 收藏单卡片网格与视图模式 */
 .collection-grid-view {
   display: flex;
   flex-direction: column;
@@ -1235,11 +1908,34 @@ onMounted(() => {
 
 .collection-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: var(--space-4);
   width: 100%;
 }
 
+/* 大图视图：每行自适应卡片，更开阔的视觉效果 */
+.collection-cards--large {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+/* 单栏视图：整行横向展示，左侧封面，右侧信息 */
+.collection-cards--single {
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+/* 双栏视图：左右对齐横向卡片 */
+.collection-cards--double {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 12px;
+}
+
+/* 无图视图：纯净卡片网格 */
+.collection-cards--no-image {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+/* 卡片基础样式与交互 */
 .collection-card {
   position: relative;
   background-color: var(--surface);
@@ -1251,6 +1947,8 @@ onMounted(() => {
   transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
               box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
               border-color 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
 }
 
 .collection-card:hover {
@@ -1259,6 +1957,22 @@ onMounted(() => {
   box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.08), 0 4px 10px -2px rgba(0, 0, 0, 0.03);
 }
 
+/* 单栏与双栏的横向布局 */
+.collection-card--single {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.collection-card--double {
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.collection-card--no-image {
+  flex-direction: column;
+}
+
+/* 封面容器尺寸 */
 .collection-cover-wrapper {
   position: relative;
   width: 100%;
@@ -1266,6 +1980,30 @@ onMounted(() => {
   background-color: var(--background-secondary);
   overflow: hidden;
   border-bottom: 1px solid var(--border-light);
+}
+
+.collection-card--large .collection-cover-wrapper {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  max-height: 150px;
+}
+
+.collection-card--single .collection-cover-wrapper {
+  width: 180px;
+  flex: 0 0 180px;
+  aspect-ratio: unset;
+  min-height: 128px;
+  border-bottom: none;
+  border-right: 1px solid var(--border-light);
+}
+
+.collection-card--double .collection-cover-wrapper {
+  width: 140px;
+  flex: 0 0 140px;
+  aspect-ratio: unset;
+  min-height: 120px;
+  border-bottom: none;
+  border-right: 1px solid var(--border-light);
 }
 
 .collection-cover-img {
@@ -1412,20 +2150,24 @@ onMounted(() => {
   transform: scale(1.08);
 }
 
+/* 卡片信息区 */
 .collection-info {
-  padding: 12px 14px;
+  padding: 14px 16px;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .collection-title-wrap {
   display: flex;
   align-items: center;
+  gap: 6px;
 }
 
 .collection-title {
-  font-size: 14.5px;
+  font-size: 15.5px;
   font-weight: 650;
   color: var(--text-primary);
   overflow: hidden;
@@ -1439,29 +2181,93 @@ onMounted(() => {
   color: var(--brand-primary);
 }
 
+.collection-inline-status {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 2px;
+}
+
+.inline-status {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.inline-status.is-default {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--brand-primary);
+}
+
+.inline-status.is-public {
+  background: var(--background-secondary);
+  color: var(--text-secondary);
+}
+
+.inline-status.is-private {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+
 .collection-desc {
   margin: 0;
   font-size: 12.5px;
   color: var(--text-secondary);
   line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
+/* 统计胶囊徽章（Capsule Pill） */
 .collection-meta-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: auto;
+  flex-wrap: wrap;
+  padding-top: 4px;
 }
 
 .meta-item {
-  font-size: 12px;
-  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 550;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 4.5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-light);
+  background: var(--background-secondary);
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.meta-item--items {
+  color: var(--brand-primary);
+  background: var(--brand-soft);
+  border-color: rgba(16, 185, 129, 0.2);
+}
+
+.meta-item--followers {
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.18);
+}
+
+.meta-item--favorites {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.18);
+}
+
+.meta-item i {
+  font-size: 11px;
 }
 
 /* 详情页面包屑与 Hero Header */
@@ -1469,6 +2275,22 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   width: 100%;
+}
+
+.collection-content-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 var(--space-4);
+}
+
+.collection-content-search-input {
+  width: min(360px, 100%);
+}
+
+.collection-content-search-hint {
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 .collection-breadcrumb {

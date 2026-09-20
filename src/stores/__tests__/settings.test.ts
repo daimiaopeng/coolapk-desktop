@@ -45,6 +45,9 @@ describe('settings store', () => {
     noImageMode: false,
     imageQuality: 'hd',
     messageEnterBehavior: 'send',
+    favoriteCollectionViewMode: 'large',
+    favoriteCollectionSortMode: 'default',
+    favoriteCollectionSortDirection: 'asc',
   };
 
   it('loads default settings when localStorage is empty', () => {
@@ -58,6 +61,9 @@ describe('settings store', () => {
     expect(store.settings.suppressUnsupportedLivePhotoCodecPrompt).toBe(defaults.suppressUnsupportedLivePhotoCodecPrompt);
     expect(store.settings.autoLoadOriginalImage).toBe(defaults.autoLoadOriginalImage);
     expect(store.settings.noImageMode).toBe(defaults.noImageMode);
+    expect(store.settings.favoriteCollectionViewMode).toBe(defaults.favoriteCollectionViewMode);
+    expect(store.settings.favoriteCollectionSortMode).toBe(defaults.favoriteCollectionSortMode);
+    expect(store.settings.favoriteCollectionSortDirection).toBe(defaults.favoriteCollectionSortDirection);
     expect(store.settings.navVisibility?.albums).toBe(true);
     expect(store.settings.navVisibility?.pictures).toBe(true);
     expect(store.settings.navVisibility?.downloads).toBe(true);
@@ -81,6 +87,8 @@ describe('settings store', () => {
       suppressUnsupportedLivePhotoCodecPrompt: true,
       autoLoadOriginalImage: false,
       noImageMode: true,
+      favoriteCollectionViewMode: 'double',
+      favoriteCollectionSortMode: 'item-count-desc',
       myRecentPinned: true,
       messageEnterBehavior: 'newline',
     });
@@ -99,6 +107,9 @@ describe('settings store', () => {
     expect(normalized.suppressUnsupportedLivePhotoCodecPrompt).toBe(true);
     expect(normalized.autoLoadOriginalImage).toBe(false);
     expect(normalized.noImageMode).toBe(true);
+    expect(normalized.favoriteCollectionViewMode).toBe('double');
+    expect(normalized.favoriteCollectionSortMode).toBe('item-count');
+    expect(normalized.favoriteCollectionSortDirection).toBe('desc');
     expect(normalized.myRecentPinned).toBe(true);
     expect(normalized.messageEnterBehavior).toBe('newline');
     expect(normalizeSettings({ rememberWindowState: false }).rememberWindowState).toBe(false);

@@ -51,6 +51,7 @@
       :title="feed.title || feed.message_title || feed.messageTitle"
       :message="displayedRatingMessage"
       :username="feed.username || feed.userInfo?.username"
+      :highlight-keyword="highlightKeyword"
     />
 
     <!-- APK 点评卡把优点、一般、缺点作为独立字段展示，不能只显示 message 摘要。 -->
@@ -193,6 +194,7 @@ import { showToast } from '../../utils/toast';
 import { getErrorMessage } from '../../utils/errors';
 import { extractFeedImageInputs } from '../../utils/livePhoto';
 import { registerOpenComments, touchActiveComments } from '../../utils/activeCommentTracker';
+import { queueFavoriteContentIndexEntry, removeFavoriteContentIndexEntry } from '../../utils/favoriteContentIndex';
 
 const settingsStore = useSettingsStore();
 const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
@@ -200,6 +202,7 @@ const showDeviceInfo = computed(() => settingsStore.settings.showDeviceInfo);
 const props = defineProps<{
   feed: any;
   cloudFavorite?: boolean;
+  highlightKeyword?: string;
 }>();
 
 const emit = defineEmits<{
@@ -256,6 +259,8 @@ async function toggleFav() {
     await CoolapkTauriAPI.setFeedCloudFavorite(id, target, feedType, trace);
     isFav.value = target;
     favnum.value = Math.max(0, favnum.value + (target ? 1 : -1));
+    if (target) void queueFavoriteContentIndexEntry(authStore.user?.uid || '', props.feed).catch((error) => console.warn('更新收藏正文索引失败:', error));
+    else void removeFavoriteContentIndexEntry(authStore.user?.uid || '', id).catch((error) => console.warn('移除收藏正文索引失败:', error));
     showToast(target ? '已收藏到云端' : '已取消云端收藏', 'success');
     emit('favorite-changed', { id: props.feed.id, favorited: target });
   } catch (err) {
@@ -339,6 +344,7 @@ async function confirmCollectionSelection(selectedIds: string[]) {
     );
     isFav.value = true;
     favnum.value = Math.max(0, favnum.value + (collectionInitialSelectedIds.value.length === 0 ? 1 : 0));
+    void queueFavoriteContentIndexEntry(authStore.user?.uid || '', props.feed).catch((error) => console.warn('更新收藏正文索引失败:', error));
     showToast('已收藏到云端', 'success');
     collectionPickerOpen.value = false;
     emit('favorite-changed', { id: props.feed.id, favorited: true });

@@ -303,6 +303,7 @@ import {
 } from '../../utils/feedRelations';
 import { getUserUid } from '../../utils/userRoute';
 import { hasActiveTextSelection } from '../../utils/selection';
+import { queueFavoriteContentIndexEntry, removeFavoriteContentIndexEntry } from '../../utils/favoriteContentIndex';
 
 const settingsStore = useSettingsStore();
 const appStore = useAppStore();
@@ -772,6 +773,8 @@ async function toggleFav() {
     await CoolapkTauriAPI.setFeedCloudFavorite(id, target, feedType, trace);
     isFav.value = target;
     favnum.value = Math.max(0, favnum.value + (target ? 1 : -1));
+    if (target) void queueFavoriteContentIndexEntry(authStore.user?.uid || '', props.feed).catch((error) => console.warn('更新收藏正文索引失败:', error));
+    else void removeFavoriteContentIndexEntry(authStore.user?.uid || '', id).catch((error) => console.warn('移除收藏正文索引失败:', error));
     showToast(target ? '已收藏到云端' : '已取消云端收藏', 'success');
     emit('favorite-changed', { id: props.feed.id, favorited: target });
   } catch (err) {
@@ -846,6 +849,7 @@ async function confirmCollectionSelection(selectedIds: string[]) {
     if (previousIds.size === 0) {
       favnum.value = Math.max(0, favnum.value + 1);
     }
+    void queueFavoriteContentIndexEntry(authStore.user?.uid || '', props.feed).catch((error) => console.warn('更新收藏正文索引失败:', error));
     showToast('已收藏到云端', 'success');
     collectionPickerOpen.value = false;
     emit('favorite-changed', { id: props.feed.id, favorited: true });

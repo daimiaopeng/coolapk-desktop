@@ -83,6 +83,12 @@ export function normalizeCoolapkFeedLink(href: string): string | null {
   return route && /^\/feed\/\d+(?:\?[^#]*)?$/i.test(route) ? route : null;
 }
 
+/** 仅识别酷安收藏单详情链接，供搜索栏等入口直接跳转使用。 */
+export function normalizeCoolapkCollectionLink(href: string): string | null {
+  const route = normalizeCoolapkDeepLink(href) || normalizeCoolapkRoute(href);
+  return route && /^\/collection\/\d+(?:\?[^#]*)?$/i.test(route) ? route : null;
+}
+
 function normalizeCoolapkRatingRoute(href: string): string | null {
   const match = href.match(/^\/feed\/nodeRatingList\/?(?:\?([^#]*))?$/i);
   if (!match) return null;
@@ -213,7 +219,7 @@ export function normalizeCoolapkSecondHandRoute(href: string): string | null {
 }
 
 function normalizeCoolapkDirectRoute(href: string): string | null {
-  const match = href.match(/^\/(?:app|product|user|topic|dyh|album)\/([^/?#]+)(?:\?([^#]*))?$/i);
+  const match = href.match(/^\/(?:app|product|user|topic|dyh|album|collection)\/([^/?#]+)(?:\?([^#]*))?$/i);
   if (!match) return null;
   const routeName = href.slice(1, href.indexOf('/', 1));
   return `/${routeName}/${match[1]}${match[2] ? `?${match[2]}` : ''}`;

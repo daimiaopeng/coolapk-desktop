@@ -11,6 +11,9 @@ import type {
   AccentColor,
   NavVisibilitySettings,
   DeviceFingerprintSettings,
+  FavoriteCollectionViewMode,
+  FavoriteCollectionSortMode,
+  FavoriteCollectionSortDirection,
   HomeTabKey,
 } from '../types/settings';
 
@@ -124,6 +127,9 @@ const defaultSettings: AppSettings = {
   showHomeHotTopics: true,
   defaultHomeTab: 'digest',
   homeTabOrder: [...DEFAULT_HOME_TAB_ORDER],
+  favoriteCollectionViewMode: 'large',
+  favoriteCollectionSortMode: 'default',
+  favoriteCollectionSortDirection: 'asc',
   downloadPath: '',
   maxConcurrentDownloads: 3,
   autoCleanCache: true,
@@ -221,6 +227,21 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.fontFamily = normalizeFontFamily(source.fontFamily, result.fontFamily);
   if (isOneOf(source.accentColor, ['green', 'blue', 'violet', 'orange'])) result.accentColor = source.accentColor;
   if (isOneOf(source.defaultHomeTab, ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'])) result.defaultHomeTab = source.defaultHomeTab;
+  if (isOneOf(source.favoriteCollectionViewMode, ['large', 'single', 'double', 'no-image'])) result.favoriteCollectionViewMode = source.favoriteCollectionViewMode as FavoriteCollectionViewMode;
+  const hasSavedCollectionSortDirection = isOneOf(source.favoriteCollectionSortDirection, ['asc', 'desc']);
+  if (hasSavedCollectionSortDirection) result.favoriteCollectionSortDirection = source.favoriteCollectionSortDirection as FavoriteCollectionSortDirection;
+  if (source.favoriteCollectionSortMode === 'item-count-desc' || source.favoriteCollectionSortMode === 'item-count-asc') {
+    result.favoriteCollectionSortMode = 'item-count';
+    result.favoriteCollectionSortDirection = source.favoriteCollectionSortMode === 'item-count-desc' ? 'desc' : 'asc';
+  } else if (source.favoriteCollectionSortMode === 'favorite-count-desc') {
+    result.favoriteCollectionSortMode = 'favorite-count';
+    result.favoriteCollectionSortDirection = 'desc';
+  } else if (source.favoriteCollectionSortMode === 'follower-count-desc') {
+    result.favoriteCollectionSortMode = 'follower-count';
+    result.favoriteCollectionSortDirection = 'desc';
+  } else if (isOneOf(source.favoriteCollectionSortMode, ['default', 'name', 'item-count', 'favorite-count', 'follower-count'])) {
+    result.favoriteCollectionSortMode = source.favoriteCollectionSortMode as FavoriteCollectionSortMode;
+  }
   if (Array.isArray(source.homeTabOrder)) {
     // 首页频道由服务端动态下发，不能用本地静态列表过滤，否则每次重启都会丢失
     // 用户在频道管理器中保存的排序和隐藏状态。
