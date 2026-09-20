@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [vue()],
   clearScreen: false,
   server: {
-    host: '127.0.0.1',
+    host: process.env.TAURI_DEV_HOST || '127.0.0.1',
     port: 17520,
     strictPort: true,
   },

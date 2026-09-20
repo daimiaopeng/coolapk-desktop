@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "android-main-window",
+  "description": "Android 主窗口所需能力，不包含托盘、开机启动等桌面专属权限",
+  "windows": ["main"],
+  "platforms": ["android"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-set-theme",
+    "core:app:allow-set-app-theme",
+    "dialog:default",
+    "notification:default",
+    "store:default",
+    "deep-link:default"
+  ]
+}

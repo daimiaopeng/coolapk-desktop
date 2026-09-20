@@ -53,6 +53,10 @@
   --window-control-active: rgba(0, 0, 0, 0.1);
   --drawer-width: 520px;
   --header-height: 56px;
+  --mobile-topbar-height: 52px;
+  --mobile-bottom-nav-height: 56px;
+  --mobile-page-padding: 10px;
+  --mobile-feed-gap: 8px;
 
   /* 动效时长 */
   --duration-fast: 120ms;

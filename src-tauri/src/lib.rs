@@ -62,7 +62,9 @@ use coolapk::commands::{
 use download_manager::DownloadManager;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use tauri::{Manager, WindowEvent};
+use tauri::Manager;
+#[cfg(desktop)]
+use tauri::WindowEvent;
 
 const PORTABLE_UPDATE_HELPER_ARG: &str = "--coolapk-apply-portable-update";
 
@@ -651,6 +653,20 @@ async fn send_desktop_notification(
     title: String,
     body: Option<String>,
 ) -> Result<(), String> {
+    #[cfg(mobile)]
+    {
+        use tauri_plugin_notification::NotificationExt;
+
+        let mut notification = app.notification().builder().title(&title);
+        if let Some(body) = body.as_deref().filter(|value| !value.trim().is_empty()) {
+            notification = notification.body(body);
+        }
+        return notification.show().map_err(|error| error.to_string());
+    }
+
+    #[cfg(desktop)]
+    {
+    #[cfg(windows)]
     let identifier = app.config().identifier.clone();
     #[cfg(windows)]
     let icon_path = windows_notification_icon_path(&app)?;
@@ -701,6 +717,7 @@ async fn send_desktop_notification(
     })
     .await
     .map_err(|error| error.to_string())?
+    }
 }
 
 /// 前端保存启动参数（静默启动 / 记忆窗口状态 / 置顶），重启后由 setup 读取生效
@@ -739,6 +756,7 @@ fn is_main_window_navigation_allowed(url: &tauri::Url) -> bool {
     }
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let client = CoolapkClient::new();
     let state = AppState {
@@ -746,7 +764,14 @@ pub fn run() {
         downloads: DownloadManager::new(),
     };
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_store::Builder::default().build());
+
+    #[cfg(desktop)]
+    let builder = builder
         // 单实例插件必须先注册，才能把外部 deep link 转发到已运行的实例。
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 重复启动时聚焦已有实例的主窗口；深链事件由插件转发给前端。
@@ -756,14 +781,12 @@ pub fn run() {
                 let _ = w.set_focus();
             }
         }))
-        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
-        ))
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_store::Builder::default().build())
+        ));
+
+    builder
         .register_asynchronous_uri_scheme_protocol("coolapk-video", |ctx, request, responder| {
             let target_url = reqwest::Url::parse(&request.uri().to_string())
                 .ok()
@@ -845,6 +868,8 @@ pub fn run() {
                 eprintln!("注册酷安通知身份失败：{error}");
             }
 
+            #[cfg(desktop)]
+            {
             // 读取启动参数并应用：窗口置顶 / 记忆上次窗口大小位置 / 静默启动到托盘
             if let Some(path) = startup_state_path(app.app_handle()) {
                 if let Ok(raw) = std::fs::read_to_string(&path) {
@@ -915,6 +940,8 @@ pub fn run() {
                 }
             }
 
+            }
+
             // 将登录凭据持久化到应用数据目录，重启后自动恢复登录态
             if let Ok(dir) = app.path().app_data_dir() {
                 let _ = std::fs::create_dir_all(&dir);
@@ -924,6 +951,8 @@ pub fn run() {
                     .persist_cookie_to(dir.join("session_cookie.txt"));
             }
 
+            #[cfg(desktop)]
+            {
             // 系统托盘图标：常驻后台、快捷恢复窗口与退出
             if let Some(icon) = app.default_window_icon().cloned() {
                 use tauri::menu::{Menu, MenuItem};
@@ -975,10 +1004,16 @@ pub fn run() {
                 // Linux 保留托盘实现的默认左键菜单行为，避免菜单弹出与窗口恢复同时触发。
                 let _tray = tray_builder.build(app)?;
             }
+            }
 
             Ok(())
         })
         .on_window_event(|window, event| {
+            #[cfg(mobile)]
+            let _ = (window, event);
+
+            #[cfg(desktop)]
+            {
             if window.label() != "main" {
                 return;
             }
@@ -1025,6 +1060,7 @@ pub fn run() {
                     }
                 }
                 _ => {}
+            }
             }
         })
         .invoke_handler(tauri::generate_handler![

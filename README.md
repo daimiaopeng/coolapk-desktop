@@ -100,6 +100,30 @@ npm run tauri build -- --bundles appimage,deb,rpm
 npm run tauri build -- --bundles app,dmg
 ```
 
+### Android APK
+
+Android 构建需要 JDK 17+、Android SDK、Platform Tools、Build Tools 和 NDK (Side by side)。Windows 下构建脚本会自动读取 `JAVA_HOME`、`ANDROID_HOME`、`NDK_HOME`，也能识别默认 Android SDK 和本项目使用的 Android OpenJDK 安装位置。
+
+```bash
+# 首次生成 Android 工程（生成目录不会提交到 Git）
+npm run android:init
+
+# 默认构建 ARM64 debug APK，适用于大多数真机
+npm run android:build
+
+# 自定义目标，例如生成全部架构的 debug APK
+npm run android:build -- --debug --apk
+```
+
+APK 输出到 `src-tauri/gen/android/app/build/outputs/apk/`。连接设备后可用 `adb install -r <apk路径>` 安装。正式分发前还需配置 Android 签名；Google Play 应优先构建并上传 AAB。
+
+Tag 发布时，GitHub Actions 会构建签名的 ARM64 release APK 和 AAB，并上传到同一个 GitHub Release。仓库需要配置以下 Actions Secrets：
+
+- `ANDROID_KEYSTORE_BASE64`：上传密钥 `.jks` 文件的 Base64 内容
+- `ANDROID_KEYSTORE_PASSWORD`：密钥库密码
+- `ANDROID_KEY_ALIAS`：密钥别名
+- `ANDROID_KEY_PASSWORD`：密钥密码
+
 安装包位于 `src-tauri/target/release/bundle/`。GitHub Actions 会提供：
 
 - Windows x64：NSIS 安装包 `-setup.exe`、单文件便携版 `x64-portable.exe`

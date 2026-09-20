@@ -2022,6 +2022,57 @@ onUnmounted(unbindGlobalListeners);
   }
 }
 
+@media (max-width: 720px) {
+  .home-page-layout {
+    height: 100%;
+  }
+
+  .main-feed-column {
+    border-right: 0;
+  }
+
+  .feed-toolbar-row :deep(.feed-layout-toggle) {
+    display: none !important;
+  }
+
+  .feed-scroll-container {
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .feed-list-padding,
+  .feed-list-padding.is-double-column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--mobile-feed-gap);
+    padding: var(--mobile-feed-gap) 0;
+    column-count: auto;
+  }
+
+  .feed-list-padding.is-double-column :deep(.feed-card),
+  .feed-list-padding :deep(.feed-card) {
+    display: block;
+    width: 100%;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .headline-header-section,
+  .hot-header-section {
+    padding-right: var(--mobile-page-padding);
+    padding-left: var(--mobile-page-padding);
+  }
+
+  .home-page-entity-list,
+  .headline-discovery-list,
+  .dyh-tab-grid {
+    grid-template-columns: 1fr;
+    padding: var(--mobile-page-padding);
+  }
+}
+
 .dyh-tab-grid {
   padding: var(--space-4);
   display: grid;

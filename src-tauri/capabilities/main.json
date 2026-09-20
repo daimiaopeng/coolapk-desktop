@@ -2,6 +2,7 @@
   "identifier": "main-window-default",
   "description": "主窗口默认能力：包含设置文件所需的 Store 插件权限",
   "windows": ["main"],
+  "platforms": ["windows", "linux", "macOS"],
   "permissions": [
     "core:default",
     "core:window:allow-close",

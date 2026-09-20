@@ -248,6 +248,112 @@ jobs:
           codesign --verify --deep --strict --verbose=4 "$app_path"
           codesign --display --verbose=4 "$app_path"
 
+  android-build:
+    name: Android ARM64 Release
+    needs: []
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装 Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: 安装 Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 安装 Android 平台与 NDK
+        shell: bash
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" "ndk;27.2.12479018"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: 安装 Rust Android 目标
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: 缓存 Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: 安装前端依赖
+        run: npm ci
+
+      - name: 同步标签版本号
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        run: npm run version:set -- ${GITHUB_REF_NAME#v}
+
+      - name: 准备 Android Release 签名
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" || -z "$ANDROID_KEYSTORE_PASSWORD" || -z "$ANDROID_KEY_ALIAS" || -z "$ANDROID_KEY_PASSWORD" ]]; then
+            echo "缺少 Android Release 签名 Secrets" >&2
+            exit 1
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/coolapk-upload.jks"
+
+      - name: 构建签名 APK 和 AAB
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/coolapk-upload.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: npm run android:build -- --target aarch64 --apk --aab --ci
+
+      - name: 整理 Android Release 产物
+        shell: bash
+        run: |
+          mkdir -p android-release
+          apk="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk"
+          aab="src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab"
+          test -f "$apk"
+          test -f "$aab"
+          cp "$apk" "android-release/coolapk-${GITHUB_REF_NAME}-android-arm64.apk"
+          cp "$aab" "android-release/coolapk-${GITHUB_REF_NAME}-android-arm64.aab"
+
+      - name: 上传 Android Release 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-arm64-release
+          path: android-release/*
+          if-no-files-found: error
+
+  publish-android:
+    name: 发布 Android APK 和 AAB
+    needs: [build, android-build]
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 下载 Android 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: android-arm64-release
+          path: android-release
+
+      - name: 上传到 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" android-release/* --repo "$GITHUB_REPOSITORY" --clobber
+
   publish-windows-portable:
     name: 发布 Windows 单文件便携版
     needs: build

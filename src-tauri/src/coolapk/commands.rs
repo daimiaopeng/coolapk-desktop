@@ -2583,12 +2583,15 @@ pub fn open_url(app: tauri::AppHandle, url: String, mode: Option<String>) -> Res
     let title = parsed.host_str().unwrap_or("链接").to_string();
 
     // 移动端 UA：酷安网页（如账号安全页）在桌面 UA 下会白屏，与登录窗口同一套已验证可用的 UA
-    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::External(parsed))
+    let browser = tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::External(parsed))
         .title(title)
         .user_agent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1")
-        .inner_size(1100.0, 780.0)
-        .center()
-        .decorations(true)
+        .inner_size(1100.0, 780.0);
+    #[cfg(desktop)]
+    let browser = browser.center();
+    #[cfg(desktop)]
+    let browser = browser.decorations(true);
+    browser
         .visible(true)
         .build()
         .map_err(|e| e.to_string())?;
@@ -2813,15 +2816,17 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     "#
     .replace("__APP_ORIGIN__", &app_origin);
 
-    let _window = tauri::WebviewWindowBuilder::new(
+    let login_window = tauri::WebviewWindowBuilder::new(
         &app,
         "login_window",
         tauri::WebviewUrl::External(login_url),
     )
     .title("酷安官方授权登录")
     .user_agent(LOGIN_WEBVIEW_USER_AGENT)
-    .inner_size(440.0, 620.0)
-    .center()
+    .inner_size(440.0, 620.0);
+    #[cfg(desktop)]
+    let login_window = login_window.center();
+    let _window = login_window
     .initialization_script(js_script)
     .build()
     .map_err(|e| e.to_string())?;

@@ -64,8 +64,17 @@ function showGlobalError(message: string) {
   }
 }
 
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim()) return message;
+  }
+  return String(error);
+}
+
 app.config.errorHandler = (err, _instance, info) => {
-  const msg = `${info || 'render'}: ${err instanceof Error ? err.message : String(err)}`;
+  const msg = `${info || 'render'}: ${describeError(err)}`;
   console.error('[global-error]', msg, err);
   showGlobalError(msg);
 };
@@ -77,7 +86,7 @@ window.addEventListener('error', (e) => {
 });
 
 window.addEventListener('unhandledrejection', (e) => {
-  const msg = e.reason instanceof Error ? e.reason.message : String(e.reason || e);
+  const msg = describeError(e.reason || e);
   console.error('[unhandledrejection]', msg, e.reason);
   showGlobalError(msg);
 });

@@ -8,6 +8,9 @@ function detectDesktopPlatform(): DesktopPlatform {
   if (typeof navigator === 'undefined') return 'web';
 
   const platformName = `${navigator.platform ?? ''} ${navigator.userAgent}`.toLowerCase();
+  // Android WebView 的 UA 同样包含 "Linux"，必须先排除移动平台，
+  // 否则会尝试调用 Android 未初始化的桌面 window 插件。
+  if (platformName.includes('android')) return 'web';
   if (platformName.includes('mac')) return 'macos';
   if (platformName.includes('win')) return 'windows';
   if (platformName.includes('linux')) return 'linux';
@@ -16,6 +19,7 @@ function detectDesktopPlatform(): DesktopPlatform {
 
 const platform = detectDesktopPlatform();
 const nativeRuntime = isTauri();
+const nativeDesktopRuntime = nativeRuntime && platform !== 'web';
 
 export function useDesktopWindow() {
   const isMaximized = ref(false);
@@ -23,13 +27,13 @@ export function useDesktopWindow() {
   let unlistenResize: (() => void) | null = null;
 
   const usesCustomControls = computed(
-    () => nativeRuntime && (platform === 'windows' || platform === 'linux'),
+    () => nativeDesktopRuntime && (platform === 'windows' || platform === 'linux'),
   );
-  const usesMacOverlay = computed(() => nativeRuntime && platform === 'macos');
+  const usesMacOverlay = computed(() => nativeDesktopRuntime && platform === 'macos');
   const showWindowControls = computed(() => usesCustomControls.value && !isFullscreen.value);
 
   async function syncWindowState() {
-    if (!nativeRuntime) return;
+    if (!nativeDesktopRuntime) return;
     const appWindow = getCurrentWindow();
     const [maximized, fullscreen] = await Promise.all([
       appWindow.isMaximized(),
@@ -40,21 +44,21 @@ export function useDesktopWindow() {
   }
 
   async function minimize() {
-    if (nativeRuntime) await getCurrentWindow().minimize();
+    if (nativeDesktopRuntime) await getCurrentWindow().minimize();
   }
 
   async function toggleMaximize() {
-    if (!nativeRuntime) return;
+    if (!nativeDesktopRuntime) return;
     await getCurrentWindow().toggleMaximize();
     await syncWindowState();
   }
 
   async function close() {
-    if (nativeRuntime) await getCurrentWindow().close();
+    if (nativeDesktopRuntime) await getCurrentWindow().close();
   }
 
   onMounted(async () => {
-    if (!nativeRuntime) return;
+    if (!nativeDesktopRuntime) return;
     await syncWindowState();
     unlistenResize = await getCurrentWindow().onResized(() => {
       void syncWindowState();
