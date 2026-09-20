@@ -1034,13 +1034,13 @@ function handleUserClick() {
 
 <style scoped>
 .top-bar {
+  position: relative;
   height: var(--topbar-height);
   min-height: var(--topbar-height);
   background-color: var(--titlebar-background);
   border-bottom: 1px solid var(--titlebar-divider);
   display: flex;
   align-items: center;
-  overflow: hidden;
   user-select: none;
   z-index: 800;
 }
