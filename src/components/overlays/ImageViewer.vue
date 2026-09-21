@@ -694,7 +694,8 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
 <style scoped>
 .image-viewer-backdrop {
   position: fixed;
-  inset: 0;
+  /* 桌面端避开应用标题栏，避免预览工具栏覆盖窗口控制按钮。 */
+  inset: var(--topbar-height) 0 0;
   background-color: rgba(0, 0, 0, 0.92);
   z-index: 3000;
   display: flex;
@@ -1062,6 +1063,12 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
   .viewer-live-video {
     animation: none;
     transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .image-viewer-backdrop {
+    inset: 0;
   }
 }
 </style>
