@@ -84,6 +84,7 @@ import { getEntityKey, parseDiscoveryPage, resolveDiscoveryRoute } from '../util
 import { normalizeCoolapkRoute } from '../utils/coolapkRoute';
 import type { DiscoveryEntity } from '../types/discovery';
 import type { NodeEntity } from '../types/content';
+import { usePageTabTitle } from '../composables/usePageTabTitle';
 
 const route = useRoute();
 const router = useRouter();
@@ -129,6 +130,7 @@ const pageTitle = computed(() => nodeTitle.value || '版块节点');
 const nodeTitle = computed(() => {
   return nodeInfo.value?.title || fallbackTitle.value || nodeId.value;
 });
+usePageTabTitle(nodeTitle);
 
 const nodeLogo = computed(() => {
   const n = nodeInfo.value;

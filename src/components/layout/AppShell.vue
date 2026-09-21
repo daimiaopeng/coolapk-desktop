@@ -5,9 +5,12 @@
     <MobileTopBar />
     <div class="app-body">
       <MainSidebar />
-      <main class="app-main-content">
-        <slot></slot>
-      </main>
+      <div class="app-content-column">
+        <PageTabBar />
+        <main class="app-main-content">
+          <slot></slot>
+        </main>
+      </div>
     </div>
     <MobileBottomNav />
   </div>
@@ -19,6 +22,7 @@ import MainSidebar from './MainSidebar.vue';
 import NetworkStatusBanner from '../common/NetworkStatusBanner.vue';
 import MobileTopBar from './MobileTopBar.vue';
 import MobileBottomNav from './MobileBottomNav.vue';
+import PageTabBar from './PageTabBar.vue';
 </script>
 
 <style scoped>
@@ -32,6 +36,7 @@ import MobileBottomNav from './MobileBottomNav.vue';
 }
 
 .app-body {
+  --page-tabbar-height: 38px;
   display: flex;
   flex: 1;
   overflow: hidden;
@@ -45,9 +50,19 @@ import MobileBottomNav from './MobileBottomNav.vue';
   display: flex;
 }
 
+.app-content-column {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 @media (max-width: 720px) {
   .app-shell :deep(.top-bar),
-  .app-shell :deep(.main-sidebar) {
+  .app-shell :deep(.main-sidebar),
+  .app-shell :deep(.page-tab-bar) {
     display: none !important;
   }
 

@@ -371,6 +371,7 @@ import { showToast } from '../utils/toast';
 import { getErrorMessage } from '../utils/errors';
 import { getHdImageUrl } from '../utils/image';
 import type { ProductConfig, ProductMedia, RatingChartPeriods } from '../types/product';
+import { usePageTabTitle } from '../composables/usePageTabTitle';
 import {
   FEED_SEARCH_SORT_OPTIONS,
   PRODUCT_FEED_TYPE_OPTIONS,
@@ -467,6 +468,7 @@ const productTitle = computed(() => {
     || productDetail.value.name
     || productId.value;
 });
+usePageTabTitle(productTitle);
 
 const productDescription = computed(() => {
   if (!productDetail.value) return '';

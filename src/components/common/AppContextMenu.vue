@@ -574,6 +574,8 @@ function closeMenu() {
 }
 
 function openMenu(event: MouseEvent) {
+  // 标签栏提供收藏、固定和关闭等专用菜单，不能被全局捕获阶段的页面菜单抢先接管。
+  if (event.target instanceof Element && event.target.closest('.page-tab-bar')) return;
   const state = buildContext(event);
   if (!state) return;
   event.preventDefault();

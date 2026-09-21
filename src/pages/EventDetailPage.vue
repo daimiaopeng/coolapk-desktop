@@ -146,6 +146,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { usePageTabTitle } from '../composables/usePageTabTitle';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import FeedCard from '../components/feed/FeedCard.vue';
 import AppImage from '../components/common/AppImage.vue';
@@ -176,6 +177,7 @@ const coverUrl = computed(() => {
 });
 
 const eventTitle = computed(() => eventDetail.value?.title || eventId.value);
+usePageTabTitle(eventTitle);
 
 const eventContent = computed(() => {
   const ev = eventDetail.value;

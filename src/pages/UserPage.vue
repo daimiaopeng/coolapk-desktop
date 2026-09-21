@@ -570,6 +570,7 @@ import { showToast } from '../utils/toast';
 import { requestConfirmation } from '../utils/confirm';
 import { asUserSpaceProfile, entityKey, normalizeEntityPage } from '../types/userSpace';
 import { getCachedUserProfileSync } from '../utils/userProfilePreloader';
+import { usePageTabTitle } from '../composables/usePageTabTitle';
 
 const route = useRoute();
 const router = useRouter();
@@ -599,6 +600,7 @@ const remarkSaving = ref(false);
 const relationshipActionLoading = ref(false);
 
 const profile = ref<any>(null);
+usePageTabTitle(computed(() => profile.value?.username || (isSelfUser.value ? '个人主页' : null)));
 const homeTabCardRows = computed<any[]>(() => (
   Array.isArray(profile.value?.homeTabCardRows) ? profile.value.homeTabCardRows : []
 ));

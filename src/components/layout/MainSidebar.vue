@@ -299,7 +299,8 @@ function handleLogout() {
 /* 图二同款：吸附在侧边栏右侧分割线边缘的凸起折叠手柄按钮 */
 .sidebar-floating-toggle-btn {
   position: absolute;
-  top: 20px;
+  /* 标签栏加入后继续保持在正文顶部下方，避免覆盖第一个标签及其拖动区域。 */
+  top: calc(var(--page-tabbar-height, 38px) + 20px);
   right: -13px;
   width: 26px;
   height: 26px;

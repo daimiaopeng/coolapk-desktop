@@ -2,7 +2,7 @@
   <AppShell>
     <router-view v-slot="{ Component, route }">
       <!-- 原生标准页面堆栈：/topics 聚合页保持单实例常驻，其他页面以 route.fullPath 独立入栈 -->
-      <keep-alive>
+      <keep-alive :max="15">
         <component
           :is="Component"
           :key="getRouteKey(route)"
@@ -136,6 +136,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { listen } from '@tauri-apps/api/event';
 import AppShell from './components/layout/AppShell.vue';
 import PublishDialog from './components/overlays/PublishDialog.vue';
@@ -169,15 +170,16 @@ import { useSidebarTransition } from './utils/routeTransition';
 import { registerGlobalSelectionClear } from './utils/selection';
 import { getPlatformInfo } from './utils/platform';
 import { syncFavoriteContentIndex } from './utils/favoriteContentIndex';
+import { usePageTabsStore } from './stores/pageTabs';
 
 const { isSidebarTransitionActive, resetSidebarTransition } = useSidebarTransition();
 
 function getRouteKey(route: any): string {
   // /topics 话题聚合页保持单实例常驻，内部子话题切换不触发父页面销毁重建与闪烁
   if (route.path === '/topics') {
-    return '/topics';
+    return `/topics:${pageTabsStore.getGeneration(route)}`;
   }
-  return route.fullPath;
+  return `${route.fullPath}:${pageTabsStore.getGeneration(route)}`;
 }
 
 const PENDING_UPDATE_KEY = 'coolapk_pending_update';
@@ -195,6 +197,8 @@ type DownloadProgress = { downloaded: number; total: number; percent: number };
 const authStore = useAuthStore();
 const settingsStore = useSettingsStore();
 const downloadStore = useDownloadStore();
+const route = useRoute();
+const pageTabsStore = usePageTabsStore();
 const updateInfo = ref<UpdateInfo | null>(null);
 const downloadNotice = ref<DownloadNotice | null>(null);
 const readyInfo = ref<ReadyInfo | null>(null);
@@ -207,6 +211,9 @@ const updatePackageType = ref<'installer' | 'portable'>('installer');
 let unregisterHotkeys: (() => void) | null = null;
 let unregisterSelectionClear: (() => void) | null = null;
 let updateDownloadInFlight = false;
+
+// 所有路由入口（侧边栏、内容卡片、深链和快捷键）统一在这里登记为可见标签页。
+watch(() => route.fullPath, () => pageTabsStore.syncRoute(route), { immediate: true });
 
 watch(
   [() => authStore.isLoggedIn, () => authStore.user?.uid],

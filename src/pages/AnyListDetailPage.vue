@@ -79,6 +79,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { usePageTabTitle } from '../composables/usePageTabTitle';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import FeedCard from '../components/feed/FeedCard.vue';
 import AppImage from '../components/common/AppImage.vue';
@@ -103,6 +104,7 @@ const feedDetail = ref<any>(null);
 const myUid = computed(() => String(authStore.user?.uid || ''));
 
 const albumTitle = computed(() => albumInfo.value?.title || feedDetail.value?.title || '万物清单');
+usePageTabTitle(albumTitle);
 const albumDescription = computed(() => albumInfo.value?.description || '');
 const albumCover = computed(() => albumInfo.value?.pic || albumInfo.value?.cover || albumInfo.value?.logo || '');
 

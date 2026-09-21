@@ -38,6 +38,7 @@ import LoadingState from '../components/common/LoadingState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import { isAnswerSearchEntity } from '../utils/searchEntities';
+import { usePageTabTitle } from '../composables/usePageTabTitle';
 
 defineOptions({ name: 'FeedDetailPage' });
 
@@ -62,6 +63,10 @@ function normalizeContextFeed(item: any): any {
 }
 
 const feedDetail = ref<any>(normalizeContextFeed(appStore.getFeedDetailContext(feedId.value)));
+usePageTabTitle(computed(() => {
+  const username = String(feedDetail.value?.username || feedDetail.value?.userInfo?.username || '').trim();
+  return username ? `${username} 的动态` : null;
+}));
 const isAnswerDetail = computed(() => Boolean(feedDetail.value && isAnswerSearchEntity(feedDetail.value)));
 const answerQuestionId = computed(() => String(
   feedDetail.value?.questionId

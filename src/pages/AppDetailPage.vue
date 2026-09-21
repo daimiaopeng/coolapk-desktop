@@ -498,6 +498,7 @@ import { handleAnchorClick } from '../utils/anchorClick';
 import { getErrorMessage } from '../utils/errors';
 import { showToast } from '../utils/toast';
 import type { RelatedApp, RelatedAlbum } from '../types/appDetail';
+import { usePageTabTitle } from '../composables/usePageTabTitle';
 
 const route = useRoute();
 const router = useRouter();
@@ -581,6 +582,7 @@ const recommendError = ref('');
 
 const logoUrl = computed(() => appInfo.value?.apkRomIcon || appInfo.value?.logo || appInfo.value?.icon || '');
 const appTitle = computed(() => appInfo.value?.title || appInfo.value?.shorttitle || packageName.value);
+usePageTabTitle(appTitle);
 const appVersion = computed(() => appInfo.value?.apkversionname || appInfo.value?.versionName || appInfo.value?.version || '');
 const developerName = computed(() => appInfo.value?.developername || appInfo.value?.shorttitle || '酷安开发者');
 const apkSize = computed(() => appInfo.value?.apksize || appInfo.value?.apkSizeFormatted || appInfo.value?.size || '未知大小');

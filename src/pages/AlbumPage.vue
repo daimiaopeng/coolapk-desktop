@@ -113,6 +113,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { usePageTabTitle } from '../composables/usePageTabTitle';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import FeedCommentSection from '../components/feed/FeedCommentSection.vue';
@@ -154,6 +155,7 @@ const albumTitle = computed(() => {
   if (!albumDetail.value) return albumId.value;
   return albumDetail.value.title || albumDetail.value.name || albumDetail.value.albumName || albumId.value;
 });
+usePageTabTitle(albumTitle);
 
 const apkCount = computed(() => {
   if (!albumDetail.value) return 0;
