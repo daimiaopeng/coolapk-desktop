@@ -161,7 +161,17 @@
             <!-- TAB: Cookie / SESSID 快速快捷登录 -->
             <div class="tab-pane">
               <div class="form-item">
-                <label class="form-label">SESSID 或 Cookie 字符串</label>
+                <div class="form-label-row">
+                  <label class="form-label">SESSID 或 Cookie 字符串</label>
+                  <button
+                    type="button"
+                    class="cookie-guide-link"
+                    title="在浏览器中查看获取 Cookie 的图文指南"
+                    @click="handleOpenCookieGuide"
+                  >
+                    <i class="fas fa-question-circle"></i> 如何抓取 Cookie？
+                  </button>
+                </div>
                 <textarea
                   v-model="rawCookieInput"
                   rows="4"
@@ -231,6 +241,12 @@ const authStore = useAuthStore();
 
 const activeTab = ref<'cookie'>('cookie');
 const showAdvanced = ref(false);
+
+const COOKIE_GUIDE_URL = 'https://github.com/daimiaopeng/coolapk-desktop/blob/main/docs/cookie-guide.md';
+
+function handleOpenCookieGuide() {
+  void CoolapkTauriAPI.openUrl(COOKIE_GUIDE_URL, 'system');
+}
 
 let statusPollTimer: ReturnType<typeof setInterval> | null = null;
 let closeModalTimer: ReturnType<typeof setTimeout> | null = null;
@@ -889,10 +905,34 @@ onUnmounted(() => {
   gap: var(--space-1);
 }
 
+.form-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .form-label {
   font-size: var(--font-size-caption);
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
+}
+
+.cookie-guide-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--brand-primary);
+  cursor: pointer;
+  transition: opacity var(--duration-fast);
+}
+
+.cookie-guide-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
 }
 
 .form-input, .form-textarea {
