@@ -1720,7 +1720,8 @@ onBeforeUnmount(() => {
 }
 
 .favorite-index-refresh,
-.favorite-export-trigger {
+.favorite-export-trigger,
+.btn-create-collection {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1735,13 +1736,9 @@ onBeforeUnmount(() => {
   transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 
-.favorite-index-refresh:hover:not(:disabled) {
-  background: var(--brand-soft);
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-}
-
-.favorite-export-trigger:hover {
+.favorite-index-refresh:hover:not(:disabled),
+.favorite-export-trigger:hover,
+.btn-create-collection:hover {
   background: var(--brand-soft);
   border-color: var(--brand-primary);
   color: var(--brand-primary);
@@ -1767,29 +1764,6 @@ onBeforeUnmount(() => {
 
 .favorite-content-search-summary i {
   color: var(--brand-primary);
-}
-
-.btn-create-collection {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 16px;
-  background: var(--surface);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-size: 13.5px;
-  font-weight: 400;
-  cursor: pointer;
-  box-shadow: none;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.btn-create-collection:hover {
-  border-color: var(--border-strong, var(--text-tertiary));
-  background: var(--background);
-  color: var(--text-primary);
 }
 
 .btn-create-collection:active {
