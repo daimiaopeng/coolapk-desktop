@@ -26,8 +26,10 @@
 | **Windows 单文件版** | `.exe` | `coolapk-desktop_x.x.x_x64-portable.exe` (x64) / `arm64-portable.exe` (ARM64) |
 | **macOS** | `.dmg` / `.app` | `coolapk-desktop_x.x.x_aarch64.dmg` (Apple 芯片) / `x64.dmg` (Intel 芯片) |
 | **Linux** | `.AppImage` / `.deb` / `.rpm` | `coolapk-desktop_x.x.x_amd64.AppImage` / `.deb` / `.rpm` |
+| **Android** | `.apk` / `.aab` | `coolapk-vx.y.z-android-arm64.apk` / `coolapk-vx.y.z-android-arm64.aab` |
+| **iPhone / iPad** | `.ipa` | `coolapk-vx.y.z-ios-arm64-unsigned.ipa`（未签名，需自行签名安装） |
 
-> 💡 **提示**：构建产物均由 GitHub Actions 自动化流程在云端打包。Windows 单文件版无需解压或安装，系统需已有 WebView2 Runtime。
+> 💡 **提示**：构建产物均由 GitHub Actions 自动化流程在云端打包。Windows 单文件版无需解压或安装，系统需已有 WebView2 Runtime。iOS IPA 为未签名设备包，不能直接安装到普通 iPhone/iPad，需要使用 AltStore、SideStore、Sideloadly 或自己的 Apple 证书完成签名。
 
 ## 界面预览
 
@@ -59,7 +61,7 @@
 - **私信聊天**：支持文字与图片消息，支持多账号快速切换
 - **账号能力**：官方授权或 Cookie 登录，多账户本地保存与一键切账号
 - **个性化与布局**：全屏无边距满幅平铺、深浅色主题、侧边栏折叠与默认启动页设置
-- **跨平台**：Windows、macOS、Linux 原生桌面应用
+- **跨平台**：Windows、macOS、Linux 原生桌面应用，以及 Android、iOS 移动端应用
 
 部分功能依赖酷安服务端接口，可能因官方调整、账号权限或风控策略而临时失效。
 
@@ -131,6 +133,31 @@ Tag 发布时，GitHub Actions 会构建签名的 ARM64 release APK 和 AAB，�
 - Linux x64：AppImage 免安装版 `.AppImage`、Debian 安装包 `.deb`、RPM 安装包 `.rpm`
 - macOS Apple 芯片：磁盘映像 `.dmg`、应用包 `.app`
 - macOS Intel：磁盘映像 `.dmg`、应用包 `.app`
+- Android ARM64：Release APK `.apk`、Google Play 发布包 `.aab`
+- iOS ARM64：未签名 IPA `.ipa`（供第三方工具或用户自行签名）
+
+### iOS IPA
+
+iOS 构建必须在 macOS 上完成，并需要完整的 Xcode、CocoaPods 和 Rust iOS 目标。首次构建前，在 macOS 上执行：
+
+```bash
+# 安装 CocoaPods（已安装可跳过）
+brew install cocoapods
+
+# 安装 Rust iOS 目标
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+
+# 首次生成 iOS 工程
+npm run tauri -- ios init
+
+# 使用 Xcode 打开并调试
+npm run tauri -- ios dev --open
+
+# 构建设备版未签名 IPA
+npm run tauri -- ios build --target aarch64 --no-sign --ci
+```
+
+GitHub Actions 会在推送 `v*` 版本标签时自动生成 ARM64 未签名 IPA，并上传到对应的 GitHub Release。该 IPA 不包含 Apple 开发者签名，安装到真机前需要使用 AltStore、SideStore、Sideloadly 或自己的证书重新签名；它不是可直接提交 App Store 的发行包。
 
 ## 自动发布
 
