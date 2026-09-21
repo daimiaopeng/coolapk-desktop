@@ -178,6 +178,16 @@ static START_MINIMIZED: AtomicBool = AtomicBool::new(false);
 static REMEMBER_WINDOW_STATE: AtomicBool = AtomicBool::new(true);
 static ALWAYS_ON_TOP: AtomicBool = AtomicBool::new(false);
 
+/// 恢复主窗口，供托盘、单实例和 macOS Dock 重新打开事件共用。
+#[cfg(desktop)]
+fn show_main_window(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct WindowState {
     x: i32,
@@ -775,11 +785,7 @@ pub fn run() {
         // 单实例插件必须先注册，才能把外部 deep link 转发到已运行的实例。
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // 重复启动时聚焦已有实例的主窗口；深链事件由插件转发给前端。
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.unminimize();
-                let _ = w.set_focus();
-            }
+            show_main_window(app);
         }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -967,11 +973,7 @@ pub fn run() {
                     .menu(&menu)
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "show" => {
-                            if let Some(w) = app.get_webview_window("main") {
-                                let _ = w.show();
-                                let _ = w.unminimize();
-                                let _ = w.set_focus();
-                            }
+                            show_main_window(app);
                         }
                         "quit" => {
                             // 退出前持久化窗口几何信息（托盘退出不触发 CloseRequested）
@@ -993,11 +995,7 @@ pub fn run() {
                         } = event
                         {
                             let app = tray.app_handle();
-                            if let Some(w) = app.get_webview_window("main") {
-                                let _ = w.show();
-                                let _ = w.unminimize();
-                                let _ = w.set_focus();
-                            }
+                            show_main_window(&app);
                         }
                     });
 
@@ -1319,6 +1317,22 @@ pub fn run() {
             vote_goods_list_item,
             bind_feed_to_goods_list,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen {
+                has_visible_windows,
+                ..
+            } = event
+            {
+                if !has_visible_windows {
+                    // 主窗口关闭到托盘后，点击 macOS Dock 图标会触发 Reopen 事件。
+                    show_main_window(app);
+                }
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }
