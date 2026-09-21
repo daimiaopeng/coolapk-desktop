@@ -45,6 +45,11 @@
           <span>新建收藏单</span>
         </button>
 
+        <button class="favorite-export-trigger" type="button" @click="openFavoriteExport('collections')">
+          <i class="fas fa-file-export"></i>
+          <span>导出收藏</span>
+        </button>
+
         <div class="collection-display-toolbar" aria-label="收藏单显示设置">
           <div class="collection-view-switch" role="group" aria-label="收藏单视图">
             <button
@@ -143,6 +148,10 @@
         <button class="favorite-index-refresh" type="button" :disabled="favoriteContentIndexing" @click="refreshFavoriteContentIndex(true)">
           <i :class="favoriteContentIndexing ? 'fas fa-spinner fa-spin' : 'fas fa-rotate'"></i>
           <span>{{ favoriteContentIndexing ? '更新索引中' : '更新正文索引' }}</span>
+        </button>
+        <button class="favorite-export-trigger" type="button" @click="openFavoriteExport('all')">
+          <i class="fas fa-file-export"></i>
+          <span>导出收藏</span>
         </button>
       </div>
     </div>
@@ -534,8 +543,8 @@
           <div v-else class="feed-list">
             <div class="favorite-content-search-summary"><i class="fas fa-database"></i> 已索引 {{ favoriteContentIndexCount }} 条收藏正文，命中 {{ favoriteContentSearchResults.length }} 条<span v-if="favoriteContentIndexing">，索引更新中</span></div>
             <template v-for="entry in favoriteContentSearchResults" :key="entry.feedId">
-              <RatingCard v-if="isRatingFeedEntity(entry.feed)" :feed="entry.feed" cloud-favorite :highlight-keyword="favoriteContentSearchKeyword" @favorite-changed="handleFavoriteChanged" />
-              <FeedCard v-else :feed="entry.feed" cloud-favorite :highlight-keyword="favoriteContentSearchKeyword" @deleted="handleFeedDeleted" @favorite-changed="handleFavoriteChanged" />
+              <RatingCard v-if="isRatingFeedEntity(entry.feed)" :feed="entry.feed" cloud-favorite favorite-picker-on-remove :highlight-keyword="favoriteContentSearchKeyword" @favorite-changed="handleFavoriteChanged" />
+              <FeedCard v-else :feed="entry.feed" cloud-favorite favorite-picker-on-remove :highlight-keyword="favoriteContentSearchKeyword" @deleted="handleFeedDeleted" @favorite-changed="handleFavoriteChanged" />
             </template>
           </div>
         </template>
@@ -558,12 +567,14 @@
                 v-if="isRatingFeedEntity(item)"
                 :feed="item"
                 cloud-favorite
+                favorite-picker-on-remove
                 @favorite-changed="handleFavoriteChanged"
               />
               <FeedCard
                 v-else
                 :feed="item"
                 cloud-favorite
+                favorite-picker-on-remove
                 @deleted="handleFeedDeleted"
                 @favorite-changed="handleFavoriteChanged"
               />
@@ -640,6 +651,12 @@
         </div>
       </form>
     </AppDialog>
+    <FavoriteExportDialog
+      :is-open="favoriteExportOpen"
+      :mode="favoriteExportMode"
+      :collections="collections"
+      @close="favoriteExportOpen = false"
+    />
   </div>
 </template>
 <script setup lang="ts">
@@ -653,6 +670,7 @@ import AppImage from '../components/common/AppImage.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import ErrorState from '../components/common/ErrorState.vue';
+import FavoriteExportDialog from '../components/favorites/FavoriteExportDialog.vue';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
@@ -679,6 +697,13 @@ const route = useRoute();
 const router = useRouter();
 
 const activeSubTab = ref<'all' | 'collections'>('all');
+const favoriteExportOpen = ref(false);
+const favoriteExportMode = ref<'all' | 'collections'>('all');
+
+function openFavoriteExport(mode: 'all' | 'collections') {
+  favoriteExportMode.value = mode;
+  favoriteExportOpen.value = true;
+}
 
 const cloudFeeds = ref<any[]>([]);
 const loading = ref(false);
@@ -1694,7 +1719,8 @@ onBeforeUnmount(() => {
   width: min(300px, 48vw);
 }
 
-.favorite-index-refresh {
+.favorite-index-refresh,
+.favorite-export-trigger {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1710,6 +1736,12 @@ onBeforeUnmount(() => {
 }
 
 .favorite-index-refresh:hover:not(:disabled) {
+  background: var(--brand-soft);
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+.favorite-export-trigger:hover {
   background: var(--brand-soft);
   border-color: var(--brand-primary);
   color: var(--brand-primary);
@@ -1743,21 +1775,21 @@ onBeforeUnmount(() => {
   gap: 6px;
   height: 34px;
   padding: 0 16px;
-  background: linear-gradient(135deg, var(--brand-primary), #0ea05b);
-  color: #ffffff;
-  border: none;
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   font-size: 13.5px;
-  font-weight: 600;
+  font-weight: 400;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(16, 185, 102, 0.25);
+  box-shadow: none;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-create-collection:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(16, 185, 102, 0.35);
-  filter: brightness(1.05);
+  border-color: var(--border-strong, var(--text-tertiary));
+  background: var(--background);
+  color: var(--text-primary);
 }
 
 .btn-create-collection:active {

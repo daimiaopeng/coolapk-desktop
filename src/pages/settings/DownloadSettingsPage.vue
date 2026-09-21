@@ -173,26 +173,17 @@
           <span class="row-label">导出浏览历史</span>
           <span class="row-sub">将酷安账号的浏览历史导出为 JSON 文件保存到下载目录</span>
         </div>
-        <AppButton variant="ghost" size="sm" :disabled="exporting" @click="exportHistory">
-          {{ exporting ? '导出中...' : '导出 JSON' }}
+        <AppButton variant="ghost" size="sm" :disabled="historyExporting" @click="exportHistory">
+          {{ historyExporting ? '导出中...' : '导出 JSON' }}
         </AppButton>
       </div>
 
-      <div class="setting-row">
-        <div class="row-info">
-          <span class="row-label">导出我的收藏</span>
-          <span class="row-sub">将我的收藏导出为 JSON 文件保存到下载目录</span>
-        </div>
-        <AppButton variant="ghost" size="sm" :disabled="exporting" @click="exportFavorites">
-          {{ exporting ? '导出中...' : '导出 JSON' }}
-        </AppButton>
-      </div>
-
-      <p v-if="exportResult" class="tray-tip">
+      <p v-if="historyExportResult" class="tray-tip">
         <i class="fas fa-check-circle"></i>
-        已导出到：{{ exportResult }}
+        浏览历史已导出到：{{ historyExportResult }}
       </p>
     </div>
+
   </div>
 </template>
 
@@ -208,8 +199,8 @@ import { clearResourceCache, clearResourceMemoryCache } from '../../utils/resour
 const settingsStore = useSettingsStore();
 const authStore = useAuthStore();
 
-const exporting = ref(false);
-const exportResult = ref('');
+const historyExporting = ref(false);
+const historyExportResult = ref('');
 const cacheBusy = ref(false);
 const cacheBytes = ref<number | null>(null);
 const cacheImageBytes = ref(0);
@@ -358,13 +349,13 @@ async function collectPages(
 }
 
 async function exportHistory() {
-  if (exporting.value) return;
+  if (historyExporting.value) return;
   if (!authStore.isLoggedIn) {
     alert('请先登录酷安账号后再导出浏览历史');
     return;
   }
-  exporting.value = true;
-  exportResult.value = '';
+  historyExporting.value = true;
+  historyExportResult.value = '';
   try {
     const items = await collectPages((page) => CoolapkTauriAPI.getHitHistory(page));
     const path = await CoolapkTauriAPI.exportJsonFile(
@@ -372,34 +363,11 @@ async function exportHistory() {
       JSON.stringify(items, null, 2),
       settingsStore.settings.downloadPath
     );
-    exportResult.value = path;
+    historyExportResult.value = path;
   } catch (err) {
     alert(exportError(err));
   } finally {
-    exporting.value = false;
-  }
-}
-
-async function exportFavorites() {
-  if (exporting.value) return;
-  if (!authStore.isLoggedIn) {
-    alert('请先登录酷安账号后再导出收藏');
-    return;
-  }
-  exporting.value = true;
-  exportResult.value = '';
-  try {
-    const items = await collectPages((page) => CoolapkTauriAPI.getFavoriteList('feed', page));
-    const path = await CoolapkTauriAPI.exportJsonFile(
-      `coolapk_favorites_${dateStamp()}.json`,
-      JSON.stringify(items, null, 2),
-      settingsStore.settings.downloadPath
-    );
-    exportResult.value = path;
-  } catch (err) {
-    alert(exportError(err));
-  } finally {
-    exporting.value = false;
+    historyExporting.value = false;
   }
 }
 
@@ -450,6 +418,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 2px;
 }
+
 
 .cache-directory-row {
   align-items: flex-start;

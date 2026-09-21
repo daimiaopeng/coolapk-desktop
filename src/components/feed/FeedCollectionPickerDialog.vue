@@ -36,10 +36,10 @@
       <AppButton
         variant="primary"
         :loading="submitting"
-        :disabled="loading || selectedIds.size === 0"
+        :disabled="loading || (!allowEmptySelection && selectedIds.size === 0)"
         @click="confirm"
       >
-        确定收藏
+        {{ allowEmptySelection && selectedIds.size === 0 ? '取消全部收藏' : '保存收藏夹' }}
       </AppButton>
     </template>
   </AppDialog>
@@ -57,11 +57,13 @@ const props = withDefaults(
     selectedIds?: string[];
     loading?: boolean;
     submitting?: boolean;
+    allowEmptySelection?: boolean;
   }>(),
   {
     selectedIds: () => [],
     loading: false,
     submitting: false,
+    allowEmptySelection: false,
   },
 );
 
@@ -124,7 +126,7 @@ function close() {
 }
 
 function confirm() {
-  if (props.loading || props.submitting || selectedIds.value.size === 0) return;
+  if (props.loading || props.submitting || (!props.allowEmptySelection && selectedIds.value.size === 0)) return;
   emit('confirm', Array.from(selectedIds.value));
 }
 </script>

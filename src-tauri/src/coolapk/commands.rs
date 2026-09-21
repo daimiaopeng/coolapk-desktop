@@ -2519,6 +2519,38 @@ fn next_available_file_path(dir: &std::path::Path, file_name: &str) -> PathBuf {
     dir.join(format!("{stem}_{}.{}", std::process::id(), extension))
 }
 
+/// 为包含 HTML 与图片资源的导出包创建独立目录。
+#[tauri::command]
+pub fn create_export_directory(
+    app: tauri::AppHandle,
+    directory_name: String,
+    dir: Option<String>,
+) -> Result<String, String> {
+    let safe_name: String = directory_name
+        .chars()
+        .take(100)
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
+        .collect();
+    if safe_name.is_empty() || safe_name == "." || safe_name == ".." {
+        return Err("导出目录名不合法".to_string());
+    }
+
+    let parent = user_save_dir(&app, dir.as_deref())?;
+    std::fs::create_dir_all(&parent).map_err(|e| format!("创建导出目录失败：{e}"))?;
+    let mut target = parent.join(&safe_name);
+    if target.exists() {
+        for index in 2..=9999 {
+            let candidate = parent.join(format!("{safe_name}_{index}"));
+            if !candidate.exists() {
+                target = candidate;
+                break;
+            }
+        }
+    }
+    std::fs::create_dir(&target).map_err(|e| format!("创建导出目录失败：{e}"))?;
+    Ok(target.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub async fn get_game_list(
     state: State<'_, AppState>,
@@ -3121,8 +3153,9 @@ pub fn export_json_file(
     if safe_name.is_empty() || safe_name == "." || safe_name == ".." || safe_name.contains("..") {
         return Err("导出文件名不合法".to_string());
     }
-    if content.len() > 20 * 1024 * 1024 {
-        return Err("导出内容过大（超过 20MB）".to_string());
+    // 保留较高上限以兼容大型 JSON/TXT/HTML 文本导出；HTML 图片资源单独保存。
+    if content.len() > 256 * 1024 * 1024 {
+        return Err("导出内容过大（超过 256MB）".to_string());
     }
 
     let dir = user_save_dir(&app, dir.as_deref())?;

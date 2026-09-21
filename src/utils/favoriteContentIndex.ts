@@ -1,11 +1,11 @@
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { getFeedDetailMessage, stripFeedMoreSuffix } from './feedContent';
+import { favoriteFeedId, loadAllFavoriteFeeds } from './favoriteFeeds';
 import { readTauriStoreValue, writeTauriStoreValue } from './tauriStore';
 
 const STORE_FILE = 'favorite_content_index.json';
 const STORE_KEY_PREFIX = 'account:';
 const INDEX_VERSION = 1;
-const MAX_SYNC_PAGES = 500;
 const MAX_REVALIDATE_PER_SYNC = 16;
 const REVALIDATE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const DETAIL_CONCURRENCY = 3;
@@ -64,7 +64,7 @@ function firstText(source: any, keys: string[]): string {
 }
 
 function feedIdOf(feed: any): string {
-  return firstText(feed, ['id', 'feedId', 'feed_id', 'entityId', 'entity_id']);
+  return favoriteFeedId(feed);
 }
 
 function updateMarkerOf(feed: any): string {
@@ -210,32 +210,6 @@ async function fetchDetailEntry(feed: any, now: number): Promise<FavoriteContent
   }
 }
 
-async function loadFavoriteSummaries(): Promise<{ feeds: any[]; complete: boolean }> {
-  const feeds: any[] = [];
-  const seenIds = new Set<string>();
-  let firstItem = '';
-  let lastItem = '';
-  for (let page = 1; page <= MAX_SYNC_PAGES; page += 1) {
-    const response: any = await CoolapkTauriAPI.getFavoriteList('feed', page, firstItem, lastItem);
-    const pageFeeds = Array.isArray(response?.data) ? response.data : [];
-    if (pageFeeds.length === 0) return { feeds, complete: true };
-    let pageHasNew = false;
-    for (const feed of pageFeeds) {
-      const feedId = feedIdOf(feed);
-      if (!feedId || seenIds.has(feedId)) continue;
-      seenIds.add(feedId);
-      feeds.push(feed);
-      pageHasNew = true;
-    }
-    const nextFirstItem = feedIdOf(pageFeeds[0]);
-    const nextLastItem = feedIdOf(pageFeeds[pageFeeds.length - 1]);
-    if (!pageHasNew || !nextLastItem || nextLastItem === lastItem) return { feeds, complete: false };
-    firstItem = nextFirstItem;
-    lastItem = nextLastItem;
-  }
-  return { feeds, complete: false };
-}
-
 function shouldRefreshEntry(entry: FavoriteContentIndexEntry | undefined, feed: any): boolean {
   if (!entry || !entry.contentComplete) return true;
   const marker = updateMarkerOf(feed);
@@ -250,7 +224,7 @@ export async function syncFavoriteContentIndex(accountIdValue: string | number):
   const sync = enqueueAccountTask(accountId, async () => {
     const index = await loadIndex(accountId);
     const now = Date.now();
-    const { feeds, complete } = await loadFavoriteSummaries();
+    const { feeds, complete } = await loadAllFavoriteFeeds();
     const seenIds = new Set(feeds.map(feedIdOf).filter(Boolean));
     const required = feeds.filter((feed) => shouldRefreshEntry(index.entries[feedIdOf(feed)], feed));
     const revalidationCandidates = feeds

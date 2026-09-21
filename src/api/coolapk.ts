@@ -1294,6 +1294,10 @@ export class CoolapkTauriAPI {
     return await invoke<string>('export_json_file', { fileName, content, dir: dir || '' });
   }
 
+  static async createExportDirectory(directoryName: string, dir?: string) {
+    return await invoke<string>('create_export_directory', { directoryName, dir: dir || '' });
+  }
+
   static async getCacheInfo(cacheDir: string = '') {
     return await invoke<{
       bytes: number;

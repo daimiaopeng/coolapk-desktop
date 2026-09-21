@@ -243,6 +243,7 @@
       :selected-ids="collectionInitialSelectedIds"
       :loading="collectionPickerLoading"
       :submitting="collectionPickerSubmitting"
+      :allow-empty-selection="favoritePickerOnRemove"
       @close="closeCollectionPicker"
       @confirm="confirmCollectionSelection"
     />
@@ -316,6 +317,7 @@ const props = defineProps<{
   detailMode?: boolean;
   autoOpenComments?: boolean;
   cloudFavorite?: boolean;
+  favoritePickerOnRemove?: boolean;
   maxLines?: number;
   highlightKeyword?: string;
   disableInlineComments?: boolean;
@@ -763,7 +765,7 @@ async function toggleFav() {
   const feedType = String((props.feed as any).entityType || (props.feed as any).feedType || 'feed');
   const trace = String((props.feed as any).trace || (props.feed as any).extra_key || '');
 
-  if (target) {
+  if (target || props.favoritePickerOnRemove) {
     await openCollectionPicker(id);
     return;
   }
@@ -826,7 +828,7 @@ function closeCollectionPicker() {
 async function confirmCollectionSelection(selectedIds: string[]) {
   if (collectionPickerSubmitting.value) return;
   const ids = Array.from(new Set(selectedIds.filter(Boolean)));
-  if (ids.length === 0) {
+  if (ids.length === 0 && !props.favoritePickerOnRemove) {
     showToast('请至少选择一个收藏夹', 'error');
     return;
   }
@@ -845,14 +847,18 @@ async function confirmCollectionSelection(selectedIds: string[]) {
       feedType,
       trace,
     );
-    isFav.value = true;
-    if (previousIds.size === 0) {
+    const remainsFavorited = ids.length > 0;
+    isFav.value = remainsFavorited;
+    if (previousIds.size === 0 && remainsFavorited) {
       favnum.value = Math.max(0, favnum.value + 1);
+    } else if (previousIds.size > 0 && !remainsFavorited) {
+      favnum.value = Math.max(0, favnum.value - 1);
     }
-    void queueFavoriteContentIndexEntry(authStore.user?.uid || '', props.feed).catch((error) => console.warn('更新收藏正文索引失败:', error));
-    showToast('已收藏到云端', 'success');
+    if (remainsFavorited) void queueFavoriteContentIndexEntry(authStore.user?.uid || '', props.feed).catch((error) => console.warn('更新收藏正文索引失败:', error));
+    else void removeFavoriteContentIndexEntry(authStore.user?.uid || '', props.feed.id).catch((error) => console.warn('移除收藏正文索引失败:', error));
+    showToast(remainsFavorited ? '收藏夹已更新' : '已取消全部云端收藏', 'success');
     collectionPickerOpen.value = false;
-    emit('favorite-changed', { id: props.feed.id, favorited: true });
+    emit('favorite-changed', { id: props.feed.id, favorited: remainsFavorited });
   } catch (err) {
     showToast(getErrorMessage(err, '收藏失败'), 'error');
   } finally {

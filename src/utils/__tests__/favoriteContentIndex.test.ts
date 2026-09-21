@@ -52,4 +52,23 @@ describe('favorite content index', () => {
     expect(await searchFavoriteContentIndex('42', '初版正文')).toHaveLength(0);
     expect(mocks.getFeedDetail).toHaveBeenCalledTimes(2);
   });
+
+  it('多页同步时始终使用第一页首项作为 firstItem', async () => {
+    mocks.getFavoriteList.mockImplementation(async (_type: string, page: number) => {
+      if (page === 1) return { data: [{ id: '300', message: '摘要' }, { id: '290', message: '摘要' }] };
+      if (page === 2) return { data: [{ id: '280', message: '摘要' }] };
+      return { data: [] };
+    });
+    mocks.getFeedDetail.mockImplementation(async (id: string) => ({ data: { id, message: `完整正文 ${id}` } }));
+
+    const result = await syncFavoriteContentIndex('42');
+
+    expect(result.total).toBe(3);
+    expect(result.complete).toBe(true);
+    expect(mocks.getFavoriteList.mock.calls).toEqual([
+      ['feed', 1, '', ''],
+      ['feed', 2, '300', '290'],
+      ['feed', 3, '300', '280'],
+    ]);
+  });
 });
