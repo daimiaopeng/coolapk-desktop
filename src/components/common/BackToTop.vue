@@ -95,7 +95,7 @@ function scrollToTop() {
     }
   }
 
-  const selectors = '.custom-scrollbar, .feed-scroll-container, .page-container, .user-page-wrapper, .discover-scroll-container, .feed-detail-page, .downloads-page, main.app-main-content';
+  const selectors = '.custom-scrollbar, .feed-scroll-container, .page-container, .user-page-wrapper, .discover-scroll-container, .feed-detail-page, .downloads-page, main.app-main-content, [data-route-surface]';
   const scrollables = document.querySelectorAll<HTMLElement>(selectors);
   let scrolledFound = false;
 

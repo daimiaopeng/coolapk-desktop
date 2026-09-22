@@ -1,0 +1,21 @@
+{
+  "policy": "Desktop Freeze：除根级 Presentation 接线、共享业务抽取、路由/状态连续性适配和由本架构引入的明确修复外，不得批量移动、重命名、重构或改写 Desktop 页面与组件。",
+  "paths": [
+    "src/components/layout/TopBar.vue",
+    "src/components/layout/MainSidebar.vue",
+    "src/components/layout/PageTabBar.vue",
+    "src/pages/HomePage.vue",
+    "src/router/index.ts",
+    "src/stores/app.ts",
+    "src/stores/auth.ts"
+  ],
+  "allowedBoundaryFiles": [
+    "src/App.vue",
+    "src/components/layout/AppShell.vue",
+    "src/presentation/",
+    "src/mobile/",
+    "src/stores/presentation.ts",
+    "src/utils/presentationPolicy.ts",
+    "src/utils/routeScroll.ts"
+  ]
+}

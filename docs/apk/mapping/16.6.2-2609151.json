@@ -1,0 +1,189 @@
+{
+  "apk": {
+    "package": "com.coolapk.market",
+    "version": "16.6.2",
+    "versionCode": 2609151,
+    "sha256": "1F0A97BEFCABDC2F2A4A834D30E5490DC68B01146555BB2E770A5366B29E05A8",
+    "source": "E:/下载/CoolApk-16.6.2-2609151-coolapk-arm64-sign.apk"
+  },
+  "staticAnalysis": {
+    "extractedDirectory": "C:/Users/daimi/AppData/Local/Temp/coolapk-apk-16.6.2-analysis/pass-20260921-225110",
+    "reports": [
+      "resource-map.tsv",
+      "manifest-components.tsv",
+      "aapt2-resources-ascii.txt",
+      "dex-class-descriptors.txt",
+      "dex-keyword-string-hits.tsv",
+      "runtime-ui.xml",
+      "runtime-page-nodes.tsv"
+    ],
+    "archiveSummary": {
+      "resFiles": 5389,
+      "assetFiles": 68,
+      "dexFiles": 1,
+      "arm64NativeFiles": 52
+    },
+    "manifest": "AndroidManifest.xml",
+    "resourceTable": "resources.arsc",
+    "resourceConfidence": "resource-confirmed",
+    "layoutMappings": {
+      "layout/main": "res/01n.xml",
+      "layout/main_fragment": "res/hy3.xml",
+      "layout/home": "res/mnl.xml",
+      "layout/app_home": "res/b-3.xml",
+      "layout/feed_detail_bottom": "res/Kbl.xml",
+      "layout/item_feed_layout_v8": "res/JmJ.xml",
+      "layout/search_result": "res/DQx.xml",
+      "layout/search_list": "res/Kst.xml",
+      "layout/collection_select": "res/nRL.xml",
+      "layout/design_bottom_navigation_item": "res/k0w.xml",
+      "layout/user_space_v9": "res/w9F.xml",
+      "layout/product_rating_detail": "res/VDK.xml"
+    },
+    "webReuseTokens": {
+      "backgroundLevel1": "#fff2f2f6",
+      "backgroundLevel2": "#ffffffff",
+      "accentGreen": "#ff0f9d58",
+      "darkGreen": "#ff0c7e46",
+      "textLevel1": "#de000000",
+      "textLevel2": "#8a000000",
+      "contentDivider": "#fff5f5f5",
+      "bottomNavigationHeightDp": 56,
+      "bottomNavigationIconSizeDp": 24,
+      "feedDetailPaddingDp": 16,
+      "feedListPaddingDp": 12,
+      "modalCornerRadiusDp": 20
+    },
+    "reusableDrawables": {
+      "homeOutline": "res/YdP.xml",
+      "user": "res/Naa.xml",
+      "message": "res/VjT.xml",
+      "setting": "res/fNx.xml",
+      "search": "res/yzL.xml",
+      "more": "res/2w9.xml",
+      "collectOutline": "res/kCG.xml",
+      "share": "res/YiH.xml",
+      "avatarBackground": "res/7rW.xml",
+      "bottomNavigationBackground": "res/2vH.xml"
+    },
+    "note": "资源文件名大量是保护壳生成的短名；以上逻辑映射来自 AAPT2/resource-map 报告。编译后的 Android XML 不能直接当 SVG 使用，未把广告 SDK、推送 SDK、用户内容或受保护 native 库复制到仓库。"
+  },
+  "runtimeEvidence": {
+    "device": "emulator-5554",
+    "android": "Android 14 / SDK 34",
+    "root": true,
+    "resolution": "1080x1920",
+    "density": 480,
+    "smallestWidthDp": 360,
+    "orientation": "portrait",
+    "activityLaunch": "com.coolapk.market/.view.main.MainActivity",
+    "launchConfidence": "runtime-confirmed",
+    "evidenceDirectory": "C:/Users/daimi/AppData/Local/Temp/coolapk_runtime_observation_20260921",
+    "screenshots": [
+      "01-baseline-main.png",
+      "02-my-page.png",
+      "05-digital-tab.png",
+      "06-discover-tab.png",
+      "08-home-menu.png",
+      "15-cold-startup-settled.png"
+    ],
+    "uiDumps": [
+      "01-baseline-main.xml",
+      "02-my-page.xml",
+      "05-digital-tab.xml",
+      "06-discover-tab.xml",
+      "08-home-menu.xml"
+    ],
+    "observed": [
+      "顶部系统状态栏 inset 约 72px，无刘海",
+      "顶部搜索框和横向频道/关注 tabs",
+      "底部自绘五项导航，中心为发布按钮",
+      "冷启动到 MainActivity 成功，稳定页面可见",
+      "横屏尝试仍保持竖屏，未宣称横屏布局已验证"
+    ],
+    "notObserved": [
+      "真实 Tablet 屏幕",
+      "登录前游客首页",
+      "iOS 页面",
+      "Android 三键导航与软键盘遮挡"
+    ]
+  },
+  "features": [
+    {
+      "id": "mobile-shell",
+      "apkFeature": "MainActivity mobile shell",
+      "activity": "com.coolapk.market.view.main.MainActivity",
+      "layoutResource": "compiled/obfuscated res resources; no safe named layout mapping",
+      "colors": "runtime screenshot: light surface, green selected state",
+      "dimensions": "runtime-confirmed status inset and bottom navigation; exact dp values not extracted",
+      "drawable": "runtime screenshot and existing CoolAPK logo asset",
+      "phoneBehavior": "top search/title area, scroll content, bottom navigation and central publish action",
+      "tabletBehavior": "not observed; implementation uses Mobile expanded Navigation Rail without a third product",
+      "mobileComponent": "src/mobile/shell/MobileShell.vue",
+      "targets": [
+        "src/mobile/shell/MobileShell.vue",
+        "src/mobile/shell/MobileAppBar.vue",
+        "src/mobile/navigation/MobileNavigation.vue"
+      ],
+      "test": "src/utils/__tests__/presentationPolicy.test.ts",
+      "confidence": "runtime-confirmed"
+    },
+    {
+      "id": "presentation-policy",
+      "apkFeature": "Phone/Tablet Presentation boundary",
+      "activity": "MainActivity runtime evidence plus desktop resize policy",
+      "layoutResource": "not applicable",
+      "colors": "not applicable",
+      "dimensions": "desktop hysteresis 720/760 is product policy, not APK-derived",
+      "drawable": "not applicable",
+      "phoneBehavior": "always Mobile on Android/iOS",
+      "tabletBehavior": "Mobile expanded; no Desktop Presentation",
+      "mobileComponent": "src/utils/presentationPolicy.ts",
+      "targets": [
+        "src/utils/presentationPolicy.ts",
+        "src/stores/presentation.ts",
+        "src/presentation/MobilePresentation.vue"
+      ],
+      "test": "src/utils/__tests__/presentationPolicy.test.ts",
+      "confidence": "code-confirmed"
+    },
+    {
+      "id": "home-feed-adaptation",
+      "apkFeature": "Home / follow feed / discover navigation",
+      "activity": "MainActivity observed at runtime",
+      "layoutResource": "protected/obfuscated; no named XML mapping claimed",
+      "colors": "green active navigation state observed",
+      "dimensions": "feed cards and bottom navigation visually observed; exact dp not claimed",
+      "drawable": "remote feed images from runtime; no binary copied to repository",
+      "phoneBehavior": "feed list with horizontal category controls and bottom navigation",
+      "tabletBehavior": "not observed; shared route content is placed in expanded Mobile shell",
+      "mobileComponent": "src/mobile/features/feed/MobileHomeFeature.vue + src/mobile/features/feed/MobileFeedFeature.vue",
+      "targets": [
+        "src/presentation/MobilePresentation.vue",
+        "src/presentation/MobileRouteOutlet.vue",
+        "src/presentation/RouteOutlet.vue",
+        "src/mobile/shell/MobileShell.vue"
+      ],
+      "test": "src/config/__tests__/featureCapabilities.test.ts",
+      "confidence": "runtime-confirmed"
+    },
+    {
+      "id": "safe-area-and-orientation",
+      "apkFeature": "system bars and orientation",
+      "activity": "MainActivity runtime observation",
+      "layoutResource": "manifest/runtime only",
+      "colors": "not applicable",
+      "dimensions": "top system inset observed; safe-area CSS uses env(safe-area-inset-*)",
+      "drawable": "not applicable",
+      "phoneBehavior": "portrait with system status bar and application bottom navigation",
+      "tabletBehavior": "not observed",
+      "mobileComponent": "src/mobile/shell/MobileAppBar.vue",
+      "targets": [
+        "src/mobile/shell/MobileAppBar.vue",
+        "src/mobile/navigation/MobileNavigation.vue"
+      ],
+      "test": "src/utils/__tests__/presentationPolicy.test.ts",
+      "confidence": "runtime-confirmed"
+    }
+  ]
+}

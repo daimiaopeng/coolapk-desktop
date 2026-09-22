@@ -2728,18 +2728,47 @@ fn merge_cookie_headers(first: Option<&str>, second: Option<&str>) -> Option<Str
     }
 }
 
-/// 从 WebView2 Cookie 存储读取酷安所有子域的 Cookie，包含 HttpOnly Cookie。
+/// 从登录 WebView 的酷安域 Cookie 存储读取完整会话，包含 HttpOnly Cookie。
+///
+/// 不能使用 `WebviewWindow::cookies()`：Tauri 的 Android 实现明确返回空列表。
+/// `cookies_for_url()` 会走 Android WebView CookieManager.getCookie，桌面端也能读取
+/// 指定 URL 的完整 Cookie，因此统一查询酷安相关域名并合并同名字段。
 fn get_login_webview_cookie<R: tauri::Runtime>(win: &tauri::WebviewWindow<R>) -> Result<String, String> {
-    let cookies = win.cookies().map_err(|e| e.to_string())?;
-    Ok(cookies
-        .into_iter()
-        .filter(|cookie| {
-            let domain = cookie.domain().unwrap_or_default().trim_start_matches('.');
-            domain == "coolapk.com" || domain.ends_with(".coolapk.com")
-        })
-        .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
-        .collect::<Vec<_>>()
-        .join("; "))
+    let cookie_urls = [
+        "https://www.coolapk.com/",
+        "https://account.coolapk.com/",
+        "https://api.coolapk.com/",
+    ];
+    let mut merged: Option<String> = None;
+    let mut errors = Vec::new();
+
+    for raw_url in cookie_urls {
+        let url = reqwest::Url::parse(raw_url).map_err(|error| error.to_string())?;
+        match win.cookies_for_url(url) {
+            Ok(cookies) => {
+                // Android 返回的 Cookie 没有 domain 元数据，但 URL 已经限制在酷安域名，
+                // 这里不能再按 domain 过滤，否则会把 Android 的所有 Cookie 全部丢掉。
+                let header = cookies
+                    .into_iter()
+                    .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                if !header.is_empty() {
+                    merged = merge_cookie_headers(merged.as_deref(), Some(&header));
+                }
+            }
+            Err(error) => errors.push(format!("{raw_url}: {error}")),
+        }
+    }
+
+    if let Some(cookie) = merged {
+        return Ok(cookie);
+    }
+    if errors.is_empty() {
+        Ok(String::new())
+    } else {
+        Err(errors.join("; "))
+    }
 }
 
 /// APK 只在 ac=access_token 时把 code 交给 /account/accessToken。
@@ -2806,7 +2835,7 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
 
     eprintln!("[login-debug] open_login_webview url={}", login_url);
 
-    // 登录完成后由 Rust monitor 读取 WebView2 Cookie 存储，避免 document.cookie 丢失 HttpOnly 和跨域 Cookie。
+    // 登录完成后由 Rust monitor 读取 WebView Cookie 存储，避免 document.cookie 丢失 HttpOnly 和跨域 Cookie。
     let js_script = r#"
         (function() {
             var APP_ORIGIN = "__APP_ORIGIN__";
@@ -2827,6 +2856,32 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                 }
             }
 
+            function isCoolapkLandingPage() {
+                var href = window.location.href || "";
+                return /^(?:https?:\/\/)(?:www|m)\.coolapk\.com(?:[\/:?#]|$)/i.test(href)
+                    && href.indexOf('account.coolapk.com/auth') === -1;
+            }
+
+            function cookieLooksAuthenticated(cookie) {
+                return /(?:^|;\s*)SESSID=[^;]+/i.test(cookie || "");
+            }
+
+            var landingBridgeStarted = false;
+            function bridgeLandingCookie() {
+                if (!isCoolapkLandingPage()) return false;
+                var cookie = document.cookie || "";
+                if (!cookieLooksAuthenticated(cookie)) return false;
+                window.location.replace(APP_ORIGIN + "/#/auth_callback?ck=" + encodeURIComponent(cookie));
+                return true;
+            }
+
+            function startLandingCookieBridge() {
+                if (landingBridgeStarted || !isCoolapkLandingPage()) return;
+                landingBridgeStarted = true;
+                bridgeLandingCookie();
+                window.setInterval(bridgeLandingCookie, 500);
+            }
+
             function checkLogoutPage() {
                 var text = (document.body && document.body.innerText) || "";
                 // 必须等待退出页面真正加载完成，不能只看到 auth/logout URL 就跳转，
@@ -2843,7 +2898,9 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
 
             document.addEventListener('DOMContentLoaded', function() {
                 checkLogoutPage();
+                startLandingCookieBridge();
             });
+            startLandingCookieBridge();
         })();
     "#
     .replace("__APP_ORIGIN__", &app_origin);
@@ -2869,6 +2926,7 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
         let mut last_monitor_url: Option<String> = None;
         let mut processed_callback_url: Option<String> = None;
         let mut attempted_landing_cookie: Option<String> = None;
+        let mut last_landing_cookie_error: Option<String> = None;
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(400)).await;
             if let Some(win) = app_handle.get_webview_window("login_window") {
@@ -2934,28 +2992,37 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                         || url_str.contains("coolapk.com"))
                         && !url_str.contains("account.coolapk.com/auth")
                     {
-                        if let Ok(cookie) = get_login_webview_cookie(&win) {
-                            if !cookie.is_empty() && attempted_landing_cookie.as_deref() != Some(cookie.as_str()) {
-                                attempted_landing_cookie = Some(cookie.clone());
-                                eprintln!(
-                                    "[login-debug:monitor] landing Cookie store, has_session={}, cookie_len={}",
-                                    CoolapkClient::has_valid_session_cookie(&cookie),
-                                    cookie.len()
-                                );
-                                if CoolapkClient::has_valid_session_cookie(&cookie) {
-                                    let state = app_handle.state::<AppState>();
-                                    match state.client.login_by_webview_cookie(&cookie).await {
-                                        Ok(result) => {
-                                            let data = result.get("data").unwrap_or(&result);
-                                            let uid = data.get("uid").or_else(|| data.get("id")).map(|value| value.to_string()).unwrap_or_default();
-                                            eprintln!("[login-debug:monitor] landing Cookie validated and login info saved, uid={}", uid.trim_matches('"'));
-                                            let _ = win.close();
-                                            use tauri::Emitter;
-                                            let _ = app_handle.emit("login-window-closed", ());
-                                            break;
+                        match get_login_webview_cookie(&win) {
+                            Ok(cookie) => {
+                                last_landing_cookie_error = None;
+                                if !cookie.is_empty() && attempted_landing_cookie.as_deref() != Some(cookie.as_str()) {
+                                    attempted_landing_cookie = Some(cookie.clone());
+                                    eprintln!(
+                                        "[login-debug:monitor] landing Cookie store, has_session={}, cookie_len={}",
+                                        CoolapkClient::has_valid_session_cookie(&cookie),
+                                        cookie.len()
+                                    );
+                                    if CoolapkClient::has_valid_session_cookie(&cookie) {
+                                        let state = app_handle.state::<AppState>();
+                                        match state.client.login_by_webview_cookie(&cookie).await {
+                                            Ok(result) => {
+                                                let data = result.get("data").unwrap_or(&result);
+                                                let uid = data.get("uid").or_else(|| data.get("id")).map(|value| value.to_string()).unwrap_or_default();
+                                                eprintln!("[login-debug:monitor] landing Cookie validated and login info saved, uid={}", uid.trim_matches('"'));
+                                                let _ = win.close();
+                                                use tauri::Emitter;
+                                                let _ = app_handle.emit("login-window-closed", ());
+                                                break;
+                                            }
+                                            Err(error) => eprintln!("[login-debug:monitor] landing Cookie not ready, waiting for updated Cookie: {}", error),
                                         }
-                                        Err(error) => eprintln!("[login-debug:monitor] landing Cookie not ready, waiting for updated Cookie: {}", error),
                                     }
+                                }
+                            }
+                            Err(error) => {
+                                if last_landing_cookie_error.as_deref() != Some(error.as_str()) {
+                                    eprintln!("[login-debug:monitor] landing Cookie read failed: {}", error);
+                                    last_landing_cookie_error = Some(error);
                                 }
                             }
                         }

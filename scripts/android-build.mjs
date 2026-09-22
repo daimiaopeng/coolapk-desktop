@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -6,6 +6,10 @@ const root = resolve(import.meta.dirname, '..');
 const androidDir = join(root, 'src-tauri', 'gen', 'android');
 const gradleProperties = join(androidDir, 'gradle.properties');
 const appBuildGradle = join(androidDir, 'app', 'build.gradle.kts');
+const androidResourceDir = join(androidDir, 'app', 'src', 'main', 'res');
+const androidIconSource = join(root, 'src', 'assets', 'coolapk-logo-rounded.png');
+const generatedIconDir = join(androidDir, '.coolapk-icon-output');
+const androidStringsPath = join(androidResourceDir, 'values', 'strings.xml');
 const keystoreProperties = join(androidDir, 'keystore.properties');
 const tauriCli = join(root, 'node_modules', '@tauri-apps', 'cli', 'tauri.js');
 const initOnly = process.argv.includes('--init-only');
@@ -94,6 +98,58 @@ function ensureAndroidProject() {
   }
 }
 
+function copyDirectory(source, target) {
+  mkdirSync(target, { recursive: true });
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    const sourcePath = join(source, entry.name);
+    const targetPath = join(target, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectory(sourcePath, targetPath);
+    } else {
+      copyFileSync(sourcePath, targetPath);
+    }
+  }
+}
+
+function syncAndroidIcon() {
+  if (!existsSync(androidIconSource)) {
+    throw new Error(`未找到 Android 应用图标源文件: ${androidIconSource}`);
+  }
+
+  // Tauri CLI 负责按 Android 密度生成 adaptive/round/legacy 三套资源，
+  // 再复制到 gen/android，保证每次重新 init 或清理生成目录后图标仍然正确。
+  runTauri(['icon', androidIconSource, '--output', generatedIconDir]);
+  const generatedAndroidIconDir = join(generatedIconDir, 'android');
+  if (!existsSync(generatedAndroidIconDir)) {
+    throw new Error(`Tauri 未生成 Android 图标资源: ${generatedAndroidIconDir}`);
+  }
+  copyDirectory(generatedAndroidIconDir, androidResourceDir);
+
+  const manifestPath = join(androidDir, 'app', 'src', 'main', 'AndroidManifest.xml');
+  let manifest = readFileSync(manifestPath, 'utf8');
+  const iconAttribute = '        android:icon="@mipmap/ic_launcher"';
+  const roundIconAttribute = '        android:roundIcon="@mipmap/ic_launcher_round"';
+  if (!manifest.includes(roundIconAttribute)) {
+    if (!manifest.includes(iconAttribute)) {
+      throw new Error(`AndroidManifest.xml 缺少预期的 android:icon 属性: ${manifestPath}`);
+    }
+    manifest = manifest.replace(iconAttribute, `${iconAttribute}\n${roundIconAttribute}`);
+    writeFileSync(manifestPath, manifest, 'utf8');
+  }
+}
+
+function configureAndroidAppName() {
+  let strings = readFileSync(androidStringsPath, 'utf8');
+  for (const resourceName of ['app_name', 'main_activity_title']) {
+    const pattern = new RegExp(`(<string name="${resourceName}">)[^<]*(</string>)`);
+    if (!pattern.test(strings)) {
+      throw new Error(`Android strings.xml 缺少预期资源: ${resourceName}`);
+    }
+    strings = strings.replace(pattern, `$1酷安开源版$2`);
+  }
+  writeFileSync(androidStringsPath, strings, 'utf8');
+}
+
 function escapeProperty(value) {
   return value.replaceAll('\\', '\\\\').replaceAll('\n', '\\n').replaceAll(':', '\\:').replaceAll('=', '\\=');
 }
@@ -123,6 +179,8 @@ function configureSigning() {
 configureWindowsEnvironment();
 mkdirSync(process.env.CARGO_TARGET_DIR || join(root, 'src-tauri', 'target'), { recursive: true });
 ensureAndroidProject();
+syncAndroidIcon();
+configureAndroidAppName();
 const signingConfigured = configureSigning();
 
 if (!initOnly) {

@@ -22,6 +22,8 @@
     "test:home-regressions:cdp": "node scripts/test-home-regressions-cdp.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "check:architecture": "node scripts/check-architecture-guardrails.mjs",
+    "check:apk-mapping": "node scripts/check-apk-mapping.mjs",
     "typecheck": "vue-tsc --noEmit",
     "tauri": "tauri",
     "android:init": "node scripts/android-build.mjs --init-only",

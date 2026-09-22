@@ -1,15 +1,10 @@
 <template>
-  <AppShell>
-    <router-view v-slot="{ Component, route }">
-      <!-- 原生标准页面堆栈：/topics 聚合页保持单实例常驻，其他页面以 route.fullPath 独立入栈 -->
-      <keep-alive :max="15">
-        <component
-          :is="Component"
-          :key="getRouteKey(route)"
-          :class="{ 'sidebar-page-enter': isSidebarTransitionActive }"
-        />
-      </keep-alive>
-    </router-view>
+  <div class="presentation-root" :data-presentation="presentationStore.presentation">
+    <DesktopPresentation v-if="presentationStore.presentation === 'desktop'" />
+    <MobilePresentation v-else />
+    <!-- Router/KeepAlive remains mounted across Presentation changes. The
+         active shell supplies the only Teleport target. -->
+    <RouteOutlet />
 
     <!-- 全局交互浮层 -->
     <PublishDialog />
@@ -17,7 +12,8 @@
     <SearchCommand />
     <LoginModal />
     <AppConfirmHost />
-    <BackToTop />
+    <!-- 移动端有自己的底部导航和滚动容器，桌面浮动按钮会遮住“我的”入口。 -->
+    <BackToTop v-if="presentationStore.presentation === 'desktop'" />
     <AppContextMenu />
 
     <AppDialog :is-open="Boolean(updateInfo)" :title="updateInfo?.hasNew ? '发现新版本' : '检查更新'" :width="540" @close="updateInfo = null">
@@ -131,14 +127,16 @@
       <i class="fas fa-download"></i>
       <span>正在后台下载更新 {{ downloading.percent }}%（{{ formatBytes(downloading.downloaded) }} / {{ formatBytes(downloading.total) }}）</span>
     </div>
-  </AppShell>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { listen } from '@tauri-apps/api/event';
-import AppShell from './components/layout/AppShell.vue';
+import DesktopPresentation from './presentation/DesktopPresentation.vue';
+import MobilePresentation from './presentation/MobilePresentation.vue';
+import RouteOutlet from './presentation/RouteOutlet.vue';
 import PublishDialog from './components/overlays/PublishDialog.vue';
 import ImageViewer from './components/overlays/ImageViewer.vue';
 import SearchCommand from './components/overlays/SearchCommand.vue';
@@ -166,21 +164,13 @@ import { desktopNotify } from './utils/desktopNotify';
 import { registerGlobalHotkeys } from './utils/hotkeys';
 import { CoolapkTauriAPI } from './api/coolapk';
 import { clearResourceCache } from './utils/resourceCache';
-import { useSidebarTransition } from './utils/routeTransition';
 import { registerGlobalSelectionClear } from './utils/selection';
 import { getPlatformInfo } from './utils/platform';
 import { syncFavoriteContentIndex } from './utils/favoriteContentIndex';
 import { usePageTabsStore } from './stores/pageTabs';
-
-const { isSidebarTransitionActive, resetSidebarTransition } = useSidebarTransition();
-
-function getRouteKey(route: any): string {
-  // /topics 话题聚合页保持单实例常驻，内部子话题切换不触发父页面销毁重建与闪烁
-  if (route.path === '/topics') {
-    return `/topics:${pageTabsStore.getGeneration(route)}`;
-  }
-  return `${route.fullPath}:${pageTabsStore.getGeneration(route)}`;
-}
+import { usePresentationStore } from './stores/presentation';
+import { useViewStateStore } from './stores/viewState';
+import { restoreRouteScrollPosition, saveRouteScrollPosition } from './utils/routeScroll';
 
 const PENDING_UPDATE_KEY = 'coolapk_pending_update';
 
@@ -199,6 +189,8 @@ const settingsStore = useSettingsStore();
 const downloadStore = useDownloadStore();
 const route = useRoute();
 const pageTabsStore = usePageTabsStore();
+const presentationStore = usePresentationStore();
+const viewStateStore = useViewStateStore();
 const updateInfo = ref<UpdateInfo | null>(null);
 const downloadNotice = ref<DownloadNotice | null>(null);
 const readyInfo = ref<ReadyInfo | null>(null);
@@ -214,6 +206,22 @@ let updateDownloadInFlight = false;
 
 // 所有路由入口（侧边栏、内容卡片、深链和快捷键）统一在这里登记为可见标签页。
 watch(() => route.fullPath, () => pageTabsStore.syncRoute(route), { immediate: true });
+
+// Presentation changes are not navigation. Save the current route's scroll
+// snapshot before its surface is replaced and restore the semantic containers
+// after the Mobile/Desktop shell has mounted.
+watch(
+  () => presentationStore.presentation,
+  () => {
+    viewStateStore.captureRoute(route.fullPath);
+    saveRouteScrollPosition(route.fullPath);
+    void nextTick(() => {
+      viewStateStore.restoreRoute(route.fullPath);
+      restoreRouteScrollPosition(route.fullPath);
+    });
+  },
+  { flush: 'sync' },
+);
 
 watch(
   [() => authStore.isLoggedIn, () => authStore.user?.uid],
@@ -488,6 +496,7 @@ async function restorePendingUpdate(): Promise<boolean> {
 }
 
 onMounted(() => {
+  presentationStore.start();
   void downloadStore.initialize();
   authStore.initAuth();
   window.addEventListener('resize', settingsStore.refreshAutoZoom);
@@ -529,6 +538,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  presentationStore.stop();
   window.removeEventListener('resize', settingsStore.refreshAutoZoom);
   unregisterHotkeys?.();
   unregisterSelectionClear?.();
@@ -550,6 +560,13 @@ html, body {
   padding: 0;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+.presentation-root {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
 .startup-update-header {

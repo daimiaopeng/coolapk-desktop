@@ -1,24 +1,15 @@
 import { computed, onMounted, onUnmounted, readonly, ref } from 'vue';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { detectRuntimePlatform } from '../utils/platform';
 
 export type DesktopPlatform = 'windows' | 'macos' | 'linux' | 'web';
 
 function detectDesktopPlatform(): DesktopPlatform {
-  if (typeof navigator === 'undefined') return 'web';
-
-  const platformName = `${navigator.platform ?? ''} ${navigator.userAgent}`.toLowerCase();
-  // 移动 WebView 不支持桌面窗口控制。iPadOS 的“请求桌面网站”UA
-  // 可能伪装成 MacIntel/Mac OS X，因此还要用触控点数识别它。
-  const isAppleMobile =
-    /iphone|ipad|ipod/.test(platformName) ||
-    (platformName.includes('mac') && navigator.maxTouchPoints > 1);
-  // Android WebView 的 UA 同样包含 "Linux"，必须先排除移动平台，
-  // 否则会尝试调用未初始化的桌面 window 插件。
-  if (platformName.includes('android') || isAppleMobile) return 'web';
-  if (platformName.includes('mac')) return 'macos';
-  if (platformName.includes('win')) return 'windows';
-  if (platformName.includes('linux')) return 'linux';
+  const runtime = detectRuntimePlatform();
+  if (runtime === 'macos' || runtime === 'windows' || runtime === 'linux') return runtime;
+  // Android/iOS/Web runtimes do not expose desktop window controls, even when
+  // a browser requests the desktop-site user agent.
   return 'web';
 }
 
