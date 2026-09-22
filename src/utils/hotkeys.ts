@@ -15,6 +15,7 @@ import { usePageTabsStore } from '../stores/pageTabs';
  *  - Ctrl+W 关闭当前标签页，Ctrl+Tab 切换标签页
  *  - Alt+Left / Alt+Right 前进后退页面
  *  - J / K 上下一条动态（派发 feed-nav-next / feed-nav-prev，由首页监听）
+ *  - J / K / C 单键导航忽略修饰键，保留 Ctrl+C 等系统快捷键
  *  - Ctrl+K / Esc 由 SearchCommand 及各浮层组件自行处理
  * 焦点在输入框/文本域/下拉框时忽略 J/K 等单键快捷键。
  */
@@ -124,7 +125,7 @@ export function registerGlobalHotkeys() {
       }
     }
 
-    if (isTypingTarget(e)) return;
+    if (isTypingTarget(e) || ctrl || e.altKey || e.shiftKey) return;
     const key = e.key.toLowerCase();
     if (key === 'j') {
       e.preventDefault();
