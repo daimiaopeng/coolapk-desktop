@@ -1469,7 +1469,7 @@ function handleUserClick() {
   }
 
   .top-bar.has-window-controls {
-    --window-control-width: 42px;
+    --window-control-width: 36px;
   }
 }
 

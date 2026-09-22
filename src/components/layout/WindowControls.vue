@@ -40,6 +40,7 @@ defineEmits<{
 .window-controls {
   align-self: stretch;
   display: flex;
+  gap: 8px;
   flex: 0 0 auto;
   height: var(--app-titlebar-height);
   border-left: 1px solid transparent;

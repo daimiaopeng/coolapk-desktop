@@ -89,4 +89,24 @@ describe('MainSidebar', () => {
     expect(wrapper.find('a[href="/downloads"]').exists()).toBe(false);
     expect(wrapper.find('a[href="/more"]').exists()).toBe(true);
   });
+
+  it('保留边界上的小圆形收起按钮，并能切换侧边栏状态', async () => {
+    const wrapper = mount(MainSidebar, {
+      global: {
+        stubs: {
+          'router-link': RouterLinkStub,
+        },
+      },
+    });
+
+    const toggleButton = wrapper.find('.sidebar-floating-toggle-btn');
+    const homeLink = wrapper.find('a[href="/"]');
+    expect(toggleButton.exists()).toBe(true);
+    expect(homeLink.exists()).toBe(true);
+    expect(toggleButton.classes()).toContain('sidebar-floating-toggle-btn');
+    expect(toggleButton.attributes('title')).toBe('收起侧边栏');
+
+    await toggleButton.trigger('click');
+    expect(toggleButton.attributes('title')).toBe('展开侧边栏');
+  });
 });

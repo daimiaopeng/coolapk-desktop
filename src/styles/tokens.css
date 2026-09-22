@@ -40,13 +40,13 @@
   --space-10: 40px;
 
   /* 布局尺寸定义 */
-  --sidebar-width: 210px;
+  --sidebar-width: 150px;
   --sidebar-collapsed-width: 56px;
   --feed-max-width: 720px;
   --right-sidebar-width: 270px;
   --app-titlebar-height: 56px;
   --topbar-height: var(--app-titlebar-height);
-  --window-control-width: 46px;
+  --window-control-width: 36px;
   --titlebar-background: var(--surface);
   --titlebar-divider: rgba(0, 0, 0, 0.05);
   --window-control-hover: rgba(0, 0, 0, 0.06);
