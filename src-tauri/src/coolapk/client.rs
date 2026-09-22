@@ -5945,7 +5945,7 @@ impl CoolapkClient {
 
     pub async fn follow_user(&self, uid: &str) -> Result<Value, String> {
         wrap_api_data(
-            self.api_get("/v6/user/follow", &[("uid", uid.to_string())])
+            self.api_post("/v6/user/follow", &[("uid", uid.to_string())], &[])
                 .await?,
         )
     }

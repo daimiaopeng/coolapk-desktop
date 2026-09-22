@@ -93,24 +93,26 @@
         </div>
         
         <template v-else>
+          <!-- APK 将 messageExtra/float 作为当前会话顶部的独立关注提示，不放进历史消息列表。 -->
+          <div v-if="followTipEntity" class="system-notice-item message-follow-tip-item">
+            <div class="system-notice-badge">
+              <span>{{ getSystemNoticeText(followTipEntity) }}</span>
+              <button class="follow-action-btn" type="button" @click="handleFollowPartner" :disabled="followingPartner || confirmingFollow">
+                <i class="fas fa-user-plus"></i> {{ followingPartner ? '关注中...' : (confirmingFollow ? '确认中...' : '关注对方') }}
+              </button>
+            </div>
+          </div>
+
           <div v-if="loadingMoreHistory" class="chat-pagination-status">加载更早消息...</div>
           <button v-else-if="historyLoadMoreError" class="chat-pagination-error" type="button" @click="retryLoadMoreHistory">
             {{ historyLoadMoreError }}，点击重试
           </button>
-          <template v-for="(msg, index) in chatHistory" :key="msg.id || msg.dateline || index">
+          <template v-for="(msg, index) in renderableChatHistory" :key="msg.id || msg.dateline || index">
             <!-- 酷安官方系统提醒 / 时间分隔项 (entityType === 'messageExtra') -->
-            <div v-if="msg.entityType === 'messageExtra'" class="system-notice-item">
+            <div v-if="getEntityType(msg) === 'messageExtra'" class="system-notice-item">
               <div :class="['system-notice-badge', { 'is-warning': isWarningNotice(msg) }]">
                 <i v-if="isWarningNotice(msg)" class="fas fa-shield-halved warning-icon"></i>
                 <span>{{ getSystemNoticeText(msg) }}</span>
-                <button 
-                  v-if="getSystemNoticeText(msg).includes('关注')" 
-                  class="follow-action-btn" 
-                  @click="handleFollowPartner"
-                  :disabled="followingPartner"
-                >
-                  <i class="fas fa-user-plus"></i> {{ followingPartner ? '关注中...' : '关注对方' }}
-                </button>
               </div>
             </div>
 
@@ -391,6 +393,11 @@ const historyLoadMoreError = ref('');
 const hasMoreHistory = ref(true);
 const isChatPositionReady = ref(false);
 const chatHistoryCache = new Map<string, any[]>();
+const getEntityType = (item: any) => String(item?.entityType ?? item?.entity_type ?? '').trim();
+const getEntityTemplate = (item: any) => String(item?.entityTemplate ?? item?.entity_template ?? '').trim();
+const isFollowTipEntity = (item: any) => getEntityType(item) === 'messageExtra' && getEntityTemplate(item) === 'float';
+const followTipEntity = computed(() => chatHistory.value.find(isFollowTipEntity) || null);
+const renderableChatHistory = computed(() => chatHistory.value.filter((item) => !isFollowTipEntity(item)));
 interface ChatHistoryPaginationState {
   nextPage: number;
   firstItem: string;
@@ -408,6 +415,7 @@ const draftSaved = ref(false);
 const sending = ref(false);
 const sendingImage = ref(false);
 const followingPartner = ref(false);
+const confirmingFollow = ref(false);
 
 const showEmojiPicker = ref(false);
 const emojiContainerRef = ref<HTMLElement | null>(null);
@@ -880,6 +888,8 @@ const getSessionPartnerUid = (session: any) => {
   return session.fromuid || session.uid || '';
 };
 
+const getSessionKey = (session: any) => String(session?.ukey || session?.id || '').trim();
+
 const getSessionUnreadCount = (session: any) => {
   return getMessageUnreadCount(session, currentUserUid.value);
 };
@@ -1129,7 +1139,7 @@ function mergeChatHistory(existing: any[], incoming: any[], prepend = false): an
 function getOldestChatHistoryCursor(items: any[]): string {
   for (const item of items) {
     // APK 会跳过关注提示等浮层，只用真实消息或时间项的 entityId 翻页。
-    if (item?.entityType === 'messageExtra' && item?.entityTemplate !== 'time') continue;
+    if (getEntityType(item) === 'messageExtra' && getEntityTemplate(item) !== 'time') continue;
     const itemId = getChatHistoryItemId(item);
     if (itemId) return itemId;
   }
@@ -1139,7 +1149,7 @@ function getOldestChatHistoryCursor(items: any[]): string {
 function getNewestChatHistoryCursor(items: any[]): string {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (item?.entityType === 'messageExtra' && item?.entityTemplate !== 'time') continue;
+    if (getEntityType(item) === 'messageExtra' && getEntityTemplate(item) !== 'time') continue;
     const itemId = getChatHistoryItemId(item);
     if (itemId) return itemId;
   }
@@ -1606,15 +1616,43 @@ const handleKeydown = (e: KeyboardEvent) => {
   }
 };
 
+function removeFollowTipFromSession(sessionKey: string) {
+  if (!sessionKey) return;
+  const cachedHistory = chatHistoryCache.get(sessionKey);
+  if (cachedHistory) chatHistoryCache.set(sessionKey, cachedHistory.filter((item) => !isFollowTipEntity(item)));
+  if (getSessionKey(currentSession.value) === sessionKey) {
+    chatHistory.value = chatHistory.value.filter((item) => !isFollowTipEntity(item));
+    chatHistoryCache.set(sessionKey, [...chatHistory.value]);
+  }
+}
+
 const handleFollowPartner = async () => {
-  if (!currentSession.value || followingPartner.value) return;
-  const partnerUid = getSessionPartnerUid(currentSession.value);
+  if (!currentSession.value || followingPartner.value || confirmingFollow.value || !followTipEntity.value) return;
+  // 私信接口返回的 messageUid 可能是数字，Tauri 关注命令统一接收字符串 UID。
+  const partnerUid = String(getSessionPartnerUid(currentSession.value) || '').trim();
   if (!partnerUid) return;
+  const session = currentSession.value;
+  const sessionKey = getSessionKey(session);
+
+  confirmingFollow.value = true;
+  let confirmed = false;
+  try {
+    confirmed = await requestConfirmation({
+      title: '关注用户',
+      message: `是否关注用户『${getUsername(session)}』？关注对方即可让TA与你无限制聊天`,
+      confirmText: '确认关注',
+    });
+  } finally {
+    confirmingFollow.value = false;
+  }
+  if (!confirmed || currentSession.value !== session || !followTipEntity.value) return;
 
   followingPartner.value = true;
   try {
     await CoolapkTauriAPI.followUser(partnerUid);
-    showToast('已成功关注该酷友！', 'success');
+    // APK 关注成功后只移除当前会话的顶部提示，不改写历史消息，也不查询用户资料。
+    removeFollowTipFromSession(sessionKey);
+    showToast('关注成功', 'success');
   } catch (err: any) {
     showToast(err?.message || '关注操作失败，请稍后重试', 'error');
   } finally {
@@ -2843,6 +2881,15 @@ onUnmounted(() => {
 .follow-action-btn:hover {
   opacity: 0.92;
   transform: scale(1.02);
+}
+
+.follow-action-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.follow-action-btn:disabled:hover {
+  transform: none;
 }
 
 .pending-images-bar {

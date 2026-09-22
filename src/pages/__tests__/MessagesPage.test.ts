@@ -9,9 +9,12 @@ const mocks = vi.hoisted(() => ({
   listChatHistory: vi.fn(),
   sendPrivateMessage: vi.fn(),
   sendPrivateImage: vi.fn(),
+  followUser: vi.fn(),
   uploadImage: vi.fn(),
   readMessage: vi.fn(),
   getUserProfile: vi.fn(),
+  showToast: vi.fn(),
+  requestConfirmation: vi.fn(),
   createObjectURL: vi.fn(() => 'blob:http://localhost/test-preview'),
   revokeObjectURL: vi.fn(),
 }));
@@ -29,12 +32,21 @@ vi.mock('../../router', () => ({
   router: mocks.router,
 }));
 
+vi.mock('../../utils/toast', () => ({
+  showToast: mocks.showToast,
+}));
+
+vi.mock('../../utils/confirm', () => ({
+  requestConfirmation: mocks.requestConfirmation,
+}));
+
 vi.mock('../../api/coolapk', () => ({
   CoolapkTauriAPI: {
     listMessages: mocks.listMessages,
     listChatHistory: mocks.listChatHistory,
     sendPrivateMessage: mocks.sendPrivateMessage,
     sendPrivateImage: mocks.sendPrivateImage,
+    followUser: mocks.followUser,
     uploadImage: mocks.uploadImage,
     readMessage: mocks.readMessage,
     getUserProfile: mocks.getUserProfile,
@@ -81,6 +93,9 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     mocks.uploadImage.mockResolvedValue({ data: '/message/2026/09/test_image.jpg' });
     mocks.sendPrivateImage.mockResolvedValue({ data: [{ id: 999, message_pic: '/message/2026/09/test_image.jpg' }] });
     mocks.sendPrivateMessage.mockResolvedValue({ data: [{ id: 1000, message: '测试文本' }] });
+    mocks.followUser.mockResolvedValue({ code: 200 });
+    mocks.getUserProfile.mockResolvedValue({ data: { isFollow: 0 } });
+    mocks.requestConfirmation.mockResolvedValue(true);
     mocks.readMessage.mockResolvedValue({ code: 200 });
   });
 
@@ -116,6 +131,242 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     }
     return wrapper;
   }
+
+  it('只处理 APK 返回的 messageExtra/float 关注提示，并将数字 messageUid 转为字符串', async () => {
+    const historySession = {
+      ukey: '10001_20002',
+      id: '10001_20002',
+      uid: 20002,
+      fromuid: 20002,
+      entityId: 20002,
+      messageUid: 20002,
+      messageUsername: '好友酷友',
+      username: '好友酷友',
+      message: '你好',
+      dateline: 1700000000,
+      isNewConversation: false,
+    };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([historySession]));
+    mocks.listMessages.mockResolvedValue({ data: [historySession] });
+    mocks.listChatHistory.mockResolvedValue({
+      data: [{ id: 'follow-tip-1', entityId: 'follow-tip-1', entityType: 'messageExtra', entityTemplate: 'float', title: '由于你未关注对方，你回复之前，ta只能给你发送3条私信' }],
+    });
+
+    const w = await mountMessagesPage();
+    const followButton = w.find('.follow-action-btn');
+    expect(followButton.exists()).toBe(true);
+    expect(mocks.getUserProfile).not.toHaveBeenCalled();
+
+    await followButton.trigger('click');
+    await flushPromises();
+
+    expect(mocks.requestConfirmation).toHaveBeenCalledWith({
+      title: '关注用户',
+      message: '是否关注用户『好友酷友』？关注对方即可让TA与你无限制聊天',
+      confirmText: '确认关注',
+    });
+    expect(mocks.followUser).toHaveBeenCalledWith('20002');
+    expect(mocks.showToast).toHaveBeenCalledWith('关注成功', 'success');
+    expect(w.find('.follow-action-btn').exists()).toBe(false);
+  });
+
+  it('普通 messageExtra 即使文本包含关注也不显示关注按钮', async () => {
+    const historySession = {
+      ukey: '10001_20002',
+      id: '10001_20002',
+      uid: 20002,
+      fromuid: 20002,
+      entityId: 20002,
+      messageUid: 20002,
+      messageUsername: '好友酷友',
+      username: '好友酷友',
+      message: '你好',
+      dateline: 1700000000,
+      isNewConversation: false,
+    };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([historySession]));
+    mocks.listMessages.mockResolvedValue({ data: [historySession] });
+    mocks.listChatHistory.mockResolvedValue({
+      data: [{ id: 'notice-1', entityType: 'messageExtra', entityTemplate: 'time', message: '关注对方后可以继续互动' }],
+    });
+
+    const w = await mountMessagesPage();
+    expect(w.find('.follow-action-btn').exists()).toBe(false);
+    expect(mocks.followUser).not.toHaveBeenCalled();
+  });
+
+  it('APK 不查询 isFollow，服务端返回提示时直接调用关注接口', async () => {
+    mocks.getUserProfile.mockResolvedValue({ data: { isFollow: 1 } });
+    mocks.listChatHistory.mockResolvedValue({
+      data: [{ id: 'follow-tip-1', entityId: 'follow-tip-1', entityType: 'messageExtra', entityTemplate: 'float', title: '关注对方即可让TA与你无限制聊天' }],
+    });
+    const historySession = {
+      ukey: '10001_20002',
+      id: '10001_20002',
+      uid: 20002,
+      fromuid: 20002,
+      entityId: 20002,
+      messageUid: 20002,
+      messageUsername: '好友酷友',
+      username: '好友酷友',
+      message: '你好',
+      dateline: 1700000000,
+      isNewConversation: false,
+    };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([historySession]));
+    mocks.listMessages.mockResolvedValue({ data: [historySession] });
+
+    const w = await mountMessagesPage();
+    const followButton = w.find('.follow-action-btn');
+    await followButton.trigger('click');
+    await flushPromises();
+
+    expect(mocks.getUserProfile).not.toHaveBeenCalled();
+    expect(mocks.followUser).toHaveBeenCalledWith('20002');
+    expect(mocks.showToast).not.toHaveBeenCalledWith('已经关注过该酷友了，无需重复关注', 'info');
+  });
+
+  it('关注成功后只移除当前会话提示，切换会话不会误删其他会话提示', async () => {
+    const firstSession = {
+      ukey: '10001_20002',
+      id: '10001_20002',
+      uid: 20002,
+      fromuid: 20002,
+      entityId: 20002,
+      messageUid: 20002,
+      messageUsername: '好友酷友',
+      username: '好友酷友',
+      message: '你好',
+      dateline: 1700000000,
+      isNewConversation: false,
+    };
+    const secondSession = { ...firstSession, ukey: '10001_30003', id: '10001_30003', uid: 30003, messageUid: 30003, messageUsername: '另一个酷友', username: '另一个酷友' };
+    let firstSessionFollowed = false;
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([firstSession, secondSession]));
+    mocks.listMessages.mockResolvedValue({ data: [firstSession, secondSession] });
+    mocks.followUser.mockImplementation(async () => {
+      firstSessionFollowed = true;
+      return { code: 200 };
+    });
+    mocks.listChatHistory.mockImplementation(async (ukey: string) => ({
+      data: ukey === firstSession.ukey && firstSessionFollowed
+        ? []
+        : [{ id: 'follow-tip-1', entityId: 'follow-tip-1', entityType: 'messageExtra', entityTemplate: 'float', title: '关注对方即可让TA与你无限制聊天' }],
+    }));
+
+    const w = await mountMessagesPage();
+    await w.find('.follow-action-btn').trigger('click');
+    await flushPromises();
+    expect(w.find('.follow-action-btn').exists()).toBe(false);
+
+    const sessionItems = w.findAll('.session-item');
+    await sessionItems[1].trigger('click');
+    await flushPromises();
+    expect(w.find('.follow-action-btn').exists()).toBe(true);
+
+    await sessionItems[0].trigger('click');
+    await flushPromises();
+
+    expect(w.find('.follow-action-btn').exists()).toBe(false);
+  });
+
+  it('关注请求失败时保留提示并允许重试', async () => {
+    mocks.followUser.mockRejectedValueOnce(new Error('关注失败'));
+    const historySession = {
+      ukey: '10001_20002',
+      id: '10001_20002',
+      uid: 20002,
+      fromuid: 20002,
+      entityId: 20002,
+      messageUid: 20002,
+      messageUsername: '好友酷友',
+      username: '好友酷友',
+      message: '你好',
+      dateline: 1700000000,
+      isNewConversation: false,
+    };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([historySession]));
+    mocks.listMessages.mockResolvedValue({ data: [historySession] });
+    mocks.listChatHistory.mockResolvedValue({
+      data: [{ id: 'follow-tip-1', entityId: 'follow-tip-1', entityType: 'messageExtra', entityTemplate: 'float', title: '关注对方即可让TA与你无限制聊天' }],
+    });
+
+    const w = await mountMessagesPage();
+    await w.find('.follow-action-btn').trigger('click');
+    await flushPromises();
+
+    expect(w.find('.follow-action-btn').exists()).toBe(true);
+    expect(mocks.showToast).toHaveBeenCalledWith('关注失败', 'error');
+
+    await w.find('.follow-action-btn').trigger('click');
+    await flushPromises();
+    expect(mocks.followUser).toHaveBeenCalledTimes(2);
+    expect(w.find('.follow-action-btn').exists()).toBe(false);
+  });
+
+  it('取消确认时不调用关注接口并保留提示', async () => {
+    mocks.requestConfirmation.mockResolvedValueOnce(false);
+    const historySession = {
+      ukey: '10001_20002',
+      id: '10001_20002',
+      uid: 20002,
+      fromuid: 20002,
+      entityId: 20002,
+      messageUid: 20002,
+      messageUsername: '好友酷友',
+      username: '好友酷友',
+      message: '你好',
+      dateline: 1700000000,
+      isNewConversation: false,
+    };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([historySession]));
+    mocks.listMessages.mockResolvedValue({ data: [historySession] });
+    mocks.listChatHistory.mockResolvedValue({
+      data: [{ id: 'follow-tip-1', entityId: 'follow-tip-1', entityType: 'messageExtra', entityTemplate: 'float', title: '关注对方即可让TA与你无限制聊天' }],
+    });
+
+    const w = await mountMessagesPage();
+    await w.find('.follow-action-btn').trigger('click');
+    await flushPromises();
+
+    expect(mocks.followUser).not.toHaveBeenCalled();
+    expect(w.find('.follow-action-btn').exists()).toBe(true);
+  });
+
+  it('关注请求进行中阻止重复提交', async () => {
+    let resolveFollow!: (value: unknown) => void;
+    mocks.followUser.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveFollow = resolve;
+    }));
+    const historySession = {
+      ukey: '10001_20002',
+      id: '10001_20002',
+      uid: 20002,
+      fromuid: 20002,
+      entityId: 20002,
+      messageUid: 20002,
+      messageUsername: '好友酷友',
+      username: '好友酷友',
+      message: '你好',
+      dateline: 1700000000,
+      isNewConversation: false,
+    };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([historySession]));
+    mocks.listMessages.mockResolvedValue({ data: [historySession] });
+    mocks.listChatHistory.mockResolvedValue({
+      data: [{ id: 'follow-tip-1', entityId: 'follow-tip-1', entityType: 'messageExtra', entityTemplate: 'float', title: '关注对方即可让TA与你无限制聊天' }],
+    });
+
+    const w = await mountMessagesPage();
+    const followButton = w.find('.follow-action-btn');
+    await followButton.trigger('click');
+    await followButton.trigger('click');
+    expect(mocks.followUser).toHaveBeenCalledTimes(1);
+
+    resolveFollow({ code: 200 });
+    await flushPromises();
+    expect(w.find('.follow-action-btn').exists()).toBe(false);
+  });
 
   it('支持在输入框粘贴图片，展示待发送图片缩略图并启用发送按钮', async () => {
     const w = await mountMessagesPage();
