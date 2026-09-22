@@ -168,7 +168,7 @@
         <AppSwitch v-model="settingsStore.settings.myRecentPinned" />
       </div>
 
-      <div class="nav-grid">
+      <div class="nav-grid nav-main-grid">
         <div v-for="nav in navItems" :key="nav.key" class="nav-toggle-card">
           <div class="nav-item-meta">
             <i :class="[nav.icon, 'nav-item-icon']"></i>
@@ -269,14 +269,12 @@ const navItems = [
   { key: 'topics', label: '话题', icon: 'fas fa-hashtag' },
   { key: 'digital', label: '数码', icon: 'fas fa-microchip' },
   { key: 'pictures', label: '酷图', icon: 'far fa-images' },
-  { key: 'apps', label: '应用', icon: 'fas fa-cubes' },
   { key: 'more', label: '更多服务', icon: 'fas fa-shapes' },
   { key: 'notifications', label: '通知', icon: 'far fa-bell' },
   { key: 'favorites', label: '收藏', icon: 'far fa-bookmark' },
   { key: 'history', label: '历史', icon: 'far fa-clock' },
   { key: 'messages', label: '消息', icon: 'far fa-comment-alt' },
   { key: 'following', label: '我关注的', icon: 'fas fa-user-group' },
-  { key: 'downloads', label: '下载', icon: 'fas fa-download' },
 ];
 
 const moreNavItems = moreNavs.map(({ key, label, icon }) => ({ key, label, icon }));

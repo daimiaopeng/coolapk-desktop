@@ -1,6 +1,5 @@
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { nextTick } from 'vue';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('vue-router', async (importOriginal) => {
@@ -13,7 +12,6 @@ vi.mock('vue-router', async (importOriginal) => {
 
 import MainSidebar from '../MainSidebar.vue';
 import * as routeTransition from '../../../utils/routeTransition';
-import { useSettingsStore } from '../../../stores/settings';
 
 const RouterLinkStub = {
   props: ['to'],
@@ -78,7 +76,7 @@ describe('MainSidebar', () => {
     expect(updateButton.text()).toContain('更新');
   });
 
-  it('关闭下载栏目后不显示下载入口', async () => {
+  it('应用和下载不再作为左侧独立入口展示', () => {
     const wrapper = mount(MainSidebar, {
       global: {
         stubs: {
@@ -86,11 +84,9 @@ describe('MainSidebar', () => {
         },
       },
     });
-    const settings = useSettingsStore();
 
-    expect(wrapper.find('a[href="/downloads"]').exists()).toBe(true);
-    settings.settings.navVisibility!.downloads = false;
-    await nextTick();
+    expect(wrapper.find('a[href="/apps"]').exists()).toBe(false);
     expect(wrapper.find('a[href="/downloads"]').exists()).toBe(false);
+    expect(wrapper.find('a[href="/more"]').exists()).toBe(true);
   });
 });

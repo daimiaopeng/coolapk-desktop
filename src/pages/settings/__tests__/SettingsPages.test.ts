@@ -71,16 +71,18 @@ describe('设置页面交互', () => {
     await wrapper.findAll('.density-card')[2].trigger('click');
     await wrapper.findAll('.zoom-btn')[3].trigger('click');
     await wrapper.find('.nav-toggle-card input').setValue(false);
-    const downloadNav = wrapper.findAll('.nav-toggle-card').find((card) => card.text().includes('下载'));
-    expect(downloadNav).toBeDefined();
-    await downloadNav!.find('.switch-input').setValue(false);
+    expect(wrapper.find('.nav-main-grid').text()).not.toContain('应用');
+    expect(wrapper.find('.nav-main-grid').text()).not.toContain('下载');
+    expect(wrapper.find('.nav-main-grid').text()).toContain('更多服务');
+    expect(wrapper.find('.nav-more-services-settings').exists()).toBe(false);
+    expect(wrapper.findAll('.nav-toggle-card').some((card) => card.text().includes('应用'))).toBe(false);
+    expect(wrapper.findAll('.nav-toggle-card').some((card) => card.text().includes('下载'))).toBe(false);
     expect(settings.settings.theme).toBe('dark');
     expect(settings.settings.accentColor).toBe('blue');
     expect(settings.settings.fontFamily).toBe('Noto Sans SC');
     expect(settings.settings.density).toBe('compact');
     expect(settings.settings.fontSize).toBe(16);
     expect(settings.settings.navVisibility?.home).toBe(false);
-    expect(settings.settings.navVisibility?.downloads).toBe(false);
   });
 
   it('内容页覆盖正文、链接和关键词设置', async () => {

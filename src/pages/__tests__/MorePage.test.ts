@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import MorePage from '../MorePage.vue';
 
@@ -10,6 +10,10 @@ vi.mock('vue-router', () => ({
 }));
 
 describe('MorePage.vue', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('renders correctly with title and featured items', () => {
     const wrapper = mount(MorePage);
     expect(wrapper.text()).toContain('更多服务');
@@ -18,6 +22,8 @@ describe('MorePage.vue', () => {
     expect(wrapper.text()).toContain('好物推荐');
     expect(wrapper.text()).toContain('酷安中心');
     expect(wrapper.text()).toContain('二手市场');
+    expect(wrapper.text()).toContain('应用');
+    expect(wrapper.text()).toContain('下载');
   });
 
   it('filters items correctly when searching', async () => {
@@ -32,8 +38,9 @@ describe('MorePage.vue', () => {
 
   it('navigates to the selected path when a card is clicked', async () => {
     const wrapper = mount(MorePage);
-    const firstFeaturedBtn = wrapper.find('.featured-btn-item');
-    await firstFeaturedBtn.trigger('click');
+    const firstFeaturedBtn = wrapper.findAll('.featured-btn-item').find((item) => item.text().includes('我的数码'));
+    expect(firstFeaturedBtn).toBeDefined();
+    await firstFeaturedBtn!.trigger('click');
 
     expect(mockPush).toHaveBeenCalledWith('/my-products');
   });

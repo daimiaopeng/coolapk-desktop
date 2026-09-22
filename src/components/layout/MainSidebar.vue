@@ -82,23 +82,6 @@
       <div class="nav-divider"></div>
 
       <div class="nav-group">
-        <router-link
-          v-if="downloadsVisible"
-          to="/downloads"
-          class="nav-item"
-          active-class="is-active"
-          :title="getNavTitle({ key: 'downloads', label: '下载' })"
-          @click="triggerSidebarTransition()"
-        >
-          <i class="fas fa-download nav-icon"></i>
-          <span v-if="!isCollapsed" class="nav-label">下载</span>
-          <span
-            v-if="getNavBadge('downloads') > 0"
-            :class="['nav-badge', { 'is-wide': getNavBadge('downloads') > 9 }]"
-          >
-            {{ getNavBadge('downloads') > 99 ? '99+' : getNavBadge('downloads') }}
-          </span>
-        </router-link>
         <router-link to="/settings" class="nav-item" active-class="is-active" title="设置" @click="triggerSidebarTransition()">
           <i class="fas fa-cog nav-icon"></i>
           <span v-if="!isCollapsed" class="nav-label">设置</span>
@@ -175,7 +158,6 @@ const allPrimaryNavs = [
   { key: 'discover', path: '/discover', label: '发现', icon: 'fas fa-compass' },
   { key: 'topics', path: '/topics', label: '话题', icon: 'fas fa-hashtag' },
   { key: 'pictures', path: '/pictures', label: '酷图', icon: 'far fa-images' },
-  { key: 'apps', path: '/apps', label: '应用', icon: 'fas fa-cubes' },
 ];
 
 const allSecondaryNavs = [
@@ -201,6 +183,8 @@ const secondaryNavs = computed(() => {
 // 属于“更多专区”的下属路由集合
 const moreSubPaths = [
   '/more',
+  '/apps',
+  '/downloads',
   '/my-products',
   '/goods',
   '/center',
@@ -256,7 +240,6 @@ const isMyActive = computed(() => {
 
 const moreVisible = computed(() => settingsStore.settings.navVisibility?.more !== false);
 const myVisible = computed(() => settingsStore.settings.navVisibility?.my !== false);
-const downloadsVisible = computed(() => settingsStore.settings.navVisibility?.downloads !== false);
 function getNavBadge(key: string): number {
   if (key === 'notifications') return notificationStore.notificationCount;
   if (key === 'messages') return notificationStore.messageCount;

@@ -167,6 +167,26 @@ function navigateTo(path: string) {
 // 核心推荐与常用金刚区（主页同款）
 const featuredItems: HubItem[] = [
   {
+    id: 'apps',
+    title: '应用',
+    shortDesc: '应用中心',
+    desc: '浏览酷安应用、游戏和软件详情，查找需要的安装包',
+    icon: 'fas fa-cubes',
+    colorClass: 'bg-blue',
+    path: '/apps',
+    tags: ['应用', '软件', '游戏', '应用中心'],
+  },
+  {
+    id: 'downloads',
+    title: '下载',
+    shortDesc: '下载管理',
+    desc: '管理应用和游戏安装包的下载任务与历史记录',
+    icon: 'fas fa-download',
+    colorClass: 'bg-green',
+    path: '/downloads',
+    tags: ['下载', '安装包', '下载管理'],
+  },
+  {
     id: 'my-products',
     title: '我的数码',
     shortDesc: '我的装备',
@@ -248,6 +268,7 @@ const featuredItems: HubItem[] = [
   },
 ];
 
+// 应用和下载作为“更多服务”中的常用入口。
 // 多维度分类架构（高扩展性，轻松承载 n 个栏目）
 const hubCategories: HubCategory[] = [
   {
