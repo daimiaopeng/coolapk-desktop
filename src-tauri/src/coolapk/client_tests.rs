@@ -115,13 +115,25 @@ fn test_secondhand_product_list_query_matches_apk_contract() {
 }
 
 #[test]
-fn test_collection_list_query_includes_default_collection() {
+fn test_collection_list_query_includes_default_collection_and_page_cursor() {
     assert_eq!(
-        build_collection_list_query("12345", 1),
+        build_collection_list_query("12345", 1, "", ""),
         vec![
             ("uid", "12345".to_string()),
             ("showDefault", "1".to_string()),
             ("page", "1".to_string()),
+            ("firstItem", "".to_string()),
+            ("lastItem", "".to_string()),
+        ]
+    );
+    assert_eq!(
+        build_collection_list_query("12345", 2, "collection-100", "collection-90"),
+        vec![
+            ("uid", "12345".to_string()),
+            ("showDefault", "1".to_string()),
+            ("page", "2".to_string()),
+            ("firstItem", "collection-100".to_string()),
+            ("lastItem", "collection-90".to_string()),
         ]
     );
 }
