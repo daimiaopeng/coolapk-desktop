@@ -34,7 +34,14 @@
         </div>
       </div>
 
-      <div ref="feedScrollContainer" class="feed-scroll-container custom-scrollbar" @scroll="handleScroll">
+      <div
+        ref="feedScrollContainer"
+        class="feed-scroll-container custom-scrollbar"
+        @scroll="handleScroll"
+        @wheel="handleFeedHorizontalWheel"
+        @pointerdown="handleFeedPointerDown"
+        @click.capture="handleFeedClickCapture"
+      >
         <!-- 1. 头条 Tab 专属：服务端要闻与动态子栏目 -->
         <div v-if="isHeadlineTab" class="headline-header-section">
           <!-- APK ConfigPage.rawEntities 动态下发的头条子栏目 -->
@@ -366,6 +373,12 @@ const feedScrollContainer = ref<HTMLElement | null>(null);
 const subChannelsContainer = ref<HTMLElement | null>(null);
 const followSubChannelsContainer = ref<HTMLElement | null>(null);
 const loading = ref(false);
+const homeTabSwipeThreshold = 56;
+let feedPointerStart: { pointerId: number; x: number; y: number } | null = null;
+let wheelGestureDelta = 0;
+let wheelGestureHandled = false;
+let wheelGestureIdleTimer: ReturnType<typeof setTimeout> | null = null;
+let suppressNextFeedClick = false;
 
 function handleSubChannelsWheel(e: WheelEvent) {
   if (subChannelsContainer.value && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
@@ -376,6 +389,90 @@ function handleSubChannelsWheel(e: WheelEvent) {
 function handleFollowSubChannelsWheel(e: WheelEvent) {
   if (followSubChannelsContainer.value && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
     followSubChannelsContainer.value.scrollLeft += e.deltaY;
+  }
+}
+
+function isInsideHorizontalScroller(target: EventTarget | null): boolean {
+  const feedContainer = feedScrollContainer.value;
+  let element = target instanceof Element ? target as HTMLElement : null;
+  while (element && element !== feedContainer) {
+    const overflowX = window.getComputedStyle(element).overflowX;
+    if ((overflowX === 'auto' || overflowX === 'scroll') && element.scrollWidth > element.clientWidth + 1) {
+      return true;
+    }
+    element = element.parentElement;
+  }
+  return false;
+}
+
+function activateAdjacentHomeTab(direction: -1 | 1): boolean {
+  const tabs = orderedDynamicTabs.value;
+  const currentIndex = tabs.findIndex((tab) => getTabKey(tab) === activeTab.value);
+  const nextTab = tabs[currentIndex + direction];
+  if (!nextTab) return false;
+  activeTab.value = getTabKey(nextTab);
+  return true;
+}
+
+function handleFeedHorizontalWheel(event: WheelEvent) {
+  if (Math.abs(event.deltaX) <= Math.abs(event.deltaY) || isInsideHorizontalScroller(event.target)) return;
+
+  wheelGestureDelta += event.deltaX;
+  if (!wheelGestureHandled && Math.abs(wheelGestureDelta) >= homeTabSwipeThreshold) {
+    const changed = activateAdjacentHomeTab(wheelGestureDelta > 0 ? 1 : -1);
+    wheelGestureHandled = changed;
+    wheelGestureDelta = 0;
+    if (changed) event.preventDefault();
+  }
+
+  if (wheelGestureIdleTimer) clearTimeout(wheelGestureIdleTimer);
+  wheelGestureIdleTimer = setTimeout(() => {
+    wheelGestureDelta = 0;
+    wheelGestureHandled = false;
+    wheelGestureIdleTimer = null;
+  }, 260);
+}
+
+function handleFeedPointerDown(event: PointerEvent) {
+  if (!event.isPrimary || event.pointerType === 'mouse' || isInsideHorizontalScroller(event.target)) return;
+  if (event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+  feedPointerStart = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+}
+
+function handleFeedPointerUp(event: PointerEvent) {
+  const start = feedPointerStart;
+  if (!start || event.pointerId !== start.pointerId) return;
+  feedPointerStart = null;
+
+  const deltaX = event.clientX - start.x;
+  const deltaY = event.clientY - start.y;
+  if (Math.abs(deltaX) < homeTabSwipeThreshold || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+  if (activateAdjacentHomeTab(deltaX < 0 ? 1 : -1)) {
+    suppressNextFeedClick = true;
+    window.setTimeout(() => { suppressNextFeedClick = false; }, 0);
+    event.preventDefault();
+  }
+}
+
+function handleFeedPointerCancel(event: PointerEvent) {
+  if (feedPointerStart?.pointerId === event.pointerId) feedPointerStart = null;
+}
+
+function handleFeedClickCapture(event: MouseEvent) {
+  if (!suppressNextFeedClick) return;
+  suppressNextFeedClick = false;
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+function resetHomeTabSwipeState() {
+  feedPointerStart = null;
+  suppressNextFeedClick = false;
+  wheelGestureDelta = 0;
+  wheelGestureHandled = false;
+  if (wheelGestureIdleTimer) {
+    clearTimeout(wheelGestureIdleTimer);
+    wheelGestureIdleTimer = null;
   }
 }
 const loadingMore = ref(false);
@@ -1432,6 +1529,8 @@ function bindGlobalListeners() {
   window.addEventListener('feed-nav-prev', onNavPrev);
   window.addEventListener('feed-nav-comment', onNavComment);
   window.addEventListener('refresh-feeds', onRefreshFeeds);
+  window.addEventListener('pointerup', handleFeedPointerUp);
+  window.addEventListener('pointercancel', handleFeedPointerCancel);
 }
 
 function unbindGlobalListeners() {
@@ -1439,6 +1538,9 @@ function unbindGlobalListeners() {
   window.removeEventListener('feed-nav-prev', onNavPrev);
   window.removeEventListener('feed-nav-comment', onNavComment);
   window.removeEventListener('refresh-feeds', onRefreshFeeds);
+  window.removeEventListener('pointerup', handleFeedPointerUp);
+  window.removeEventListener('pointercancel', handleFeedPointerCancel);
+  resetHomeTabSwipeState();
 }
 
 onMounted(() => {
@@ -1549,6 +1651,7 @@ onUnmounted(unbindGlobalListeners);
 .feed-scroll-container {
   flex: 1;
   overflow-y: auto;
+  touch-action: pan-y;
   background-color: var(--background-secondary);
 }
 

@@ -38,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import type { ConfigPageTab } from '../../types/settings';
 import type { HomeSubChannelSelection } from '../../utils/homeTabs';
 import TabManagerModal from './TabManagerModal.vue';
@@ -66,6 +66,13 @@ defineEmits<{
 
 const showTabManager = ref(false);
 const tabsContainer = ref<HTMLElement | null>(null);
+
+watch(() => props.activeKey, () => {
+  void nextTick(() => {
+    const activeTab = tabsContainer.value?.querySelector<HTMLElement>('.tab-item.is-active');
+    activeTab?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  });
+}, { immediate: true });
 
 function getTabKey(tab: ConfigPageTab): string {
   return tab.page_name || tab.url || String(tab.id || tab.title);
