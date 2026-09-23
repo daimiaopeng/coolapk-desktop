@@ -228,4 +228,39 @@ onMounted(() => { loadCurrentPage(true); });
 .loading-more { padding: 16px; text-align: center; }
 .discovery-page-list.topic-list-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; align-content: start; padding: 16px; }
 .discovery-page-list.topic-list-layout > .loading-more { grid-column: 1 / -1; }
+
+@media (max-width: 720px) {
+  .discovery-page-list.topic-list-layout {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .topic-list-layout :deep(.topic-card.mode-card) {
+    padding: 12px 6px;
+    border-radius: 12px;
+  }
+
+  .topic-list-layout :deep(.topic-card.mode-card .topic-icon-wrapper) {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 8px;
+    border-radius: 12px;
+  }
+
+  .topic-list-layout :deep(.topic-card.mode-card .topic-title) {
+    font-size: 12px;
+  }
+
+  .topic-list-layout :deep(.topic-card.mode-card .topic-stats) {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    text-overflow: ellipsis;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-height: 1.25;
+    font-size: 10px;
+  }
+}
 </style>
