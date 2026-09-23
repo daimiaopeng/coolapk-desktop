@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   values: new Map<string, unknown>(),
   feeds: ['200', '100'],
   getFavoriteList: vi.fn(),
+  getCollectionList: vi.fn(),
   getCollectionItemList: vi.fn(),
   getFeedDetail: vi.fn(),
   getFeedReplies: vi.fn(),
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../api/coolapk', () => ({
   CoolapkTauriAPI: {
     getFavoriteList: mocks.getFavoriteList,
+    getCollectionList: mocks.getCollectionList,
     getCollectionItemList: mocks.getCollectionItemList,
     getFeedDetail: mocks.getFeedDetail,
     getFeedReplies: mocks.getFeedReplies,
@@ -34,14 +36,18 @@ describe('favorite export', () => {
     mocks.values.clear();
     mocks.feeds = ['200', '100'];
     mocks.getFavoriteList.mockReset();
+    mocks.getCollectionList.mockReset();
     mocks.getCollectionItemList.mockReset();
     mocks.getFeedDetail.mockReset();
     mocks.getFeedReplies.mockReset();
     mocks.getSubReplies.mockReset();
     mocks.getImageDataUrl.mockReset();
     mocks.getImageDataUrl.mockResolvedValue('data:image/jpeg;base64,YWJj');
-    mocks.getFavoriteList.mockImplementation(async (_type: string, page: number) => ({
-      data: page === 1 ? mocks.feeds.map(id => ({ id, message: `摘要 ${id}…查看更多` })) : [],
+    mocks.getCollectionList.mockImplementation(async (_uid: string, page: number) => ({
+      data: page === 1 ? [{ id: 'default', entityId: 'collection-default' }] : [],
+    }));
+    mocks.getCollectionItemList.mockImplementation(async (collectionId: string, page: number) => ({
+      data: collectionId === 'default' && page === 1 ? mocks.feeds.map(id => ({ id, entityId: id, message: `摘要 ${id}…查看更多` })) : [],
     }));
     mocks.getFeedDetail.mockImplementation(async (id: string) => ({
       data: { id, title: `标题 ${id}`, username: '作者', uid: '9', userAvatar: 'https://avatar.coolapk.com/data/000/00/00/09_avatar_middle.jpg', message: `完整正文 ${id} [doge]`, pic: `https://image.coolapk.com/${id}.jpg` },
@@ -175,5 +181,6 @@ describe('favorite export', () => {
       includeAuthorReplies: false,
     }, undefined, undefined, controller.signal)).rejects.toThrow('导出已取消');
     expect(mocks.getFavoriteList).not.toHaveBeenCalled();
+    expect(mocks.getCollectionList).not.toHaveBeenCalled();
   });
 });

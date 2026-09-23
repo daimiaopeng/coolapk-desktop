@@ -843,12 +843,12 @@ export class CoolapkTauriAPI {
     return await this.updateFeedCloudCollections(feedId, '', cancelIds, feedType || 'feed', trace);
   }
 
-  static async getCollectionList(uid: string, page: number = 1) {
-    return await invokeNative('get_collection_list', { uid, page });
+  static async getCollectionList(uid: string, page: number = 1, firstItem: string = '', lastItem: string = '') {
+    return await invokeNative('get_collection_list', { uid, page, firstItem, lastItem });
   }
 
-  static async getCollectionItemList(collectionId: string, page: number = 1) {
-    return await invokeNative('get_collection_item_list', { collectionId, page });
+  static async getCollectionItemList(collectionId: string, page: number = 1, firstItem: string = '', lastItem: string = '') {
+    return await invokeNative('get_collection_item_list', { collectionId, page, firstItem, lastItem });
   }
 
   static async getCollectionDetail(collectionId: string) {

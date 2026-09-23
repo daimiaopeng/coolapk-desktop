@@ -580,8 +580,11 @@
               />
             </template>
             <div class="pagination-footer">
-              <LoadingState v-if="loadingMore" text="加载更多收藏中..." />
-              <div v-else-if="noMore" class="no-more">没有更多收藏了</div>
+              <div v-if="cloudError" class="no-more collection-load-warning">
+                {{ cloudError }}
+                <button type="button" @click="fetchCloudFavorites(true)">重新加载</button>
+              </div>
+              <div v-else-if="noMore" class="no-more">已加载全部收藏</div>
             </div>
           </div>
         </template>
@@ -683,6 +686,7 @@ import { requestConfirmation } from '../utils/confirm';
 import { getErrorMessage } from '../utils/errors';
 import { showToast } from '../utils/toast';
 import { isRatingFeedEntity } from '../utils/rating';
+import { favoriteFeedCursorId, loadAllFavoriteCollections, loadAllFavoriteFeeds } from '../utils/favoriteFeeds';
 import {
   getFavoriteContentIndexCount,
   normalizeFavoriteSearchText,
@@ -707,12 +711,8 @@ function openFavoriteExport(mode: 'all' | 'collections') {
 
 const cloudFeeds = ref<any[]>([]);
 const loading = ref(false);
-const loadingMore = ref(false);
 const cloudError = ref('');
-const page = ref(1);
 const noMore = ref(false);
-const firstItem = ref('');
-const lastItem = ref('');
 const favoriteContentSearchKeyword = ref('');
 const favoriteContentSearchResults = ref<FavoriteContentIndexEntry[]>([]);
 const favoriteContentSearchLoading = ref(false);
@@ -733,6 +733,8 @@ const collectionItemsLoadingMore = ref(false);
 const collectionItemsError = ref('');
 const collectionItemsPage = ref(1);
 const collectionItemsNoMore = ref(false);
+const collectionItemsFirstItem = ref('');
+const collectionItemsLastItem = ref('');
 const collectionContentSearchKeyword = ref('');
 const collectionContentSearchIds = ref<Set<string>>(new Set());
 const collectionContentSearchLoading = ref(false);
@@ -1145,10 +1147,9 @@ async function fetchCollections() {
   if (!uid) return;
   collectionsLoading.value = true;
   try {
-    // 酷安 APK 的“我的收藏单”调用使用空 uid，让服务端按当前会话返回默认收藏单。
-    // 显式传当前 uid 会只返回用户创建的收藏单，即使 showDefault=1 也不会带默认单。
-    const res = await CoolapkTauriAPI.getCollectionList('', 1);
-    collections.value = (res && res.data && Array.isArray(res.data)) ? res.data : [];
+    const result = await loadAllFavoriteCollections();
+    collections.value = result.collections;
+    if (!result.complete) console.warn('收藏单列表分页未完整结束');
   } catch (err) {
     console.warn('获取收藏单失败', err);
   } finally {
@@ -1339,6 +1340,8 @@ function resetCollectionState() {
   collectionItems.value = [];
   collectionItemsPage.value = 1;
   collectionItemsNoMore.value = false;
+  collectionItemsFirstItem.value = '';
+  collectionItemsLastItem.value = '';
   collectionContentSearchKeyword.value = '';
   collectionContentSearchIds.value = new Set();
   collectionMoreMenuOpen.value = false;
@@ -1469,6 +1472,8 @@ async function fetchCollectionItems(isRefresh = false) {
   if (isRefresh) {
     collectionItemsPage.value = 1;
     collectionItemsNoMore.value = false;
+    collectionItemsFirstItem.value = '';
+    collectionItemsLastItem.value = '';
     collectionItems.value = [];
     collectionItemsLoading.value = true;
   } else {
@@ -1478,7 +1483,7 @@ async function fetchCollectionItems(isRefresh = false) {
   collectionItemsError.value = '';
 
   try {
-    const res = await CoolapkTauriAPI.getCollectionItemList(activeCollectionId.value, collectionItemsPage.value);
+    const res = await CoolapkTauriAPI.getCollectionItemList(activeCollectionId.value, collectionItemsPage.value, collectionItemsFirstItem.value, collectionItemsLastItem.value);
     const newItems = (res && res.data && Array.isArray(res.data)) ? res.data : [];
     if (newItems.length === 0) {
       collectionItemsNoMore.value = true;
@@ -1489,6 +1494,8 @@ async function fetchCollectionItems(isRefresh = false) {
         const existingIds = new Set(collectionItems.value.map(i => i.id));
         collectionItems.value.push(...newItems.filter((i: any) => !existingIds.has(i.id)));
       }
+      if (!collectionItemsFirstItem.value) collectionItemsFirstItem.value = favoriteFeedCursorId(collectionItems.value[0]);
+      collectionItemsLastItem.value = favoriteFeedCursorId(collectionItems.value[collectionItems.value.length - 1]);
       collectionItemsPage.value++;
     }
   } catch (err: any) {
@@ -1502,42 +1509,25 @@ async function fetchCollectionItems(isRefresh = false) {
 async function fetchCloudFavorites(isRefresh = false) {
   const uid = authStore.user?.uid;
   if (!uid) return;
-  if (loading.value || (loadingMore.value && !isRefresh)) return;
+  if (loading.value || (!isRefresh && noMore.value)) return;
 
   if (isRefresh) {
-    page.value = 1;
     noMore.value = false;
-    firstItem.value = '';
-    lastItem.value = '';
     cloudFeeds.value = [];
     loading.value = true;
-  } else {
-    if (noMore.value) return;
-    loadingMore.value = true;
   }
   cloudError.value = '';
 
   try {
-    const res = await CoolapkTauriAPI.getFavoriteList('feed', page.value, firstItem.value, lastItem.value);
-    const newFeeds = (res && res.data && Array.isArray(res.data)) ? res.data : [];
-    if (newFeeds.length === 0) {
-      noMore.value = true;
-    } else {
-      if (isRefresh) {
-        cloudFeeds.value = newFeeds;
-      } else {
-        const existingIds = new Set(cloudFeeds.value.map(i => i.id));
-        cloudFeeds.value.push(...newFeeds.filter((i: any) => !existingIds.has(i.id)));
-      }
-      firstItem.value = String(cloudFeeds.value[0]?.id || '');
-      lastItem.value = String(cloudFeeds.value[cloudFeeds.value.length - 1]?.id || '');
-      page.value++;
-    }
+    const result = await loadAllFavoriteFeeds();
+    cloudFeeds.value = result.feeds;
+    noMore.value = true;
+    if (!result.complete) cloudError.value = '部分收藏单或内容未能完整读取，请刷新重试';
   } catch (err: any) {
     cloudError.value = err?.message || '加载失败，请检查网络';
+    noMore.value = true;
   } finally {
     loading.value = false;
-    loadingMore.value = false;
   }
 }
 
@@ -1548,10 +1538,6 @@ function handleScroll(e: Event) {
     if (activeSubTab.value === 'collections' && activeCollectionId.value) {
       if (!collectionItemsLoading.value && !collectionItemsLoadingMore.value && !collectionItemsNoMore.value) {
         fetchCollectionItems(false);
-      }
-    } else if (activeSubTab.value === 'all') {
-      if (!loading.value && !loadingMore.value && !noMore.value) {
-        fetchCloudFavorites(false);
       }
     }
   }

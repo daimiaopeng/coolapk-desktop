@@ -563,11 +563,13 @@ fn get_str_by_keys(obj: &serde_json::Map<String, Value>, keys: &[&str]) -> Optio
     None
 }
 
-fn build_collection_list_query(uid: &str, page: u32) -> Vec<(&'static str, String)> {
+fn build_collection_list_query(uid: &str, page: u32, first_item: &str, last_item: &str) -> Vec<(&'static str, String)> {
     vec![
         ("uid", uid.to_string()),
         ("showDefault", "1".to_string()),
         ("page", page.to_string()),
+        ("firstItem", first_item.to_string()),
+        ("lastItem", last_item.to_string()),
     ]
 }
 
@@ -1842,6 +1844,9 @@ impl CoolapkClient {
             "uid": raw_uid,
             "dateline": get_u64_by_keys(obj, &["dateline", "create_time", "lastupdate", "createTime"])
         });
+
+        // APK 列表分页使用 Entity.entityId 生成 firstItem 和 lastItem，清洗时需要保留该游标字段。
+        copy_first_field(&mut cleaned, obj, "entityId", &["entityId", "entity_id"]);
 
         // 列表接口会把关联标的和视频字段放在这些扩展字段中，必须在归一化时保留下来。
         copy_first_field(&mut cleaned, obj, "targetRow", &["targetRow", "target_row"]);
@@ -4250,13 +4255,14 @@ impl CoolapkClient {
     }
 
     /// 收藏单（收藏夹）列表
-    /// 数据来源: GET /v6/collection/list?uid={uid}&showDefault=1
+    /// 数据来源: GET /v6/collection/list?uid={uid}&showDefault=1&page={page}&firstItem={firstItem}&lastItem={lastItem}
     /// `showDefault=1` 用于把账号的系统默认收藏单一并返回；否则接口只返回用户创建的收藏单。
-    pub async fn get_collection_list(&self, uid: &str, page: u32) -> Result<Value, String> {
+    /// APK 用首项和末项的 entityId 作为分页游标。
+    pub async fn get_collection_list(&self, uid: &str, page: u32, first_item: &str, last_item: &str) -> Result<Value, String> {
         let raw = self
             .api_get(
                 "/v6/collection/list",
-                &build_collection_list_query(uid, page),
+                &build_collection_list_query(uid, page, first_item, last_item),
             )
             .await?;
         let mut collections = Vec::new();
@@ -4302,6 +4308,7 @@ impl CoolapkClient {
                     .unwrap_or(json!(0));
                 collections.push(json!({
                     "id": id,
+                    "entityId": get_str_by_keys(obj, &["entityId", "entity_id"]).unwrap_or_else(|| id.clone()),
                     "title": title,
                     "cover": cover.clone(),
                     "coverPic": cover,
@@ -4325,6 +4332,8 @@ impl CoolapkClient {
         &self,
         collection_id: &str,
         page: u32,
+        first_item: &str,
+        last_item: &str,
     ) -> Result<Value, String> {
         let raw = self
             .api_get(
@@ -4332,8 +4341,8 @@ impl CoolapkClient {
                 &[
                     ("id", collection_id.to_string()),
                     ("page", page.to_string()),
-                    ("firstItem", String::new()),
-                    ("lastItem", String::new()),
+                    ("firstItem", first_item.to_string()),
+                    ("lastItem", last_item.to_string()),
                     ("listType", "allFeedType".to_string()),
                 ],
             )

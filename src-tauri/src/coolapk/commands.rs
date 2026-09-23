@@ -558,8 +558,10 @@ pub async fn get_collection_list(
     state: State<'_, AppState>,
     uid: String,
     page: u32,
+    first_item: Option<String>,
+    last_item: Option<String>,
 ) -> Result<Value, String> {
-    state.client.get_collection_list(&uid, page).await
+    state.client.get_collection_list(&uid, page, first_item.as_deref().unwrap_or(""), last_item.as_deref().unwrap_or("")).await
 }
 
 #[tauri::command]
@@ -567,10 +569,17 @@ pub async fn get_collection_item_list(
     state: State<'_, AppState>,
     collection_id: String,
     page: u32,
+    first_item: Option<String>,
+    last_item: Option<String>,
 ) -> Result<Value, String> {
     state
         .client
-        .get_collection_item_list(&collection_id, page)
+        .get_collection_item_list(
+            &collection_id,
+            page,
+            first_item.as_deref().unwrap_or(""),
+            last_item.as_deref().unwrap_or(""),
+        )
         .await
 }
 
