@@ -115,6 +115,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import { onBackButtonPress } from '@tauri-apps/api/app';
+import { isTauri } from '@tauri-apps/api/core';
 import { useRouter } from 'vue-router';
 import { useAppStore } from '../../stores/app';
 import { CoolapkTauriAPI } from '../../api/coolapk';
@@ -136,6 +138,7 @@ import { normalizeCoolapkCollectionLink, normalizeCoolapkFeedLink } from '../../
 
 const appStore = useAppStore();
 const router = useRouter();
+const isAndroidTauri = isTauri() && typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent);
 
 const query = ref('');
 const loading = ref(false);
@@ -148,6 +151,37 @@ const directCollectionRoute = computed(() => normalizeCoolapkCollectionLink(quer
 let searchRequestVersion = 0;
 const suggestions = ref<string[]>([]);
 let hotSearchRequestVersion = 0;
+let searchBackHandlerVersion = 0;
+let unregisterSearchBackHandler: (() => Promise<void>) | null = null;
+
+async function registerSearchBackHandler() {
+  if (!isAndroidTauri || !appStore.isSearchOpen || unregisterSearchBackHandler) return;
+
+  const version = ++searchBackHandlerVersion;
+  try {
+    const listener = await onBackButtonPress(() => {
+      if (appStore.isSearchOpen) appStore.closeSearch();
+    });
+
+    if (version !== searchBackHandlerVersion || !appStore.isSearchOpen) {
+      await listener.unregister();
+      return;
+    }
+
+    unregisterSearchBackHandler = () => listener.unregister();
+  } catch (error) {
+    console.warn('注册 Android 搜索返回键失败:', error);
+  }
+}
+
+function releaseSearchBackHandler() {
+  searchBackHandlerVersion += 1;
+  const unregister = unregisterSearchBackHandler;
+  unregisterSearchBackHandler = null;
+  if (unregister) {
+    void unregister().catch((error) => console.warn('移除 Android 搜索返回键监听失败:', error));
+  }
+}
 
 async function loadHotSearches() {
   const requestVersion = ++hotSearchRequestVersion;
@@ -167,7 +201,12 @@ watch(() => appStore.isSearchOpen, (open) => {
     searchSuggestions.value = [];
     activeResultIndex.value = -1;
     if (!suggestions.value.length) void loadHotSearches();
-    nextTick(() => searchInput.value?.focus());
+    void nextTick(async () => {
+      await registerSearchBackHandler();
+      if (appStore.isSearchOpen) searchInput.value?.focus();
+    });
+  } else {
+    releaseSearchBackHandler();
   }
 });
 
@@ -312,6 +351,7 @@ onMounted(() => {
   window.addEventListener('keydown', handleGlobalKeydown);
 });
 onUnmounted(() => window.removeEventListener('keydown', handleGlobalKeydown));
+onUnmounted(releaseSearchBackHandler);
 </script>
 
 <style scoped>
