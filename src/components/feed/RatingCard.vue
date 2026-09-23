@@ -107,6 +107,7 @@
         :feed-id="feed.id"
         :feed-uid="feed.uid || feed.userInfo?.uid"
         :feed-username="feed.username"
+        :default-sort-mode="commentsSortMode"
         :total-comment-count="feed.replynum"
         :comments="comments"
         :loading="commentsLoading"
@@ -178,7 +179,6 @@ import AppImage from '../common/AppImage.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkRichText } from '../../utils/richText';
 import {
-  DEFAULT_COMMENT_SORT_MODE,
   getCommentReplyRequestOptions,
   getExpectedCommentCount,
   getReplyData,
@@ -233,7 +233,7 @@ const commentsPage = ref(0);
 const hasMoreComments = ref(false);
 const commentsLoadingMore = ref(false);
 const commentsLoadMoreError = ref('');
-const commentsSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentsSortMode = ref<CommentSortMode>(settingsStore.settings.commentDefaultSortMode);
 const commentsAuthorOnly = ref(false);
 let commentsFirstItem = '';
 let commentsLastItem = '';
@@ -776,6 +776,12 @@ function handleCommentSortChange(selection: CommentSortSelection) {
   commentsAuthorOnly.value = selection.authorOnly;
   void loadComments(true);
 }
+
+watch(() => settingsStore.settings.commentDefaultSortMode, (sortMode) => {
+  commentsSortMode.value = sortMode;
+  commentsAuthorOnly.value = false;
+  if (showComments.value) void loadComments(true);
+});
 
 async function toggleComments() {
   showComments.value = !showComments.value;

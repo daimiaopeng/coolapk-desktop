@@ -125,6 +125,7 @@ import { ref, computed, onMounted, onActivated, onDeactivated, nextTick, watch }
 import { useRoute, useRouter } from 'vue-router';
 import { CoolapkTauriAPI } from '../api/coolapk';
 import { useAuthStore } from '../stores/auth';
+import { useSettingsStore } from '../stores/settings';
 import FeedCard from '../components/feed/FeedCard.vue';
 import DiscoveryEntityCard from '../components/discovery/DiscoveryEntityCard.vue';
 import AppImage from '../components/common/AppImage.vue';
@@ -178,6 +179,7 @@ interface TopicTab {
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
+const settingsStore = useSettingsStore();
 function decodeTopicTag(raw: string): string {
   try {
     return decodeURIComponent(raw);
@@ -226,7 +228,7 @@ const noMore = ref(false);
 const isFollowed = ref(false);
 const followPending = ref(false);
 
-const currentSort = ref('default');
+const currentSort = ref<string>(settingsStore.settings.topicDiscussionDefaultSortMode);
 const FALLBACK_SORT_OPTIONS: TopicSortOption[] = [
   { key: 'default', label: '默认', listType: '', url: '' },
   { key: 'latest', label: '最新', listType: 'dateline_desc', url: '' },
@@ -234,6 +236,15 @@ const FALLBACK_SORT_OPTIONS: TopicSortOption[] = [
 ];
 const sortOptions = ref<TopicSortOption[]>([...FALLBACK_SORT_OPTIONS]);
 let feedRequestId = 0;
+
+function findTopicSortOption(sortKey: string, options = sortOptions.value): TopicSortOption | undefined {
+  const exact = options.find((option) => option.key === sortKey);
+  if (exact) return exact;
+  if (sortKey === 'latest' || sortKey === 'latest-reply') return options.find((option) => option.listType === 'dateline_desc');
+  if (sortKey === 'hot') return options.find((option) => option.listType === 'popular');
+  if (sortKey === 'default') return options.find((option) => !option.listType);
+  return undefined;
+}
 
 const activeTopicTab = computed(() => {
   return topicTabs.value.find((tab) => tab.key === activeTopicTabKey.value) || topicTabs.value[0] || null;
@@ -333,9 +344,9 @@ function applyServerSortOptions(response: any) {
   const serverOptions = normalizeSortOptions(response?.sortOptions);
   if (serverOptions.length === 0) return;
   sortOptions.value = serverOptions;
-  if (!serverOptions.some((option) => option.key === currentSort.value)) {
-    currentSort.value = serverOptions[0].key;
-  }
+  currentSort.value = findTopicSortOption(currentSort.value, serverOptions)?.key
+    || findTopicSortOption(settingsStore.settings.topicDiscussionDefaultSortMode, serverOptions)?.key
+    || serverOptions[0].key;
 }
 
 function topicTabKind(pageName: string, label: string, url: string): TopicTab['kind'] {
@@ -549,7 +560,7 @@ async function fetchFeeds(isLoadMore = false) {
   const requestId = ++feedRequestId;
   feedsLoading.value = true;
   try {
-    const sortOption = sortOptions.value.find((option) => option.key === currentSort.value) || FALLBACK_SORT_OPTIONS[0];
+    const sortOption = findTopicSortOption(currentSort.value) || FALLBACK_SORT_OPTIONS[0];
     const firstItem = isLoadMore && topicFeeds.value.length > 0 ? readFeedCursor(topicFeeds.value[0]) : '';
     const lastItem = isLoadMore && topicFeeds.value.length > 0 ? readFeedCursor(topicFeeds.value[topicFeeds.value.length - 1]) : '';
     const tab = activeTopicTab.value;
@@ -641,7 +652,8 @@ function handleTopicSearch(payload: { keyword: string }) {
 
 function handleTopicClear() {
   searchKeyword.value = '';
-  currentSort.value = 'default';
+  currentSort.value = findTopicSortOption(settingsStore.settings.topicDiscussionDefaultSortMode)?.key
+    || settingsStore.settings.topicDiscussionDefaultSortMode;
   searchFeedType.value = 'all';
   page.value = 1;
   noMore.value = false;
@@ -670,14 +682,26 @@ function changeSort(sortKey: string) {
 function changeTopicTab(tabKey: string) {
   if (activeTopicTabKey.value === tabKey) return;
   activeTopicTabKey.value = tabKey;
-  currentSort.value = 'default';
   searchFeedType.value = 'all';
   sortOptions.value = [...FALLBACK_SORT_OPTIONS];
+  currentSort.value = isDiscussionTab(activeTopicTab.value) ? settingsStore.settings.topicDiscussionDefaultSortMode : 'default';
   page.value = 1;
   noMore.value = false;
   topicFeeds.value = [];
   void fetchFeeds(false);
 }
+
+watch(() => settingsStore.settings.topicDiscussionDefaultSortMode, (sortMode) => {
+  if (!isDiscussionTab(activeTopicTab.value)) return;
+  const nextSort = findTopicSortOption(sortMode)?.key || sortMode;
+  if (currentSort.value === nextSort) return;
+  currentSort.value = nextSort;
+  if (!topicDetail.value) return;
+  page.value = 1;
+  noMore.value = false;
+  topicFeeds.value = [];
+  void fetchFeeds(false);
+});
 
 const pageContainerRef = ref<HTMLElement | null>(null);
 let savedScrollTop = 0;

@@ -66,6 +66,7 @@
       <div v-if="feed" class="feed-comment-container">
         <FeedCommentSection
           :feed-id="feed.id"
+          :default-sort-mode="commentsSortMode"
           :feed-uid="authorUid"
           :feed-username="authorName"
           :total-comment-count="commentCount"
@@ -100,7 +101,6 @@ import AppAvatar from '../common/AppAvatar.vue';
 import UserHoverCard from '../user/UserHoverCard.vue';
 import { getUserUid, normalizeUserUid } from '../../utils/userRoute';
 import {
-  DEFAULT_COMMENT_SORT_MODE,
   getCommentReplyRequestOptions,
   getExpectedCommentCount,
   getReplyData,
@@ -115,6 +115,7 @@ import {
   reactiveUserProfileMap,
   getCachedUserProfileSync,
 } from '../../utils/userProfilePreloader';
+import { useSettingsStore } from '../../stores/settings';
 
 const props = defineProps<{
   feed?: any;
@@ -125,6 +126,7 @@ defineEmits<{
 }>();
 
 const router = useRouter();
+const settingsStore = useSettingsStore();
 const comments = ref<any[]>([]);
 const loading = ref(false);
 const error = ref('');
@@ -132,7 +134,7 @@ const commentsPage = ref(0);
 const hasMoreComments = ref(false);
 const commentsLoadingMore = ref(false);
 const commentsLoadMoreError = ref('');
-const commentsSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentsSortMode = ref<CommentSortMode>(settingsStore.settings.commentDefaultSortMode);
 const commentsAuthorOnly = ref(false);
 let commentsFirstItem = '';
 let commentsLastItem = '';
@@ -372,6 +374,12 @@ function handleCommentSortChange(selection: CommentSortSelection) {
   commentsAuthorOnly.value = selection.authorOnly;
   void loadComments(true);
 }
+
+watch(() => settingsStore.settings.commentDefaultSortMode, (sortMode) => {
+  commentsSortMode.value = sortMode;
+  commentsAuthorOnly.value = false;
+  if (props.feed?.id) void loadComments(true);
+});
 
 function handleDeleteComment(commentId: string | number) {
   comments.value = comments.value.filter((c) => String(c.id) !== String(commentId));

@@ -106,6 +106,7 @@
           :feed-id="feedId"
           :feed-uid="feedUid"
           :feed-username="feedUsername"
+          :default-sort-mode="commentsSortMode"
           :comments="comments"
           :loading="commentsLoading"
           :error="commentsError"
@@ -159,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import AppButton from '../common/AppButton.vue';
 import AppImage from '../common/AppImage.vue';
@@ -175,7 +176,6 @@ import CreateGoodsListDialog from './CreateGoodsListDialog.vue';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { handleAnchorClick } from '../../utils/anchorClick';
 import {
-  DEFAULT_COMMENT_SORT_MODE,
   getCommentReplyRequestOptions,
   getExpectedCommentCount,
   getReplyData,
@@ -186,6 +186,7 @@ import {
   type CommentSortSelection,
 } from '../../utils/commentList';
 import { useAuthStore } from '../../stores/auth';
+import { useSettingsStore } from '../../stores/settings';
 import { showToast } from '../../utils/toast';
 import { getErrorMessage } from '../../utils/errors';
 
@@ -200,6 +201,7 @@ const props = withDefaults(
 );
 
 const authStore = useAuthStore();
+const settingsStore = useSettingsStore();
 const feed = ref<any>(null);
 const loading = ref(false);
 const error = ref('');
@@ -213,7 +215,7 @@ const commentsPage = ref(0);
 const hasMoreComments = ref(false);
 const commentsLoadingMore = ref(false);
 const commentsLoadMoreError = ref('');
-const commentsSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentsSortMode = ref<CommentSortMode>(settingsStore.settings.commentDefaultSortMode);
 const commentsAuthorOnly = ref(false);
 let commentsFirstItem = '';
 let commentsLastItem = '';
@@ -395,6 +397,12 @@ function handleCommentSortChange(selection: CommentSortSelection) {
   commentsAuthorOnly.value = selection.authorOnly;
   void loadComments(true);
 }
+
+watch(() => settingsStore.settings.commentDefaultSortMode, (sortMode) => {
+  commentsSortMode.value = sortMode;
+  commentsAuthorOnly.value = false;
+  if (replyReady.value) void loadComments(true);
+});
 
 function loadAll(isRefresh = false) {
   void loadFeed();

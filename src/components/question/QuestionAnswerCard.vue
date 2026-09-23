@@ -137,6 +137,7 @@
         :feed-uid="authorUid"
         :feed-username="answer.username || answer.userInfo?.username"
         :total-comment-count="replyCount"
+        :default-sort-mode="commentsSortMode"
         :comments="comments"
         :loading="commentsLoading"
         :error="commentsError"
@@ -202,7 +203,6 @@ import { normalizeCoolapkNativeRoute, normalizeCoolapkPageRoute, normalizeCoolap
 import { renderCoolapkRichText } from '../../utils/richText';
 import { preloadUserProfile } from '../../utils/userProfilePreloader';
 import {
-  DEFAULT_COMMENT_SORT_MODE,
   getCommentReplyRequestOptions,
   getExpectedCommentCount,
   getReplyData,
@@ -683,7 +683,7 @@ const commentsPage = ref(0);
 const hasMoreComments = ref(false);
 const commentsLoadingMore = ref(false);
 const commentsLoadMoreError = ref('');
-const commentsSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentsSortMode = ref<CommentSortMode>(settingsStore.settings.commentDefaultSortMode);
 const commentsAuthorOnly = ref(false);
 let commentsFirstItem = '';
 let commentsLastItem = '';
@@ -811,6 +811,12 @@ function handleCommentSortChange(selection: CommentSortSelection) {
   commentsAuthorOnly.value = selection.authorOnly;
   void openComments(true);
 }
+
+watch(() => settingsStore.settings.commentDefaultSortMode, (sortMode) => {
+  commentsSortMode.value = sortMode;
+  commentsAuthorOnly.value = false;
+  if (showComments.value) void openComments(true);
+});
 
 function removeComment(id: string | number) { comments.value = comments.value.filter((comment: any) => String(comment.id) !== String(id)); }
 function normalizeImg(url: string): string { return url; }

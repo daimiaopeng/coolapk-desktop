@@ -14,6 +14,8 @@ import type {
   FavoriteCollectionViewMode,
   FavoriteCollectionSortMode,
   FavoriteCollectionSortDirection,
+  CommentSortPreference,
+  TopicDiscussionSortPreference,
   HomeTabKey,
 } from '../types/settings';
 
@@ -130,6 +132,8 @@ const defaultSettings: AppSettings = {
   favoriteCollectionViewMode: 'large',
   favoriteCollectionSortMode: 'default',
   favoriteCollectionSortDirection: 'asc',
+  commentDefaultSortMode: 'default',
+  topicDiscussionDefaultSortMode: 'latest',
   downloadPath: '',
   maxConcurrentDownloads: 3,
   autoCleanCache: true,
@@ -242,6 +246,9 @@ export function normalizeSettings(value: unknown): AppSettings {
   } else if (isOneOf(source.favoriteCollectionSortMode, ['default', 'name', 'item-count', 'favorite-count', 'follower-count'])) {
     result.favoriteCollectionSortMode = source.favoriteCollectionSortMode as FavoriteCollectionSortMode;
   }
+  if (isOneOf(source.commentDefaultSortMode, ['default', 'likes', 'latest'])) result.commentDefaultSortMode = source.commentDefaultSortMode as CommentSortPreference;
+  if (source.topicDiscussionDefaultSortMode === 'likes') result.topicDiscussionDefaultSortMode = 'hot';
+  else if (isOneOf(source.topicDiscussionDefaultSortMode, ['default', 'latest', 'hot'])) result.topicDiscussionDefaultSortMode = source.topicDiscussionDefaultSortMode as TopicDiscussionSortPreference;
   if (Array.isArray(source.homeTabOrder)) {
     // 首页频道由服务端动态下发，不能用本地静态列表过滤，否则每次重启都会丢失
     // 用户在频道管理器中保存的排序和隐藏状态。

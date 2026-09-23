@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { describe, expect, it, vi } from 'vitest';
+import { useSettingsStore } from '../../stores/settings';
 
 const mocks = vi.hoisted(() => ({
   getTopicDetail: vi.fn(),
@@ -28,6 +29,7 @@ describe('话题排序按钮', () => {
   it('首次列表请求未完成时切换排序仍会加载新排序并丢弃旧响应', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
+    useSettingsStore(pinia).settings.topicDiscussionDefaultSortMode = 'default';
     const firstRequest = deferred<any>();
     const sortedRequest = deferred<any>();
     const hotRequest = deferred<any>();
@@ -94,6 +96,7 @@ describe('话题排序按钮', () => {
   it('搜索按钮位于栏目右侧且在话题页内按 APK 参数搜索', async () => {
     const pinia = createPinia();
     setActivePinia(pinia);
+    useSettingsStore(pinia).settings.topicDiscussionDefaultSortMode = 'default';
     mocks.getTopicDetail.mockResolvedValue({
       data: {
         title: '数码',

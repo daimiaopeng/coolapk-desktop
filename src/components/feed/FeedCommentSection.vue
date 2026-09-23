@@ -544,7 +544,6 @@ import { verifyWithCaptcha, extractCaptchaParamsFromResponse } from '../../utils
 import { hasActiveTextSelection } from '../../utils/selection';
 import {
   COMMENT_SORT_OPTIONS,
-  DEFAULT_COMMENT_SORT_MODE,
   formatCommentAbsoluteTime,
   formatCommentTime,
   getCommentDeviceTitle,
@@ -563,6 +562,7 @@ import {
 const props = withDefaults(
   defineProps<{
     feedId?: string | number;
+    defaultSortMode?: CommentSortMode;
     feedUid?: string | number;
     feedUsername?: string;
     comments: any[];
@@ -620,12 +620,23 @@ const sending = ref(false);
 const inputRef = ref<HTMLDivElement | null>(null);
 const replyTargetUser = ref('');
 const replyTargetId = ref('');
-const commentSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentSortMode = ref<CommentSortMode>(props.defaultSortMode ?? settingsStore.settings.commentDefaultSortMode);
 const authorOnly = ref(false);
 const commentSortOptions = COMMENT_SORT_OPTIONS;
 const absoluteTimeIds = ref<Set<string>>(new Set());
 const loadMoreSentinel = ref<HTMLElement | null>(null);
 let loadMoreObserver: IntersectionObserver | null = null;
+
+watch(() => props.defaultSortMode, (sortMode) => {
+  if (!sortMode) return;
+  commentSortMode.value = sortMode;
+  authorOnly.value = false;
+});
+
+watch(() => settingsStore.settings.commentDefaultSortMode, (sortMode) => {
+  commentSortMode.value = sortMode;
+  authorOnly.value = false;
+});
 
 function disconnectLoadMoreObserver() {
   loadMoreObserver?.disconnect();

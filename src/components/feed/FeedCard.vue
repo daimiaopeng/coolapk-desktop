@@ -154,6 +154,7 @@
         :feed-id="feed.id"
         :feed-uid="authorUid"
         :feed-username="feed.username"
+        :default-sort-mode="commentsSortMode"
         :total-comment-count="feed.replynum"
         :comments="comments"
         :loading="commentsLoading"
@@ -273,7 +274,6 @@ import { preloadUserProfile, reactiveUserProfileMap } from '../../utils/userProf
 import { renderCoolapkRichText } from '../../utils/richText';
 import { generateTextDiffHtml, getDiffSummary } from '../../utils/textDiff';
 import {
-  DEFAULT_COMMENT_SORT_MODE,
   getCommentReplyRequestOptions,
   getExpectedCommentCount,
   getReplyData,
@@ -746,7 +746,7 @@ const commentsPage = ref(0);
 const hasMoreComments = ref(false);
 const commentsLoadingMore = ref(false);
 const commentsLoadMoreError = ref('');
-const commentsSortMode = ref<CommentSortMode>(DEFAULT_COMMENT_SORT_MODE);
+const commentsSortMode = ref<CommentSortMode>(settingsStore.settings.commentDefaultSortMode);
 const commentsAuthorOnly = ref(false);
 let commentsFirstItem = '';
 let commentsLastItem = '';
@@ -998,6 +998,12 @@ function handleCommentSortChange(selection: CommentSortSelection) {
   commentsAuthorOnly.value = selection.authorOnly;
   void openComments(true);
 }
+
+watch(() => settingsStore.settings.commentDefaultSortMode, (sortMode) => {
+  commentsSortMode.value = sortMode;
+  commentsAuthorOnly.value = false;
+  if (showComments.value) void openComments(true);
+});
 
 const cardRef = ref<HTMLElement | null>(null);
 const isCommentsFloatingVisible = ref(false);

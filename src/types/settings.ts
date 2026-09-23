@@ -4,6 +4,8 @@ export type FeedLayout = 'single' | 'double';
 export type FavoriteCollectionViewMode = 'large' | 'single' | 'double' | 'no-image';
 export type FavoriteCollectionSortMode = 'default' | 'name' | 'item-count' | 'favorite-count' | 'follower-count';
 export type FavoriteCollectionSortDirection = 'asc' | 'desc';
+export type CommentSortPreference = 'default' | 'likes' | 'latest';
+export type TopicDiscussionSortPreference = 'default' | 'latest' | 'hot';
 /** 空字符串表示使用应用原有的系统回退字体栈，否则保存 Windows 返回的字体族名称。 */
 export type FontFamily = string;
 export type ImageQuality = 'standard' | 'hd' | 'raw';
@@ -138,6 +140,9 @@ export interface AppSettings {
   favoriteCollectionViewMode: FavoriteCollectionViewMode;
   favoriteCollectionSortMode: FavoriteCollectionSortMode;
   favoriteCollectionSortDirection: FavoriteCollectionSortDirection;
+  /** 普通评论与话题讨论分别使用的默认排序。 */
+  commentDefaultSortMode: CommentSortPreference;
+  topicDiscussionDefaultSortMode: TopicDiscussionSortPreference;
   downloadPath: string;
   maxConcurrentDownloads: number;
   autoCleanCache: boolean;

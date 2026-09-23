@@ -93,6 +93,33 @@
     </div>
 
     <div class="setting-group">
+      <h4 class="group-title">评论排序</h4>
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">话题讨论默认排序</span>
+          <span class="row-sub">进入话题讨论页时，动态列表默认按最新排序</span>
+        </div>
+        <select v-model="settingsStore.settings.topicDiscussionDefaultSortMode" class="select-control">
+          <option value="latest">最新</option>
+          <option value="default">默认</option>
+          <option value="hot">热度</option>
+        </select>
+      </div>
+
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">普通评论默认排序</span>
+          <span class="row-sub">动态、回答等普通评论区使用的默认排序</span>
+        </div>
+        <select v-model="settingsStore.settings.commentDefaultSortMode" class="select-control">
+          <option value="default">默认</option>
+          <option value="latest">最新</option>
+          <option value="likes">热门</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="setting-group">
       <h4 class="group-title">关键词屏蔽</h4>
       <div class="setting-row">
         <div class="row-info">
