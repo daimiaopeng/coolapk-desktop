@@ -1,5 +1,7 @@
 import { reactive } from 'vue';
+import { getActivePinia } from 'pinia';
 import { CoolapkTauriAPI } from '../api/coolapk';
+import { useSettingsStore } from '../stores/settings';
 
 interface UserCacheEntry {
   data: any;
@@ -21,11 +23,26 @@ const inFlightRequests = new Map<string, Promise<any>>();
 const preloadQueue: string[] = [];
 let activePreloadCount = 0;
 
+function isBackgroundPreloadEnabled() {
+  const pinia = getActivePinia();
+  return Boolean(pinia && useSettingsStore(pinia).settings.preloadUserProfile);
+}
+
 /**
  * 调度后台预加载队列
  */
 function pumpPreloadQueue() {
+  if (!isBackgroundPreloadEnabled()) {
+    preloadQueue.length = 0;
+    return;
+  }
+
   while (activePreloadCount < MAX_CONCURRENT_PRELOAD && preloadQueue.length > 0) {
+    if (!isBackgroundPreloadEnabled()) {
+      preloadQueue.length = 0;
+      return;
+    }
+
     const uid = preloadQueue.shift();
     if (!uid) continue;
 
@@ -81,6 +98,7 @@ function pumpPreloadQueue() {
  * 在后台静默预加载指定用户的个人资料与空间数据
  */
 export function preloadUserProfile(rawUid: string | number | undefined | null) {
+  if (!isBackgroundPreloadEnabled()) return;
   if (!rawUid) return;
   const uid = String(rawUid).trim();
   if (!uid || uid === '0' || uid === 'undefined' || uid === 'null') return;

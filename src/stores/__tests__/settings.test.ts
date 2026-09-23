@@ -43,6 +43,7 @@ describe('settings store', () => {
     suppressUnsupportedLivePhotoCodecPrompt: false,
     autoLoadOriginalImage: true,
     noImageMode: false,
+    preloadUserProfile: true,
     imageQuality: 'hd',
     messageEnterBehavior: 'send',
     favoriteCollectionViewMode: 'large',
@@ -61,6 +62,7 @@ describe('settings store', () => {
     expect(store.settings.suppressUnsupportedLivePhotoCodecPrompt).toBe(defaults.suppressUnsupportedLivePhotoCodecPrompt);
     expect(store.settings.autoLoadOriginalImage).toBe(defaults.autoLoadOriginalImage);
     expect(store.settings.noImageMode).toBe(defaults.noImageMode);
+    expect(store.settings.preloadUserProfile).toBe(defaults.preloadUserProfile);
     expect(store.settings.favoriteCollectionViewMode).toBe(defaults.favoriteCollectionViewMode);
     expect(store.settings.favoriteCollectionSortMode).toBe(defaults.favoriteCollectionSortMode);
     expect(store.settings.favoriteCollectionSortDirection).toBe(defaults.favoriteCollectionSortDirection);
@@ -87,6 +89,7 @@ describe('settings store', () => {
       suppressUnsupportedLivePhotoCodecPrompt: true,
       autoLoadOriginalImage: false,
       noImageMode: true,
+      preloadUserProfile: true,
       favoriteCollectionViewMode: 'double',
       favoriteCollectionSortMode: 'item-count-desc',
       myRecentPinned: true,
@@ -107,6 +110,7 @@ describe('settings store', () => {
     expect(normalized.suppressUnsupportedLivePhotoCodecPrompt).toBe(true);
     expect(normalized.autoLoadOriginalImage).toBe(false);
     expect(normalized.noImageMode).toBe(true);
+    expect(normalized.preloadUserProfile).toBe(true);
     expect(normalized.favoriteCollectionViewMode).toBe('double');
     expect(normalized.favoriteCollectionSortMode).toBe('item-count');
     expect(normalized.favoriteCollectionSortDirection).toBe('desc');

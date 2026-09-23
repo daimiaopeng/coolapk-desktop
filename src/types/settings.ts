@@ -133,6 +133,7 @@ export interface AppSettings {
   autoLoadOriginalImage: boolean;
   noImageMode: boolean;
   showDeviceInfo: boolean;
+  preloadUserProfile: boolean;
   showHomeMonthlyRank: boolean;
   showHomeHotTopics: boolean;
   defaultHomeTab: HomeTabKey;
