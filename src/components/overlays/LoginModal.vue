@@ -330,6 +330,16 @@ listen('login-window-closed', () => {
   unlistenFn = unlisten;
 }).catch(error => console.warn('[login-debug] listen login-window-closed failed', error));
 
+// Android 登录页返回主 Activity 时，后台期间的事件可能晚于页面恢复。
+function handleLoginWindowReturn() {
+  if (document.visibilityState === 'visible' && authStore.isLoginModalOpen && !webLoginCompleted) {
+    void handleCheckWebLogin(false);
+  }
+}
+
+window.addEventListener('focus', handleLoginWindowReturn);
+document.addEventListener('visibilitychange', handleLoginWindowReturn);
+
 // 手机号登录表单
 // 账号密码登录表单
 
@@ -490,6 +500,8 @@ onUnmounted(() => {
   stopStatusPolling();
   if (closeModalTimer) clearTimeout(closeModalTimer);
   if (unlistenFn) unlistenFn();
+  window.removeEventListener('focus', handleLoginWindowReturn);
+  document.removeEventListener('visibilitychange', handleLoginWindowReturn);
 });
 </script>
 

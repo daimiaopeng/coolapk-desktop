@@ -1516,6 +1516,24 @@ onMounted(() => {
   cursor: pointer;
 }
 
+@media (max-width: 860px) {
+  .detail-tabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .detail-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .detail-tab-item {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
+
 .detail-tab-item:hover,
 .detail-tab-item.is-active {
   color: var(--brand-primary);

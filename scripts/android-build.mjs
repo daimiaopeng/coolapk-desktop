@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -6,6 +6,8 @@ const root = resolve(import.meta.dirname, '..');
 const androidDir = join(root, 'src-tauri', 'gen', 'android');
 const gradleProperties = join(androidDir, 'gradle.properties');
 const appBuildGradle = join(androidDir, 'app', 'build.gradle.kts');
+const androidManifest = join(androidDir, 'app', 'src', 'main', 'AndroidManifest.xml');
+const androidActivityDir = join(androidDir, 'app', 'src', 'main', 'java', 'com', 'coolapk', 'desktop');
 const keystoreProperties = join(androidDir, 'keystore.properties');
 const tauriCli = join(root, 'node_modules', '@tauri-apps', 'cli', 'tauri.js');
 const initOnly = process.argv.includes('--init-only');
@@ -92,6 +94,22 @@ function ensureAndroidProject() {
     );
     writeFileSync(appBuildGradle, buildGradle, 'utf8');
   }
+
+  const loginActivityMarker = 'android:name=".LoginActivity"';
+  let manifest = readFileSync(androidManifest, 'utf8');
+  if (!manifest.includes(loginActivityMarker)) {
+    const closingTag = '    </application>';
+    if (!manifest.includes(closingTag)) throw new Error('AndroidManifest.xml 缺少 application 节点');
+    manifest = manifest.replace(closingTag, `        <activity
+            ${loginActivityMarker}
+            android:exported="false"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:label="酷安官方授权登录" />
+${closingTag}`);
+    writeFileSync(androidManifest, manifest, 'utf8');
+  }
+  mkdirSync(androidActivityDir, { recursive: true });
+  copyFileSync(join(root, 'src-tauri', 'android', 'LoginActivity.kt'), join(androidActivityDir, 'LoginActivity.kt'));
 }
 
 function escapeProperty(value) {
