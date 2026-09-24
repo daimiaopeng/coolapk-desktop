@@ -1397,6 +1397,12 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
+@media (max-width: 767px) {
+  .topics-split-layout.columns-1 > .split-center-main {
+    min-width: 0;
+  }
+}
+
 /* 单栏模式或左栏收起时的顶部导航条 */
 .single-column-top-nav {
   width: 100%;

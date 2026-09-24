@@ -571,4 +571,28 @@ onMounted(() => loadData());
   align-items: center;
   gap: 4px;
 }
+
+@media (max-width: 720px) {
+  .page-container {
+    min-width: 0;
+    padding: var(--space-3);
+  }
+
+  .games-grid {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .game-card {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .game-info {
+    min-width: 0;
+  }
+}
 </style>

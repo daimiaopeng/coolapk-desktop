@@ -1,5 +1,5 @@
 <template>
-  <Teleport to="body">
+  <Teleport to="#app">
     <button
       v-if="mobileOpen"
       type="button"

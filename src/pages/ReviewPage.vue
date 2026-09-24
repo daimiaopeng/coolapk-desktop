@@ -497,6 +497,51 @@ onUnmounted(unbindGlobalListeners);
   }
 }
 
+@media (max-width: 720px) {
+  .page-container {
+    min-width: 0;
+    padding: var(--space-3);
+  }
+
+  .header-main {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .search-area {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .search-box {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  .search-input {
+    min-width: 0;
+  }
+
+  .category-tabs {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .category-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .cat-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
+
 .loading-wrapper,
 .error-wrapper,
 .empty-wrapper {

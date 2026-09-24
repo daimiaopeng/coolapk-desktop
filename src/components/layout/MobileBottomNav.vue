@@ -41,7 +41,7 @@ const authStore = useAuthStore();
 
 const leftItems = [
   { path: '/', label: '首页', icon: 'fas fa-house' },
-  { path: '/apps', label: '应用', icon: 'fas fa-border-all' },
+  { path: '/digital', label: '数码', icon: 'fas fa-microchip' },
 ];
 
 const profilePath = computed(() => {

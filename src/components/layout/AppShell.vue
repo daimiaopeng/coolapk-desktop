@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import TopBar from './TopBar.vue';
 import MainSidebar from './MainSidebar.vue';
 import NetworkStatusBanner from '../common/NetworkStatusBanner.vue';
@@ -32,8 +32,10 @@ import MobileTopBar from './MobileTopBar.vue';
 import MobileBottomNav from './MobileBottomNav.vue';
 import PageTabBar from './PageTabBar.vue';
 import { useAndroidBackButton } from '../../utils/androidBackButton';
+import { navigateBack } from '../../utils/navigation';
 
 const route = useRoute();
+const router = useRouter();
 const mobileNavigationOpen = ref(false);
 
 function toggleMobileNavigation() {
@@ -45,6 +47,7 @@ function closeMobileNavigation() {
 }
 
 useAndroidBackButton(() => mobileNavigationOpen.value, closeMobileNavigation);
+useAndroidBackButton(() => true, () => navigateBack(router));
 
 function handleMobileNavigationKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') closeMobileNavigation();

@@ -24,8 +24,15 @@
       </div>
     </div>
 
-    <div class="content-wrapper">
-      <div v-if="loading && items.length === 0" class="loading-wrapper">
+      <div class="content-wrapper">
+      <div v-if="!authStore.isLoggedIn" class="empty-wrapper">
+        <EmptyState title="登录后查看通知" description="登录酷安账号后，可在这里查看评论回复、@ 提及、收到的赞和新关注提醒" />
+        <div class="notification-login-hint">
+          <AppButton variant="primary" size="sm" @click="authStore.openLoginModal()">立即登录</AppButton>
+        </div>
+      </div>
+
+      <div v-else-if="loading && items.length === 0" class="loading-wrapper">
         <LoadingState text="正在获取通知..." />
       </div>
 
@@ -107,6 +114,7 @@ import { renderCoolapkRichText } from '../utils/richText';
 import { handleAnchorClick } from '../utils/anchorClick';
 import { openFeedDetail } from '../utils/feedNavigation';
 import { getNotificationExternalUrl, getNotificationFeedId, getNotificationFeedTarget, getNotificationProductName, resolveNotificationTargetRoute } from '../utils/notificationNavigation';
+import AppButton from '../components/common/AppButton.vue';
 import AppAvatar from '../components/common/AppAvatar.vue';
 import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
@@ -172,11 +180,24 @@ function loadMoreWhenNearBottom(container = pageContainerRef.value) {
 // 获取数据
 async function fetchNotifications(): Promise<boolean> {
   if (loading.value) return false;
+  if (!authStore.isLoggedIn) {
+    items.value = [];
+    page.value = 1;
+    hasMore.value = false;
+    notificationError.value = '';
+    return false;
+  }
   loading.value = true;
   notificationError.value = '';
   let fetchSucceeded = false;
   try {
     const res = await CoolapkTauriAPI.getNotifications(currentTab.value, page.value);
+    if (!authStore.isLoggedIn) {
+      items.value = [];
+      page.value = 1;
+      hasMore.value = false;
+      return false;
+    }
     const data = res?.data || [];
     
     if (Array.isArray(data)) {
@@ -453,6 +474,13 @@ onActivated(() => {
   window.addEventListener('coolapk-notification-count-increased', handleNotificationCountIncrease);
   const requestedTab = String(route.query.tab || '');
   if (tabs.some((tab) => tab.value === requestedTab)) currentTab.value = requestedTab;
+  if (!authStore.isLoggedIn) {
+    items.value = [];
+    page.value = 1;
+    hasMore.value = false;
+    notificationError.value = '';
+    return;
+  }
   void refreshNotifications().then((loaded) => {
     if (loaded) void clearFeedNotifications();
   });
@@ -467,6 +495,21 @@ watch(
   (tab) => {
     const requestedTab = String(tab || '');
     if (tabs.some((item) => item.value === requestedTab)) void switchTab(requestedTab);
+  }
+);
+
+watch(
+  () => authStore.isLoggedIn,
+  (isLoggedIn) => {
+    page.value = 1;
+    items.value = [];
+    notificationError.value = '';
+    hasMore.value = isLoggedIn;
+    if (isLoggedIn) {
+      void refreshNotifications().then((loaded) => {
+        if (loaded) void clearFeedNotifications();
+      });
+    }
   }
 );
 
@@ -579,6 +622,12 @@ watch(
 
 .loading-wrapper, .empty-wrapper {
   padding: var(--space-8) 0;
+}
+
+.notification-login-hint {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-3);
 }
 
 .notification-list {
@@ -794,5 +843,26 @@ watch(
 .no-more {
   color: var(--text-tertiary);
   font-size: var(--font-size-caption);
+}
+
+@media (max-width: 720px) {
+  .empty-wrapper :deep(.error-state) {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .empty-wrapper :deep(.error-desc) {
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .notification-inline-error {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }
 </style>
