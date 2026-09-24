@@ -52,17 +52,19 @@
             <div
               v-for="(item, i) in searchSuggestions"
               :key="i"
-              class="suggestion-item"
+              :class="['suggestion-item', { 'is-active': activeSuggestionIndex === i }]"
+              :aria-selected="activeSuggestionIndex === i"
+              @mouseenter="activeSuggestionIndex = i; activeResultIndex = -1"
               @mousedown.prevent="selectSuggestion(item)"
             >
               <i class="fas fa-search suggestion-icon"></i>
-              <span class="suggestion-text">{{ item.title }}</span>
+              <span class="suggestion-text">{{ getSearchEntityTitle(item) }}</span>
             </div>
           </div>
 
           <div class="search-results custom-scrollbar">
-            <div v-if="loading" class="loading-wrapper">
-              <LoadingState text="搜索中..." />
+            <div v-if="loading && query" class="loading-wrapper">
+              <LoadingState text="正在获取搜索建议..." />
             </div>
 
             <div v-else-if="!query" class="quick-suggestions">
@@ -85,17 +87,19 @@
               </div>
             </div>
 
-            <div v-else-if="results.length === 0" class="empty-wrapper">
+            <div v-else-if="query && results.length === 0 && searchSuggestions.length" class="search-submit-prompt">
+              暂无即时搜索结果，按 Enter 查看完整结果
+            </div>
+            <div v-else-if="query && results.length === 0" class="empty-wrapper">
               <EmptyState title="未找到相关结果" />
             </div>
-
             <div v-else class="result-list">
               <div
                 v-for="(item, i) in results"
                 :key="i"
                 :class="['result-item', { 'is-active': activeResultIndex === i }]"
                 :aria-selected="activeResultIndex === i"
-                @mouseenter="activeResultIndex = i"
+                @mouseenter="activeResultIndex = i; activeSuggestionIndex = -1"
                 @click="selectResult(item)"
               >
                 <i :class="[getIcon(item), 'result-icon']"></i>
@@ -105,7 +109,8 @@
                 </div>
               </div>
             </div>
-            <div v-if="query && results.length" class="search-keyboard-hint"><kbd>↑</kbd><kbd>↓</kbd> 选择 <kbd>Enter</kbd> 打开 <kbd>Esc</kbd> 关闭</div>
+            <div v-if="query && searchSuggestions.length" class="search-keyboard-hint"><kbd>↑</kbd><kbd>↓</kbd> 选择联想项 <kbd>Enter</kbd> 搜索或打开 <kbd>Esc</kbd> 关闭</div>
+            <div v-else-if="query && results.length" class="search-keyboard-hint"><kbd>↑</kbd><kbd>↓</kbd> 选择结果 <kbd>Enter</kbd> 打开 <kbd>Esc</kbd> 关闭</div>
           </div>
         </div>
       </div>
@@ -128,13 +133,14 @@ import {
   extractHotSearchKeywords,
   extractSearchEntities,
   getSearchEntityKind,
+  getSearchEntityRoute,
   getSearchEntitySearchTarget,
   getSearchEntitySubtitle,
   getSearchEntityTitle,
+  getSearchEntityUrl,
   isNavigableSearchEntity,
-  navigateSearchEntity,
 } from '../../utils/searchEntities';
-import { normalizeCoolapkCollectionLink, normalizeCoolapkFeedLink } from '../../utils/coolapkRoute';
+import { normalizeCoolapkCollectionLink, normalizeCoolapkDeepLink, normalizeCoolapkFeedLink, normalizeCoolapkRoute } from '../../utils/coolapkRoute';
 
 const appStore = useAppStore();
 const router = useRouter();
@@ -145,6 +151,7 @@ const loading = ref(false);
 const results = ref<SearchEntity[]>([]);
 const searchSuggestions = ref<SearchEntity[]>([]);
 const searchInput = ref<HTMLInputElement | null>(null);
+const activeSuggestionIndex = ref(-1);
 const activeResultIndex = ref(-1);
 const directFeedRoute = computed(() => normalizeCoolapkFeedLink(query.value.trim()));
 const directCollectionRoute = computed(() => normalizeCoolapkCollectionLink(query.value.trim()));
@@ -199,6 +206,7 @@ watch(() => appStore.isSearchOpen, (open) => {
     query.value = '';
     results.value = [];
     searchSuggestions.value = [];
+    activeSuggestionIndex.value = -1;
     activeResultIndex.value = -1;
     if (!suggestions.value.length) void loadHotSearches();
     void nextTick(async () => {
@@ -211,32 +219,30 @@ watch(() => appStore.isSearchOpen, (open) => {
 });
 
 let timer: any = null;
+// 保留联想和即时结果两栏，联想项按 APK 返回的跳转地址执行。
 watch(query, (val) => {
   if (timer) clearTimeout(timer);
   const requestVersion = ++searchRequestVersion;
+  results.value = [];
+  searchSuggestions.value = [];
+  activeSuggestionIndex.value = -1;
+  activeResultIndex.value = -1;
+  loading.value = false;
   if (!val.trim()) {
-    results.value = [];
-    searchSuggestions.value = [];
-    activeResultIndex.value = -1;
     return;
   }
   timer = setTimeout(async () => {
     if (directFeedRoute.value || directCollectionRoute.value) {
       results.value = [];
       searchSuggestions.value = [];
-      activeResultIndex.value = -1;
       loading.value = false;
       return;
     }
     loading.value = true;
     try {
-      const [searchRes, suggestRes] = await Promise.all([
-        CoolapkTauriAPI.searchAll(val.trim(), 1),
-        CoolapkTauriAPI.getSearchSuggestions(val.trim())
-      ]);
+      const [searchRes, suggestRes] = await Promise.all([CoolapkTauriAPI.searchAll(val.trim(), 1), CoolapkTauriAPI.getSearchSuggestions(val.trim())]);
       if (requestVersion !== searchRequestVersion) return;
-      results.value = extractSearchEntities(searchRes).filter(isNavigableSearchEntity).slice(0, 8);
-      activeResultIndex.value = results.value.length ? 0 : -1;
+      results.value = deduplicateSearchResults(searchRes).slice(0, 8);
       searchSuggestions.value = extractSearchEntities(suggestRes).filter((item) => getSearchEntityTitle(item)).slice(0, 8);
     } catch (err) {
       console.error('Search error', err);
@@ -246,22 +252,55 @@ watch(query, (val) => {
   }, 300);
 });
 
+// 将搜索结果链接归一为桌面路由后去重，同一话题优先保留明确的话题实体。
+function getSearchResultRoute(item: SearchEntity): string | null {
+  const url = getSearchEntityUrl(item);
+  const route = getSearchEntityRoute(item) || normalizeCoolapkDeepLink(url) || normalizeCoolapkRoute(url);
+  return route ? normalizeCoolapkDeepLink(route) || normalizeCoolapkRoute(route) || route : null;
+}
+
+function isTopicSearchResult(item: SearchEntity): boolean {
+  return getSearchEntityKind(item) === 'topic' || /^\/topic\//i.test(getSearchResultRoute(item) || '');
+}
+
+function deduplicateSearchResults(response: unknown): SearchEntity[] {
+  const unique: SearchEntity[] = [];
+  const routeIndexes = new Map<string, number>();
+  for (const item of extractSearchEntities(response).filter(isNavigableSearchEntity)) {
+    const route = getSearchResultRoute(item);
+    if (!route) {
+      unique.push(item);
+      continue;
+    }
+    const existingIndex = routeIndexes.get(route);
+    if (existingIndex === undefined) {
+      routeIndexes.set(route, unique.length);
+      unique.push(item);
+    } else if (getSearchEntityKind(item) === 'topic' && getSearchEntityKind(unique[existingIndex]) !== 'topic') {
+      unique[existingIndex] = item;
+    }
+  }
+  return unique;
+}
+
 function applySearch(tag: string) {
   query.value = tag;
 }
 
 function selectSuggestion(item: SearchEntity) {
   const searchTarget = getSearchEntitySearchTarget(item);
-  if (searchTarget) {
-    searchSuggestions.value = [];
-    handleEnterSearch(searchTarget.keyword, searchTarget.searchType);
+  const title = getSearchEntityTitle(item);
+  const historyValue = searchTarget?.keyword || title || query.value.trim();
+  const route = getSearchResultRoute(item);
+  searchSuggestions.value = [];
+  activeSuggestionIndex.value = -1;
+  if (route) {
+    if (historyValue) addSearchHistory(historyValue);
+    appStore.closeSearch();
+    void router.push(route);
     return;
   }
-  const title = getSearchEntityTitle(item);
-  if (!title) return;
-  query.value = title;
-  searchSuggestions.value = [];
-  handleEnterSearch();
+  handleEnterSearch(searchTarget?.keyword || title || query.value, searchTarget?.searchType || '');
 }
 
 function handleEnterSearch(value = query.value, searchType = '') {
@@ -285,15 +324,17 @@ function handleInputKeydown(e: KeyboardEvent) {
       openDirectCollection();
       return;
     }
-    if (activeResultIndex.value >= 0 && results.value[activeResultIndex.value]) selectResult(results.value[activeResultIndex.value]);
+    if (activeSuggestionIndex.value >= 0 && searchSuggestions.value[activeSuggestionIndex.value]) selectSuggestion(searchSuggestions.value[activeSuggestionIndex.value]);
+    else if (activeResultIndex.value >= 0 && results.value[activeResultIndex.value]) selectResult(results.value[activeResultIndex.value]);
     else handleEnterSearch();
     return;
   }
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    if (!results.value.length) return;
+    if (!searchSuggestions.value.length && !results.value.length) return;
     e.preventDefault();
     const delta = e.key === 'ArrowDown' ? 1 : -1;
-    activeResultIndex.value = (activeResultIndex.value + delta + results.value.length) % results.value.length;
+    if (searchSuggestions.value.length) activeSuggestionIndex.value = activeSuggestionIndex.value < 0 ? (delta > 0 ? 0 : searchSuggestions.value.length - 1) : (activeSuggestionIndex.value + delta + searchSuggestions.value.length) % searchSuggestions.value.length;
+    else activeResultIndex.value = activeResultIndex.value < 0 ? (delta > 0 ? 0 : results.value.length - 1) : (activeResultIndex.value + delta + results.value.length) % results.value.length;
     return;
   }
   if (e.key === 'Escape') {
@@ -321,15 +362,17 @@ function clearHistory() {
 }
 
 function selectResult(item: SearchEntity) {
+  const route = getSearchResultRoute(item);
   appStore.closeSearch();
-  if (!navigateSearchEntity(router, item)) handleEnterSearch();
+  if (route) void router.push(route);
+  else handleEnterSearch();
 }
 
 function getIcon(item: SearchEntity) {
+  if (isTopicSearchResult(item)) return 'fas fa-hashtag';
   switch (getSearchEntityKind(item)) {
     case 'user': return 'fas fa-user';
     case 'app': return 'fas fa-cube';
-    case 'topic': return 'fas fa-hashtag';
     case 'question': return 'fas fa-circle-question';
     default: return 'fas fa-align-left';
   }
@@ -460,60 +503,18 @@ onUnmounted(releaseSearchBackHandler);
   color: var(--brand-primary);
 }
 
-.result-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.result-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3);
-  border-radius: var(--radius-control);
-  cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-default);
-}
-
-.result-item:hover {
-  background-color: var(--surface-hover);
-}
-
-.result-item.is-active { background-color: var(--brand-soft); color: var(--brand-primary); }
 .search-keyboard-hint { padding: 8px 4px 0; color: var(--text-tertiary); font-size: var(--font-size-caption); text-align: right; }
 .search-keyboard-hint kbd { margin: 0 2px; padding: 1px 5px; color: var(--text-secondary); background: var(--surface-hover); border: 1px solid var(--border); border-radius: 4px; font-size: 11px; }
 
-.result-icon {
-  font-size: 16px;
-  color: var(--text-tertiary);
-  width: 24px;
-  text-align: center;
-}
-
-.result-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.result-title {
-  font-size: var(--font-size-sub);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.result-sub {
-  font-size: var(--font-size-caption);
-  color: var(--text-tertiary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.result-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.result-item { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-control); cursor: pointer; transition: background var(--duration-fast) var(--ease-default); }
+.result-item:hover { background-color: var(--surface-hover); }
+.result-item.is-active { background-color: var(--brand-soft); color: var(--brand-primary); }
+.result-icon { font-size: 16px; color: var(--text-tertiary); width: 24px; text-align: center; }
+.result-info { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.result-title { font-size: var(--font-size-sub); font-weight: var(--font-weight-medium); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-sub { font-size: var(--font-size-caption); color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-submit-prompt { padding: 8px 4px; color: var(--text-tertiary); font-size: var(--font-size-caption); text-align: center; }
 
 .suggestion-list {
   max-height: 200px;
@@ -590,6 +591,8 @@ onUnmounted(releaseSearchBackHandler);
 .suggestion-item:hover {
   background-color: var(--surface-hover);
 }
+
+.suggestion-item.is-active { background-color: var(--brand-soft); }
 
 .suggestion-icon {
   font-size: 13px;
