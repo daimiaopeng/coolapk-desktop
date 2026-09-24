@@ -906,6 +906,16 @@ pub async fn get_feed_detail(state: State<'_, AppState>, feed_id: String) -> Res
 }
 
 #[tauri::command]
+pub async fn get_editable_feed(state: State<'_, AppState>, feed_id: String) -> Result<Value, String> {
+    state.client.get_editable_feed(&feed_id).await
+}
+
+#[tauri::command]
+pub async fn update_feed(state: State<'_, AppState>, feed_id: String, message: String, pic: String, post_token: Option<String>) -> Result<Value, String> {
+    state.client.update_feed(&feed_id, &message, &pic, post_token.as_deref()).await
+}
+
+#[tauri::command]
 pub async fn resolve_video_url(
     state: State<'_, AppState>,
     request_params: String,

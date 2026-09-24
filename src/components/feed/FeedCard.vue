@@ -42,6 +42,9 @@
       <button class="more-menu-item" @click="handleShareImage">
         <i class="fas fa-image"></i> 生成长图
       </button>
+      <button v-if="isMyFeed" class="more-menu-item" :disabled="!canEditFeed" :title="canEditFeed ? '重新编辑动态' : '此动态当前不能编辑'" @click="handleEditFeed">
+        <i class="fas fa-pen"></i> 重新编辑
+      </button>
       <button v-if="isMyFeed" class="more-menu-item is-danger" @click="handleDeleteFeed">
         <i class="fas fa-trash-alt"></i> 删除动态
       </button>
@@ -404,6 +407,11 @@ const isMyFeed = computed(() => {
   return !!authorUid.value && authorUid.value === String(authStore.user.uid);
 });
 
+const canEditFeed = computed(() => {
+  const value = (props.feed as any).enableModify ?? (props.feed as any).enable_modify;
+  return value === undefined || Number(value) === 1;
+});
+
 const isEdited = computed(() => {
   const flag = props.feed.isModified ?? props.feed.is_modified;
   if (flag === true || flag === 1 || flag === '1') return true;
@@ -601,6 +609,11 @@ function toggleMoreMenu() {
 function handleShareImage() {
   moreMenuOpen.value = false;
   shareImageOpen.value = true;
+}
+
+function handleEditFeed() {
+  moreMenuOpen.value = false;
+  appStore.openEditFeed(props.feed);
 }
 
 async function openHistoryDialog() {
@@ -1884,6 +1897,11 @@ defineExpose({
 
 .more-menu-item:hover {
   background-color: var(--surface-hover);
+}
+
+.more-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .more-menu-item.is-danger {

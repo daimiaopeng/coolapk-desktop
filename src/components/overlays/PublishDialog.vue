@@ -1,11 +1,14 @@
 <template>
   <AppDialog
     :is-open="appStore.isPublishOpen && !shuzilmGuideState.visible"
-    title="发布新动态"
+    :title="isEditMode ? '重新编辑动态' : '发布新动态'"
     :width="720"
     @close="appStore.closePublish"
   >
     <div class="publish-container">
+      <div v-if="editLoading" class="panel-tip">正在读取可编辑动态...</div>
+      <div v-else-if="editLoadError" class="error-tip"><i class="fas fa-exclamation-circle"></i> {{ editLoadError }}</div>
+      <template v-else>
       <div v-if="previewMode" class="preview-box custom-scrollbar">
         <div class="preview-content" v-html="previewHtml"></div>
         <div v-if="!message.trim()" class="preview-empty">输入内容后此处显示预览效果</div>
@@ -29,11 +32,11 @@
 
       <div class="publish-media-preview" v-if="images.length > 0">
         <div v-for="(img, i) in images" :key="i" class="media-thumb">
-          <img :src="img.preview" alt="upload" />
+          <AppImage :src="img.preview" alt="动态图片" image-class="media-thumb-image" />
           <button class="remove-img" :disabled="submitting" @click="removeImage(i)"><i class="fas fa-times"></i></button>
         </div>
         <div v-if="uploadingImages" class="upload-tip">
-          <i class="fas fa-circle-notch fa-spin"></i> 正在上传图片 {{ uploadedCount }}/{{ images.length }}...
+          <i class="fas fa-circle-notch fa-spin"></i> 正在上传图片 {{ uploadedCount }}/{{ images.filter((image) => !!image.file).length }}...
         </div>
       </div>
 
@@ -132,17 +135,18 @@
       <div v-if="errorMessage" class="error-tip">
         <i class="fas fa-exclamation-circle"></i> {{ errorMessage }}
       </div>
+      </template>
     </div>
 
     <template #footer>
       <AppButton variant="ghost" @click="appStore.closePublish">取消</AppButton>
       <AppButton
         variant="primary"
-        :disabled="(!message.trim() && images.length === 0) || submitting"
+        :disabled="editLoading || !!editLoadError || (!message.trim() && images.length === 0) || submitting"
         :loading="submitting"
         @click="handlePublish"
       >
-        立即发布
+        {{ isEditMode ? '保存修改' : '立即发布' }}
       </AppButton>
     </template>
   </AppDialog>
@@ -157,18 +161,20 @@ import { CoolapkTauriAPI } from '../../api/coolapk';
 import { renderCoolapkEmoji, EMOJI_MAP, getEmojiUrl } from '../../utils/coolapkEmoji';
 import { useRecentEmojis } from '../../utils/recentEmojis';
 import { renderCoolapkRichText } from '../../utils/richText';
+import { extractFeedImageInputs, normalizeFeedImageItems } from '../../utils/livePhoto';
 import { clearPublishDraft, loadPublishDraft, savePublishDraft } from '../../utils/publishDrafts';
 import { verifyWithCaptcha, extractCaptchaParamsFromResponse } from '../../utils/neteaseCaptcha';
 import { shuzilmGuideState, openShuzilmGuide, isRiskControlError } from '../../utils/shuzilmDeviceGuide';
 import AppDialog from '../common/AppDialog.vue';
 import AppButton from '../common/AppButton.vue';
+import AppImage from '../common/AppImage.vue';
 
 const appStore = useAppStore();
 const settingsStore = useSettingsStore();
 const authStore = useAuthStore();
 const MAX_IMAGES = 9;
 const message = ref('');
-const images = ref<{ file: File; preview: string }[]>([]);
+const images = ref<{ file?: File; preview: string; url?: string }[]>([]);
 const uploadingImages = ref(false);
 const uploadedCount = ref(0);
 const submitting = ref(false);
@@ -179,9 +185,13 @@ const showTopicPanel = ref(false);
 const topics = ref<any[]>([]);
 const topicsLoading = ref(false);
 const previewMode = ref(false);
+const editLoading = ref(false);
+const editLoadError = ref('');
+const isEditMode = computed(() => !!appStore.editFeedTarget);
 const messageInput = ref<HTMLDivElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 let restoringDraft = false;
+let openRevision = 0;
 
 function currentDraftAccount(): string {
   return String(authStore.user?.uid || 'guest');
@@ -194,6 +204,7 @@ const previewHtml = computed(() => {
 });
 
 watch(() => appStore.isPublishOpen, async (open) => {
+  const revision = ++openRevision;
   if (open) {
     restoringDraft = true;
     message.value = '';
@@ -203,7 +214,44 @@ watch(() => appStore.isPublishOpen, async (open) => {
     previewMode.value = false;
     showEmojiPanel.value = false;
     showTopicPanel.value = false;
-    message.value = await loadPublishDraft(currentDraftAccount());
+    editLoadError.value = '';
+    if (appStore.editFeedTarget) {
+      editLoading.value = true;
+      try {
+        const response = await CoolapkTauriAPI.getEditableFeed(String(appStore.editFeedTarget.id));
+        if (revision !== openRevision || !appStore.isPublishOpen) return;
+        const feed = response?.data;
+        if (!feed || String(feed.id) !== String(appStore.editFeedTarget.id)) throw new Error('获取可编辑动态失败');
+        const authorUid = feed.uid ?? feed.userInfo?.uid;
+        if (authorUid && String(authorUid) !== String(authStore.user?.uid)) throw new Error('只能编辑自己发布的动态');
+        const canEdit = feed.enableModify ?? feed.enable_modify;
+        if (canEdit !== undefined && Number(canEdit) !== 1) throw new Error('此动态当前不允许编辑或编辑次数已用尽');
+        if (String(feed.feedType ?? feed.feed_type ?? 'feed') !== 'feed') throw new Error('目前只支持重新编辑普通动态');
+        if (Number(feed.isHtmlArticle ?? feed.is_html_article ?? 0) > 0 || Number(feed.mediaType ?? feed.media_type ?? 0) > 0 || String(feed.mediaUrl ?? feed.media_url ?? '')) throw new Error('目前只支持重新编辑普通图文动态');
+        const cardFeed = appStore.editFeedTarget;
+        message.value = [feed.messageRawInput, feed.message_raw_input, feed.message, feed.messageRawOutput, cardFeed.message, cardFeed.message_raw_output].find((value) => typeof value === 'string' && value.trim()) || '';
+        const imageInputs = extractFeedImageInputs(feed);
+        const detailItems = normalizeFeedImageItems(imageInputs.length === 1 && typeof imageInputs[0] === 'string' && imageInputs[0].includes(',') ? imageInputs[0].split(',') : imageInputs);
+        const cardItems = normalizeFeedImageItems(extractFeedImageInputs(cardFeed));
+        if (imageInputs.length > 0 && detailItems.length === 0 && cardItems.length === 0) throw new Error('无法识别原动态图片，为避免丢失图片，已停止编辑');
+        if ([...detailItems, ...cardItems].some((item) => item.isLivePhoto)) throw new Error('暂不支持重新编辑实况照片动态，以免丢失照片信息');
+        const originalPics = typeof feed.pic === 'string' ? feed.pic.split(',').filter(Boolean) : [];
+        const imageCount = Math.max(detailItems.length, cardItems.length, originalPics.length);
+        images.value = Array.from({ length: imageCount }, (_, index) => ({
+          url: originalPics.length === imageCount ? originalPics[index] : cardItems[index]?.sourceUrl || detailItems[index]?.sourceUrl || '',
+          preview: cardItems[index]?.coverUrl || detailItems[index]?.coverUrl || '',
+        }));
+        if (images.value.some((image) => !image.url || !image.preview)) throw new Error('原动态图片信息不完整，为避免丢失图片，已停止编辑');
+      } catch (error: any) {
+        if (revision === openRevision) editLoadError.value = error?.message || String(error);
+      } finally {
+        if (revision === openRevision) editLoading.value = false;
+      }
+    } else {
+      const draft = await loadPublishDraft(currentDraftAccount());
+      if (revision !== openRevision || !appStore.isPublishOpen) return;
+      message.value = draft;
+    }
     await nextTick();
     renderEditor();
     restoringDraft = false;
@@ -215,7 +263,7 @@ watch(() => appStore.isPublishOpen, async (open) => {
 });
 
 watch(message, (value) => {
-  if (!restoringDraft) void savePublishDraft(currentDraftAccount(), value);
+  if (!restoringDraft && !isEditMode.value) void savePublishDraft(currentDraftAccount(), value);
 });
 
 watch(previewMode, async (preview) => {
@@ -227,7 +275,8 @@ function escapeEditorText(value: string): string {
 }
 
 // 编辑区显示表情图片，实际草稿和发布内容仍保留酷安使用的 [表情名] 文本。
-function editorText(node: Node): string {
+function editorText(node: Node | null): string {
+  if (!node) return '';
   if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
   if (node instanceof HTMLImageElement) return node.alt || '';
   return Array.from(node.childNodes).map(editorText).join('');
@@ -296,7 +345,9 @@ function syncEditor() {
 }
 
 function handleEditorInput(event: InputEvent) {
-  if (event.isComposing) { message.value = editorText(messageInput.value!); return; }
+  const editor = messageInput.value;
+  if (!editor || event.currentTarget !== editor) return;
+  if (event.isComposing) { message.value = editorText(editor); return; }
   syncEditor();
 }
 
@@ -441,6 +492,7 @@ function removeImage(index: number) {
 
 function buildFinalMessage(): string {
   const base = message.value.trim();
+  if (isEditMode.value) return message.value;
   if (
     settingsStore.settings.publishDeviceSignature &&
     settingsStore.settings.deviceSignature &&
@@ -452,11 +504,11 @@ function buildFinalMessage(): string {
 }
 
 async function handlePublish() {
-  if ((!message.value.trim() && images.value.length === 0) || submitting.value) return;
+  if ((!message.value.trim() && images.value.length === 0) || submitting.value || editLoading.value || editLoadError.value) return;
 
   const proceedPublish = async () => {
     submitting.value = true;
-    uploadingImages.value = images.value.length > 0;
+    uploadingImages.value = images.value.some((image) => !!image.file);
     uploadedCount.value = 0;
     errorMessage.value = '';
     try {
@@ -464,16 +516,20 @@ async function handlePublish() {
       if (images.value.length > 0) {
         const urls: string[] = [];
         for (const img of images.value) {
-          const bytes = new Uint8Array(await img.file.arrayBuffer());
-          const contentType = img.file.type || 'image/jpeg';
-          const res = await CoolapkTauriAPI.uploadImage(bytes, img.file.name, contentType, 'feed');
-          urls.push(resolveUploadedUrl(res?.data));
-          uploadedCount.value += 1;
+          if (img.url && !img.file) { urls.push(img.url); continue; }
+          if (img.file) {
+            const bytes = new Uint8Array(await img.file.arrayBuffer());
+            const contentType = img.file.type || 'image/jpeg';
+            const res = await CoolapkTauriAPI.uploadImage(bytes, img.file.name, contentType, 'feed');
+            urls.push(resolveUploadedUrl(res?.data));
+            uploadedCount.value += 1;
+          }
         }
         pic = urls.join(',');
       }
 
       const executeCreate = async (postToken?: string) => {
+        if (appStore.editFeedTarget) return await CoolapkTauriAPI.updateFeed(String(appStore.editFeedTarget.id), buildFinalMessage(), pic, postToken);
         if (postToken) {
           return await CoolapkTauriAPI.createFeed(buildFinalMessage(), pic || undefined, postToken);
         }
@@ -489,7 +545,7 @@ async function handlePublish() {
           const token = await verifyWithCaptcha(captchaParams.captchaId);
           res = await executeCreate(token);
         } else if (isRiskControlError(err)) {
-          errorMessage.value = '酷安服务端风控拦截（需官方设备认证），发布失败';
+          errorMessage.value = `酷安服务端风控拦截（需官方设备认证），${isEditMode.value ? '修改' : '发布'}失败`;
           openShuzilmGuide({
             reason: 'risk_controlled',
             message: '请求被酷安服务端拦截。请到设备信息设置粘贴手机官方酷安复制的设备日志，保存后重试。',
@@ -510,7 +566,7 @@ async function handlePublish() {
           const token = await verifyWithCaptcha(captchaParams.captchaId);
           res = await executeCreate(token);
         } else if (isRiskControlError(res)) {
-          errorMessage.value = '酷安服务端风控拦截（需官方设备认证），发布失败';
+          errorMessage.value = `酷安服务端风控拦截（需官方设备认证），${isEditMode.value ? '修改' : '发布'}失败`;
           openShuzilmGuide({
             reason: 'risk_controlled',
             message: '请求被酷安服务端拦截。请到设备信息设置粘贴手机官方酷安复制的设备日志，保存后重试。',
@@ -524,24 +580,29 @@ async function handlePublish() {
       }
 
       if (res && res.code === 200) {
-        await clearPublishDraft(currentDraftAccount());
+        if (appStore.editFeedTarget) {
+          const updatedPictures = pic ? pic.split(',') : [];
+          Object.assign(appStore.editFeedTarget, { message: buildFinalMessage(), messageRawInput: buildFinalMessage(), message_raw_output: buildFinalMessage(), pics: updatedPictures, picArr: updatedPictures, imageUriList: updatedPictures, pic, isModified: 1 });
+        } else {
+          await clearPublishDraft(currentDraftAccount());
+        }
         message.value = '';
         images.value = [];
         // 给用户明确反馈后延迟关闭
         errorMessage.value = '';
         const successTip = document.createElement('div');
         successTip.className = 'publish-success-tip';
-        successTip.textContent = '发布成功！';
+        successTip.textContent = isEditMode.value ? '修改成功！' : '发布成功！';
         document.body.appendChild(successTip);
         setTimeout(() => successTip.remove(), 1500);
         setTimeout(() => {
           appStore.closePublish();
         }, 600);
       } else {
-        errorMessage.value = res?.message || '发布动态失败';
+        errorMessage.value = res?.message || `${isEditMode.value ? '修改' : '发布'}动态失败`;
       }
     } catch (err: any) {
-      errorMessage.value = typeof err === 'string' ? err : (err?.message || '发布动态服务异常');
+      errorMessage.value = typeof err === 'string' ? err : (err?.message || `${isEditMode.value ? '修改' : '发布'}动态服务异常`);
       // 失败时保持弹窗打开并聚焦输入框，便于用户修改重试
       nextTick(() => messageInput.value?.focus());
     } finally {
@@ -551,7 +612,7 @@ async function handlePublish() {
   };
 
   // 未设置设备 ID 时先完成设备信息设置，保存后继续发布。
-  if (!settingsStore.settings.deviceFingerprint.deviceId?.trim()) {
+  if (!isEditMode.value && !settingsStore.settings.deviceFingerprint.deviceId?.trim()) {
     openShuzilmGuide({ reason: 'missing_id', onConfirmContinue: () => { void proceedPublish(); } });
     return;
   }
@@ -629,6 +690,12 @@ async function handlePublish() {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.media-thumb :deep(.app-image-container),
+.media-thumb :deep(.app-image-container img) {
+  width: 100%;
+  height: 100%;
 }
 
 .remove-img {

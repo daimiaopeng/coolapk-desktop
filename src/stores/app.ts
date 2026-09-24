@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { FeedImageInput, LivePhotoContextType } from '../utils/livePhoto';
+import type { FeedItem } from '../types/feed';
 
 export interface ImageViewerContext {
   contentId?: string | number;
@@ -15,6 +16,7 @@ export interface ImageViewerState extends ImageViewerContext {
 export const useAppStore = defineStore('app', () => {
   const isSearchOpen = ref(false);
   const isPublishOpen = ref(false);
+  const editFeedTarget = ref<FeedItem | null>(null);
   const feedDetailContexts = ref<Record<string, any>>({});
   const activeImageViewer = ref<ImageViewerState | null>(null);
 
@@ -27,11 +29,18 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function openPublish() {
+    editFeedTarget.value = null;
+    isPublishOpen.value = true;
+  }
+
+  function openEditFeed(feed: FeedItem) {
+    editFeedTarget.value = feed;
     isPublishOpen.value = true;
   }
 
   function closePublish() {
     isPublishOpen.value = false;
+    editFeedTarget.value = null;
   }
 
   function setFeedDetailContext(feedId: string | number, feed: any) {
@@ -66,11 +75,13 @@ export const useAppStore = defineStore('app', () => {
   return {
     isSearchOpen,
     isPublishOpen,
+    editFeedTarget,
     feedDetailContexts,
     activeImageViewer,
     openSearch,
     closeSearch,
     openPublish,
+    openEditFeed,
     closePublish,
     setFeedDetailContext,
     getFeedDetailContext,

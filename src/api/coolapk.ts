@@ -1176,6 +1176,14 @@ export class CoolapkTauriAPI {
     return await invokeNative('create_feed', args);
   }
 
+  static async getEditableFeed(feedId: string) {
+    return await invokeNative('get_editable_feed', { feedId }, { retry: false, kind: 'feed' });
+  }
+
+  static async updateFeed(feedId: string, message: string, pic: string, postToken?: string) {
+    return await invokeNative('update_feed', { feedId, message, pic, postToken });
+  }
+
   static async saveCookie(cookieStr: string) {
     return await invoke<string>('save_cookie_securely', { cookieStr });
   }

@@ -1926,6 +1926,7 @@ impl CoolapkClient {
 
         // APK 列表分页使用 Entity.entityId 生成 firstItem 和 lastItem，清洗时需要保留该游标字段。
         copy_first_field(&mut cleaned, obj, "entityId", &["entityId", "entity_id"]);
+        copy_first_field(&mut cleaned, obj, "enableModify", &["enableModify", "enable_modify"]);
 
         // 列表接口会把关联标的和视频字段放在这些扩展字段中，必须在归一化时保留下来。
         copy_first_field(&mut cleaned, obj, "targetRow", &["targetRow", "target_row"]);
@@ -3533,6 +3534,56 @@ impl CoolapkClient {
             "动态详情加载失败：{primary_error}；游客接口：{}",
             public_errors.join("；")
         ))
+    }
+
+    /// APK 二次编辑先读取 changeDetail，服务端在这里返回可编辑状态和原始内容。
+    pub async fn get_editable_feed(&self, feed_id: &str) -> Result<Value, String> {
+        wrap_api_data(self.api_get("/v6/feed/changeDetail", &[("id", feed_id.to_string()), ("rid", String::new()), ("noticeId", String::new()), ("fromApi", String::new())]).await?)
+    }
+
+    /// 与 APK 的 FeedMultiPart 一样保留原动态字段，只替换正文和图片。
+    pub async fn update_feed(&self, feed_id: &str, message: &str, pic: &str, post_token: Option<&str>) -> Result<Value, String> {
+        let detail = self.get_editable_feed(feed_id).await?;
+        let original = detail.get("data").ok_or_else(|| "获取可编辑动态失败".to_string())?;
+        let original_id = original.get("id").map(value_to_string).unwrap_or_default();
+        if original_id != feed_id { return Err("可编辑动态 ID 不匹配".to_string()); }
+        if let Some(allowed) = original.get("enableModify").or_else(|| original.get("enable_modify")) {
+            if parse_u64_val(allowed) != Some(1) { return Err("此动态当前不允许编辑或编辑次数已用尽".to_string()); }
+        }
+        let feed_type = original.get("feedType").or_else(|| original.get("feed_type")).and_then(Value::as_str).unwrap_or("feed");
+        if feed_type != "feed" { return Err("目前只支持重新编辑普通动态".to_string()); }
+        let original_obj = original.as_object().ok_or_else(|| "动态格式无效".to_string())?;
+        if get_u64_by_keys(original_obj, &["isHtmlArticle", "is_html_article"]) > 0 || get_u64_by_keys(original_obj, &["mediaType", "media_type"]) > 0 || original.get("mediaUrl").or_else(|| original.get("media_url")).and_then(Value::as_str).is_some_and(|value| !value.is_empty()) { return Err("目前只支持重新编辑普通图文动态".to_string()); }
+        if message.trim().is_empty() && pic.trim().is_empty() { return Err("动态内容不能为空".to_string()); }
+        if message.chars().count() > 1000 { return Err("动态内容超过 1000 字".to_string()); }
+
+        let mut form = build_create_feed_form(message, Some(pic), None);
+        for (key, value) in &mut form {
+            if *key == "id" { *value = feed_id.to_string(); continue; }
+            let source_keys: &[&str] = match *key {
+                "publish_status" => &["publish_status", "publishStatus"], "location" => &["location"], "long_location" => &["long_location", "longLocation"],
+                "latitude" => &["latitude"], "longitude" => &["longitude"], "media_url" => &["media_url", "mediaUrl"], "media_type" => &["media_type", "mediaType"],
+                "media_pic" => &["media_pic", "mediaPic"], "message_title" => &["message_title", "messageTitle"], "message_brief" => &["message_brief", "messageBrief"],
+                "extra_title" => &["extra_title", "extraTitle"], "extra_url" => &["extra_url", "extraUrl"], "extra_key" => &["extra_key", "extraKey"],
+                "extra_pic" => &["extra_pic", "extraPic"], "extra_info" => &["extra_info", "extraInfo"], "message_cover" => &["message_cover", "messageCover"],
+                "original_type" => &["original_type", "originalType"], "is_editInDyh" => &["is_editInDyh", "isEditInDyh"], "forwardid" => &["forwardid", "forwardId"],
+                "fid" => &["fid"], "dyhId" => &["dyhId", "dyh_id"], "targetType" => &["targetType", "target_type"], "productId" => &["productId", "product_id"],
+                "targetId" => &["targetId", "target_id"], "location_city" => &["location_city", "locationCity"], "location_country" => &["location_country", "locationCountry"],
+                "disallow_reply" => &["disallow_reply", "disallowReply"], "vote_score" => &["vote_score", "voteScore"], "replyWithForward" => &["replyWithForward", "reply_with_forward"],
+                "media_info" => &["media_info", "mediaInfo"], "insert_product_media" => &["insert_product_media", "insertProductMedia"], "is_ks_doc" => &["is_ks_doc", "isKsDoc"],
+                "goods_list_id" => &["goods_list_id", "goodsListId"], "is_html_article" => &["is_html_article", "isHtmlArticle"], _ => &[],
+            };
+            if let Some(raw) = source_keys.iter().find_map(|source_key| original.get(*source_key).filter(|value| !value.is_null())) {
+                *value = if let Some(flag) = raw.as_bool() { if flag { "1" } else { "0" }.to_string() } else { value_to_string(raw) };
+            }
+        }
+        for (key, source_keys) in [("province", &["province"][..]), ("city_code", &["city_code", "cityCode"][..])] {
+            if let Some(raw) = source_keys.iter().find_map(|source_key| original.get(*source_key).filter(|value| !value.is_null())) { form.push((key, value_to_string(raw))); }
+        }
+        if let Some(token) = post_token.filter(|token| !token.trim().is_empty()) { form.push(("_v2_post_token", token.to_string())); }
+        let updated = wrap_api_data(self.api_post("/v6/feed/changeFeed", &[], &form).await?)?;
+        if updated.get("data").and_then(|data| data.get("id")).map(value_to_string).as_deref() != Some(feed_id) { return Err("服务端未返回修改后的动态，请刷新确认".to_string()); }
+        Ok(updated)
     }
 
     /// 按 APK 的回退链路，把 Video.requestParams 交给酷安播放器接口解析。
