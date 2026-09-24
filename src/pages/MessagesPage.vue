@@ -1,5 +1,11 @@
 <template>
-  <div class="messages-page">
+  <div
+    class="messages-page"
+    :class="{
+      'is-mobile-chat-active': mobileChatActive,
+      'is-mobile-login-state': isNotLoggedIn,
+    }"
+  >
     <!-- 左侧会话列表 -->
     <div class="messages-sidebar" :style="{ width: `${sidebarWidth}px` }">
       <div class="sidebar-header">
@@ -58,6 +64,14 @@
     <!-- 右侧聊天区域 -->
     <div class="messages-main" v-if="currentSession">
       <div class="main-header">
+        <button
+          type="button"
+          class="mobile-session-back"
+          aria-label="返回会话列表"
+          @click="showMobileSessionList"
+        >
+          <i class="fas fa-arrow-left"></i>
+        </button>
         <div 
           class="header-partner-info clickable-header" 
           @click="navigateToUser(getSessionPartnerUid(currentSession))"
@@ -342,6 +356,7 @@ import {
 import { DEVELOPER_UID, DEVELOPER_USERNAME } from '../utils/feedback';
 
 import { useRoute, useRouter } from 'vue-router';
+import { useAndroidBackButton } from '../utils/androidBackButton';
 
 // --- 状态管理 ---
 const route = useRoute();
@@ -365,6 +380,7 @@ const sessions = ref<any[]>([]);
 const loadingSessions = ref(false);
 const sessionsError = ref('');
 const currentSession = ref<any>(null);
+const mobileChatActive = ref(false);
 
 const isNotLoggedIn = computed(() => {
   if (!authStore.isLoggedIn) return true;
@@ -1283,6 +1299,7 @@ const loadSessions = async () => {
     loadingSessions.value = false;
     sessions.value = [];
     currentSession.value = null;
+    mobileChatActive.value = false;
     return;
   }
   if (loadingSessions.value) return;
@@ -1415,11 +1432,24 @@ async function openTargetConversation(uid: string) {
   }
 }
 
+function showMobileSessionList() {
+  mobileChatActive.value = false;
+}
+
+useAndroidBackButton(
+  () => route.path === '/messages'
+    && mobileChatActive.value
+    && typeof window !== 'undefined'
+    && window.matchMedia?.('(max-width: 720px)').matches !== false,
+  showMobileSessionList,
+);
+
 const selectSession = async (session: any) => {
   await saveCurrentDraft();
   clearPendingImages();
   const requestSequence = ++historyRequestSequence;
   currentSession.value = session;
+  mobileChatActive.value = true;
   isChatPositionReady.value = false;
   loadingMoreHistory.value = false;
   historyLoadMoreError.value = '';
@@ -1554,6 +1584,7 @@ async function deleteSession(detail: { ukey?: string; id?: string; isNew?: boole
     }
     if (currentSession.value === session) {
       currentSession.value = null;
+      mobileChatActive.value = false;
       chatHistory.value = [];
       historyError.value = '';
       await router.replace({ path: '/messages' });
@@ -3068,5 +3099,63 @@ textarea::placeholder {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+}
+
+.mobile-session-back {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .messages-sidebar {
+    width: 100% !important;
+    min-width: 0;
+    max-width: none;
+    border-right: 0;
+  }
+
+  .sidebar-resizer {
+    display: none;
+  }
+
+  .messages-main {
+    display: none;
+  }
+
+  .messages-page.is-mobile-chat-active .messages-sidebar,
+  .messages-page.is-mobile-login-state .messages-sidebar {
+    display: none;
+  }
+
+  .messages-page.is-mobile-chat-active .messages-main:not(.empty-main),
+  .messages-page.is-mobile-login-state .messages-main.empty-main {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .messages-page.is-mobile-chat-active .main-header {
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .messages-page.is-mobile-chat-active .mobile-session-back {
+    display: inline-flex;
+    flex: 0 0 36px;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 16px;
+  }
+
+  .messages-page.is-mobile-chat-active .header-partner-info {
+    min-width: 0;
+    flex: 1;
+  }
 }
 </style>

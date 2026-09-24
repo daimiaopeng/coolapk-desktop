@@ -40,6 +40,7 @@ import { showToast } from '../../utils/toast';
 import { getOriginalImageUrl } from '../../utils/image';
 import { usePlatformShortcuts } from '../../utils/shortcuts';
 import { refreshPageTabGeneration } from '../../utils/pageTabs';
+import { useAndroidBackButton } from '../../utils/androidBackButton';
 
 type ContextKind = 'page' | 'selection' | 'link' | 'image' | 'comment' | 'feed' | 'message' | 'chat-message';
 
@@ -576,6 +577,8 @@ function adjustFontSize(delta: number) {
 function closeMenu() {
   menu.value = null;
 }
+
+useAndroidBackButton(() => Boolean(menu.value), closeMenu);
 
 function openMenu(event: MouseEvent) {
   // 标签栏提供收藏、固定和关闭等专用菜单，不能被全局捕获阶段的页面菜单抢先接管。

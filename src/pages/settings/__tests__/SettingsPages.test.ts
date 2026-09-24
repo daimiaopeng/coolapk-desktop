@@ -28,7 +28,10 @@ vi.mock('../../../utils/resourceCache', () => ({
 }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: mocks.open }));
 vi.mock('@tauri-apps/plugin-autostart', () => ({ enable: mocks.enable, disable: mocks.disable, isEnabled: mocks.isEnabled }));
-vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn().mockResolvedValue(undefined),
+  isTauri: vi.fn(() => false),
+}));
 
 import AppearanceSettingsPage from '../AppearanceSettingsPage.vue';
 import AccountSettingsPage from '../AccountSettingsPage.vue';

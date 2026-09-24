@@ -151,6 +151,7 @@ import { getHdImageUrl, getOriginalImageUrl } from '../../utils/image';
 import { loadImageResource, normalizeResourceUrl } from '../../utils/resourceCache';
 import { getErrorMessage } from '../../utils/errors';
 import { showToast } from '../../utils/toast';
+import { useAndroidBackButton } from '../../utils/androidBackButton';
 import { normalizeFeedImageItems, resolveLivePhotoVideo } from '../../utils/livePhoto';
 import { detectLiveVideoCodec, getLiveVideoCodecSupport, waitForDecodedVideoFrame, type LiveVideoCodec } from '../../utils/liveVideoCodec';
 
@@ -574,6 +575,8 @@ function rotateLeft() {
 function close() {
   appStore.closeImageViewer();
 }
+
+useAndroidBackButton(() => Boolean(viewerData.value), close);
 
 function prev() {
   if (currentIndex.value > 0) {

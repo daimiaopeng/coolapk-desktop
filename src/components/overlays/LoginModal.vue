@@ -233,6 +233,7 @@ import { ref, computed, watch, onUnmounted } from 'vue';
 import { listen } from '@tauri-apps/api/event';
 import { useAuthStore } from '../../stores/auth';
 import { CoolapkTauriAPI } from '../../api/coolapk';
+import { useAndroidBackButton } from '../../utils/androidBackButton';
 import AppButton from '../common/AppButton.vue';
 import AppAvatar from '../common/AppAvatar.vue';
 import AppConfirmDialog from '../common/AppConfirmDialog.vue';
@@ -465,6 +466,8 @@ function handleClose() {
   pendingRemovalAccount.value = null;
   authStore.closeLoginModal();
 }
+
+useAndroidBackButton(() => authStore.isLoginModalOpen, handleClose);
 
 // Cookie 凭据导入登录
 async function handleCookieLogin() {

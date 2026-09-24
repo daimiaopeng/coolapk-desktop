@@ -121,4 +121,65 @@ const settingsMenu = [
   padding: var(--space-6);
   overflow-y: auto;
 }
+
+@media (max-width: 720px) {
+  .settings-page-container,
+  .settings-layout-card {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .settings-layout-card {
+    flex-direction: column;
+  }
+
+  .settings-sidebar {
+    width: 100%;
+    flex: 0 0 auto;
+    padding: 6px 10px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .settings-title {
+    display: none;
+  }
+
+  .settings-menu {
+    flex-direction: row;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 8px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .settings-menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  .settings-menu-item {
+    flex: 0 0 auto;
+    height: 36px;
+    gap: 7px;
+    padding: 0 12px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .menu-icon {
+    width: 14px;
+    font-size: 13px;
+  }
+
+  .settings-content {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: 16px;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+  }
+}
 </style>

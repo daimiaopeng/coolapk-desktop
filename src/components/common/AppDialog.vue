@@ -26,6 +26,7 @@
 
 <script setup lang="ts">
 import { onActivated, onDeactivated, onMounted, onUnmounted } from 'vue';
+import { useAndroidBackButton } from '../../utils/androidBackButton';
 
 const props = withDefaults(
   defineProps<{
@@ -60,6 +61,8 @@ function handleKeydown(e: KeyboardEvent) {
     close();
   }
 }
+
+useAndroidBackButton(() => props.isOpen, close);
 
 function bindGlobalListeners() {
   window.addEventListener('keydown', handleKeydown);
