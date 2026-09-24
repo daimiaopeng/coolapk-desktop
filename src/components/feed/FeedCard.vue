@@ -412,6 +412,8 @@ const isEdited = computed(() => {
 });
 
 const baseTargetRow = computed<any>(() =>
+  (props.feed as any).forwardSourceFeed ||
+  (props.feed as any).forward_source_feed ||
   props.feed.targetRow ||
   (props.feed as any).target_row ||
   (props.feed as any).targetFeed ||

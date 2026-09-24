@@ -299,6 +299,16 @@ fn test_create_answer_form_uses_answer_type_and_question_fid() {
 }
 
 #[test]
+fn test_forward_form_uses_forwardid_instead_of_fid() {
+    let form = build_forward_form("转发内容", Some("https://image.coolapk.com/feed/test.png"), "feed-42");
+    let value = |key: &str| form.iter().find(|(name, _)| *name == key).map(|(_, value)| value.as_str());
+    assert_eq!(value("forwardid"), Some("feed-42"));
+    assert_eq!(value("fid"), Some(""));
+    assert_eq!(value("type"), Some("feed"));
+    assert_eq!(value("pic"), Some("https://image.coolapk.com/feed/test.png"));
+}
+
+#[test]
 fn test_hot_rank_routes_use_statistics_api() {
     assert_eq!(
         rank_feed_url("month"),
@@ -435,6 +445,15 @@ fn test_clean_answer_keeps_parent_question_id() {
     let cleaned = CoolapkClient::clean_single_feed(&raw, 0).expect("回答动态应能正常清洗");
     assert_eq!(cleaned["feedType"], "answer");
     assert_eq!(cleaned["questionId"], 789);
+}
+
+#[test]
+fn test_clean_forward_keeps_source_feed() {
+    let raw = json!({"id": 124, "uid": 456, "username": "转发用户", "message": "转发内容", "forwardid": "123", "forwardSourceType": "feed", "forwardSourceFeed": {"id": "123", "entityType": "feed", "username": "原作者", "message": "原动态内容"}});
+    let cleaned = CoolapkClient::clean_single_feed(&raw, 0).expect("转发动态应能正常清洗");
+    assert_eq!(cleaned["forwardId"], "123");
+    assert_eq!(cleaned["forwardSourceType"], "feed");
+    assert_eq!(cleaned["forwardSourceFeed"]["message"], "原动态内容");
 }
 
 #[test]

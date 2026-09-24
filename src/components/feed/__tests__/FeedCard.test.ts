@@ -38,6 +38,16 @@ describe('动态卡片编辑记录', () => {
     setActivePinia(createPinia());
   });
 
+  it('转发动态展示服务端返回的原动态内容', () => {
+    const wrapper = mount(FeedCard, {
+      props: { feed: { id: 'forward-1', uid: '456', username: '转发用户', message: '转发内容', forwardId: 'source-1', forwardSourceFeed: { id: 'source-1', entityType: 'feed', username: '原作者', message: '原动态内容' } } },
+      global: { stubs: { FeedHeader: true, FeedContent: true, FeedImageGrid: true, FeedVideoCard: true, FeedActionBar: true, FeedCommentSection: true, ForwardDialog: true, FeedShareImageDialog: true, FeedInteractionListDialog: true, FeedCollectionPickerDialog: true, AppDialog: true, LoadingState: true } },
+    });
+    expect(wrapper.find('.quoted-feed-box').text()).toContain('原作者');
+    expect(wrapper.find('.quoted-feed-box').text()).toContain('原动态内容');
+    wrapper.unmount();
+  });
+
   it('闲置动态显示并打开 APK 返回的闲鱼链接', async () => {
     const link = 'https://m.tb.cn/h.example?tk=test';
     const wrapper = mount(FeedCard, {

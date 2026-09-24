@@ -362,6 +362,15 @@ fn build_create_feed_form_for_type(
     form
 }
 
+/// 官方转发动态使用 forwardid 指向原动态；fid 留给回答等其他发布类型。
+fn build_forward_form(message: &str, pic: Option<&str>, forward_id: &str) -> Vec<(&'static str, String)> {
+    let mut form = build_create_feed_form(message, pic, None);
+    if let Some((_, value)) = form.iter_mut().find(|(name, _)| *name == "forwardid") {
+        *value = forward_id.to_string();
+    }
+    form
+}
+
 /// 设备信息覆盖配置（由设置页"设备信息"下发，作用于 API 请求头和设备身份）。
 /// 字段为 None 时使用客户端默认值；全部留空表示恢复默认。
 /// device_id 用于 X-App-Device；ddid 仅在服务端要求 DDI 的写接口中作为 Cookie 发送。
@@ -1734,6 +1743,8 @@ impl CoolapkClient {
                 "extra_rows",
                 "productRows",
                 "product_rows",
+                "forwardSourceFeed",
+                "forward_source_feed",
             ],
         );
         let has_rating = has_any_non_empty_field(
@@ -1921,6 +1932,10 @@ impl CoolapkClient {
         copy_first_field(&mut cleaned, obj, "relationRows", &["relationRows", "relation_rows"]);
         copy_first_field(&mut cleaned, obj, "extraRows", &["extraRows", "extra_rows"]);
         copy_first_field(&mut cleaned, obj, "productRows", &["productRows", "product_rows"]);
+        // 转发动态的原文由服务端放在 forwardSourceFeed，列表清洗时需要保留。
+        copy_first_field(&mut cleaned, obj, "forwardSourceFeed", &["forwardSourceFeed", "forward_source_feed"]);
+        copy_first_field(&mut cleaned, obj, "forwardSourceType", &["forwardSourceType", "forward_source_type"]);
+        copy_first_field(&mut cleaned, obj, "forwardId", &["forwardid", "forwardId", "forward_id"]);
         // 回答动态的 fid 是所属问题 ID；首页清洗时必须保留，否则点击回答只能退化到 /feed/:id。
         copy_first_field(&mut cleaned, obj, "questionId", &["questionId", "question_id", "fid", "f_id"]);
         copy_first_field(&mut cleaned, obj, "answerId", &["answerId", "answer_id"]);
@@ -6384,65 +6399,17 @@ impl CoolapkClient {
     }
 
     /// 转发动态（需登录）
-    /// 官方无独立转发接口（/v6/feed/forward、/v6/feed/repost 均不存在），
-    /// 通过 createFeed 携带 fid 实现：POST multipart /v6/feed/createFeed。
-    /// 实测：参数名必须是 fid（forward_id 会被服务端当成普通动态发布，fid=0）
+    /// 官方通过 createFeed 的 forwardid 字段关联原动态，使用表单提交。
     pub async fn create_forward(
         &self,
         feed_id: &str,
         message: &str,
         pic: Option<&str>,
     ) -> Result<Value, String> {
-        let token = self.get_token()?;
-        let mut form = reqwest::multipart::Form::new()
-            .text("message", message.to_string())
-            .text("type", "feed".to_string())
-            .text("is_html_article", "0".to_string())
-            .text("fid", feed_id.to_string());
-        if let Some(pic) = pic {
-            if !pic.is_empty() {
-                form = form.text("pic", pic.to_string());
-            }
+        if feed_id.trim().is_empty() {
+            return Err("转发失败：原动态 ID 为空".to_string());
         }
-
-        let mut request = self.apply_device_profile(
-            self.client
-                .request(
-                    reqwest::Method::POST,
-                    "https://api.coolapk.com/v6/feed/createFeed",
-                )
-                .header("X-App-Token", token)
-                .header("X-Requested-With", "XMLHttpRequest")
-                .multipart(form),
-        )?;
-
-        let cookie = self
-            .user_cookie
-            .read()
-            .map_err(|_| "failed to read login state".to_string())?
-            .clone();
-        if let Some(cookie) = cookie {
-            let full_cookie = self.cookie_for_path(&cookie, "/v6/feed/createFeed");
-            if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
-                request = request.header(COOKIE, header_val);
-            }
-        }
-
-        let response = request.send().await.map_err(|e| e.to_string())?;
-        let wrapped = wrap_api_data(response_json(response).await?)?;
-        let created = wrapped
-            .get("data")
-            .and_then(|d| d.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()))
-            .or_else(|| {
-                wrapped
-                    .get("data")
-                    .and_then(|d| d.get("id").and_then(|v| v.as_u64()))
-                    .map(|n| n.to_string())
-            });
-        if created.is_none() {
-            return Err("转发失败：服务端未返回转发结果，请重试".to_string());
-        }
-        Ok(wrapped)
+        self.submit_create_feed_form(build_forward_form(message, pic, feed_id), "转发失败：").await
     }
 
     pub async fn check_login_status(&self) -> Result<Value, String> {
