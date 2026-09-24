@@ -38,6 +38,17 @@ describe('动态头部信息布局', () => {
     expect(wrapper.find('.meta-row').element.firstElementChild?.classList.contains('dateline')).toBe(true);
   });
 
+  it('在动态头部显示 APK 的浏览量，零浏览量不显示', async () => {
+    setActivePinia(createPinia());
+    const wrapper = mount(FeedHeader, {
+      props: { username: '测试用户', dateline: '1 天前', readNum: 604000 },
+      global: { stubs: { AppAvatar: true, AppIconButton: true } },
+    });
+    expect(wrapper.find('.meta-row .read-count').text()).toBe('60.4万浏览');
+    await wrapper.setProps({ readNum: 0 });
+    expect(wrapper.find('.meta-row .read-count').exists()).toBe(false);
+  });
+
   it('问答动态在头部右侧显示明确的问答标识', () => {
     setActivePinia(createPinia());
     const wrapper = mount(FeedHeader, {

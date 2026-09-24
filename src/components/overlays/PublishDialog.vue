@@ -10,15 +10,22 @@
         <div class="preview-content" v-html="previewHtml"></div>
         <div v-if="!message.trim()" class="preview-empty">输入内容后此处显示预览效果</div>
       </div>
-      <textarea
+      <div
         v-else
         ref="messageInput"
-        v-model="message"
-        placeholder="分享这一刻的酷搞感受，与酷友讨论数码生活..."
+        contenteditable="true"
+        role="textbox"
+        aria-label="动态内容"
+        aria-multiline="true"
+        data-placeholder="分享这一刻的酷搞感受，与酷友讨论数码生活..."
         class="publish-textarea custom-scrollbar"
-        rows="6"
-        maxlength="1000"
-      ></textarea>
+        @input="handleEditorInput"
+        @keydown="handleEditorKeydown"
+        @paste="handleEditorPaste"
+        @copy="handleEditorCopy"
+        @cut="handleEditorCut"
+        @compositionend="syncEditor"
+      ></div>
 
       <div class="publish-media-preview" v-if="images.length > 0">
         <div v-for="(img, i) in images" :key="i" class="media-thumb">
@@ -51,6 +58,7 @@
               type="button"
               class="emoji-item"
               :title="name"
+              @mousedown.prevent
               @click="insertEmoji(name)"
             >
               <img :src="getEmojiUrl(String(name))" :alt="name" />
@@ -67,6 +75,7 @@
             type="button"
             class="emoji-item"
             :title="name"
+            @mousedown.prevent
             @click="insertEmoji(name)"
           >
             <img :src="getEmojiUrl(String(name))" :alt="name" />
@@ -83,6 +92,7 @@
           :key="t.id || t.tag || t.title || idx"
           class="topic-item"
           :title="getTopicTitle(t)"
+          @mousedown.prevent
           @click="insertTopic(getTopicTitle(t))"
         >
           <i class="fas fa-hashtag topic-hash"></i>
@@ -96,6 +106,7 @@
             class="tool-btn"
             :class="{ 'is-active': showEmojiPanel }"
             title="插入表情"
+            @mousedown.prevent
             @click="toggleEmojiPanel"
           >
             <i class="far fa-smile"></i> 表情
@@ -105,11 +116,12 @@
             class="tool-btn"
             :class="{ 'is-active': showTopicPanel }"
             title="插入话题"
+            @mousedown.prevent
             @click="toggleTopicPanel"
           >
             <i class="fas fa-hashtag"></i> 话题
           </button>
-          <button class="tool-btn" title="@酷友" @click="insertAtMention"><i class="fas fa-at"></i> 提醒</button>
+          <button class="tool-btn" title="@酷友" @mousedown.prevent @click="insertAtMention"><i class="fas fa-at"></i> 提醒</button>
           <button class="tool-btn" title="预览效果" @click="previewMode = !previewMode">
             <i class="far fa-eye"></i> {{ previewMode ? '编辑' : '预览' }}
           </button>
@@ -142,7 +154,7 @@ import { useAppStore } from '../../stores/app';
 import { useSettingsStore } from '../../stores/settings';
 import { useAuthStore } from '../../stores/auth';
 import { CoolapkTauriAPI } from '../../api/coolapk';
-import { renderCoolapkEmoji, EMOJI_MAP, EMOJI_BASE, getEmojiUrl } from '../../utils/coolapkEmoji';
+import { renderCoolapkEmoji, EMOJI_MAP, getEmojiUrl } from '../../utils/coolapkEmoji';
 import { useRecentEmojis } from '../../utils/recentEmojis';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { clearPublishDraft, loadPublishDraft, savePublishDraft } from '../../utils/publishDrafts';
@@ -167,7 +179,7 @@ const showTopicPanel = ref(false);
 const topics = ref<any[]>([]);
 const topicsLoading = ref(false);
 const previewMode = ref(false);
-const messageInput = ref<HTMLTextAreaElement | null>(null);
+const messageInput = ref<HTMLDivElement | null>(null);
 const imageInputRef = ref<HTMLInputElement | null>(null);
 let restoringDraft = false;
 
@@ -192,6 +204,8 @@ watch(() => appStore.isPublishOpen, async (open) => {
     showEmojiPanel.value = false;
     showTopicPanel.value = false;
     message.value = await loadPublishDraft(currentDraftAccount());
+    await nextTick();
+    renderEditor();
     restoringDraft = false;
     if (topics.value.length === 0 && !topicsLoading.value) {
       fetchHotTopics();
@@ -204,18 +218,127 @@ watch(message, (value) => {
   if (!restoringDraft) void savePublishDraft(currentDraftAccount(), value);
 });
 
-function insertAtCursor(text: string) {
-  const el = messageInput.value;
-  const start = el?.selectionStart ?? message.value.length;
-  const end = el?.selectionEnd ?? message.value.length;
-  message.value = message.value.slice(0, start) + text + message.value.slice(end);
-  nextTick(() => {
-    if (el) {
-      el.focus();
-      const pos = start + text.length;
-      el.setSelectionRange(pos, pos);
+watch(previewMode, async (preview) => {
+  if (!preview) { await nextTick(); renderEditor(); }
+});
+
+function escapeEditorText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// 编辑区显示表情图片，实际草稿和发布内容仍保留酷安使用的 [表情名] 文本。
+function editorText(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
+  if (node instanceof HTMLImageElement) return node.alt || '';
+  return Array.from(node.childNodes).map(editorText).join('');
+}
+
+function editorOffset(): number {
+  const editor = messageInput.value;
+  const selection = window.getSelection();
+  if (!editor || !selection?.rangeCount || !editor.contains(selection.anchorNode)) return message.value.length;
+  const range = selection.getRangeAt(0).cloneRange();
+  range.selectNodeContents(editor);
+  range.setEnd(selection.anchorNode!, selection.anchorOffset);
+  return editorText(range.cloneContents()).length;
+}
+
+function setEditorOffset(offset: number) {
+  const editor = messageInput.value;
+  if (!editor) return;
+  const selection = window.getSelection();
+  const range = document.createRange();
+  let remaining = offset;
+  let found = false;
+  const nodes = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  while (nodes.nextNode()) {
+    const node = nodes.currentNode;
+    if (node instanceof HTMLImageElement) {
+      const length = node.alt.length;
+      if (remaining === 0) { range.setStartBefore(node); found = true; break; }
+      if (remaining <= length) { range.setStartAfter(node); found = true; break; }
+      remaining -= length;
+    } else if (node.nodeType === Node.TEXT_NODE) {
+      const length = node.textContent?.length || 0;
+      if (remaining <= length) { range.setStart(node, remaining); found = true; break; }
+      remaining -= length;
     }
-  });
+  }
+  if (!found) range.selectNodeContents(editor);
+  range.collapse(!found ? false : true);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function renderEditor(caret?: number) {
+  const editor = messageInput.value;
+  if (!editor) return;
+  editor.innerHTML = renderCoolapkEmoji(escapeEditorText(message.value));
+  if (caret !== undefined) setEditorOffset(caret);
+}
+
+function emojiCount(value: string): number {
+  return Array.from(value.matchAll(/\[([^\]\r\n]{1,20})\]/g)).filter((match) => !!getEmojiUrl(match[1])).length;
+}
+
+function syncEditor() {
+  const editor = messageInput.value;
+  if (!editor) return;
+  const caret = editorOffset();
+  const value = editorText(editor);
+  if (value.length > 1000) {
+    message.value = value.slice(0, 1000);
+    renderEditor(Math.min(caret, 1000));
+    return;
+  }
+  message.value = value;
+  if (editor.querySelectorAll('img.coolapk-emoji').length !== emojiCount(value)) renderEditor(caret);
+}
+
+function handleEditorInput(event: InputEvent) {
+  if (event.isComposing) { message.value = editorText(messageInput.value!); return; }
+  syncEditor();
+}
+
+function insertAtCursor(text: string) {
+  const editor = messageInput.value;
+  if (!editor) return;
+  editor.focus();
+  const selection = window.getSelection();
+  const range = selection?.rangeCount && editor.contains(selection.anchorNode) ? selection.getRangeAt(0) : document.createRange();
+  if (!editor.contains(range.startContainer)) { range.selectNodeContents(editor); range.collapse(false); }
+  range.deleteContents();
+  const node = document.createTextNode(text);
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  syncEditor();
+}
+
+function handleEditorKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); insertAtCursor('\n'); }
+}
+
+function handleEditorPaste(event: ClipboardEvent) {
+  event.preventDefault();
+  insertAtCursor(event.clipboardData?.getData('text/plain') || '');
+}
+
+function handleEditorCopy(event: ClipboardEvent) {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || !messageInput.value?.contains(selection.anchorNode)) return;
+  event.preventDefault();
+  event.clipboardData?.setData('text/plain', editorText(selection.getRangeAt(0).cloneContents()));
+}
+
+function handleEditorCut(event: ClipboardEvent) {
+  handleEditorCopy(event);
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return;
+  selection.getRangeAt(0).deleteContents();
+  syncEditor();
 }
 
 function insertEmoji(name: string) {
@@ -445,15 +568,28 @@ async function handlePublish() {
 .publish-textarea {
   width: 100%;
   border: none;
-  resize: none;
+  min-height: 140px;
+  max-height: 220px;
+  overflow-y: auto;
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
   color: var(--text-primary);
   background: transparent;
 }
 
-.publish-textarea::placeholder {
+.publish-textarea:empty::before {
+  content: attr(data-placeholder);
   color: var(--text-tertiary);
+}
+
+.publish-textarea :deep(.coolapk-emoji) {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  vertical-align: middle;
 }
 
 .preview-box {

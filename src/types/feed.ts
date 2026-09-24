@@ -61,6 +61,11 @@ export interface FeedItem {
   replynum?: number;
   favnum?: number;
   sharenum?: number;
+  /** 官方动态浏览量；列表清洗后与详情接口使用同一字段。 */
+  readNum?: number | string;
+  read_num?: number | string;
+  viewnum?: number | string;
+  hitnum?: number | string;
   target_multilink_title?: string;
   target_multilink_url?: string;
   extra_key?: string;

@@ -1867,10 +1867,9 @@ impl CoolapkClient {
         );
         let fav_num = get_u64_by_keys(obj, &["favnum", "fav_num", "favorite_num"]);
         let share_num = get_u64_by_keys(obj, &["sharenum", "share_num"]);
-        let hit_num = get_u64_by_keys(
-            obj,
-            &["hitnum", "clicknum", "read_num", "view_num", "hit_num"],
-        );
+        // 官方不同列表会使用 readNum 或 viewnum；优先保留实际返回的非零浏览量。
+        let hit_num = ["readNum", "readnum", "read_num", "viewnum", "viewNum", "view_num", "hitnum", "hit_num", "clicknum"]
+            .iter().filter_map(|key| obj.get(*key).and_then(parse_u64_val)).find(|count| *count > 0).unwrap_or(0);
         let is_modified = get_u64_by_keys(obj, &["isModified", "is_modified"]);
         let change_count = get_u64_by_keys(obj, &["change_count", "changeCount"]);
         let last_change_time = get_u64_by_keys(obj, &["last_change_time", "lastChangeTime"]);
@@ -1910,6 +1909,7 @@ impl CoolapkClient {
             "likenum": likenum,
             "replynum": replynum,
             "hitnum": hit_num,
+            "readNum": hit_num,
             "favnum": fav_num,
             "sharenum": share_num,
             "isTop": is_top,

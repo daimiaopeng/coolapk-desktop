@@ -38,6 +38,15 @@ describe('动态卡片编辑记录', () => {
     setActivePinia(createPinia());
   });
 
+  it('把动态浏览量传给卡片头部', () => {
+    const wrapper = mount(FeedCard, {
+      props: { feed: { id: 'feed-with-views', uid: '456', username: '测试用户', message: '正文', readNum: 604000 } },
+      global: { stubs: { FeedHeader: { props: ['readNum'], template: '<div class="stub-read-count" :data-read-num="String(readNum)"></div>' }, FeedContent: true, FeedImageGrid: true, FeedVideoCard: true, FeedActionBar: true, FeedCommentSection: true, ForwardDialog: true, FeedShareImageDialog: true, FeedInteractionListDialog: true, FeedCollectionPickerDialog: true, AppDialog: true, LoadingState: true } },
+    });
+    expect(wrapper.find('.stub-read-count').attributes('data-read-num')).toBe('604000');
+    wrapper.unmount();
+  });
+
   it('转发动态展示服务端返回的原动态内容', () => {
     const wrapper = mount(FeedCard, {
       props: { feed: { id: 'forward-1', uid: '456', username: '转发用户', message: '转发内容', forwardId: 'source-1', forwardSourceFeed: { id: 'source-1', entityType: 'feed', username: '原作者', message: '原动态内容' } } },

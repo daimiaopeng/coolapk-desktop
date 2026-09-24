@@ -42,6 +42,7 @@
           <i class="fas fa-mobile-alt device-icon"></i>
           <span>{{ device }}</span>
         </span>
+        <span v-if="readCount > 0" class="read-count" :title="`${readCount.toLocaleString('zh-CN')} 次浏览`">{{ formattedReadCount }}浏览</span>
         <span v-if="ipLocationText" class="ip-badge" :title="`IP属地: ${ipLocationText}`">
           <i class="fas fa-location-dot ip-icon"></i>
           <span>{{ ipLocationText }}</span>
@@ -57,7 +58,7 @@
           <i class="fas fa-trophy rank-icon"></i>
           <span>TOP {{ rankIndex }}</span>
         </span>
-        <span v-if="recommendSource" class="recommend-source-badge">
+        <span v-if="recommendSource && (!showDeviceInfo || recommendSource.trim() !== device?.trim())" class="recommend-source-badge">
           {{ recommendSource }}
         </span>
       </div>
@@ -104,6 +105,7 @@ const props = withDefaults(defineProps<{
   verifyTitle?: string;
   dateline?: number | string;
   device?: string;
+  readNum?: number | string;
   rankIndex?: number;
   recommendSource?: string;
   showDeviceInfo?: boolean;
@@ -117,6 +119,15 @@ const props = withDefaults(defineProps<{
 
 const router = useRouter();
 const settingsStore = useSettingsStore();
+const readCount = computed(() => {
+  const value = Number(props.readNum);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+});
+const formattedReadCount = computed(() => {
+  if (readCount.value < 10000) return String(readCount.value);
+  const value = (readCount.value / 10000).toFixed(1);
+  return `${value.endsWith('.0') ? value.slice(0, -2) : value}万`;
+});
 
 const emit = defineEmits<{
   (e: 'more'): void;
@@ -330,6 +341,11 @@ function normalizeTimestamp(value: number | string): number | null {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.read-count {
+  color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
 .meta-dot {

@@ -344,6 +344,13 @@ fn test_clean_feed_keeps_edit_metadata() {
 }
 
 #[test]
+fn test_clean_feed_keeps_apk_read_num() {
+    let raw = json!({"id": 123, "uid": 456, "username": "测试用户", "message": "测试正文", "readNum": 604000, "hitnum": 12});
+    let cleaned = CoolapkClient::clean_single_feed(&raw, 0).expect("动态应能正常清洗");
+    assert_eq!(cleaned["readNum"], 604000);
+}
+
+#[test]
 fn test_clean_feed_preserves_cloud_collection_state() {
     let raw = json!({
         "id": 123,

@@ -25,6 +25,7 @@
       :verify-title="feed.userInfo?.verify_title || feed.verifyTitle"
       :dateline="feed.dateline || feed.infoHtml"
       :device="feed.device_title || feed.deviceTitle"
+      :read-num="[feed.readNum, feed.read_num, feed.viewnum, feed.hitnum].find((count) => Number(count) > 0)"
       :rank-index="rankIndex"
       :recommend-source="feed.recommendSource || feed.targetType"
       :show-device-info="showDeviceInfo"
