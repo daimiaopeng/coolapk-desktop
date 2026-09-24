@@ -1819,6 +1819,11 @@ async function handleSend() {
   }
   };
 
+  // 未设置设备 ID 时先让用户在弹窗中粘贴官方日志，保存后继续评论。
+  if (!settingsStore.settings.deviceFingerprint.deviceId?.trim()) {
+    openShuzilmGuide({ reason: 'missing_id', onConfirmContinue: () => { void proceedSubmit(); } });
+    return;
+  }
   await proceedSubmit();
 }
 </script>

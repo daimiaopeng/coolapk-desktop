@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('vue-router', () => ({
+  useRoute: () => ({ fullPath: '/' }),
   useRouter: () => ({
     push: vi.fn(),
     back: vi.fn(),

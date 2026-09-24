@@ -129,6 +129,11 @@ async function handleSubmit() {
     }
   };
 
+  // 未设置设备 ID 时先完成设置，保存后继续评论。
+  if (!settingsStore.settings.deviceFingerprint.deviceId?.trim()) {
+    openShuzilmGuide({ reason: 'missing_id', onConfirmContinue: () => { void proceedSubmit(); } });
+    return;
+  }
   await proceedSubmit();
 }
 </script>

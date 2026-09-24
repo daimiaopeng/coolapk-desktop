@@ -427,6 +427,11 @@ async function handlePublish() {
     }
   };
 
+  // 未设置设备 ID 时先完成设备信息设置，保存后继续发布。
+  if (!settingsStore.settings.deviceFingerprint.deviceId?.trim()) {
+    openShuzilmGuide({ reason: 'missing_id', onConfirmContinue: () => { void proceedPublish(); } });
+    return;
+  }
   await proceedPublish();
 }
 </script>

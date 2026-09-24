@@ -355,7 +355,7 @@ describe('评论完整信息展示', () => {
     expect(wrapper.emitted('send-comment')?.[0]).toEqual(['这是一条测试评论内容']);
   });
 
-  it('未配置 DDI 会话值时提交评论会唤起认证指引弹窗', async () => {
+  it('未配置设备 ID 时提交评论会唤起设置弹窗', async () => {
     const authStore = useAuthStore();
     authStore.user = { uid: 12345, username: '发布者' } as any;
     authStore.isLoggedIn = true;
