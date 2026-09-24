@@ -1070,6 +1070,11 @@ pub async fn get_user_profile(state: State<'_, AppState>, uid: String) -> Result
 }
 
 #[tauri::command]
+pub async fn get_user_remark_list(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
+    state.client.get_user_remark_list(&uid).await
+}
+
+#[tauri::command]
 pub async fn update_user_profile(
     state: State<'_, AppState>,
     key: String,

@@ -3930,6 +3930,11 @@ impl CoolapkClient {
         )
     }
 
+    /// 读取当前登录用户维护的用户备注列表。
+    pub async fn get_user_remark_list(&self, uid: &str) -> Result<Value, String> {
+        wrap_api_data(self.api_get("/v6/user/remarkList", &[("uid", uid.to_string())]).await?)
+    }
+
     /// 修改个人资料字段。对应 APK 的 POST /v6/account/changeProfile。
     pub async fn update_user_profile(&self, key: &str, value: &str) -> Result<Value, String> {
         wrap_api_data(

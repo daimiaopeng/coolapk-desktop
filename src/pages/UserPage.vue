@@ -75,7 +75,7 @@
             <div class="user-details-area-immersive">
               <!-- 名字与等级 -->
               <div class="username-title-row">
-                <h1 class="app-username">{{ profile.username }}</h1>
+                <h1 class="app-username">{{ displayUserName }}</h1>
                 <span class="app-user-level" v-if="profile.level">Lv.{{ profile.level }}</span>
                 <span v-if="profile.isDeveloper || profile.verify_title" class="app-verify-tag">
                   <i class="fas fa-check-circle"></i> {{ profile.verify_title || '酷安认证开发者' }}
@@ -260,7 +260,7 @@
       <div class="qr-header">
         <AppAvatar :src="profile.userAvatar || getAvatarUrlByUid(profile.uid)" size="md" />
         <div class="qr-header-text">
-          <span class="qr-username">{{ profile.username || '酷友' }}</span>
+          <span class="qr-username">{{ displayUserName }}</span>
           <span class="qr-hint">扫一扫，在手机酷安打开主页</span>
         </div>
       </div>
@@ -288,7 +288,7 @@
         />
         <div class="user-info-text">
           <div class="name-row">
-            <span class="user-name">{{ profile.username || '酷友' }}</span>
+            <span class="user-name">{{ displayUserName }}</span>
             <span class="app-user-level" v-if="profile.level">Lv.{{ profile.level }}</span>
           </div>
           <span class="user-subtext">UID: {{ profile.uid }} · {{ formatLoginTime(profile.logintime) }}活跃</span>
@@ -468,7 +468,7 @@
         />
         <div class="sheet-hero-info">
           <div class="hero-name-row">
-            <h3 class="hero-name">{{ profile.username || '酷友' }}</h3>
+            <h3 class="hero-name">{{ displayUserName }}</h3>
             <span class="app-user-level" v-if="profile.level">Lv.{{ profile.level }}</span>
           </div>
           <p class="hero-bio">{{ profile.bio || '这家伙很神秘，什么都没写' }}</p>
@@ -567,6 +567,7 @@ import LoadingState from '../components/common/LoadingState.vue';
 import EmptyState from '../components/common/EmptyState.vue';
 import { useAuthStore } from '../stores/auth';
 import { showToast } from '../utils/toast';
+import { getErrorMessage } from '../utils/errors';
 import { requestConfirmation } from '../utils/confirm';
 import { asUserSpaceProfile, entityKey, normalizeEntityPage } from '../types/userSpace';
 import { getCachedUserProfileSync } from '../utils/userProfilePreloader';
@@ -600,7 +601,9 @@ const remarkSaving = ref(false);
 const relationshipActionLoading = ref(false);
 
 const profile = ref<any>(null);
-usePageTabTitle(computed(() => profile.value?.username || (isSelfUser.value ? '个人主页' : null)));
+const displayUserName = computed(() => String(profile.value?.remarkName || profile.value?.username || '酷友'));
+usePageTabTitle(computed(() => profile.value?.remarkName || profile.value?.username || (isSelfUser.value ? '个人主页' : null)));
+const USER_REMARK_CACHE_KEY = 'coolapk_user_remark_cache';
 const homeTabCardRows = computed<any[]>(() => (
   Array.isArray(profile.value?.homeTabCardRows) ? profile.value.homeTabCardRows : []
 ));
@@ -830,6 +833,7 @@ async function enrichProfileDetails(uid: string, spaceData: any) {
       ...spaceData,
       ...detail,
       ...detailUserInfo,
+      remarkName: profile.value?.remarkName || detail.remarkName || spaceData.remarkName || '',
       homeTabCardRows: spaceData.homeTabCardRows || detail.homeTabCardRows || [],
       selectedTab: spaceData.selectedTab || detail.selectedTab,
       isFollow: spaceData.isFollow ?? detail.isFollow,
@@ -845,6 +849,65 @@ async function enrichProfileDetails(uid: string, spaceData: any) {
     profile.value = asUserSpaceProfile(merged, uid);
   } catch (e) {
     console.warn('获取用户详细资料失败:', e);
+  }
+}
+
+async function loadUserRemark(uid: string, sequence: number) {
+  const loginUid = String(authStore.user?.uid || '').trim();
+  if (!loginUid) return;
+  const cachedName = getCachedUserRemark(loginUid, uid);
+  if (cachedName && profile.value) profile.value.remarkName = cachedName;
+  try {
+    const response: any = await CoolapkTauriAPI.getUserRemarkList(loginUid);
+    if (sequence !== profileFetchSequence || String(effectiveUid.value) !== uid || String(authStore.user?.uid || '').trim() !== loginUid) return;
+    const remarks = extractUserRemarks(response);
+    const remark = remarks.find((item: any) => String(item?.remarkUid ?? item?.remark_uid ?? '') === uid);
+    const remarkName = String(remark?.remarkName ?? remark?.remark_name ?? '').trim();
+    if (remarkName) {
+      profile.value.remarkName = remarkName;
+      cacheUserRemark(loginUid, uid, remarkName);
+    }
+  } catch (error) {
+    console.warn('读取用户备注失败:', error);
+  }
+}
+
+function extractUserRemarks(response: any): any[] {
+  const data = response?.data ?? response;
+  if (Array.isArray(data)) return data;
+  for (const key of ['data', 'list', 'items', 'entities', 'rows', 'userRemarkList', 'user_remark_list', 'remarkList', 'remarks']) {
+    if (Array.isArray(data?.[key])) return data[key];
+  }
+  return [];
+}
+
+function getCachedUserRemark(accountUid: string, uid: string): string {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(USER_REMARK_CACHE_KEY) || '{}');
+    const cache = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    return String(cache[accountUid]?.[uid] || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+function applyCachedUserRemark(uid: string) {
+  const accountUid = String(authStore.user?.uid || '').trim();
+  const cachedName = accountUid ? getCachedUserRemark(accountUid, uid) : '';
+  if (cachedName && profile.value) profile.value.remarkName = cachedName;
+}
+
+function cacheUserRemark(accountUid: string, uid: string, remarkName: string) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(USER_REMARK_CACHE_KEY) || '{}');
+    const cache = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    const accountCache = cache?.[accountUid] && typeof cache[accountUid] === 'object' ? { ...cache[accountUid] } : {};
+    if (remarkName) accountCache[uid] = remarkName;
+    else delete accountCache[uid];
+    cache[accountUid] = accountCache;
+    localStorage.setItem(USER_REMARK_CACHE_KEY, JSON.stringify(cache));
+  } catch (error) {
+    console.warn('保存本地用户备注失败:', error);
   }
 }
 
@@ -955,16 +1018,20 @@ async function fetchUserProfile() {
     if (profRes && profRes.data) {
       const spaceData = profRes.data;
       profile.value = asUserSpaceProfile(spaceData, targetUid);
+      applyCachedUserRemark(targetUid);
       isBlacklisted.value = isFlag(spaceData.isBlackList ?? spaceData.isInBlackList);
       isIgnored.value = isFlag(spaceData.isIgnoreList ?? spaceData.isInIgnoreList);
       selectInitialTab(spaceData);
       await enrichProfileDetails(targetUid, spaceData);
+      await loadUserRemark(targetUid, seq);
     } else {
       const backupProf = await CoolapkTauriAPI.getUserProfile(targetUid);
       if (seq !== profileFetchSequence || targetUid !== effectiveUid.value) return;
       if (backupProf && backupProf.data) {
         profile.value = asUserSpaceProfile(backupProf.data, targetUid);
+        applyCachedUserRemark(targetUid);
         selectInitialTab(backupProf.data);
+        await loadUserRemark(targetUid, seq);
       }
     }
   } catch (err) {
@@ -1215,7 +1282,8 @@ async function removeFollower() {
 
 function openRemarkDialog() {
   const remarks = Array.isArray(profile.value?.userRemarkList) ? profile.value.userRemarkList : [];
-  remarkName.value = String(profile.value?.remarkName || remarks[0]?.name || remarks[0]?.remark || '');
+  const remark = remarks.find((item: any) => String(item?.remarkUid ?? item?.remark_uid ?? '') === String(effectiveUid.value));
+  remarkName.value = String(profile.value?.remarkName || remark?.remarkName || remark?.remark_name || remark?.name || remark?.remark || '').trim();
   profileActionOpen.value = false;
   remarkDialogOpen.value = true;
 }
@@ -1223,14 +1291,17 @@ function openRemarkDialog() {
 async function saveRemark() {
   const uid = effectiveUid.value;
   if (!uid || remarkSaving.value) return;
+  const accountUid = String(authStore.user?.uid || '').trim();
   remarkSaving.value = true;
   try {
-    await CoolapkTauriAPI.updateUserRemark(uid, remarkName.value.trim());
-    profile.value.remarkName = remarkName.value.trim();
+    const nextRemarkName = remarkName.value.trim();
+    await CoolapkTauriAPI.updateUserRemark(uid, nextRemarkName);
+    profile.value.remarkName = nextRemarkName;
+    if (accountUid) cacheUserRemark(accountUid, uid, nextRemarkName);
     remarkDialogOpen.value = false;
     showToast('备注已保存');
-  } catch (err: any) {
-    alert(err?.message || '备注保存失败');
+  } catch (err: unknown) {
+    showToast(`备注保存失败：${getErrorMessage(err, '未知错误')}`, 'error');
   } finally {
     remarkSaving.value = false;
   }
@@ -1324,6 +1395,7 @@ onMounted(() => {
   const cached = getCachedUserProfileSync(uid);
   if (cached) {
     profile.value = asUserSpaceProfile(cached, uid);
+    applyCachedUserRemark(uid);
     isBlacklisted.value = isFlag(cached.isBlackList ?? cached.isInBlackList);
     isIgnored.value = isFlag(cached.isIgnoreList ?? cached.isInIgnoreList);
     selectInitialTab(cached);
@@ -1346,6 +1418,13 @@ watch(activeRatingFilter, () => {
 });
 
 watch(tabs, ensureActiveTabVisible);
+
+watch(() => authStore.user?.uid, (accountUid) => {
+  const uid = effectiveUid.value;
+  if (!accountUid || !uid || !profile.value) return;
+  applyCachedUserRemark(uid);
+  void loadUserRemark(uid, profileFetchSequence);
+});
 
 watch(
   () => [route.query.tab, route.query.ratingTarget],

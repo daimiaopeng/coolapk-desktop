@@ -1,18 +1,15 @@
 <template>
   <div class="feed-action-bar">
     <div class="action-group">
-      <button :class="['action-btn', 'like-btn', { 'is-liked': isLiked }]" @click.stop="toggleLike" title="点赞">
-        <i :class="[isLiked ? 'fas fa-heart' : 'far fa-heart', 'action-icon']"></i>
-      </button>
       <button
-        v-if="likeCount > 0"
         type="button"
-        class="interaction-count-btn"
-        title="查看点赞用户"
-        aria-label="查看点赞用户"
-        @click.stop="$emit('open-like-list')"
+        :class="['action-btn', 'like-btn', { 'is-liked': isLiked }]"
+        title="点赞"
+        :aria-label="`点赞，当前 ${formatCount(likeCount, '0')}`"
+        @click.stop="toggleLike"
       >
-        {{ formatCount(likeCount) }}
+        <i :class="[isLiked ? 'fas fa-heart' : 'far fa-heart', 'action-icon']"></i>
+        <span>{{ formatCount(likeCount) }}</span>
       </button>
     </div>
 
@@ -22,18 +19,15 @@
     </button>
 
     <div class="action-group">
-      <button class="action-btn share-btn" @click.stop="shareFeed" title="转发">
-        <i class="fas fa-retweet action-icon"></i>
-      </button>
       <button
-        v-if="shareCount > 0"
         type="button"
-        class="interaction-count-btn"
-        title="查看转发列表"
-        aria-label="查看转发列表"
-        @click.stop="$emit('open-forward-list')"
+        class="action-btn share-btn"
+        title="转发"
+        :aria-label="`转发，当前 ${formatCount(shareCount, '0')}`"
+        @click.stop="shareFeed"
       >
-        {{ formatCount(shareCount) }}
+        <i class="fas fa-retweet action-icon"></i>
+        <span>{{ formatCount(shareCount) }}</span>
       </button>
     </div>
 

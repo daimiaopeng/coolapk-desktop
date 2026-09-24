@@ -13,6 +13,7 @@
       <div class="card-cover-mask"></div>
     </div>
 
+    <!-- targetType 是关联标的标题，由下方关联卡片展示；头部只显示明确的推荐来源。 -->
     <FeedHeader
       :uid="authorUid"
       :avatar="feed.userAvatar || feed.userInfo?.userAvatar"
@@ -27,7 +28,7 @@
       :device="feed.device_title || feed.deviceTitle"
       :read-num="[feed.readNum, feed.read_num, feed.viewnum, feed.hitnum].find((count) => Number(count) > 0)"
       :rank-index="rankIndex"
-      :recommend-source="feed.recommendSource || feed.targetType"
+      :recommend-source="feed.recommendSource"
       :show-device-info="showDeviceInfo"
       :entity-type="feed.entityType"
       :entity-id="feed.entityId || feed.id"
@@ -47,6 +48,14 @@
       </button>
       <button v-if="isMyFeed" class="more-menu-item is-danger" @click="handleDeleteFeed">
         <i class="fas fa-trash-alt"></i> 删除动态
+      </button>
+      <div class="more-menu-divider"></div>
+      <!-- 点赞和转发列表入口放在省略号菜单末尾。 -->
+      <button class="more-menu-item" @click="openInteractionListFromMoreMenu('likes')">
+        <i class="far fa-heart"></i> 查看点赞用户
+      </button>
+      <button class="more-menu-item" @click="openInteractionListFromMoreMenu('forwards')">
+        <i class="fas fa-retweet"></i> 查看转发列表
       </button>
     </div>
 
@@ -604,6 +613,12 @@ function closeInteractionDialog(show: boolean) {
 
 function toggleMoreMenu() {
   moreMenuOpen.value = !moreMenuOpen.value;
+}
+
+function openInteractionListFromMoreMenu(mode: 'likes' | 'forwards') {
+  moreMenuOpen.value = false;
+  if (mode === 'likes') openLikeList();
+  else openForwardList();
 }
 
 function handleShareImage() {
@@ -1897,6 +1912,12 @@ defineExpose({
 
 .more-menu-item:hover {
   background-color: var(--surface-hover);
+}
+
+.more-menu-divider {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--border-light);
 }
 
 .more-menu-item:disabled {

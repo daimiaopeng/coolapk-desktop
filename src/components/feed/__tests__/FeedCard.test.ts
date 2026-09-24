@@ -117,6 +117,8 @@ describe('动态卡片编辑记录', () => {
 
     await wrapper.find('.stub-more').trigger('click');
     expect(wrapper.find('.more-menu').text()).toContain('生成长图');
+    expect(wrapper.find('.more-menu').text()).toContain('查看点赞用户');
+    expect(wrapper.find('.more-menu').text()).toContain('查看转发列表');
 
     await wrapper.find('.more-menu-item').trigger('click');
     expect(wrapper.find('.more-menu').exists()).toBe(false);
