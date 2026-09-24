@@ -49,6 +49,14 @@
       <button v-if="isMyFeed" class="more-menu-item is-danger" @click="handleDeleteFeed">
         <i class="fas fa-trash-alt"></i> 删除动态
       </button>
+      <div class="more-menu-divider"></div>
+      <!-- 点赞和转发列表入口放在省略号菜单末尾。 -->
+      <button class="more-menu-item" @click="openInteractionListFromMoreMenu('likes')">
+        <i class="far fa-heart"></i> 查看点赞用户
+      </button>
+      <button class="more-menu-item" @click="openInteractionListFromMoreMenu('forwards')">
+        <i class="fas fa-retweet"></i> 查看转发列表
+      </button>
     </div>
 
     <FeedContent
@@ -605,6 +613,12 @@ function closeInteractionDialog(show: boolean) {
 
 function toggleMoreMenu() {
   moreMenuOpen.value = !moreMenuOpen.value;
+}
+
+function openInteractionListFromMoreMenu(mode: 'likes' | 'forwards') {
+  moreMenuOpen.value = false;
+  if (mode === 'likes') openLikeList();
+  else openForwardList();
 }
 
 function handleShareImage() {
@@ -1898,6 +1912,12 @@ defineExpose({
 
 .more-menu-item:hover {
   background-color: var(--surface-hover);
+}
+
+.more-menu-divider {
+  height: 1px;
+  margin: 5px 8px;
+  background: var(--border-light);
 }
 
 .more-menu-item:disabled {
