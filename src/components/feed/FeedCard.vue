@@ -13,6 +13,7 @@
       <div class="card-cover-mask"></div>
     </div>
 
+    <!-- targetType 是关联标的标题，由下方关联卡片展示；头部只显示明确的推荐来源。 -->
     <FeedHeader
       :uid="authorUid"
       :avatar="feed.userAvatar || feed.userInfo?.userAvatar"
@@ -27,7 +28,7 @@
       :device="feed.device_title || feed.deviceTitle"
       :read-num="[feed.readNum, feed.read_num, feed.viewnum, feed.hitnum].find((count) => Number(count) > 0)"
       :rank-index="rankIndex"
-      :recommend-source="feed.recommendSource || feed.targetType"
+      :recommend-source="feed.recommendSource"
       :show-device-info="showDeviceInfo"
       :entity-type="feed.entityType"
       :entity-id="feed.entityId || feed.id"
