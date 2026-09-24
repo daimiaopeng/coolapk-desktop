@@ -1,5 +1,5 @@
 <template>
-  <header class="mobile-top-bar">
+  <header class="mobile-top-bar" :class="{ 'is-macos': macOverlay }">
     <button
       v-if="route.path !== '/'"
       type="button"
@@ -53,7 +53,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../../stores/app';
 import { useNotificationStore } from '../../stores/notifications';
 
-defineProps<{ navigationOpen: boolean }>();
+defineProps<{ navigationOpen: boolean; macOverlay: boolean }>();
 const emit = defineEmits<{ toggleNavigation: [] }>();
 
 const route = useRoute();
@@ -151,6 +151,14 @@ function goBack() {
     background: color-mix(in srgb, var(--surface) 96%, transparent);
     backdrop-filter: blur(14px);
     z-index: 30;
+  }
+
+  .mobile-top-bar.is-macos {
+    padding-left: max(86px, env(safe-area-inset-left));
+  }
+
+  .mobile-top-bar.is-macos .mobile-brand {
+    display: none;
   }
 
   .mobile-brand,

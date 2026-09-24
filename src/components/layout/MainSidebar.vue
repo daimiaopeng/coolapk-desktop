@@ -3,13 +3,13 @@
     <button
       v-if="mobileOpen"
       type="button"
-      class="mobile-sidebar-backdrop"
+      :class="['mobile-sidebar-backdrop', { 'has-window-controls': mobileWindowControls }]"
       aria-label="关闭导航菜单"
       @click="emit('closeMobile')"
     ></button>
   </Teleport>
 
-  <aside :class="['main-sidebar', { 'is-collapsed': isCollapsed, 'is-mobile-open': mobileOpen }]">
+  <aside :class="['main-sidebar', { 'is-collapsed': isCollapsed, 'is-mobile-open': mobileOpen, 'has-window-controls': mobileWindowControls }]">
     <div v-if="mobileOpen" class="mobile-navigation-header">
       <strong>快捷入口</strong>
       <span>频道与常用功能</span>
@@ -144,7 +144,7 @@ const downloadStore = useDownloadStore();
 const appVersion = APP_VERSION;
 const appDisplayName = computed(() => /android|iphone|ipad|ipod/i.test(navigator.userAgent) ? '酷安' : '酷安桌面版');
 
-const props = withDefaults(defineProps<{ mobileOpen?: boolean }>(), { mobileOpen: false });
+const props = withDefaults(defineProps<{ mobileOpen?: boolean; mobileWindowControls?: boolean }>(), { mobileOpen: false, mobileWindowControls: false });
 const emit = defineEmits<{ closeMobile: [] }>();
 
 const mobileOpen = computed(() => props.mobileOpen);
@@ -686,6 +686,10 @@ function handleLogout() {
     border: 0;
     background: rgba(15, 23, 42, 0.3);
     touch-action: manipulation;
+  }
+
+  .mobile-sidebar-backdrop.has-window-controls {
+    top: calc(var(--mobile-window-controls-height) + var(--mobile-topbar-height));
   }
 }
 </style>

@@ -1,14 +1,16 @@
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'has-mobile-window-controls': showWindowControls }">
     <NetworkStatusBanner />
     <TopBar />
     <MobileTopBar
       :navigation-open="mobileNavigationOpen"
+      :mac-overlay="usesMacOverlay"
       @toggle-navigation="toggleMobileNavigation"
     />
     <div class="app-body">
       <MainSidebar
         :mobile-open="mobileNavigationOpen"
+        :mobile-window-controls="showWindowControls"
         @close-mobile="closeMobileNavigation"
       />
       <div class="app-content-column">
@@ -33,10 +35,12 @@ import MobileBottomNav from './MobileBottomNav.vue';
 import PageTabBar from './PageTabBar.vue';
 import { useAndroidBackButton } from '../../utils/androidBackButton';
 import { navigateBack } from '../../utils/navigation';
+import { useDesktopWindow } from '../../composables/useDesktopWindow';
 
 const route = useRoute();
 const router = useRouter();
 const mobileNavigationOpen = ref(false);
+const { showWindowControls, usesMacOverlay } = useDesktopWindow();
 
 function toggleMobileNavigation() {
   mobileNavigationOpen.value = !mobileNavigationOpen.value;
@@ -99,6 +103,28 @@ onUnmounted(() => window.removeEventListener('keydown', handleMobileNavigationKe
     display: none !important;
   }
 
+  /* 无系统标题栏的桌面平台在窄窗口仍需要最小化、最大化和关闭按钮。 */
+  .app-shell.has-mobile-window-controls :deep(.top-bar.has-window-controls) {
+    display: flex !important;
+    flex: 0 0 var(--mobile-window-controls-height);
+    height: var(--mobile-window-controls-height);
+    min-height: var(--mobile-window-controls-height);
+  }
+
+  .app-shell.has-mobile-window-controls :deep(.top-bar.has-window-controls > .titlebar-sidebar-offset),
+  .app-shell.has-mobile-window-controls :deep(.top-bar.has-window-controls > .top-bar-center),
+  .app-shell.has-mobile-window-controls :deep(.top-bar.has-window-controls > .top-bar-right) {
+    display: none !important;
+  }
+
+  .app-shell.has-mobile-window-controls :deep(.top-bar.has-window-controls > .window-controls) {
+    height: var(--mobile-window-controls-height);
+  }
+
+  .app-shell.has-mobile-window-controls :deep(.network-status-banner) {
+    top: calc(var(--mobile-window-controls-height) + var(--mobile-topbar-height));
+  }
+
   .app-shell :deep(.main-sidebar) {
     display: flex !important;
     position: fixed;
@@ -117,6 +143,10 @@ onUnmounted(() => window.removeEventListener('keydown', handleMobileNavigationKe
     overflow: hidden;
     transition: transform var(--duration-normal) var(--ease-default), visibility var(--duration-normal), opacity var(--duration-normal);
     opacity: 0;
+  }
+
+  .app-shell.has-mobile-window-controls :deep(.main-sidebar.has-window-controls) {
+    top: calc(var(--mobile-window-controls-height) + var(--mobile-topbar-height) + 8px);
   }
 
   .app-shell :deep(.main-sidebar.is-mobile-open) {

@@ -1065,12 +1065,9 @@ function handleUserClick() {
   color: var(--text-primary);
 }
 
-/*
- * macOS 的 Overlay 标题栏会把原生红黄绿按钮放在 WebView 上方。
- * 品牌内容必须跳过这块安全区，否则会与窗口按钮重叠。
- */
+/* macOS Overlay 的原生红黄绿按钮占用左侧区域，桌面标题栏不显示品牌。 */
 .top-bar.is-macos .titlebar-brand {
-  padding-left: var(--macos-traffic-light-safe-width);
+  display: none;
 }
 
 .titlebar-brand-logo {
