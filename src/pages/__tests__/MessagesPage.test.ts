@@ -132,6 +132,18 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     return wrapper;
   }
 
+  it('手机上可从聊天返回会话列表，同时保留当前会话', async () => {
+    const w = await mountMessagesPage();
+
+    expect(w.find('.messages-page').classes()).toContain('is-mobile-chat-active');
+    expect(w.find('.mobile-session-back').exists()).toBe(true);
+
+    await w.find('.mobile-session-back').trigger('click');
+
+    expect(w.find('.messages-page').classes()).not.toContain('is-mobile-chat-active');
+    expect(w.find('.messages-main').exists()).toBe(true);
+  });
+
   it('只处理 APK 返回的 messageExtra/float 关注提示，并将数字 messageUid 转为字符串', async () => {
     const historySession = {
       ukey: '10001_20002',

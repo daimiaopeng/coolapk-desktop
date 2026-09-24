@@ -25,6 +25,24 @@
           {{ notificationStore.notificationCount > 99 ? '99+' : notificationStore.notificationCount }}
         </span>
       </button>
+      <button
+        v-if="!route.path.startsWith('/settings')"
+        type="button"
+        class="mobile-icon-button"
+        aria-label="设置"
+        @click="router.push('/settings')"
+      >
+        <i class="fas fa-gear"></i>
+      </button>
+      <button
+        type="button"
+        class="mobile-icon-button"
+        :aria-label="navigationOpen ? '关闭快捷入口' : '打开快捷入口'"
+        :aria-expanded="navigationOpen"
+        @click="emit('toggleNavigation')"
+      >
+        <i :class="navigationOpen ? 'fas fa-xmark' : 'fas fa-grip'"></i>
+      </button>
     </div>
   </header>
 </template>
@@ -34,6 +52,9 @@ import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../../stores/app';
 import { useNotificationStore } from '../../stores/notifications';
+
+defineProps<{ navigationOpen: boolean }>();
+const emit = defineEmits<{ toggleNavigation: [] }>();
 
 const route = useRoute();
 const router = useRouter();

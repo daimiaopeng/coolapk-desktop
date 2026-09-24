@@ -2,9 +2,15 @@
   <div class="app-shell">
     <NetworkStatusBanner />
     <TopBar />
-    <MobileTopBar />
+    <MobileTopBar
+      :navigation-open="mobileNavigationOpen"
+      @toggle-navigation="toggleMobileNavigation"
+    />
     <div class="app-body">
-      <MainSidebar />
+      <MainSidebar
+        :mobile-open="mobileNavigationOpen"
+        @close-mobile="closeMobileNavigation"
+      />
       <div class="app-content-column">
         <PageTabBar />
         <main class="app-main-content">
@@ -17,12 +23,34 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import TopBar from './TopBar.vue';
 import MainSidebar from './MainSidebar.vue';
 import NetworkStatusBanner from '../common/NetworkStatusBanner.vue';
 import MobileTopBar from './MobileTopBar.vue';
 import MobileBottomNav from './MobileBottomNav.vue';
 import PageTabBar from './PageTabBar.vue';
+
+const route = useRoute();
+const mobileNavigationOpen = ref(false);
+
+function toggleMobileNavigation() {
+  mobileNavigationOpen.value = !mobileNavigationOpen.value;
+}
+
+function closeMobileNavigation() {
+  mobileNavigationOpen.value = false;
+}
+
+function handleMobileNavigationKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') closeMobileNavigation();
+}
+
+watch(() => route.fullPath, closeMobileNavigation);
+
+onMounted(() => window.addEventListener('keydown', handleMobileNavigationKeydown));
+onUnmounted(() => window.removeEventListener('keydown', handleMobileNavigationKeydown));
 </script>
 
 <style scoped>
@@ -61,9 +89,128 @@ import PageTabBar from './PageTabBar.vue';
 
 @media (max-width: 720px) {
   .app-shell :deep(.top-bar),
-  .app-shell :deep(.main-sidebar),
   .app-shell :deep(.page-tab-bar) {
     display: none !important;
+  }
+
+  .app-shell :deep(.main-sidebar) {
+    display: flex !important;
+    position: fixed;
+    top: calc(var(--mobile-topbar-height) + 8px);
+    bottom: calc(var(--mobile-bottom-nav-height) + 8px);
+    left: 50%;
+    z-index: 1001;
+    width: min(460px, calc(100vw - 24px)) !important;
+    height: auto;
+    transform: translate(-50%, -8px);
+    visibility: hidden;
+    pointer-events: none;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    transition: transform var(--duration-normal) var(--ease-default), visibility var(--duration-normal), opacity var(--duration-normal);
+    opacity: 0;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open) {
+    transform: translate(-50%, 0);
+    visibility: visible;
+    pointer-events: auto;
+    opacity: 1;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .mobile-navigation-header) {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: baseline;
+    gap: 10px;
+    padding: 14px 16px 8px;
+    color: var(--text-primary);
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .mobile-navigation-header strong) {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .mobile-navigation-header span) {
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .sidebar-nav) {
+    display: grid !important;
+    flex: 1 1 auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-content: start;
+    gap: 8px;
+    min-height: 0;
+    width: 100%;
+    padding: 12px;
+    overflow-y: auto;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .nav-group) {
+    display: contents;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .nav-item) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center !important;
+    gap: 5px;
+    width: 100%;
+    height: 60px;
+    padding: 6px 4px !important;
+    border: 1px solid var(--border-light);
+    border-radius: 13px;
+    background: var(--surface-hover);
+    font-size: 12px;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .nav-label) {
+    display: inline !important;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .nav-item.is-active::before) {
+    display: none;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .nav-icon) {
+    width: auto;
+    margin: 0 !important;
+    font-size: 18px;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .nav-divider) {
+    display: block;
+    grid-column: 1 / -1;
+    width: auto;
+    height: 1px;
+    margin: 2px 0;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .sidebar-footer) {
+    display: flex !important;
+    flex: 0 0 auto;
+  }
+
+  .app-shell :deep(.main-sidebar.is-mobile-open .nav-badge) {
+    position: absolute;
+    top: 3px;
+    right: 6px;
+    left: auto;
+    margin: 0;
+  }
+
+  .app-shell :deep(.sidebar-floating-toggle-btn) {
+    display: none;
   }
 
   .app-body,

@@ -1,7 +1,23 @@
 <template>
-  <aside :class="['main-sidebar', { 'is-collapsed': isCollapsed }]">
+  <Teleport to="body">
+    <button
+      v-if="mobileOpen"
+      type="button"
+      class="mobile-sidebar-backdrop"
+      aria-label="关闭导航菜单"
+      @click="emit('closeMobile')"
+    ></button>
+  </Teleport>
+
+  <aside :class="['main-sidebar', { 'is-collapsed': isCollapsed, 'is-mobile-open': mobileOpen }]">
+    <div v-if="mobileOpen" class="mobile-navigation-header">
+      <strong>快捷入口</strong>
+      <span>频道与常用功能</span>
+    </div>
+
     <!-- 截图同款：吸附在侧边栏右侧分割线边缘的小圆形折叠手柄。 -->
     <button
+      v-if="!mobileOpen"
       class="sidebar-floating-toggle-btn"
       :title="isCollapsed ? '展开侧边栏' : '收起侧边栏'"
       @click="settingsStore.toggleSidebar"
@@ -21,10 +37,10 @@
           class="nav-item"
           active-class="is-active"
           :title="item.label"
-          @click="triggerSidebarTransition()"
+          @click="handleNavSelection"
         >
           <i :class="[item.icon, 'nav-icon']"></i>
-          <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
+          <span v-if="!isCollapsed || mobileOpen" class="nav-label">{{ item.label }}</span>
         </router-link>
 
         <router-link
@@ -33,10 +49,10 @@
           class="nav-item"
           :class="{ 'is-active': isMoreActive }"
           title="更多服务与专区"
-          @click="triggerSidebarTransition()"
+          @click="handleNavSelection"
         >
           <i class="fas fa-shapes nav-icon"></i>
-          <span v-if="!isCollapsed" class="nav-label">更多</span>
+          <span v-if="!isCollapsed || mobileOpen" class="nav-label">更多</span>
         </router-link>
 
       </div>
@@ -51,10 +67,10 @@
           class="nav-item"
           active-class="is-active"
           :title="getNavTitle(item)"
-          @click="triggerSidebarTransition()"
+          @click="handleNavSelection"
         >
           <i :class="[item.icon, 'nav-icon']"></i>
-          <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
+          <span v-if="!isCollapsed || mobileOpen" class="nav-label">{{ item.label }}</span>
           <span
             v-if="getNavBadge(item.key) > 0"
             :class="['nav-badge', { 'is-wide': getNavBadge(item.key) > 9 }]"
@@ -71,26 +87,26 @@
         :class="{ 'is-active': isMyActive }"
         active-class="is-active"
         title="我的"
-        @click="triggerSidebarTransition()"
+        @click="handleNavSelection"
       >
         <i class="fas fa-user nav-icon"></i>
-        <span v-if="!isCollapsed" class="nav-label">我的</span>
+        <span v-if="!isCollapsed || mobileOpen" class="nav-label">我的</span>
       </router-link>
 
       <div class="nav-divider"></div>
 
       <div class="nav-group">
-        <router-link to="/settings" class="nav-item" active-class="is-active" title="设置" @click="triggerSidebarTransition()">
+        <router-link to="/settings" class="nav-item" active-class="is-active" title="设置" @click="handleNavSelection">
           <i class="fas fa-cog nav-icon"></i>
-          <span v-if="!isCollapsed" class="nav-label">设置</span>
+          <span v-if="!isCollapsed || mobileOpen" class="nav-label">设置</span>
         </router-link>
       </div>
     </nav>
 
-    <div v-if="!isCollapsed" class="sidebar-footer">
+    <div v-if="!isCollapsed || mobileOpen" class="sidebar-footer">
       <div class="app-info-card">
         <div class="app-info-top">
-          <span class="app-name">酷安桌面版</span>
+          <span class="app-name">{{ appDisplayName }}</span>
           <span class="version-badge">v{{ appVersion }}</span>
         </div>
         <div class="app-info-actions">
@@ -126,6 +142,17 @@ const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
 const downloadStore = useDownloadStore();
 const appVersion = APP_VERSION;
+const appDisplayName = computed(() => /android|iphone|ipad|ipod/i.test(navigator.userAgent) ? '酷安' : '酷安桌面版');
+
+const props = withDefaults(defineProps<{ mobileOpen?: boolean }>(), { mobileOpen: false });
+const emit = defineEmits<{ closeMobile: [] }>();
+
+const mobileOpen = computed(() => props.mobileOpen);
+
+function handleNavSelection() {
+  emit('closeMobile');
+  triggerSidebarTransition();
+}
 
 function handleFeedback() {
   openFeedbackMessage(router, authStore);
@@ -646,6 +673,19 @@ function handleLogout() {
     height: 14px;
     padding: 0 3px;
     line-height: 14px;
+  }
+}
+
+@media (max-width: 720px) {
+  .mobile-sidebar-backdrop {
+    position: fixed;
+    inset: var(--mobile-topbar-height) 0 var(--mobile-bottom-nav-height);
+    z-index: 1000;
+    display: block;
+    padding: 0;
+    border: 0;
+    background: rgba(15, 23, 42, 0.3);
+    touch-action: manipulation;
   }
 }
 </style>
