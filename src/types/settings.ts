@@ -91,10 +91,14 @@ export interface NavVisibilitySettings {
 
 /** 设备信息（请求头指纹）：机型/Android 版本/Build 内嵌于 User-Agent，
  * App 版本/版本号/SDK Int/Locale/暗色模式为独立请求头。
- * 注意：X-App-Device（设备码）与 X-App-Token 由账号绑定，不可自定义。 */
+ * 数盟设备 ID 用于 X-App-Device 首字段；ddid 单独填写，仅在服务端要求 DDI 的写请求中作为 Cookie 发送。 */
 export interface DeviceFingerprintSettings {
   /** 是否启用自定义设备信息（关闭时使用客户端默认值） */
   customFingerprint: boolean;
+  /** 手动填写的数盟设备 ID（设备ID / ShuzlmID），用于 X-App-Device 首字段 */
+  deviceId: string;
+  /** 手动填写的 DDI 会话值，仅作为对应写请求的 ddid Cookie 值 */
+  ddid: string;
   /** 机型型号，内嵌 UA，如 "23113RKC6C"（小米 14） */
   model: string;
   /** UA 内 Android 版本，如 "16" */

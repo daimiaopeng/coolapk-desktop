@@ -43,6 +43,8 @@ import AppButton from '../common/AppButton.vue';
 import AppIconButton from '../common/AppIconButton.vue';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAuthStore } from '../../stores/auth';
+import { useSettingsStore } from '../../stores/settings';
+import { openShuzilmGuide, isRiskControlError } from '../../utils/shuzilmDeviceGuide';
 import { clearCommentDraft, loadCommentDraft, saveCommentDraft } from '../../utils/commentDrafts';
 
 const props = defineProps<{
@@ -56,6 +58,7 @@ const emit = defineEmits<{
 }>();
 
 const authStore = useAuthStore();
+const settingsStore = useSettingsStore();
 
 const content = ref('');
 const submitting = ref(false);
@@ -95,22 +98,38 @@ async function handleSubmit() {
     return;
   }
 
-  submitting.value = true;
-  errorMsg.value = '';
-  try {
-    await CoolapkTauriAPI.replyFeed(
-      String(props.feedId),
-      content.value.trim(),
-      props.replyTo ? String(props.replyTo.rid) : undefined
-    );
-    await clearCommentDraft(currentDraftAccount(), props.feedId, props.replyTo?.rid);
-    content.value = '';
-    emit('success');
-  } catch (err: any) {
-    errorMsg.value = err?.message || '评论发布失败，请检查网络或登录状态';
-  } finally {
-    submitting.value = false;
-  }
+  const proceedSubmit = async () => {
+    submitting.value = true;
+    errorMsg.value = '';
+    try {
+      await CoolapkTauriAPI.replyFeed(
+        String(props.feedId),
+        content.value.trim(),
+        props.replyTo ? String(props.replyTo.rid) : undefined
+      );
+      await clearCommentDraft(currentDraftAccount(), props.feedId, props.replyTo?.rid);
+      content.value = '';
+      emit('success');
+    } catch (err: any) {
+      if (isRiskControlError(err)) {
+        errorMsg.value = '酷安服务端风控拦截（需官方设备认证），发表失败';
+        openShuzilmGuide({
+          reason: 'risk_controlled',
+          message: '请求被酷安服务端拦截。请到设备信息设置粘贴手机官方酷安复制的设备日志，保存后重试。',
+          onConfirmContinue: () => {
+            errorMsg.value = '';
+            void proceedSubmit();
+          },
+        });
+      } else {
+        errorMsg.value = err?.message || '评论发布失败，请检查网络或登录状态';
+      }
+    } finally {
+      submitting.value = false;
+    }
+  };
+
+  await proceedSubmit();
 }
 </script>
 

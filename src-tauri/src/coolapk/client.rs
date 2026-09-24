@@ -9,11 +9,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// 接口路径需求：记录服务端配置中声明的写接口风控要求。
 ///
-/// `needs_ddid` 只用于保留服务端配置的可观测性；当前客户端明确不生成、
-/// 不追加、也不转发 `ddid`。
+/// `needs_ddid` 标记服务端要求携带 DDI 会话 Cookie 的写接口；请求层会在设置了会话值时添加 `ddid`。
 #[derive(Clone, Copy, Debug, Default)]
 pub struct PathRequirements {
-    /// 服务端配置声明需要 `ddid`。客户端不会据此发送 `ddid`。
+    /// 服务端配置声明该路径需要 `ddid`。
     pub needs_ddid: bool,
     /// 需要表单携带 `_v2_post_token`（网易易盾滑块验证 Token）。
     pub needs_post_token: bool,
@@ -26,7 +25,6 @@ const DDI_EVENT_PATHS: &[&str] = &[
     "/v6/feed/reply",
     "/v6/feed/like",
     "/v6/feed/likeReply",
-    "/v6/message/send",
 ];
 
 /// 酷安服务端下发的 `PostToken.List`（需网易易盾 `_v2_post_token`）。
@@ -54,10 +52,15 @@ fn cookie_without_ddid(cookie: &str) -> String {
         .join("; ")
 }
 
-fn cookie_for_request(cookie: &str, _needs_ddid: bool) -> String {
-    // 保留参数是为了让调用点继续与服务端路径分类对齐，但无论路径如何，
-    // 当前兼容模式都只发送原有登录 Cookie。
-    cookie_without_ddid(cookie)
+fn cookie_for_request(cookie: &str, needs_ddid: bool, ddid: Option<&str>) -> String {
+    let cookie = cookie_without_ddid(cookie);
+    if !needs_ddid {
+        return cookie;
+    }
+    match ddid.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value) => merge_cookie_value(&cookie, "ddid", &encode_login_cookie_value(value)),
+        None => cookie,
+    }
 }
 
 /// 按酷安客户端 CookieInterceptor 的规则编码账号信息。
@@ -359,11 +362,22 @@ fn build_create_feed_form_for_type(
     form
 }
 
-/// 设备信息覆盖配置（由设置页"设备信息"下发，作用于所有 API 请求头）。
+/// 设备信息覆盖配置（由设置页"设备信息"下发，作用于 API 请求头和设备身份）。
 /// 字段为 None 时使用客户端默认值；全部留空表示恢复默认。
-/// 注意：X-App-Device（设备码）与 X-App-Token 属于账号绑定指纹，不允许覆盖。
+/// device_id 用于 X-App-Device；ddid 仅在服务端要求 DDI 的写接口中作为 Cookie 发送。
 #[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceProfile {
+    /// 用户手动填写的数盟设备 ID，用于设备码首字段。
+    #[serde(default)]
+    pub device_id: Option<String>,
+    /// 用户手动填写的 DDI 会话值，仅作为指定写接口的 ddid Cookie 发送。
+    #[serde(default)]
+    pub ddid: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub build: Option<String>,
     #[serde(default)]
     pub user_agent: Option<String>,
     #[serde(default)]
@@ -907,31 +921,78 @@ impl CoolapkClient {
         })
     }
 
-    /// 账号绑定的固定设备码：恢复 v1.9.1 及更早版本的 UID 派生算法。
-    ///
-    /// v1.10 曾把这里改成固定/数盟设备码并把 `deviceId` 写入请求身份，
-    /// 导致已有账号即使不发送 `ddid` 也会带着另一套 Token + 设备指纹。
-    /// 每次同步都重新按 UID 计算并持久化，顺便迁移已经保存的新版设备码。
+    /// 获取当前用户配置的有效数盟设备 ID（设备ID / ShuzlmID）
+    pub fn effective_custom_device_id(&self) -> Option<String> {
+        let guard = self.device_profile.read().ok()?;
+        guard
+            .device_id
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    /// 获取用户手动填写的 ddid Cookie 值。
+    fn effective_custom_ddid(&self) -> Option<String> {
+        let guard = self.device_profile.read().ok()?;
+        guard.ddid.as_ref().map(|value| value.trim().to_string()).filter(|value| !value.is_empty() && value.len() <= 512 && !value.chars().any(char::is_control))
+    }
+
+    /// 在服务端要求 DDI 的写接口上使用设置页单独填写的会话值作为 ddid Cookie。
+    fn cookie_for_path(&self, cookie: &str, path: &str) -> String {
+        let needs_ddid = classify_path(path).needs_ddid;
+        let ddid = if needs_ddid { self.effective_custom_ddid() } else { None };
+        cookie_for_request(cookie, needs_ddid, ddid.as_deref())
+    }
+
+    /// 账号绑定的固定设备码：
+    /// 若用户在设置中配置了数盟设备 ID，则优先按该设备 ID 生成标准设备码；
+    /// 否则使用 UID 派生算法保持向后兼容。
     fn account_device_code(&self, uid: &str) -> String {
         let mut accounts = self.load_accounts();
-        let code = generate_device_code_for_id(uid);
+        let custom_id = self.effective_custom_device_id();
+        let code = if let Some(ref dev_id) = custom_id {
+            let (model, build) = if let Ok(guard) = self.device_profile.read() {
+                (guard.model.clone(), guard.build.clone())
+            } else {
+                (None, None)
+            };
+            generate_device_code_with_device_id(dev_id, model.as_deref(), build.as_deref())
+        } else {
+            generate_device_code_for_id(uid)
+        };
         if let Some(pos) = accounts
             .iter()
             .position(|a| a.get("uid").and_then(|v| v.as_str()) == Some(uid))
         {
             if let Some(obj) = accounts[pos].as_object_mut() {
                 obj.insert("deviceCode".to_string(), json!(code.clone()));
+                if let Some(ref dev_id) = custom_id {
+                    obj.insert("deviceId".to_string(), json!(dev_id.clone()));
+                }
             }
             self.save_accounts(&accounts);
             return code;
         }
-        accounts.push(json!({ "uid": uid, "cookie": "", "deviceCode": code.clone() }));
+        let mut account_val = json!({ "uid": uid, "cookie": "", "deviceCode": code.clone() });
+        if let Some(ref dev_id) = custom_id {
+            account_val["deviceId"] = json!(dev_id.clone());
+        }
+        accounts.push(account_val);
         self.save_accounts(&accounts);
         code
     }
 
-    /// 游客设备码：首次生成符合官方规范的标准设备码后固定持久化
+    /// 游客设备码：配置了数盟设备 ID 时优先使用，未配置时首次随机生成并持久化
     fn guest_device_code(&self) -> String {
+        let custom_id = self.effective_custom_device_id();
+        if let Some(ref dev_id) = custom_id {
+            let (model, build) = if let Ok(guard) = self.device_profile.read() {
+                (guard.model.clone(), guard.build.clone())
+            } else {
+                (None, None)
+            };
+            return generate_device_code_with_device_id(dev_id, model.as_deref(), build.as_deref());
+        }
         let mut root = self.load_accounts_root();
         if let Some(code) = root
             .get("guestDeviceCode")
@@ -1005,9 +1066,10 @@ impl CoolapkClient {
         if let Ok(mut guard) = self.device_profile.write() {
             *guard = profile;
         }
+        self.sync_device_code();
     }
 
-    /// 当前设备信息（设置页展示用）：登录态 + 生效设备码
+    /// 当前设备信息（设置页展示用）：登录态 + 生效设备码 + 自定义设备 ID
     pub fn get_device_info(&self) -> Result<Value, String> {
         let code = self
             .device_code
@@ -1019,7 +1081,15 @@ impl CoolapkClient {
             .read()
             .map_err(|_| "failed to read login state".to_string())?
             .is_some();
-        Ok(json!({ "code": 200, "data": { "loggedIn": logged_in, "deviceCode": code } }))
+        let device_id = self.effective_custom_device_id();
+        Ok(json!({
+            "code": 200,
+            "data": {
+                "loggedIn": logged_in,
+                "deviceCode": code,
+                "deviceId": device_id
+            }
+        }))
     }
 
     /// 绑定 Cookie 持久化文件路径，并载入上次保存的登录凭据
@@ -1446,8 +1516,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let req = classify_path(path);
-            let full_cookie = cookie_for_request(&cookie, req.needs_ddid);
+            let full_cookie = self.cookie_for_path(&cookie, path);
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -1525,8 +1594,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let requirements = classify_path(path);
-            let full_cookie = cookie_for_request(&cookie, requirements.needs_ddid);
+            let full_cookie = self.cookie_for_path(&cookie, path);
             if let Ok(header_val) = HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -5320,7 +5388,7 @@ impl CoolapkClient {
     /// 发送私信（需登录）
     ///
     /// 私信沿用 v1.9.1 及更早版本的兼容签名：旧版 Token cost=10、当前
-    /// 账号 UID 派生设备码，并且 Cookie 明确移除 `ddid`。请求体仍按当前
+    /// 使用设置中的数盟 ID 更新 DDI 写请求 Cookie。请求体仍按当前
     /// APK 的 `message/send` 契约发送 multipart，并补齐 `quick_reply=1`、
     /// 空图片和空扩展字段。
     pub async fn send_private_message(&self, uid: &str, message: &str) -> Result<Value, String> {
@@ -5357,7 +5425,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let full_cookie = cookie_for_request(&cookie, true);
+            let full_cookie = self.cookie_for_path(&cookie, "/v6/message/send");
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -5403,7 +5471,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let full_cookie = cookie_for_request(&cookie, true);
+            let full_cookie = self.cookie_for_path(&cookie, "/v6/message/send");
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -5476,7 +5544,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let full_cookie = cookie_for_request(&cookie, true);
+            let full_cookie = self.cookie_for_path(&cookie, path);
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -6248,7 +6316,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let full_cookie = cookie_for_request(&cookie, true);
+            let full_cookie = self.cookie_for_path(&cookie, "/v6/feed/createFeed");
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -6354,7 +6422,7 @@ impl CoolapkClient {
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
         if let Some(cookie) = cookie {
-            let full_cookie = cookie_for_request(&cookie, true);
+            let full_cookie = self.cookie_for_path(&cookie, "/v6/feed/createFeed");
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
             }
@@ -7996,10 +8064,29 @@ fn is_valid_device_code(code: &str) -> bool {
     false
 }
 
+/// 根据指定的数盟设备 ID（设备ID / ShuzlmID）生成官方标准设备码。
+///
+/// 官方标准 X-App-Device 格式为：
+/// `{device_id}; ; ; ; {manufacturer}; {brand}; {model}; {build}; {oaid}`
+/// 经 Base64 编码、字符逆序并剔除换行与 `=` 填充符生成。
+fn generate_device_code_with_device_id(
+    device_id: &str,
+    model: Option<&str>,
+    build: Option<&str>,
+) -> String {
+    let model = model.filter(|s| !s.trim().is_empty()).unwrap_or("23113RKC6C");
+    let build = build.filter(|s| !s.trim().is_empty()).unwrap_or("AQ3A.250226.002");
+    let raw = format!("{device_id}; ; ; ; Xiaomi; Xiaomi; {model}; {build}; ");
+    let b64 = BASE64.encode(raw.as_bytes());
+    let mut rev: String = b64.chars().rev().collect();
+    rev.retain(|c| c != '=' && c != '\r' && c != '\n');
+    rev
+}
+
 /// v1.9.1 及更早版本使用的账号设备码。
 ///
 /// 账号请求身份由 UID 派生 Android ID，再按官方客户端的逆序 Base64
-/// 格式生成。该兼容链路不需要数盟设备注册 ID，也不会生成或发送 `ddid`。
+/// 格式生成。该函数只生成设备码；`ddid` 由请求层按设置和接口路径添加。
 fn generate_device_code_for_id(uid: &str) -> String {
     use md5::{Digest, Md5};
 

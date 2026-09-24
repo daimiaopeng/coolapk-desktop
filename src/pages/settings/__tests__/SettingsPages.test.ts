@@ -148,12 +148,23 @@ describe('设置页面交互', () => {
     await wrapper.get('select').setValue('2211133C');
     expect(settings.settings.deviceFingerprint.model).toBe('2211133C');
     expect(settings.settings.deviceFingerprint.androidVersion).toBe('15');
-    await inputs[4].setValue('2600000');
+    const appCodeInput = inputs.find((i) => i.attributes('placeholder') === '2604201') || inputs[5];
+    await appCodeInput.setValue('2600000');
     expect(wrapper.find('.version-warning').exists()).toBe(true);
     await wrapper.get('.reset-button').trigger('click');
     expect(settings.settings.deviceFingerprint.model).toBe('23113RKC6C');
     expect(settings.settings.deviceFingerprint.appCode).toBe('2604201');
     expect(settings.settings.deviceFingerprint.sdkInt).toBe('35');
+  });
+
+  it('设备页支持数盟设备 ID 输入、智能提取与保存', async () => {
+    const { wrapper, settings } = mountPage(DeviceSettingsPage);
+    await flushPromises();
+    const deviceIdInput = wrapper.find('.full-width-input');
+    await deviceIdInput.setValue('设备ID: DU-MOCK-SAMPLE-DEVICE-ID-12345\nShuzlmID: DU-MOCK-SAMPLE-DEVICE-ID-12345');
+    expect(wrapper.find('.success-tip').exists()).toBe(true);
+    await wrapper.find('.primary-btn').trigger('click');
+    expect(settings.settings.deviceFingerprint.deviceId).toBe('DU-MOCK-SAMPLE-DEVICE-ID-12345');
   });
 
   it('下载页展示缓存总量与明细', async () => {

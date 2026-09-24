@@ -541,6 +541,7 @@ import { getErrorMessage } from '../../utils/errors';
 import { renderCoolapkRichText } from '../../utils/richText';
 import { reactiveUserProfileMap, getCachedUserProfileSync } from '../../utils/userProfilePreloader';
 import { verifyWithCaptcha, extractCaptchaParamsFromResponse } from '../../utils/neteaseCaptcha';
+import { openShuzilmGuide, isRiskControlError } from '../../utils/shuzilmDeviceGuide';
 import { hasActiveTextSelection } from '../../utils/selection';
 import {
   COMMENT_SORT_OPTIONS,
@@ -1712,80 +1713,90 @@ async function handleSend() {
     return;
   }
 
-  sending.value = true;
-  uploadingImages.value = images.value.length > 0;
-  uploadedCount.value = 0;
+  const proceedSubmit = async () => {
+    sending.value = true;
+    uploadingImages.value = images.value.length > 0;
+    uploadedCount.value = 0;
 
-  try {
-    let pic = '';
-    if (images.value.length > 0) {
-      const urls: string[] = [];
-      for (const img of images.value) {
-        const bytes = new Uint8Array(await img.file.arrayBuffer());
-        const contentType = img.file.type || 'image/jpeg';
-        const res = await CoolapkTauriAPI.uploadImage(bytes, img.file.name, contentType, 'feed');
-        urls.push(resolveUploadedUrl(res?.data));
-        uploadedCount.value += 1;
+    try {
+      let pic = '';
+      if (images.value.length > 0) {
+        const urls: string[] = [];
+        for (const img of images.value) {
+          const bytes = new Uint8Array(await img.file.arrayBuffer());
+          const contentType = img.file.type || 'image/jpeg';
+          const res = await CoolapkTauriAPI.uploadImage(bytes, img.file.name, contentType, 'feed');
+          urls.push(resolveUploadedUrl(res?.data));
+          uploadedCount.value += 1;
+        }
+        pic = urls.join(',');
       }
-      pic = urls.join(',');
-    }
 
-    const finalMessage = buildFinalMessage(rawMsg);
-    const targetRid = replyTargetId.value || undefined;
+      const finalMessage = buildFinalMessage(rawMsg);
+      const targetRid = replyTargetId.value || undefined;
 
-    const executeReply = async (postToken?: string) => {
-      if (postToken) {
+      const executeReply = async (postToken?: string) => {
+        if (postToken) {
+          return await CoolapkTauriAPI.replyFeed(
+            String(currentFeedId),
+            finalMessage,
+            targetRid,
+            pic || undefined,
+            postToken
+          );
+        }
         return await CoolapkTauriAPI.replyFeed(
           String(currentFeedId),
           finalMessage,
           targetRid,
-          pic || undefined,
-          postToken
+          pic || undefined
         );
-      }
-      return await CoolapkTauriAPI.replyFeed(
-        String(currentFeedId),
-        finalMessage,
-        targetRid,
-        pic || undefined
-      );
-    };
+      };
 
-    let res: any;
-    try {
-      res = await executeReply();
-    } catch (err: any) {
-      const captchaParams = extractCaptchaParamsFromResponse(err);
-      if (captchaParams?.captchaId) {
-        showToast('正在调起安全滑块验证...', 'info');
-        const token = await verifyWithCaptcha(captchaParams.captchaId);
-        res = await executeReply(token);
-      } else {
-        const errMsg = String(err?.message || err || '');
-        if (errMsg.includes('网络环境可能异常') || errMsg.includes('err_request_need_upgrade_new_version')) {
-          showToast('酷安服务端风控拦截（需官方手机环境），发表失败', 'error');
+      let res: any;
+      try {
+        res = await executeReply();
+      } catch (err: any) {
+        const captchaParams = extractCaptchaParamsFromResponse(err);
+        if (captchaParams?.captchaId) {
+          showToast('正在调起安全滑块验证...', 'info');
+          const token = await verifyWithCaptcha(captchaParams.captchaId);
+          res = await executeReply(token);
+        } else if (isRiskControlError(err)) {
+          showToast('酷安服务端风控拦截（需官方设备认证），发表失败', 'error');
+          openShuzilmGuide({
+            reason: 'risk_controlled',
+            message: '请求被酷安服务端拦截。请到设备信息设置粘贴手机官方酷安复制的设备日志，保存后重试。',
+            onConfirmContinue: () => {
+              void proceedSubmit();
+            },
+          });
+          return;
+        } else {
+          throw err;
+        }
+      }
+
+      if (res && res.code !== 200) {
+        const captchaParams = extractCaptchaParamsFromResponse(res);
+        if (captchaParams?.captchaId) {
+          showToast('正在调起安全滑块验证...', 'info');
+          const token = await verifyWithCaptcha(captchaParams.captchaId);
+          res = await executeReply(token);
+        } else if (isRiskControlError(res)) {
+          showToast('酷安服务端风控拦截（需官方设备认证），发表失败', 'error');
+          openShuzilmGuide({
+            reason: 'risk_controlled',
+            message: '请求被酷安服务端拦截。请到设备信息设置粘贴手机官方酷安复制的设备日志，保存后重试。',
+            onConfirmContinue: () => {
+              void proceedSubmit();
+            },
+          });
           return;
         }
-        throw err;
       }
-    }
 
-    if (res && res.code !== 200) {
-      const captchaParams = extractCaptchaParamsFromResponse(res);
-      if (captchaParams?.captchaId) {
-        showToast('正在调起安全滑块验证...', 'info');
-        const token = await verifyWithCaptcha(captchaParams.captchaId);
-        res = await executeReply(token);
-      } else if (
-        String(res.message || res.messageStatus || '').includes('网络环境可能异常') ||
-        String(res.message || res.messageStatus || '').includes('err_request_need_upgrade_new_version')
-      ) {
-        showToast('酷安服务端风控拦截（需官方手机环境），发表失败', 'error');
-        return;
-      }
-    }
-
-    if (res && res.code === 200) {
+      if (res && res.code === 200) {
       await clearCommentDraft(currentDraftAccount(), currentFeedId, targetRid);
       inputMsg.value = '';
       if (inputRef.value) {
@@ -1806,6 +1817,9 @@ async function handleSend() {
     uploadingImages.value = false;
     sending.value = false;
   }
+  };
+
+  await proceedSubmit();
 }
 </script>
 

@@ -24,7 +24,6 @@ fn test_classify_path_detects_requirements() {
     assert!(classify_path("/v6/feed/like").needs_ddid);
     assert!(!classify_path("/v6/feed/unlike").needs_ddid);
     assert!(classify_path("/v6/feed/likeReply").needs_ddid);
-    assert!(classify_path("/v6/message/send").needs_ddid);
     // PostToken 接口：发动态/评论需要 _v2_post_token
     assert!(classify_path("/v6/feed/createFeed").needs_post_token);
     assert!(classify_path("/v6/feed/reply").needs_post_token);
@@ -40,7 +39,11 @@ fn test_classify_path_detects_requirements() {
 fn test_ddid_is_not_sent_when_disabled() {
     let cookie = "SESSID=session; uid=123; ddid=stale-ddid; sid=other";
     assert_eq!(cookie_without_ddid(cookie), "SESSID=session; uid=123; sid=other");
-    assert!(!cookie_for_request(cookie, true).contains("ddid="));
+    assert!(!cookie_for_request(cookie, true, None).contains("ddid="));
+    assert!(!cookie_for_request(cookie, false, Some("DU-MOCK-TEST-ID")).contains("ddid="));
+    let configured = cookie_for_request(cookie, true, Some("DU-MOCK-TEST-ID"));
+    assert!(configured.contains("ddid=DU-MOCK-TEST-ID"));
+    assert!(!configured.contains("stale-ddid"));
 }
 
 #[test]
@@ -1188,4 +1191,40 @@ async fn test_live_oss_and_reply() {
         .upload_image(&fake_png, "test_dot.png", "image/png", "feed", None)
         .await;
     println!("upload_res = {:?}", upload_res);
+}
+
+#[test]
+fn test_generate_device_code_with_device_id() {
+    let custom_id = "DU-MOCK-TEST-DEVICE-ID-99999999";
+    let code = generate_device_code_with_device_id(custom_id, Some("23113RKC6C"), Some("AQ3A.250226.002"));
+    assert!(is_valid_device_code(&code));
+
+    let mut rev_code: String = code.chars().rev().collect();
+    while rev_code.len() % 4 != 0 {
+        rev_code.push('=');
+    }
+    let decoded_bytes = BASE64.decode(rev_code.as_bytes()).expect("base64 decode failed");
+    let decoded = String::from_utf8(decoded_bytes).expect("valid utf8");
+    assert!(decoded.starts_with(&format!("{custom_id}; ; ; ; Xiaomi; Xiaomi; 23113RKC6C; AQ3A.250226.002; ")));
+}
+
+#[test]
+fn test_update_device_profile_with_device_id() {
+    let client = CoolapkClient::new();
+    let custom_id = "DU-MOCK-TEST-DEVICE-ID-99999999";
+
+    client.update_device_profile(DeviceProfile {
+        device_id: Some(custom_id.to_string()),
+        model: Some("23113RKC6C".to_string()),
+        build: Some("AQ3A.250226.002".to_string()),
+        ..Default::default()
+    });
+
+    assert_eq!(client.effective_custom_device_id(), Some(custom_id.to_string()));
+
+    let info = client.get_device_info().expect("get_device_info");
+    assert_eq!(info["data"]["deviceId"].as_str(), Some(custom_id));
+
+    let active_code = client.device_code.read().unwrap().clone();
+    assert!(is_valid_device_code(&active_code));
 }

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { useAuthStore } from '../../../stores/auth';
+import { useSettingsStore } from '../../../stores/settings';
+import { shuzilmGuideState } from '../../../utils/shuzilmDeviceGuide';
 
 const mocks = vi.hoisted(() => ({
   getReplyDetail: vi.fn(),
@@ -29,6 +31,7 @@ describe('评论完整信息展示', () => {
     mocks.replyFeed.mockResolvedValue({ code: 200, message: 'ok' });
     mocks.uploadImage.mockResolvedValue({ code: 200, data: { url: 'https://image.coolapk.com/feed/test.jpg' } });
     setActivePinia(createPinia());
+    shuzilmGuideState.visible = false;
   });
 
   function mountSection(commentOverrides: Record<string, any> = {}, extraProps: Record<string, any> = {}) {
@@ -335,6 +338,10 @@ describe('评论完整信息展示', () => {
     authStore.user = { uid: 12345, username: '发布者' } as any;
     authStore.isLoggedIn = true;
 
+    const settingsStore = useSettingsStore();
+    settingsStore.settings.deviceFingerprint.deviceId = 'DU-MOCK-SAMPLE-DEVICE-ID-12345';
+    settingsStore.settings.deviceFingerprint.ddid = 'DU-MOCK-DDI-SESSION-12345';
+
     const wrapper = mountSection();
     const editor = wrapper.find('.comment-textarea');
     editor.element.textContent = '这是一条测试评论内容';
@@ -346,5 +353,29 @@ describe('评论完整信息展示', () => {
 
     expect(mocks.replyFeed).toHaveBeenCalledWith('feed-1', '这是一条测试评论内容', undefined, undefined);
     expect(wrapper.emitted('send-comment')?.[0]).toEqual(['这是一条测试评论内容']);
+  });
+
+  it('未配置 DDI 会话值时提交评论会唤起认证指引弹窗', async () => {
+    const authStore = useAuthStore();
+    authStore.user = { uid: 12345, username: '发布者' } as any;
+    authStore.isLoggedIn = true;
+
+    const settingsStore = useSettingsStore();
+    settingsStore.settings.deviceFingerprint.deviceId = '';
+    settingsStore.settings.deviceFingerprint.ddid = '';
+
+    const wrapper = mountSection();
+    const editor = wrapper.find('.comment-textarea');
+    editor.element.textContent = '这是一条测试评论内容';
+    await editor.trigger('input');
+
+    const submitBtn = wrapper.find('.stub-button');
+    await submitBtn.trigger('click');
+    await flushPromises();
+
+    // 未配置时拦截 replyFeed 并唤起 shuzilmGuideState
+    expect(mocks.replyFeed).not.toHaveBeenCalled();
+    expect(shuzilmGuideState.visible).toBe(true);
+    expect(shuzilmGuideState.reason).toBe('missing_id');
   });
 });
