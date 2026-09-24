@@ -5,7 +5,6 @@ import {
   canNavigateForward,
   navigateBack,
   navigateForward,
-  reloadCurrentPage,
 } from '../navigation';
 
 function createRouterState(back: unknown, forward: unknown) {
@@ -49,11 +48,5 @@ describe('全局页面导航', () => {
 
     expect(router.replace).toHaveBeenCalledWith('/discover');
     expect(router.forward).not.toHaveBeenCalled();
-  });
-
-  it('刷新按钮调用当前页面刷新', () => {
-    const reload = vi.fn();
-    reloadCurrentPage({ reload });
-    expect(reload).toHaveBeenCalledOnce();
   });
 });

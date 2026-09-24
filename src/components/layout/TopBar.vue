@@ -327,6 +327,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../../stores/app';
 import { useAuthStore } from '../../stores/auth';
 import { useNotificationStore } from '../../stores/notifications';
+import { usePageTabsStore } from '../../stores/pageTabs';
 import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { desktopNotify } from '../../utils/desktopNotify';
@@ -352,7 +353,6 @@ import {
   canNavigateForward,
   navigateBack,
   navigateForward,
-  reloadCurrentPage,
 } from '../../utils/navigation';
 import AppButton from '../common/AppButton.vue';
 import AppIconButton from '../common/AppIconButton.vue';
@@ -361,12 +361,14 @@ import BackToTop from '../common/BackToTop.vue';
 import WindowControls from './WindowControls.vue';
 import { usePlatformShortcuts } from '../../utils/shortcuts';
 import { useDesktopWindow } from '../../composables/useDesktopWindow';
+import { refreshPageTabGeneration } from '../../utils/pageTabs';
 
 const router = useRouter();
 const route = useRoute();
 const appStore = useAppStore();
 const authStore = useAuthStore();
 const notificationStore = useNotificationStore();
+const pageTabsStore = usePageTabsStore();
 const settingsStore = useSettingsStore();
 const { formatShortcut } = usePlatformShortcuts();
 const {
@@ -399,7 +401,7 @@ function goForward() {
 }
 
 function refreshPage() {
-  reloadCurrentPage();
+  refreshPageTabGeneration(pageTabsStore.tabs, route);
 }
 
 const NOTIFICATION_POLL_MIN_INTERVAL_MS = 60 * 1000;

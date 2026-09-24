@@ -28,8 +28,3 @@ export function navigateForward(router: Router): void {
     router.forward();
   }
 }
-
-/** 按浏览器刷新语义重新加载当前页面。 */
-export function reloadCurrentPage(location: Pick<Location, 'reload'> = window.location): void {
-  location.reload();
-}

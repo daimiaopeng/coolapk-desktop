@@ -69,6 +69,12 @@ export function getPageTabId(route: TabRoute): string {
   return `${String(route.name || route.path)}${structuralQuerySuffix(route)}`;
 }
 
+/** 递增当前路由标签的视图代数，让页面内容重新挂载并保留应用外壳。 */
+export function refreshPageTabGeneration(tabs: Array<{ id: string; generation: number }>, route: TabRoute): void {
+  const tab = tabs.find((item) => item.id === getPageTabId(route));
+  if (tab) tab.generation += 1;
+}
+
 /** 根据已有路由信息生成无需等待接口的标签标题和图标。 */
 export function describePageTab(route: TabRoute): PageTabDescriptor {
   const param = firstParam(route);
