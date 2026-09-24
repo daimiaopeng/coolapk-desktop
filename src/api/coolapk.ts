@@ -536,6 +536,10 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_user_profile', { uid });
   }
 
+  static async getUserRemarkList(uid: string) {
+    return await invokeNative('get_user_remark_list', { uid });
+  }
+
   static async updateUserProfile(key: string, value: string) {
     return await invokeNative('update_user_profile', { key, value });
   }
