@@ -1662,8 +1662,29 @@ watch(
 }
 
 @media (max-width: 700px) {
+  .header-content {
+    display: grid;
+    grid-template-columns: 60px minmax(0, 1fr);
+    align-items: start;
+    column-gap: 12px;
+    row-gap: 12px;
+  }
+  .product-info {
+    grid-column: 2;
+    min-width: 0;
+  }
+  .product-title {
+    overflow-wrap: anywhere;
+    line-height: 1.3;
+  }
+  .product-stats {
+    gap: 4px 8px;
+  }
   .header-actions {
+    grid-column: 1 / -1;
     flex-direction: row;
+    justify-content: flex-end;
+    width: 100%;
   }
   .media-grid {
     grid-template-columns: repeat(2, 1fr);

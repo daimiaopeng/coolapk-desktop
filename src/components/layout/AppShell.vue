@@ -31,6 +31,7 @@ import NetworkStatusBanner from '../common/NetworkStatusBanner.vue';
 import MobileTopBar from './MobileTopBar.vue';
 import MobileBottomNav from './MobileBottomNav.vue';
 import PageTabBar from './PageTabBar.vue';
+import { useAndroidBackButton } from '../../utils/androidBackButton';
 
 const route = useRoute();
 const mobileNavigationOpen = ref(false);
@@ -42,6 +43,8 @@ function toggleMobileNavigation() {
 function closeMobileNavigation() {
   mobileNavigationOpen.value = false;
 }
+
+useAndroidBackButton(() => mobileNavigationOpen.value, closeMobileNavigation);
 
 function handleMobileNavigationKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') closeMobileNavigation();

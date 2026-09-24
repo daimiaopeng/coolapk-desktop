@@ -356,6 +356,7 @@ import {
 import { DEVELOPER_UID, DEVELOPER_USERNAME } from '../utils/feedback';
 
 import { useRoute, useRouter } from 'vue-router';
+import { useAndroidBackButton } from '../utils/androidBackButton';
 
 // --- 状态管理 ---
 const route = useRoute();
@@ -1434,6 +1435,14 @@ async function openTargetConversation(uid: string) {
 function showMobileSessionList() {
   mobileChatActive.value = false;
 }
+
+useAndroidBackButton(
+  () => route.path === '/messages'
+    && mobileChatActive.value
+    && typeof window !== 'undefined'
+    && window.matchMedia?.('(max-width: 720px)').matches !== false,
+  showMobileSessionList,
+);
 
 const selectSession = async (session: any) => {
   await saveCurrentDraft();

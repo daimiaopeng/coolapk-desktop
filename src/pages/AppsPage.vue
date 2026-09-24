@@ -466,5 +466,77 @@ onMounted(() => loadApps());
 .action-btn {
   flex-shrink: 0;
 }
-</style>
 
+@media (max-width: 720px) {
+  .page-container {
+    min-width: 0;
+    padding: var(--space-3);
+  }
+
+  .apps-toolbar-bar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .apps-tabs-wrapper {
+    width: 100%;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .apps-tabs-wrapper::-webkit-scrollbar {
+    display: none;
+  }
+
+  .apps-actions-wrapper {
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-mode-switch {
+    width: 100%;
+  }
+
+  .mode-btn {
+    min-width: 0;
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .search-box {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .apps-grid {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-card {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr) auto;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .app-info,
+  .title-row {
+    min-width: 0;
+  }
+
+  .app-meta {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+}
+</style>
