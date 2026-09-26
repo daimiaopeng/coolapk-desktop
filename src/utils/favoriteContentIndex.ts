@@ -202,7 +202,7 @@ async function fetchDetailEntry(feed: any, now: number): Promise<FavoriteContent
   const feedId = feedIdOf(feed);
   if (!feedId) return null;
   try {
-    const response: any = await CoolapkTauriAPI.getFeedDetail(feedId);
+    const response: any = await CoolapkTauriAPI.getPublicFeedDetail(feedId);
     return entryFromFeed(feed, response?.data, now, true);
   } catch (error) {
     console.warn(`获取收藏动态 ${feedId} 的完整正文失败:`, error);

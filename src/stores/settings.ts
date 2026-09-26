@@ -127,7 +127,6 @@ const defaultSettings: AppSettings = {
   autoLoadOriginalImage: true,
   noImageMode: false,
   showDeviceInfo: true,
-  preloadUserProfile: true,
   showHomeMonthlyRank: true,
   showHomeHotTopics: true,
   defaultHomeTab: 'digest',
@@ -280,7 +279,6 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.autoLoadOriginalImage = readBoolean(source.autoLoadOriginalImage, result.autoLoadOriginalImage);
   result.noImageMode = readBoolean(source.noImageMode, result.noImageMode);
   result.showDeviceInfo = readBoolean(source.showDeviceInfo, result.showDeviceInfo);
-  result.preloadUserProfile = readBoolean(source.preloadUserProfile, result.preloadUserProfile);
   result.showHomeMonthlyRank = readBoolean(source.showHomeMonthlyRank, result.showHomeMonthlyRank);
   result.showHomeHotTopics = readBoolean(source.showHomeHotTopics, result.showHomeHotTopics);
   result.downloadPath = readString(source.downloadPath, result.downloadPath);

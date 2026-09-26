@@ -4,14 +4,14 @@ const mocks = vi.hoisted(() => ({
   values: new Map<string, unknown>(),
   getCollectionList: vi.fn(),
   getCollectionItemList: vi.fn(),
-  getFeedDetail: vi.fn(),
+  getPublicFeedDetail: vi.fn(),
 }));
 
 vi.mock('../../api/coolapk', () => ({
   CoolapkTauriAPI: {
     getCollectionList: mocks.getCollectionList,
     getCollectionItemList: mocks.getCollectionItemList,
-    getFeedDetail: mocks.getFeedDetail,
+    getPublicFeedDetail: mocks.getPublicFeedDetail,
   },
 }));
 
@@ -31,7 +31,7 @@ describe('favorite content index', () => {
     mocks.values.clear();
     mocks.getCollectionList.mockReset();
     mocks.getCollectionItemList.mockReset();
-    mocks.getFeedDetail.mockReset();
+    mocks.getPublicFeedDetail.mockReset();
     mocks.getCollectionList.mockImplementation(async (_uid: string, page: number) => ({
       data: page === 1 ? [{ id: 'default', entityId: 'collection-default' }] : [],
     }));
@@ -45,7 +45,7 @@ describe('favorite content index', () => {
       if (page !== 1) return { data: [] };
       return { data: [{ id: '100', entityId: '100', message: '摘要…查看更多', lastupdate: String(version) }] };
     });
-    mocks.getFeedDetail.mockImplementation(async () => ({
+    mocks.getPublicFeedDetail.mockImplementation(async () => ({
       data: { id: '100', title: '旧收藏', message: version === 1 ? '初版正文' : '编辑后的正文', lastupdate: String(version) },
     }));
 
@@ -57,7 +57,7 @@ describe('favorite content index', () => {
     expect(result.updated).toBe(1);
     expect(await searchFavoriteContentIndex('42', '编辑后的正文')).toHaveLength(1);
     expect(await searchFavoriteContentIndex('42', '初版正文')).toHaveLength(0);
-    expect(mocks.getFeedDetail).toHaveBeenCalledTimes(2);
+    expect(mocks.getPublicFeedDetail).toHaveBeenCalledTimes(2);
   });
 
   it('多页同步时收藏单分页始终使用第一页首项作为 firstItem', async () => {
@@ -66,7 +66,7 @@ describe('favorite content index', () => {
       if (page === 2) return { data: [{ id: '280', entityId: '280', message: '摘要' }] };
       return { data: [] };
     });
-    mocks.getFeedDetail.mockImplementation(async (id: string) => ({ data: { id, message: `完整正文 ${id}` } }));
+    mocks.getPublicFeedDetail.mockImplementation(async (id: string) => ({ data: { id, message: `完整正文 ${id}` } }));
 
     const result = await syncFavoriteContentIndex('42');
 

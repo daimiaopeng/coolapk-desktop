@@ -256,7 +256,7 @@ async function compareSnapshot(accountId: string, source: FavoriteExportSource, 
   await mapConcurrent(missing, async (entry) => {
     throwIfCancelled(signal);
     try {
-      await CoolapkTauriAPI.getFeedDetail(entry.id);
+      await CoolapkTauriAPI.getPublicFeedDetail(entry.id);
       removedFromFavorites.push(entry);
     } catch (error) {
       unavailable.push({ ...entry, error: errorMessage(error) });
@@ -295,7 +295,7 @@ export async function buildFavoriteExport(
     throwIfCancelled(signal);
     const id = favoriteFeedId(summary);
     try {
-      const response = await CoolapkTauriAPI.getFeedDetail(id);
+      const response = await CoolapkTauriAPI.getPublicFeedDetail(id);
       throwIfCancelled(signal);
       const detail = response?.data;
       const message = stripFeedMoreSuffix(getFeedDetailMessage(detail) || getFeedDetailMessage(summary));

@@ -1420,7 +1420,7 @@ async function openTargetConversation(uid: string) {
   // 后台补充用户资料（如真实头像与最新昵称），平滑更新
   try {
     const userProf = await withTimeout(
-      CoolapkTauriAPI.getUserProfile(targetUid),
+      CoolapkTauriAPI.getPublicUserProfile(targetUid),
       15_000,
       '用户资料请求超时',
     );

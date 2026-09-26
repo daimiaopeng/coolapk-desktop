@@ -499,6 +499,11 @@ export class CoolapkTauriAPI {
     throw primaryError instanceof Error ? primaryError : new Error(String(primaryError || '动态详情加载失败'));
   }
 
+  /** 后台索引和导出读取公开正文，不携带当前账号 Cookie。 */
+  static async getPublicFeedDetail(feedId: string) {
+    return await invokeNative('get_public_feed_detail', { feedId }, { retry: true, kind: 'feed' });
+  }
+
   // APK fallback: POST /v6/player/getUrl with form field params=<provider payload>.
   static async resolveVideoUrl(requestParams: string) {
     return await invokeNative('resolve_video_url', { requestParams }, { retry: true, kind: 'feed' });
@@ -532,8 +537,16 @@ export class CoolapkTauriAPI {
     return await invokeNative('get_user_space', { uid });
   }
 
+  static async getPublicUserSpace(uid: string) {
+    return await invokeNative('get_public_user_space', { uid });
+  }
+
   static async getUserProfile(uid: string) {
     return await invokeNative('get_user_profile', { uid });
+  }
+
+  static async getPublicUserProfile(uid: string) {
+    return await invokeNative('get_public_user_profile', { uid });
   }
 
   static async getUserRemarkList(uid: string) {

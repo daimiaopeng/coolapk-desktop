@@ -12,6 +12,11 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
     vi.mocked(invoke).mockResolvedValue(okResponse([]));
   });
 
+  it('后台正文读取使用独立的游客详情命令', async () => {
+    await CoolapkTauriAPI.getPublicFeedDetail('123');
+    expect(invoke).toHaveBeenCalledWith('get_public_feed_detail', { feedId: '123' });
+  });
+
   it('酷友圈活动列表调用 get_event_list', async () => {
     await CoolapkTauriAPI.getEventList(3);
     expect(invoke).toHaveBeenCalledWith('get_event_list', { page: 3 });
@@ -194,6 +199,13 @@ describe('CoolapkTauriAPI 内容新页接口封装', () => {
   it('个人资料读取调用 get_user_profile', async () => {
     await CoolapkTauriAPI.getUserProfile('2014');
     expect(invoke).toHaveBeenCalledWith('get_user_profile', { uid: '2014' });
+  });
+
+  it('后台用户资料读取使用游客命令', async () => {
+    await CoolapkTauriAPI.getPublicUserSpace('2014');
+    await CoolapkTauriAPI.getPublicUserProfile('2014');
+    expect(invoke).toHaveBeenCalledWith('get_public_user_space', { uid: '2014' });
+    expect(invoke).toHaveBeenCalledWith('get_public_user_profile', { uid: '2014' });
   });
 
   it('个人资料字段修改调用 update_user_profile', async () => {

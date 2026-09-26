@@ -47,14 +47,6 @@
 
       <div class="setting-row">
         <div class="row-info">
-          <span class="row-label">后台预加载用户信息</span>
-          <span class="row-sub">提前获取用户空间资料，悬停头像时显示更快；关闭后仅在实际悬停时加载，减少无意的用户访问记录</span>
-        </div>
-        <AppSwitch v-model="settingsStore.settings.preloadUserProfile" />
-      </div>
-
-      <div class="setting-row">
-        <div class="row-info">
           <span class="row-label">时间显示格式</span>
           <span class="row-sub">动态时间展示为“X 分钟前”或完整日期时间</span>
         </div>

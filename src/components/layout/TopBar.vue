@@ -954,7 +954,7 @@ let popoverHideTimer: any = null;
 async function fetchUserDetailStats() {
   if (!authStore.isLoggedIn || !authStore.user?.uid) return;
   try {
-    const res: any = await CoolapkTauriAPI.getUserSpace(String(authStore.user.uid));
+    const res: any = await CoolapkTauriAPI.getPublicUserSpace(String(authStore.user.uid));
     const data = res?.data || res || {};
     authStore.updateProfileStats({
       ...data,

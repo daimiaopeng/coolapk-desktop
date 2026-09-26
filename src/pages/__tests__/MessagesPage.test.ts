@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   followUser: vi.fn(),
   uploadImage: vi.fn(),
   readMessage: vi.fn(),
-  getUserProfile: vi.fn(),
+  getPublicUserProfile: vi.fn(),
   showToast: vi.fn(),
   requestConfirmation: vi.fn(),
   createObjectURL: vi.fn(() => 'blob:http://localhost/test-preview'),
@@ -49,7 +49,7 @@ vi.mock('../../api/coolapk', () => ({
     followUser: mocks.followUser,
     uploadImage: mocks.uploadImage,
     readMessage: mocks.readMessage,
-    getUserProfile: mocks.getUserProfile,
+    getPublicUserProfile: mocks.getPublicUserProfile,
   },
 }));
 
@@ -94,7 +94,7 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     mocks.sendPrivateImage.mockResolvedValue({ data: [{ id: 999, message_pic: '/message/2026/09/test_image.jpg' }] });
     mocks.sendPrivateMessage.mockResolvedValue({ data: [{ id: 1000, message: '测试文本' }] });
     mocks.followUser.mockResolvedValue({ code: 200 });
-    mocks.getUserProfile.mockResolvedValue({ data: { isFollow: 0 } });
+    mocks.getPublicUserProfile.mockResolvedValue({ data: { isFollow: 0 } });
     mocks.requestConfirmation.mockResolvedValue(true);
     mocks.readMessage.mockResolvedValue({ code: 200 });
   });
@@ -167,7 +167,7 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     const w = await mountMessagesPage();
     const followButton = w.find('.follow-action-btn');
     expect(followButton.exists()).toBe(true);
-    expect(mocks.getUserProfile).not.toHaveBeenCalled();
+    expect(mocks.getPublicUserProfile).not.toHaveBeenCalled();
 
     await followButton.trigger('click');
     await flushPromises();
@@ -208,7 +208,7 @@ describe('MessagesPage 粘贴图片发送功能', () => {
   });
 
   it('APK 不查询 isFollow，服务端返回提示时直接调用关注接口', async () => {
-    mocks.getUserProfile.mockResolvedValue({ data: { isFollow: 1 } });
+    mocks.getPublicUserProfile.mockResolvedValue({ data: { isFollow: 1 } });
     mocks.listChatHistory.mockResolvedValue({
       data: [{ id: 'follow-tip-1', entityId: 'follow-tip-1', entityType: 'messageExtra', entityTemplate: 'float', title: '关注对方即可让TA与你无限制聊天' }],
     });
@@ -233,7 +233,7 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     await followButton.trigger('click');
     await flushPromises();
 
-    expect(mocks.getUserProfile).not.toHaveBeenCalled();
+    expect(mocks.getPublicUserProfile).not.toHaveBeenCalled();
     expect(mocks.followUser).toHaveBeenCalledWith('20002');
     expect(mocks.showToast).not.toHaveBeenCalledWith('已经关注过该酷友了，无需重复关注', 'info');
   });

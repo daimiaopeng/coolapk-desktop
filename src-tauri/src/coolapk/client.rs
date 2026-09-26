@@ -3536,6 +3536,22 @@ impl CoolapkClient {
         ))
     }
 
+    /// 后台索引与导出使用游客设备读取公开动态，避免将未打开的帖子记入当前账号的浏览历史。
+    pub async fn get_public_feed_detail(&self, feed_id: &str) -> Result<Value, String> {
+        let query = [("id", feed_id.to_string())];
+        let mut errors = Vec::new();
+        for api_origin in ["https://api.coolapk.com", "https://api2.coolapk.com"] {
+            match self.public_api_get_from(api_origin, "/v6/feed/detail", &query).await {
+                Ok(value) => match wrap_api_data(value) {
+                    Ok(detail) => return Ok(detail),
+                    Err(error) => errors.push(format!("{api_origin}: {error}")),
+                },
+                Err(error) => errors.push(format!("{api_origin}: {error}")),
+            }
+        }
+        Err(format!("公开动态详情加载失败：{}", errors.join("；")))
+    }
+
     /// APK 二次编辑先读取 changeDetail，服务端在这里返回可编辑状态和原始内容。
     pub async fn get_editable_feed(&self, feed_id: &str) -> Result<Value, String> {
         wrap_api_data(self.api_get("/v6/feed/changeDetail", &[("id", feed_id.to_string()), ("rid", String::new()), ("noticeId", String::new()), ("fromApi", String::new())]).await?)
@@ -3916,18 +3932,40 @@ impl CoolapkClient {
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
     }
 
+    async fn get_user_data(&self, path: &str, uid: &str, guest: bool) -> Result<Value, String> {
+        let query = [("uid", uid.to_string())];
+        if !guest {
+            return wrap_api_data(self.api_get(path, &query).await?);
+        }
+
+        let mut errors = Vec::new();
+        for api_origin in ["https://api.coolapk.com", "https://api2.coolapk.com"] {
+            match self.public_api_get_from(api_origin, path, &query).await {
+                Ok(value) => match wrap_api_data(value) {
+                    Ok(data) => return Ok(data),
+                    Err(error) => errors.push(format!("{api_origin}: {error}")),
+                },
+                Err(error) => errors.push(format!("{api_origin}: {error}")),
+            }
+        }
+        Err(format!("游客用户资料加载失败：{}", errors.join("；")))
+    }
+
     pub async fn get_user_space(&self, uid: &str) -> Result<Value, String> {
-        wrap_api_data(
-            self.api_get("/v6/user/space", &[("uid", uid.to_string())])
-                .await?,
-        )
+        self.get_user_data("/v6/user/space", uid, false).await
+    }
+
+    /// 后台读取使用游客设备与凭据，不携带登录 Cookie。
+    pub async fn get_public_user_space(&self, uid: &str) -> Result<Value, String> {
+        self.get_user_data("/v6/user/space", uid, true).await
     }
 
     pub async fn get_user_profile(&self, uid: &str) -> Result<Value, String> {
-        wrap_api_data(
-            self.api_get("/v6/user/profile", &[("uid", uid.to_string())])
-                .await?,
-        )
+        self.get_user_data("/v6/user/profile", uid, false).await
+    }
+
+    pub async fn get_public_user_profile(&self, uid: &str) -> Result<Value, String> {
+        self.get_user_data("/v6/user/profile", uid, true).await
     }
 
     /// 读取当前登录用户维护的用户备注列表。

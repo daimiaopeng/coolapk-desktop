@@ -78,7 +78,8 @@ describe('HistoryPage 点击行为', () => {
   it('点击动态条目卡片 → 进入完整动态页并保存上下文', async () => {
     const { wrapper, appStore } = await mountPage();
     const items = wrapper.findAll('.history-item');
-    expect(items).toHaveLength(2);
+    expect(items).toHaveLength(1);
+    expect(mocks.getHitHistory).toHaveBeenCalledWith(1, 'feed', undefined, undefined);
 
     await items[0].trigger('click');
     expect(mocks.router.push).toHaveBeenCalledWith('/feed/72727311');
@@ -105,25 +106,30 @@ describe('HistoryPage 点击行为', () => {
     expect(mocks.router.resolve).toHaveBeenCalled();
   });
 
-  it('点击用户条目 → 跳转用户主页', async () => {
-    const { wrapper, appStore } = await mountPage();
-    const items = wrapper.findAll('.history-item');
+  it('浏览历史只展示帖子，不混入用户和最近常逛记录', async () => {
+    const { wrapper } = await mountPage();
+    expect(wrapper.findAll('.history-item')).toHaveLength(1);
+    expect(wrapper.text()).not.toContain('测试用户');
+    expect(mocks.getRecentHistory).not.toHaveBeenCalled();
+  });
 
-    await items[1].trigger('click');
-    expect(appStore.feedDetailContexts).toEqual({});
-    expect(mocks.router.push).toHaveBeenCalledWith('/user/123456');
+  it('兼容接口直接返回的 feed 实体及无 URL 的历史编号', async () => {
+    const { wrapper } = await mountPage([
+      { id: 'feed:88', historyType: 'feed', entityType: 'feed', title: '测试帖子', dateline: 1786022084 },
+      userItem,
+    ]);
+    expect(wrapper.findAll('.history-item')).toHaveLength(1);
+    await wrapper.find('.history-item').trigger('click');
+    expect(mocks.router.push).toHaveBeenCalledWith('/feed/88');
   });
 
   it('历史接口字段为非字符串时仍能正常渲染', async () => {
     const nonStringItems = [
       { id: 1, title: 123, description: '', logo: '', url: '/feed/1', type: {}, entityType: {}, target_type: [], dateline: 1786022084 },
-      { id: 2, title: '测试动态', description: '', logo: '', url: { path: '/feed/2' }, type: 'feed', dateline: 1786022084 },
+      { id: 2, title: '测试动态', description: '', logo: '', url: { path: '/feed/2' }, historyType: 'feed', type: 'feed', dateline: 1786022084 },
     ];
     const { wrapper } = await mountPage(nonStringItems);
 
-    expect(wrapper.findAll('.history-item')).toHaveLength(2);
-    await wrapper.findAll('.filter-btn')[1].trigger('click');
-    await flushPromises();
     expect(wrapper.findAll('.history-item')).toHaveLength(2);
   });
 
@@ -134,7 +140,7 @@ describe('HistoryPage 点击行为', () => {
     yesterday.setDate(today.getDate() - 1);
     const historyData = [
       { ...feedItem, id: 'feed:today', dateline: Math.floor(today.getTime() / 1000) },
-      { ...userItem, id: 'user:yesterday', dateline: Math.floor(yesterday.getTime() / 1000) },
+      { ...feedItem, id: 'feed:yesterday', url: '/feed/2', dateline: Math.floor(yesterday.getTime() / 1000) },
     ];
 
     const { wrapper } = await mountPage(historyData);

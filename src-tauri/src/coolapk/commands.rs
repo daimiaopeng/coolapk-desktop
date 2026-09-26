@@ -906,6 +906,11 @@ pub async fn get_feed_detail(state: State<'_, AppState>, feed_id: String) -> Res
 }
 
 #[tauri::command]
+pub async fn get_public_feed_detail(state: State<'_, AppState>, feed_id: String) -> Result<Value, String> {
+    state.client.get_public_feed_detail(&feed_id).await
+}
+
+#[tauri::command]
 pub async fn get_editable_feed(state: State<'_, AppState>, feed_id: String) -> Result<Value, String> {
     state.client.get_editable_feed(&feed_id).await
 }
@@ -1065,8 +1070,18 @@ pub async fn get_user_space(state: State<'_, AppState>, uid: String) -> Result<V
 }
 
 #[tauri::command]
+pub async fn get_public_user_space(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
+    state.client.get_public_user_space(&uid).await
+}
+
+#[tauri::command]
 pub async fn get_user_profile(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
     state.client.get_user_profile(&uid).await
+}
+
+#[tauri::command]
+pub async fn get_public_user_profile(state: State<'_, AppState>, uid: String) -> Result<Value, String> {
+    state.client.get_public_user_profile(&uid).await
 }
 
 #[tauri::command]

@@ -11,7 +11,7 @@ vi.mock('vue-router', async (importOriginal) => {
 
 vi.mock('../../../api/coolapk', () => ({
   CoolapkTauriAPI: {
-    getUserSpace: vi.fn().mockResolvedValue({ data: {} }),
+    getPublicUserSpace: vi.fn().mockResolvedValue({ data: {} }),
     followQuestion: vi.fn(),
     unfollowQuestion: vi.fn(),
   },

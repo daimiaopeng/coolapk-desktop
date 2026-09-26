@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useSettingsStore } from '../../stores/settings';
 import { CoolapkTauriAPI } from '../../api/coolapk';
-import { preloadUserProfile } from '../userProfilePreloader';
+import { getUserProfileCached, preloadUserProfile } from '../userProfilePreloader';
 
 describe('userProfilePreloader', () => {
   afterEach(() => {
@@ -9,27 +8,25 @@ describe('userProfilePreloader', () => {
     vi.useRealTimers();
   });
 
-  it('关闭后台预加载时不请求用户空间', async () => {
+  it('后台自动预加载使用游客用户空间', async () => {
     vi.useFakeTimers();
-    const settingsStore = useSettingsStore();
-    settingsStore.settings.preloadUserProfile = false;
-    const getUserSpace = vi.spyOn(CoolapkTauriAPI, 'getUserSpace').mockResolvedValue({ data: { uid: 'disabled-user' } });
+    const getUserSpace = vi.spyOn(CoolapkTauriAPI, 'getUserSpace');
+    const getPublicUserSpace = vi.spyOn(CoolapkTauriAPI, 'getPublicUserSpace').mockResolvedValue({ data: { uid: 'background-user' } });
 
-    preloadUserProfile('disabled-user');
+    preloadUserProfile('background-user');
     await vi.runAllTimersAsync();
 
+    expect(getPublicUserSpace).toHaveBeenCalledWith('background-user');
     expect(getUserSpace).not.toHaveBeenCalled();
   });
 
-  it('开启后台预加载时继续请求用户空间', async () => {
-    vi.useFakeTimers();
-    const settingsStore = useSettingsStore();
-    settingsStore.settings.preloadUserProfile = true;
+  it('悬停即时读取也使用游客用户空间', async () => {
     const getUserSpace = vi.spyOn(CoolapkTauriAPI, 'getUserSpace').mockResolvedValue({ data: { uid: 'enabled-user' } });
+    const getPublicUserSpace = vi.spyOn(CoolapkTauriAPI, 'getPublicUserSpace').mockResolvedValue({ data: { uid: 'hover-user' } });
 
-    preloadUserProfile('enabled-user');
-    await vi.runAllTimersAsync();
+    await getUserProfileCached('hover-user');
 
-    expect(getUserSpace).toHaveBeenCalledWith('enabled-user');
+    expect(getPublicUserSpace).toHaveBeenCalledWith('hover-user');
+    expect(getUserSpace).not.toHaveBeenCalled();
   });
 });

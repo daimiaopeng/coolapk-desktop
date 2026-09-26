@@ -40,10 +40,10 @@ function enqueueRequest<T>(loader: () => Promise<T>): Promise<T> {
 }
 
 /**
- * 后台预取动态完整正文。同一条动态的并发调用共享同一个请求，
- * 完成后保存在当前应用会话中，避免列表卡片重复访问详情接口。
+ * 用户主动展开正文时读取完整内容。同一条动态的并发调用共享请求，
+ * 完成后保存在当前应用会话中，避免重复访问详情接口。
  */
-export function preloadFeedFullText(feedId: string | number): Promise<string> {
+export function loadFeedFullText(feedId: string | number): Promise<string> {
   const key = String(feedId).trim();
   if (!key) return Promise.reject(new Error('动态编号为空'));
 
@@ -54,7 +54,7 @@ export function preloadFeedFullText(feedId: string | number): Promise<string> {
   if (pending) return pending;
 
   const request = enqueueRequest(async () => {
-    const response: any = await CoolapkTauriAPI.getFeedDetail(key);
+    const response: any = await CoolapkTauriAPI.getPublicFeedDetail(key);
     const message = getFeedDetailMessage(response?.data);
     if (!message) throw new Error('动态详情没有返回完整正文');
     fullTextCache.set(key, message);
@@ -79,7 +79,7 @@ export function clearFeedFullTextCache() {
   requestQueue.splice(0, requestQueue.length);
 }
 
-/** 仅用于验证后台请求没有超过并发上限。 */
+/** 仅用于验证全文请求没有超过并发上限。 */
 export function getFeedFullTextRequestStats() {
   return {
     active: activeRequestCount,
