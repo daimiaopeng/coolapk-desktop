@@ -982,7 +982,7 @@ async function fetchTabConfig() {
 }
 
 /** 动态依据 Tab 的 url / page_name 请求数据流 */
-async function fetchTabApi(tabKey: string, p: number) {
+async function fetchTabApi(tabKey: string, p: number, background = false) {
   const matchedTab = orderedDynamicTabs.value.find(
     t => (t.page_name || t.url || String(t.id || t.title)) === tabKey
   );
@@ -1019,7 +1019,7 @@ async function fetchTabApi(tabKey: string, p: number) {
   }
 
   if (matchedTab ? isHotConfigTab(matchedTab) : isHotTab.value) {
-    return await CoolapkTauriAPI.getRankFeeds(activeHotRank.value, p);
+    return await CoolapkTauriAPI.getRankFeeds(activeHotRank.value, p, background);
   }
 
   const targetUrl = matchedTab ? (matchedTab.url || matchedTab.page_name || '') : tabKey;
@@ -1065,7 +1065,7 @@ async function fetchTabApi(tabKey: string, p: number) {
 
   // 1. 如果匹配到具体 URL，调用通用板块/页面数据流
   if (targetUrl) {
-    return await CoolapkTauriAPI.getBoardFeeds(targetUrl, p);
+    return await CoolapkTauriAPI.getBoardFeeds(targetUrl, p, background);
   }
 
   // 2. 默认保底请求
@@ -1077,7 +1077,7 @@ async function prefetchNextPage() {
   isPrefetching.value = true;
   try {
     const nextP = page.value;
-    const res: any = await fetchTabApi(activeTab.value, nextP);
+    const res: any = await fetchTabApi(activeTab.value, nextP, true);
     if (res && res.data && Array.isArray(res.data)) {
       const validItems = res.data.filter((item: any) => hasFeedRenderableContent(item) && !shouldHideFeed(item, settingsStore.settings));
       if (validItems.length > 0) {

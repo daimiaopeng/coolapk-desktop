@@ -341,8 +341,8 @@ export class CoolapkTauriAPI {
     return await safeFetch(`/feeds/hot?page=${page}`, 'get_hot_feeds', { page });
   }
 
-  static async getRankFeeds(rankType: string, page: number = 1) {
-    return await invokeNative('get_rank_feeds', { rankType, page });
+  static async getRankFeeds(rankType: string, page: number = 1, background = false) {
+    return await invokeNative('get_rank_feeds', { rankType, page, background });
   }
 
   // 3. 全站最新
@@ -365,8 +365,8 @@ export class CoolapkTauriAPI {
     return await safeFetch(`/feeds/secondhand?page=${page}`, 'get_secondhand_feeds', { page });
   }
 
-  static async getBoardFeeds(boardTag: string, page: number = 1) {
-    return await invokeNative('get_board_feeds', { boardTag, page });
+  static async getBoardFeeds(boardTag: string, page: number = 1, background = false) {
+    return await invokeNative('get_board_feeds', { boardTag, page, background });
   }
 
   // 游戏中心榜单与列表

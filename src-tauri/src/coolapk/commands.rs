@@ -467,8 +467,12 @@ pub async fn get_rank_feeds(
     state: State<'_, AppState>,
     rank_type: String,
     page: u32,
+    background: Option<bool>,
 ) -> Result<Value, String> {
-    state.client.get_rank_feeds(&rank_type, page).await
+    state
+        .client
+        .get_rank_feeds_with_mode(&rank_type, page, background.unwrap_or(false))
+        .await
 }
 
 #[tauri::command]
@@ -491,8 +495,12 @@ pub async fn get_board_feeds(
     state: State<'_, AppState>,
     board_tag: String,
     page: u32,
+    background: Option<bool>,
 ) -> Result<Value, String> {
-    state.client.get_board_feeds(&board_tag, page).await
+    state
+        .client
+        .get_board_feeds_with_mode(&board_tag, page, background.unwrap_or(false))
+        .await
 }
 
 #[tauri::command]

@@ -1527,12 +1527,20 @@ impl CoolapkClient {
             .read()
             .map_err(|_| "failed to read login state".to_string())?
             .clone();
+        let mut cookie_attached = false;
         if let Some(cookie) = cookie {
             let full_cookie = self.cookie_for_path(&cookie, path);
             if let Ok(header_val) = reqwest::header::HeaderValue::from_str(&full_cookie) {
                 request = request.header(COOKIE, header_val);
+                cookie_attached = true;
             }
         }
+        log::debug!(
+            "api.request method={} path={} cookie_attached={}",
+            method_name,
+            log_path,
+            cookie_attached
+        );
         if let Some(form) = form {
             request = request.form(form);
         }
@@ -1558,6 +1566,20 @@ impl CoolapkClient {
         self.request_api(Method::GET, path, query, None).await
     }
 
+    async fn api_get_for_list(
+        &self,
+        path: &str,
+        query: &[(&str, String)],
+        guest: bool,
+    ) -> Result<Value, String> {
+        if guest {
+            self.public_api_get_from("https://api.coolapk.com", path, query)
+                .await
+        } else {
+            self.api_get(path, query).await
+        }
+    }
+
     async fn public_api_get_from(
         &self,
         api_origin: &str,
@@ -1576,6 +1598,7 @@ impl CoolapkClient {
         let public_token = CoolapkAuth::new(public_device_code.clone()).get_app_token()?;
         let device_header = HeaderValue::from_str(&public_device_code)
             .map_err(|_| "公开读取设备码格式无效".to_string())?;
+        log::debug!("api.guest_request path={} cookie_attached=false", log_path);
         let response = self
             .client
             .get(format!("{api_origin}{path}"))
@@ -2563,8 +2586,12 @@ impl CoolapkClient {
     //   likenum（点赞数）  → 6659/3630/1586/1545/1256... ← 点赞热榜，采用此排序
     // #/feed/hotList 与 V9_HOME_TAB_RANKING 主列表点赞仅个位数/千位以下。
     pub async fn get_hot_feeds(&self, page: u32) -> Result<Value, String> {
+        self.get_hot_feeds_with_mode(page, false).await
+    }
+
+    async fn get_hot_feeds_with_mode(&self, page: u32, guest: bool) -> Result<Value, String> {
         let res = self
-            .api_get(
+            .api_get_for_list(
                 "/v6/page/dataList",
                 &[
                     (
@@ -2574,6 +2601,7 @@ impl CoolapkClient {
                     ("title", "热门".to_string()),
                     ("page", page.to_string()),
                 ],
+                guest,
             )
             .await;
 
@@ -2588,12 +2616,13 @@ impl CoolapkClient {
 
         // 备用热榜 API: /v6/page/dataList?url=%23%2Ffeed%2FstatHotList%3Fperiod%3D24h
         let fallback = self
-            .api_get(
+            .api_get_for_list(
                 "/v6/page/dataList",
                 &[
                     ("url", "#/feed/statHotList?period=24h".to_string()),
                     ("page", page.to_string()),
                 ],
+                guest,
             )
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&fallback) }))
@@ -2601,19 +2630,29 @@ impl CoolapkClient {
 
     /// 热榜页内的五种榜单。周榜沿用带降级的主热榜，其余榜单使用官方统计页参数。
     pub async fn get_rank_feeds(&self, rank_type: &str, page: u32) -> Result<Value, String> {
+        self.get_rank_feeds_with_mode(rank_type, page, false).await
+    }
+
+    pub async fn get_rank_feeds_with_mode(
+        &self,
+        rank_type: &str,
+        page: u32,
+        guest: bool,
+    ) -> Result<Value, String> {
         if rank_type == "week" {
-            return self.get_hot_feeds(page).await;
+            return self.get_hot_feeds_with_mode(page, guest).await;
         }
         if rank_type == "picture" {
-            return self.get_cool_picture_rank(page).await;
+            return self.get_cool_picture_rank_with_mode(page, guest).await;
         }
 
         let rank_url =
             rank_feed_url(rank_type).ok_or_else(|| format!("不支持的热榜类型：{rank_type}"))?;
         let raw = self
-            .api_get(
+            .api_get_for_list(
                 "/v6/page/dataList",
                 &[("url", rank_url.to_string()), ("page", page.to_string())],
+                guest,
             )
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
@@ -2730,8 +2769,12 @@ impl CoolapkClient {
     // 实测：digestList?type=8 返回的动态点赞全为 0（数据异常），
     // 官方酷图榜入口为 statList?statType=30days&sortField=likenum&type=8（点赞 256/169/124）
     pub async fn get_cool_picture_rank(&self, page: u32) -> Result<Value, String> {
+        self.get_cool_picture_rank_with_mode(page, false).await
+    }
+
+    async fn get_cool_picture_rank_with_mode(&self, page: u32, guest: bool) -> Result<Value, String> {
         let raw = self
-            .api_get(
+            .api_get_for_list(
                 "/v6/page/dataList",
                 &[
                     (
@@ -2741,6 +2784,7 @@ impl CoolapkClient {
                     ("title", "酷图热榜".to_string()),
                     ("page", page.to_string()),
                 ],
+                guest,
             )
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
@@ -3209,11 +3253,26 @@ impl CoolapkClient {
     }
 
     pub async fn get_board_feeds(&self, board_tag: &str, page: u32) -> Result<Value, String> {
+        self.get_board_feeds_with_mode(board_tag, page, false).await
+    }
+
+    pub async fn get_board_feeds_with_mode(
+        &self,
+        board_tag: &str,
+        page: u32,
+        guest: bool,
+    ) -> Result<Value, String> {
         let tag = board_tag.trim();
         if tag == "/main/headline" || tag == "headline" || tag == "V9_HOME_TAB_HEADLINE" {
+            if guest {
+                return Err("头条页不支持后台预取".to_string());
+            }
             return self.get_headline_feeds(page).await;
         }
         if tag == "/main/indexV8" || tag == "index_v8" {
+            if guest {
+                return Err("头条页不支持后台预取".to_string());
+            }
             return self.get_index_v8_feeds(page).await;
         }
 
@@ -3226,12 +3285,13 @@ impl CoolapkClient {
         };
 
         let raw = self
-            .api_get(
+            .api_get_for_list(
                 "/v6/page/dataList",
                 &[
                     ("url", url_param),
                     ("page", page.to_string()),
                 ],
+                guest,
             )
             .await?;
         Ok(json!({ "code": 200, "data": Self::extract_cleaned_list(&raw) }))
