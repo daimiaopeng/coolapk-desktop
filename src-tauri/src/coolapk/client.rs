@@ -6753,7 +6753,9 @@ impl CoolapkClient {
             return Err("官方登录 WebView 没有返回有效的 SESSID".to_string());
         }
         self.set_user_cookie(cookie.clone())?;
+        log::info!("login.cookie_validation_started");
         let result = self.check_login_info().await?;
+        log::info!("login.cookie_validation_succeeded");
         let data = result.get("data").unwrap_or(&result);
         let uid = data
             .get("uid")
@@ -6802,6 +6804,7 @@ impl CoolapkClient {
 
         // accessToken 只应使用本次 WebView 回调的会话，避免把旧账号的 uid/token 带给一次性授权码。
         self.set_user_cookie(cookie.clone())?;
+        log::info!("login.access_token_request_started");
         let result = wrap_api_data(
             self.api_get(
                 "/v6/account/accessToken",
@@ -6809,6 +6812,7 @@ impl CoolapkClient {
             )
             .await?,
         )?;
+        log::info!("login.access_token_response_accepted");
         let data = result.get("data").unwrap_or(&result);
         let uid = data
             .get("uid")
@@ -6836,6 +6840,7 @@ impl CoolapkClient {
         {
             return Err("酷安授权接口未返回完整登录信息".to_string());
         }
+        log::info!("login.access_token_identity_complete");
 
         let stored_cookie = merge_cookie_value(&cookie, "uid", &encode_login_cookie_value(&uid));
         let stored_cookie = merge_cookie_value(
