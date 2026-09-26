@@ -396,6 +396,10 @@ jobs:
           aab="src-tauri/gen/android/app/build/outputs/bundle/universalRelease/app-universal-release.aab"
           test -f "$apk"
           test -f "$aab"
+          verification="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk")"
+          printf '%s\n' "$verification"
+          grep -Fqx 'Verified using v1 scheme (JAR signing): true' <<< "$verification"
+          grep -Fqx 'Verified using v2 scheme (APK Signature Scheme v2): true' <<< "$verification"
           cp "$apk" "android-release/coolapk-${GITHUB_REF_NAME}-android-arm64.apk"
           cp "$aab" "android-release/coolapk-${GITHUB_REF_NAME}-android-arm64.aab"
 

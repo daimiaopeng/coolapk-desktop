@@ -93,8 +93,19 @@ function ensureAndroidProject() {
       '        getByName("release") {',
       `        getByName("release") {\n            if (signingPropertiesFile.exists()) {\n                signingConfig = signingConfigs.getByName("release")\n            }`,
     );
-    writeFileSync(appBuildGradle, buildGradle, 'utf8');
   }
+  // Gradle 在 minSdk >= 24 时可能只生成 v2 签名；同时启用 v1 兼容旧版文件管理器的签名检查。
+  const signingStorePassword = 'storePassword = signingProperties.getProperty("storePassword")';
+  if (!buildGradle.includes('enableV1Signing = true')) {
+    if (!buildGradle.includes(signingStorePassword)) {
+      throw new Error('Android Release 签名配置缺少 storePassword，无法启用 v1/v2 签名');
+    }
+    buildGradle = buildGradle.replace(
+      signingStorePassword,
+      `${signingStorePassword}\n                enableV1Signing = true\n                enableV2Signing = true`,
+    );
+  }
+  writeFileSync(appBuildGradle, buildGradle, 'utf8');
 
   const loginActivityMarker = 'android:name=".LoginActivity"';
   let manifest = readFileSync(androidManifest, 'utf8');
