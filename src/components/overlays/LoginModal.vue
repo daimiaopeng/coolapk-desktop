@@ -234,6 +234,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useAuthStore } from '../../stores/auth';
 import { CoolapkTauriAPI } from '../../api/coolapk';
 import { useAndroidBackButton } from '../../utils/androidBackButton';
+import { logDiagnostic } from '../../utils/diagnosticLogger';
 import AppButton from '../common/AppButton.vue';
 import AppAvatar from '../common/AppAvatar.vue';
 import AppConfirmDialog from '../common/AppConfirmDialog.vue';
@@ -274,7 +275,7 @@ function completeWebLogin() {
 }
 
 async function handleOpenWebAuth() {
-  console.log('[login-debug] handleOpenWebAuth -> openLoginWebview()');
+  logDiagnostic('info', 'login', 'webview_requested');
   webLoginCompleted = false;
   debugStatus.value = '已调用 open_login_webview，等待登录窗口';
   errorMessage.value = '';
@@ -289,7 +290,7 @@ async function handleOpenWebAuth() {
 }
 
 async function handleCheckWebLogin(showFailure = true): Promise<boolean> {
-  console.log('[login-debug] handleCheckWebLogin start');
+  logDiagnostic('info', 'login', 'status_check_started');
   if (statusPollInFlight) return false;
   statusPollInFlight = true;
   if (showFailure) {
@@ -299,7 +300,7 @@ async function handleCheckWebLogin(showFailure = true): Promise<boolean> {
   }
   try {
     const isLoggedIn = await authStore.checkStatus();
-    console.log('[login-debug] checkStatus result =', isLoggedIn);
+    logDiagnostic('info', 'login', 'status_check_finished', `logged_in=${isLoggedIn}`);
     if (isLoggedIn) {
       completeWebLogin();
       return true;
@@ -312,7 +313,7 @@ async function handleCheckWebLogin(showFailure = true): Promise<boolean> {
     }
     return false;
   } catch (e: any) {
-    console.log('[login-debug] checkStatus error =', e?.message || e);
+    logDiagnostic('warn', 'login', 'status_check_failed');
     if (showFailure) errorMessage.value = '同步校验失败: ' + (e?.message || e);
     return false;
   } finally {
@@ -324,7 +325,7 @@ async function handleCheckWebLogin(showFailure = true): Promise<boolean> {
 // 监听 Rust 端发送的网页窗口自动重定向闭环事件
 let unlistenFn: any = null;
 listen('login-window-closed', () => {
-  console.log('[login-debug] received login-window-closed event');
+  logDiagnostic('info', 'login', 'window_closed_event');
   debugStatus.value = '收到 login-window-closed 事件，触发同步校验';
   void handleCheckWebLogin(false);
 }).then(unlisten => {

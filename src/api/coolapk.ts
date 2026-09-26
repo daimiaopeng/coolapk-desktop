@@ -3,6 +3,7 @@ import { router } from '../router';
 import { getFeedDetailMessage, hasFeedMoreSuffix, parseWebFeedDetail } from '../utils/feedContent';
 import { normalizeCoolapkRoute } from '../utils/coolapkRoute';
 import { requestWithPolicy, type RequestKind } from '../utils/requestCenter';
+import { logDiagnostic } from '../utils/diagnosticLogger';
 
 async function safeFetchOnce(pythonEndpoint: string, tauriCmd: string, tauriArgs: any = {}) {
   let rustError: unknown;
@@ -53,11 +54,19 @@ async function safeFetch(pythonEndpoint: string, tauriCmd: string, tauriArgs: an
 type NativeRequestOptions = { retry?: boolean; maxAttempts?: number; timeoutMs?: number; kind?: RequestKind };
 
 async function invokeNative(tauriCmd: string, tauriArgs: any = {}, options: NativeRequestOptions = {}) {
-  return requestWithPolicy(tauriCmd, async () => {
-    const response = await invoke(tauriCmd, tauriArgs);
-    if (response && (response as any).code === 200) return response as any;
-    throw new Error((response as any)?.message || `${tauriCmd} 返回格式不正确`);
-  }, options);
+  const started = Date.now();
+  try {
+    const result = await requestWithPolicy(tauriCmd, async () => {
+      const response = await invoke(tauriCmd, tauriArgs);
+      if (response && (response as any).code === 200) return response as any;
+      throw new Error((response as any)?.message || `${tauriCmd} 返回格式不正确`);
+    }, options);
+    logDiagnostic('debug', 'api', 'request_ok', `${tauriCmd} elapsed_ms=${Date.now() - started}`);
+    return result;
+  } catch (error) {
+    logDiagnostic('warn', 'api', 'request_failed', `${tauriCmd} elapsed_ms=${Date.now() - started}`);
+    throw error;
+  }
 }
 
 export class CoolapkTauriAPI {

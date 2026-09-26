@@ -1,4 +1,5 @@
 pub mod coolapk;
+pub mod diagnostics;
 pub mod download_manager;
 
 use coolapk::client::CoolapkClient;
@@ -60,6 +61,7 @@ use coolapk::commands::{
     vote_goods_list_item,
 };
 use download_manager::DownloadManager;
+use diagnostics::{get_diagnostic_logs, clear_diagnostic_logs, get_diagnostic_verbose, set_diagnostic_verbose};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::Manager;
@@ -775,7 +777,22 @@ pub fn run() {
     };
 
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new()
+            .clear_targets()
+            .target(tauri_plugin_log::Target::new(
+                tauri_plugin_log::TargetKind::LogDir { file_name: Some("coolapk-diagnostics".to_string()) },
+            ))
+            .target(tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout))
+            .level(log::LevelFilter::Debug)
+            .filter(|metadata| {
+                (metadata.target().starts_with("coolapk_desktop_lib") || metadata.target().starts_with("webview"))
+                    && (metadata.level() <= log::Level::Info || diagnostics::verbose_enabled())
+            })
+            .max_file_size(2_000_000)
+            .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(4))
+            .build())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::default().build());
@@ -1218,6 +1235,10 @@ pub fn run() {
             clear_app_cache,
             clean_expired_cache,
             open_cache_directory,
+            get_diagnostic_logs,
+            clear_diagnostic_logs,
+            get_diagnostic_verbose,
+            set_diagnostic_verbose,
             get_album_detail,
             get_album_list,
             get_album_replies,

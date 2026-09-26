@@ -178,6 +178,7 @@ import { registerGlobalSelectionClear } from './utils/selection';
 import { getPlatformInfo } from './utils/platform';
 import { syncFavoriteContentIndex } from './utils/favoriteContentIndex';
 import { usePageTabsStore } from './stores/pageTabs';
+import { logDiagnostic } from './utils/diagnosticLogger';
 
 const { isSidebarTransitionActive, resetSidebarTransition } = useSidebarTransition();
 
@@ -244,6 +245,7 @@ function formatBytes(bytes: number) {
 }
 
 async function checkForUpdate(manual = false) {
+  logDiagnostic('info', 'update', 'check_started', `manual=${manual}`);
   try {
     await refreshUpdatePlatform();
     if (manual && canInstallInApp.value && !readyInfo.value) {
@@ -257,6 +259,7 @@ async function checkForUpdate(manual = false) {
       undefined,
       updatePackageType.value
     );
+    logDiagnostic('info', 'update', 'check_finished', `has_new=${result.hasNew} has_package=${Boolean(result.installerUrl)}`);
     const latestVersion = normalizeVersion(result.latestVersion || '') || '';
     const ignoredVersion = normalizeVersion(settingsStore.settings.ignoredUpdateVersion) || '';
 
@@ -306,6 +309,7 @@ async function checkForUpdate(manual = false) {
     }
     if (manual || result.hasNew) updateInfo.value = result;
   } catch {
+    logDiagnostic('warn', 'update', 'check_failed');
     if (manual && readyInfo.value) {
       updateInfo.value = null;
       readyUpdateVisible.value = true;
@@ -337,6 +341,7 @@ async function startBackgroundDownload(info: UpdateInfo) {
   }
   if (!canInstallInApp.value || !url || updateDownloadInFlight || downloading.value) return;
   updateDownloadInFlight = true;
+  logDiagnostic('info', 'update', 'download_started');
   updateInfo.value = null;
   downloadError.value = null;
   downloadNotice.value = {
@@ -362,6 +367,7 @@ async function startBackgroundDownload(info: UpdateInfo) {
       speedLimitKbps: settingsStore.settings.updateSpeedLimitKBps,
       proxyUrl: settingsStore.settings.proxyUrl,
     });
+    logDiagnostic('info', 'update', 'download_finished');
     const downloadedVersion = normalizeVersion(info.latestVersion || '') || info.latestVersion || '';
     try {
       await CoolapkTauriAPI.cleanupUpdatePackages(path);
@@ -389,6 +395,7 @@ async function startBackgroundDownload(info: UpdateInfo) {
       );
     }
   } catch (err) {
+    logDiagnostic('error', 'update', 'download_failed');
     downloading.value = null;
     downloadNotice.value = null;
     downloadError.value = `更新包下载失败，请检查网络连接后重试。(${String(err)})`;
@@ -410,11 +417,13 @@ function installNow() {
     return;
   }
   installingUpdate.value = true;
+  logDiagnostic('info', 'update', 'install_requested');
   installPermissionNeeded.value = false;
   void (async () => {
     try {
       await settingsStore.flushSettings();
       const result = await CoolapkTauriAPI.installUpdate(info.path, info.packageType === 'portable');
+      logDiagnostic('info', 'update', 'installer_result', String(result));
       if (isAndroid.value) {
         installPermissionNeeded.value = result === 'permission_required';
         installingUpdate.value = false;
@@ -424,6 +433,7 @@ function installNow() {
       // 下次启动可校验版本和文件是否仍存在，再决定重试或重新下载。
       await CoolapkTauriAPI.quitApp();
     } catch (err) {
+      logDiagnostic('error', 'update', 'install_failed');
       installingUpdate.value = false;
       downloadError.value = `启动安装程序失败：${String(err)}`;
     }

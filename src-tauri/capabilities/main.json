@@ -16,6 +16,8 @@
     "core:tray:allow-set-icon",
     "autostart:default",
     "dialog:default",
+    "log:default",
+    "fs:allow-write-text-file",
     "notification:default",
     "store:default",
     "deep-link:default"

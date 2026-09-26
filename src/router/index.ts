@@ -63,6 +63,7 @@ import ShortcutSettingsPage from '../pages/settings/ShortcutSettingsPage.vue';
 import AboutSettingsPage from '../pages/settings/AboutSettingsPage.vue';
 import StartupSettingsPage from '../pages/settings/StartupSettingsPage.vue';
 import DeviceSettingsPage from '../pages/settings/DeviceSettingsPage.vue';
+import DiagnosticsSettingsPage from '../pages/settings/DiagnosticsSettingsPage.vue';
 import { restoreRouteScrollPosition, saveRouteScrollPosition } from '../utils/routeScroll';
 
 import AuthCallbackView from '../pages/AuthCallbackView.vue';
@@ -149,6 +150,7 @@ const routes = [
       { path: 'shortcuts', component: ShortcutSettingsPage },
       { path: 'startup', component: StartupSettingsPage },
       { path: 'device', component: DeviceSettingsPage },
+      { path: 'diagnostics', component: DiagnosticsSettingsPage },
       { path: 'about', component: AboutSettingsPage },
     ]
   }

@@ -1508,6 +1508,9 @@ impl CoolapkClient {
         if api_origin != "https://api.coolapk.com" && api_origin != "https://api2.coolapk.com" {
             return Err("不受信任的酷安 API 主机".to_string());
         }
+        let started = std::time::Instant::now();
+        let log_path = path.split('?').next().unwrap_or(path);
+        let method_name = method.as_str().to_string();
         let token = self.get_token()?;
         let url = format!("{api_origin}{path}");
         let requested_with = "XMLHttpRequest";
@@ -1534,8 +1537,21 @@ impl CoolapkClient {
             request = request.form(form);
         }
 
-        let response = request.send().await.map_err(|e| e.to_string())?;
-        response_json(response).await
+        let response = request.send().await.map_err(|error| {
+            log::warn!("api.transport_failed method={} path={} timeout={} elapsed_ms={}",
+                method_name, log_path, error.is_timeout(), started.elapsed().as_millis());
+            error.to_string()
+        })?;
+        let status = response.status();
+        let result = response_json(response).await;
+        if result.is_err() {
+            log::warn!("api.response_failed method={} path={} status={} elapsed_ms={}",
+                method_name, log_path, status.as_u16(), started.elapsed().as_millis());
+        } else {
+            log::debug!("api.response_ok method={} path={} status={} elapsed_ms={}",
+                method_name, log_path, status.as_u16(), started.elapsed().as_millis());
+        }
+        result
     }
 
     async fn api_get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, String> {
@@ -1551,6 +1567,8 @@ impl CoolapkClient {
         if api_origin != "https://api.coolapk.com" && api_origin != "https://api2.coolapk.com" {
             return Err("不受信任的酷安 API 主机".to_string());
         }
+        let started = std::time::Instant::now();
+        let log_path = path.split('?').next().unwrap_or(path);
 
         // 公开内容只读回退使用本机持久化的游客设备码，不携带账号 Cookie。
         // 这样既能避开登录设备触发的 -415，也不会改变已绑定账号的写操作指纹。
@@ -1567,8 +1585,21 @@ impl CoolapkClient {
             .query(query)
             .send()
             .await
-            .map_err(|e| e.to_string())?;
-        response_json(response).await
+            .map_err(|error| {
+                log::warn!("api.guest_transport_failed path={} timeout={} elapsed_ms={}",
+                    log_path, error.is_timeout(), started.elapsed().as_millis());
+                error.to_string()
+            })?;
+        let status = response.status();
+        let result = response_json(response).await;
+        if result.is_err() {
+            log::warn!("api.guest_response_failed path={} status={} elapsed_ms={}",
+                log_path, status.as_u16(), started.elapsed().as_millis());
+        } else {
+            log::debug!("api.guest_response_ok path={} status={} elapsed_ms={}",
+                log_path, status.as_u16(), started.elapsed().as_millis());
+        }
+        result
     }
 
     async fn api_post(
@@ -6533,8 +6564,8 @@ impl CoolapkClient {
                     return Ok(json!({ "code": 200, "data": data }));
                 }
             }
-            Err(error) => {
-                eprintln!("[login-debug] user/space failed after login_info succeeded: {}", error);
+            Err(_) => {
+                log::warn!("login.user_space_failed_after_status_success");
             }
         }
         Ok(login_info)
@@ -6800,7 +6831,7 @@ impl CoolapkClient {
         {
             Ok(raw) => Ok(json!({ "code": 200, "data": raw })),
             Err(err) => {
-                eprintln!("[update_home_tab_config] 云端配置同步提示: {err}");
+                log::warn!("home_tab.remote_sync_failed");
                 Ok(json!({ "code": 200, "warning": err }))
             }
         }

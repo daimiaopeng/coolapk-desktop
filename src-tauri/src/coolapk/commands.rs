@@ -2169,19 +2169,16 @@ pub async fn save_cookie_securely(
     state: State<'_, AppState>,
     cookie_str: String,
 ) -> Result<String, String> {
-    eprintln!(
-        "[login-debug] save_cookie_securely received cookie len={}",
-        cookie_str.len()
-    );
+    log::info!("login.cookie_received");
     state.client.set_user_cookie(cookie_str)?;
     // 保存和验证分开：回调页必须先确认服务端返回真实账号，再关登录窗口。
-    eprintln!("[login-debug] save_cookie_securely done, cookie staged for validation");
+    log::info!("login.cookie_staged");
     Ok("登录 Cookie 已载入，正在验证会话".to_string())
 }
 
 #[tauri::command]
 pub async fn check_login_status(state: State<'_, AppState>) -> Result<Value, String> {
-    eprintln!("[login-debug] check_login_status called");
+    log::info!("login.status_check");
     state.client.check_login_status().await
 }
 
@@ -2680,8 +2677,8 @@ pub fn close_login_window(app: tauri::AppHandle) -> Result<(), String> {
             // 不能保证结束前台 Activity；明确调用 finish() 才会返回主界面。
             win.with_webview(|webview| {
                 webview.jni_handle().exec(|env, activity, _| {
-                    if let Err(error) = env.call_method(activity, "finish", "()V", &[]) {
-                        eprintln!("[login-debug] LoginActivity.finish failed: {error}");
+                    if env.call_method(activity, "finish", "()V", &[]).is_err() {
+                        log::warn!("login.activity_finish_failed");
                     }
                 });
             })
@@ -2695,10 +2692,7 @@ pub fn close_login_window(app: tauri::AppHandle) -> Result<(), String> {
         Ok(())
     };
     // 即使关窗请求失败，也通知主窗口检查已保存的登录态。
-    eprintln!(
-        "[login-debug] close_login_window -> emit login-window-closed, close_ok={}",
-        close_result.is_ok()
-    );
+    log::info!("login.window_closed close_ok={}", close_result.is_ok());
     let _ = app.emit("login-window-closed", ());
     close_result
 }
@@ -2789,9 +2783,9 @@ fn merge_cookie_headers(first: Option<&str>, second: Option<&str>) -> Option<Str
 }
 
 /// 从登录 WebView 的 Cookie 存储读取酷安会话，包含 HttpOnly Cookie。
-fn get_login_webview_cookie<R: tauri::Runtime>(win: &tauri::WebviewWindow<R>) -> Result<String, String> {
-    // Android 的 WebView::cookies() 固定返回空列表；按 URL 查询会走系统 CookieManager。
-    // 查询的都是固定酷安域名，所以 Android 返回的 Cookie 即使没有 domain 属性也可以使用。
+async fn get_login_webview_cookie<R: tauri::Runtime>(win: &tauri::WebviewWindow<R>) -> Result<String, String> {
+    // Android 的 WebView::cookies() 返回空列表；从登录 Activity 的 CookieManager 读取。
+    // 不使用 Wry RustWebView.getCookies：旧 APK 中该方法缺失时会导致 Java 进程崩溃。
     #[cfg(target_os = "android")]
     {
         let mut combined: Option<String> = None;
@@ -2801,13 +2795,31 @@ fn get_login_webview_cookie<R: tauri::Runtime>(win: &tauri::WebviewWindow<R>) ->
             "https://m.coolapk.com/",
             "https://api.coolapk.com/",
         ] {
-            let url = reqwest::Url::parse(address).map_err(|e| e.to_string())?;
-            let cookies = win.cookies_for_url(url).map_err(|e| e.to_string())?;
-            let header = cookies
-                .iter()
-                .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
-                .collect::<Vec<_>>()
-                .join("; ");
+            let (sender, receiver) = tokio::sync::oneshot::channel();
+            let address = address.to_string();
+            win.with_webview(move |webview| {
+                webview.jni_handle().exec(move |env, activity, _| {
+                    let result: jni::errors::Result<String> = (|| {
+                        let address = env.new_string(address)?;
+                        let value = env.call_method(
+                            activity,
+                            "getCoolapkCookies",
+                            "(Ljava/lang/String;)Ljava/lang/String;",
+                            &[(&address).into()],
+                        )?.l()?;
+                        let value = jni::objects::JString::from(value);
+                        Ok(env.get_string(&value)?.into())
+                    })();
+                    if result.is_err() && env.exception_check().unwrap_or(false) {
+                        let _ = env.exception_clear();
+                    }
+                    let _ = sender.send(result.map_err(|error| error.to_string()));
+                });
+            }).map_err(|error| error.to_string())?;
+            let header = tokio::time::timeout(std::time::Duration::from_secs(5), receiver)
+                .await
+                .map_err(|_| "读取 Android 登录 Cookie 超时".to_string())?
+                .map_err(|_| "Android 登录窗口已关闭".to_string())??;
             // account 域优先；其他子域只补充它没有的 Cookie。
             combined = merge_cookie_headers(Some(&header), combined.as_deref());
         }
@@ -2835,13 +2847,6 @@ fn extract_access_code_from_url(url: &str) -> Option<String> {
         return None;
     }
     extract_callback_param(url, "code").filter(|code| !code.trim().is_empty())
-}
-
-/// 日志脱敏：只保留 scheme+host+path，剥离 query/hash（避免 ck 等凭据参数泄露到终端）
-fn redact_url(url: &str) -> String {
-    let without_frag = url.split('#').next().unwrap_or(url);
-    let base = without_frag.split('?').next().unwrap_or(without_frag);
-    base.to_string()
 }
 
 fn percent_decode(s: &str) -> String {
@@ -2891,7 +2896,7 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    eprintln!("[login-debug] open_login_webview url={}", login_url);
+    log::info!("login.webview_opened");
 
     // 登录完成后由 Rust monitor 读取 WebView2 Cookie 存储，避免 document.cookie 丢失 HttpOnly 和跨域 Cookie。
     let js_script = r#"
@@ -2967,20 +2972,25 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                     let app_origin = get_app_origin(&app_handle);
 
                     if last_monitor_url.as_deref() != Some(url_str) {
-                        eprintln!("[login-debug:monitor] url_origin={}", redact_url(url_str));
+                        log::info!("login.navigation_changed");
                         last_monitor_url = Some(url_str.to_string());
                     }
 
-                    let is_account_callback = url_str.starts_with("https://account.coolapk.com/auth/callback");
-                    let is_app_callback = url_str.starts_with(&format!("{}/", app_origin));
+                    let is_account_callback = url.scheme() == "https"
+                        && url.host_str() == Some("account.coolapk.com")
+                        && url.path() == "/auth/callback";
+                    let is_app_callback = url_str.starts_with(&format!("{}/", app_origin))
+                        && url.fragment().is_some_and(|fragment| {
+                            fragment.split('?').next() == Some("/auth_callback")
+                        });
                     // 官方回调和本地回调都在 Rust 侧处理，避免回调页重复保存 Cookie 或覆盖完整会话。
                     if (is_account_callback || is_app_callback) && processed_callback_url.as_deref() != Some(url_str) {
                         let callback_code = extract_access_code_from_url(url_str);
                         let callback_cookie = extract_ck_from_url(url_str);
-                        let webview_cookie = get_login_webview_cookie(&win).ok();
+                        let webview_cookie = get_login_webview_cookie(&win).await.ok();
                         let effective_cookie = merge_cookie_headers(callback_cookie.as_deref(), webview_cookie.as_deref());
-                        eprintln!(
-                            "[login-debug:monitor] reached {} callback, has_access_code={}, has_cookie={}, cookie_has_session={}",
+                        log::info!(
+                            "login.callback kind={} has_access_code={} has_cookie={} cookie_has_session={}",
                             if is_account_callback { "official" } else { "app-origin" },
                             callback_code.is_some(),
                             effective_cookie.as_ref().map(|value| !value.trim().is_empty()).unwrap_or(false),
@@ -2990,41 +3000,35 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                         let mut valid = false;
                         if let Some(code) = callback_code {
                             match state.client.login_by_access_code(&code, effective_cookie.as_deref()).await {
-                                Ok(result) => {
+                                Ok(_result) => {
                                     valid = true;
-                                    let data = result.get("data").unwrap_or(&result);
-                                    let uid = data.get("uid").or_else(|| data.get("id")).map(|value| value.to_string()).unwrap_or_default();
-                                    eprintln!("[login-debug:monitor] access code exchanged and login info saved, uid={}", uid.trim_matches('"'));
+                                    log::info!("login.access_code_succeeded");
                                 }
-                                Err(error) => eprintln!("[login-debug:monitor] access code exchange failed: {}", error),
+                                Err(_) => log::warn!("login.access_code_failed"),
                             }
                         } else if let Some(cookie) = effective_cookie {
                             match state.client.login_by_webview_cookie(&cookie).await {
-                                Ok(result) => {
+                                Ok(_result) => {
                                     valid = true;
-                                    let data = result.get("data").unwrap_or(&result);
-                                    let uid = data.get("uid").or_else(|| data.get("id")).map(|value| value.to_string()).unwrap_or_default();
-                                    eprintln!("[login-debug:monitor] WebView Cookie validated and login info saved, uid={}", uid.trim_matches('"'));
+                                    log::info!("login.webview_cookie_succeeded");
                                 }
-                                Err(error) => eprintln!("[login-debug:monitor] WebView Cookie validation failed: {}", error),
+                                Err(_) => log::warn!("login.webview_cookie_failed"),
                             }
                         }
                         processed_callback_url = Some(url_str.to_string());
                         if valid {
-                            if let Err(error) = close_login_window(app_handle.clone()) {
-                                eprintln!("[login-debug:monitor] close login window failed: {error}");
+                            if close_login_window(app_handle.clone()).is_err() {
+                                log::warn!("login.window_close_failed");
                             }
                             break;
                         }
                     }
 
                     // 登录落地页：读取 account.coolapk.com 的 Cookie 存储，而不是读取 www 域的 document.cookie。
-                    if (url_str.contains("www.coolapk.com")
-                        || url_str.contains("m.coolapk.com")
-                        || url_str.contains("coolapk.com"))
-                        && !url_str.contains("account.coolapk.com/auth")
+                    if url.scheme() == "https"
+                        && matches!(url.host_str(), Some("www.coolapk.com" | "m.coolapk.com" | "coolapk.com"))
                     {
-                        if let Ok(cookie) = get_login_webview_cookie(&win) {
+                        if let Ok(cookie) = get_login_webview_cookie(&win).await {
                             let should_retry = last_landing_attempt
                                 .is_none_or(|at| at.elapsed() >= std::time::Duration::from_secs(2));
                             if CoolapkClient::has_valid_session_cookie(&cookie)
@@ -3032,23 +3036,17 @@ pub async fn open_login_webview(app: tauri::AppHandle) -> Result<(), String> {
                             {
                                 attempted_landing_cookie = Some(cookie.clone());
                                 last_landing_attempt = Some(std::time::Instant::now());
-                                eprintln!(
-                                    "[login-debug:monitor] landing Cookie store, has_session={}, cookie_len={}",
-                                    CoolapkClient::has_valid_session_cookie(&cookie),
-                                    cookie.len()
-                                );
+                                log::info!("login.landing_cookie_detected");
                                 let state = app_handle.state::<AppState>();
                                 match state.client.login_by_webview_cookie(&cookie).await {
-                                    Ok(result) => {
-                                        let data = result.get("data").unwrap_or(&result);
-                                        let uid = data.get("uid").or_else(|| data.get("id")).map(|value| value.to_string()).unwrap_or_default();
-                                        eprintln!("[login-debug:monitor] landing Cookie validated and login info saved, uid={}", uid.trim_matches('"'));
-                                        if let Err(error) = close_login_window(app_handle.clone()) {
-                                            eprintln!("[login-debug:monitor] close login window failed: {error}");
+                                    Ok(_result) => {
+                                        log::info!("login.landing_cookie_succeeded");
+                                        if close_login_window(app_handle.clone()).is_err() {
+                                            log::warn!("login.window_close_failed");
                                         }
                                         break;
                                     }
-                                    Err(error) => eprintln!("[login-debug:monitor] landing Cookie not ready, retrying: {}", error),
+                                    Err(_) => log::warn!("login.landing_cookie_not_ready"),
                                 }
                             }
                         }

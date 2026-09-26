@@ -182,7 +182,8 @@ describe('设置页面交互', () => {
 
   it('设置布局展示全部设置分类', () => {
     const { wrapper } = mountPage(SettingsLayout);
-    expect(wrapper.findAll('.settings-menu-item')).toHaveLength(11);
+    expect(wrapper.findAll('.settings-menu-item')).toHaveLength(12);
+    expect(wrapper.text()).toContain('诊断日志');
     expect(wrapper.text()).toContain('账号与安全');
     expect(wrapper.text()).toContain('个人信息');
     expect(wrapper.text()).toContain('设备信息');

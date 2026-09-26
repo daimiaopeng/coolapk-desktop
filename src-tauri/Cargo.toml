@@ -35,6 +35,9 @@ chrono = "0.4"
 anyhow = "1.0"
 tracing = "0.1"
 opener = "0.7"
+tauri-plugin-log = "2"
+log = "0.4"
+tauri-plugin-fs = "2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri = { version = "2", features = ["tray-icon"] }

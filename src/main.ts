@@ -10,9 +10,11 @@ import { CoolapkTauriAPI } from './api/coolapk';
 import { useSettingsStore } from './stores/settings';
 import { setupGlobalAlertProxy } from './utils/toast';
 import { normalizeCoolapkDeepLink } from './utils/coolapkRoute';
+import { installDiagnosticLogging, logDiagnostic } from './utils/diagnosticLogger';
 
 // 启动全局原生 alert 代理拦截，统一呈现顶部高质感 Toast
 setupGlobalAlertProxy();
+installDiagnosticLogging();
 
 const app = createApp(App);
 const pinia = createPinia();
@@ -75,18 +77,21 @@ function describeError(error: unknown): string {
 
 app.config.errorHandler = (err, _instance, info) => {
   const msg = `${info || 'render'}: ${describeError(err)}`;
+  logDiagnostic('error', 'vue', 'render_exception', info || 'render');
   console.error('[global-error]', msg, err);
   showGlobalError(msg);
 };
 
 window.addEventListener('error', (e) => {
   const msg = `${e.message || 'unknown'} @ ${e.filename || ''}:${e.lineno || ''}:${e.colno || ''}`;
+  logDiagnostic('error', 'window', 'uncaught_exception', e.error instanceof Error ? e.error.name : 'unknown');
   console.error('[window-error]', msg, e.error);
   showGlobalError(msg);
 });
 
 window.addEventListener('unhandledrejection', (e) => {
   const msg = describeError(e.reason || e);
+  logDiagnostic('error', 'window', 'unhandled_rejection', e.reason instanceof Error ? e.reason.name : 'unknown');
   console.error('[unhandledrejection]', msg, e.reason);
   showGlobalError(msg);
 });
@@ -124,10 +129,12 @@ async function setupDeepLinkHandling() {
 
 async function bootstrap() {
   await settingsStore.initializeSettings();
+  logDiagnostic('info', 'app', 'settings-ready');
   app.mount('#app');
   // 设置文件在应用挂载前读取；缩放等依赖 #app 的外观设置需在挂载后再应用一次。
   settingsStore.applyAppearance();
   await setupDeepLinkHandling();
+  logDiagnostic('info', 'app', 'ready');
 }
 
 void bootstrap();
