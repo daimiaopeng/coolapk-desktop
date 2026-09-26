@@ -3,24 +3,14 @@
     <!-- 分类快捷标签栏与操作栏 -->
     <div v-if="authStore.isLoggedIn" class="category-toolbar">
       <div class="category-tabs">
-        <button
-          :class="['cat-tab', { active: activeSubTab === 'all' }]"
-          @click="switchSubTab('all')"
-        >
-          <i class="far fa-bookmark"></i>
-          <span>全部收藏</span>
-        </button>
-        <button
-          :class="['cat-tab', { active: activeSubTab === 'collections' }]"
-          @click="switchSubTab('collections')"
-        >
+        <div class="cat-tab active" aria-current="page">
           <i class="fas fa-folder-open"></i>
           <span>收藏单</span>
           <span v-if="collections.length" class="tab-badge">{{ collections.length }}</span>
-        </button>
+        </div>
       </div>
 
-      <div v-if="activeSubTab === 'collections' && !activeCollectionId" class="toolbar-actions">
+      <div v-if="!activeCollectionId" class="toolbar-actions">
         <!-- 搜索筛选框 -->
         <div v-if="collections.length > 3" class="filter-search-wrap">
           <i class="fas fa-search search-icon"></i>
@@ -45,7 +35,7 @@
           <span>新建收藏单</span>
         </button>
 
-        <button class="favorite-export-trigger" type="button" @click="openFavoriteExport('collections')">
+        <button class="favorite-export-trigger" type="button" @click="openFavoriteExport">
           <i class="fas fa-file-export"></i>
           <span>导出收藏</span>
         </button>
@@ -131,29 +121,6 @@
           </div>
         </div>
       </div>
-      <div v-else-if="activeSubTab === 'all'" class="toolbar-actions">
-        <div class="filter-search-wrap favorite-content-search-wrap">
-          <i class="fas fa-search search-icon"></i>
-          <input
-            v-model.trim="favoriteContentSearchKeyword"
-            type="text"
-            placeholder="搜索收藏正文（本地索引）..."
-            class="filter-search-input"
-            @keydown.esc="favoriteContentSearchKeyword = ''"
-          />
-          <button v-if="favoriteContentSearchKeyword" class="search-clear-btn" title="清空正文搜索" @click="favoriteContentSearchKeyword = ''">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-        <button class="favorite-index-refresh" type="button" :disabled="favoriteContentIndexing" @click="refreshFavoriteContentIndex(true)">
-          <i :class="favoriteContentIndexing ? 'fas fa-spinner fa-spin' : 'fas fa-rotate'"></i>
-          <span>{{ favoriteContentIndexing ? '更新索引中' : '更新正文索引' }}</span>
-        </button>
-        <button class="favorite-export-trigger" type="button" @click="openFavoriteExport('all')">
-          <i class="fas fa-file-export"></i>
-          <span>导出收藏</span>
-        </button>
-      </div>
     </div>
 
     <!-- 云端收藏：未登录状态 -->
@@ -166,7 +133,7 @@
 
     <template v-else>
       <!-- 收藏单内容视图 (详情页) -->
-      <div v-if="activeSubTab === 'collections' && activeCollectionId" class="collection-detail">
+      <div v-if="activeCollectionId" class="collection-detail">
         <!-- 面包屑导航 -->
         <div class="collection-breadcrumb">
           <button class="breadcrumb-back-btn" @click="backToCollections">
@@ -402,7 +369,7 @@
 
 
       <!-- 收藏单列表视图 (卡片网格) -->
-      <div v-else-if="activeSubTab === 'collections'" class="collection-grid-view">
+      <div v-else class="collection-grid-view">
         <div v-if="collectionsLoading" class="loading-wrapper">
           <LoadingState text="正在获取收藏单..." />
         </div>
@@ -528,67 +495,6 @@
         </div>
       </div>
 
-      <!-- 全部收藏视图 -->
-      <template v-else>
-        <template v-if="favoriteContentSearchKeyword">
-          <div v-if="favoriteContentSearchLoading" class="loading-wrapper">
-            <LoadingState text="正在检索本地收藏正文..." />
-          </div>
-          <div v-else-if="favoriteContentSearchError" class="error-wrapper">
-            <ErrorState title="本地正文检索失败" :message="favoriteContentSearchError" @retry="runFavoriteContentSearch" />
-          </div>
-          <div v-else-if="favoriteContentSearchResults.length === 0" class="empty-wrapper">
-            <EmptyState title="未找到匹配的收藏正文" :description="favoriteContentIndexing ? '正文索引正在后台更新，请稍后再试' : '可点击“更新正文索引”补齐或刷新本地缓存'" />
-          </div>
-          <div v-else class="feed-list">
-            <div class="favorite-content-search-summary"><i class="fas fa-database"></i> 已索引 {{ favoriteContentIndexCount }} 条收藏正文，命中 {{ favoriteContentSearchResults.length }} 条<span v-if="favoriteContentIndexing">，索引更新中</span></div>
-            <template v-for="entry in favoriteContentSearchResults" :key="entry.feedId">
-              <RatingCard v-if="isRatingFeedEntity(entry.feed)" :feed="entry.feed" cloud-favorite favorite-picker-on-remove :highlight-keyword="favoriteContentSearchKeyword" @favorite-changed="handleFavoriteChanged" />
-              <FeedCard v-else :feed="entry.feed" cloud-favorite favorite-picker-on-remove :highlight-keyword="favoriteContentSearchKeyword" @deleted="handleFeedDeleted" @favorite-changed="handleFavoriteChanged" />
-            </template>
-          </div>
-        </template>
-        <template v-else>
-          <div v-if="loading && cloudFeeds.length === 0" class="loading-wrapper">
-            <LoadingState text="正在获取云端收藏..." />
-          </div>
-
-          <div v-else-if="cloudError && cloudFeeds.length === 0" class="error-wrapper">
-            <ErrorState title="收藏加载失败" :message="cloudError" @retry="fetchCloudFavorites(true)" />
-          </div>
-
-          <div v-else-if="cloudFeeds.length === 0 && !loading" class="empty-wrapper">
-            <EmptyState title="暂无云端收藏" description="在酷安上收藏过的动态将显示在这里" />
-          </div>
-
-          <div v-else class="feed-list">
-            <template v-for="item in cloudFeeds" :key="item.id">
-              <RatingCard
-                v-if="isRatingFeedEntity(item)"
-                :feed="item"
-                cloud-favorite
-                favorite-picker-on-remove
-                @favorite-changed="handleFavoriteChanged"
-              />
-              <FeedCard
-                v-else
-                :feed="item"
-                cloud-favorite
-                favorite-picker-on-remove
-                @deleted="handleFeedDeleted"
-                @favorite-changed="handleFavoriteChanged"
-              />
-            </template>
-            <div class="pagination-footer">
-              <div v-if="cloudError" class="no-more collection-load-warning">
-                {{ cloudError }}
-                <button type="button" @click="fetchCloudFavorites(true)">重新加载</button>
-              </div>
-              <div v-else-if="noMore" class="no-more">已加载全部收藏</div>
-            </div>
-          </div>
-        </template>
-      </template>
     </template>
 
     <!-- 编辑/新建收藏单弹窗 -->
@@ -656,7 +562,7 @@
     </AppDialog>
     <FavoriteExportDialog
       :is-open="favoriteExportOpen"
-      :mode="favoriteExportMode"
+      mode="collections"
       :collections="collections"
       @close="favoriteExportOpen = false"
     />
@@ -686,41 +592,25 @@ import { requestConfirmation } from '../utils/confirm';
 import { getErrorMessage } from '../utils/errors';
 import { showToast } from '../utils/toast';
 import { isRatingFeedEntity } from '../utils/rating';
-import { favoriteFeedCursorId, loadAllFavoriteCollections, loadAllFavoriteFeeds } from '../utils/favoriteFeeds';
+import { favoriteFeedCursorId, loadAllFavoriteCollections } from '../utils/favoriteFeeds';
 import {
-  getFavoriteContentIndexCount,
   normalizeFavoriteSearchText,
   removeFavoriteContentIndexEntry,
   searchFavoriteContentIndex,
   syncFavoriteContentIndex,
-  type FavoriteContentIndexEntry,
 } from '../utils/favoriteContentIndex';
 
 const authStore = useAuthStore();
 const route = useRoute();
 const router = useRouter();
 
-const activeSubTab = ref<'all' | 'collections'>('all');
 const favoriteExportOpen = ref(false);
-const favoriteExportMode = ref<'all' | 'collections'>('all');
 
-function openFavoriteExport(mode: 'all' | 'collections') {
-  favoriteExportMode.value = mode;
+function openFavoriteExport() {
   favoriteExportOpen.value = true;
 }
 
-const cloudFeeds = ref<any[]>([]);
-const loading = ref(false);
-const cloudError = ref('');
-const noMore = ref(false);
-const favoriteContentSearchKeyword = ref('');
-const favoriteContentSearchResults = ref<FavoriteContentIndexEntry[]>([]);
-const favoriteContentSearchLoading = ref(false);
-const favoriteContentSearchError = ref('');
 const favoriteContentIndexing = ref(false);
-const favoriteContentIndexCount = ref(0);
-let favoriteContentSearchTimer: ReturnType<typeof setTimeout> | null = null;
-let favoriteContentSearchVersion = 0;
 
 const collections = ref<any[]>([]);
 const collectionsLoading = ref(false);
@@ -844,58 +734,14 @@ function scheduleCollectionContentSearch() {
   }, 180);
 }
 
-async function runFavoriteContentSearch() {
-  const keyword = favoriteContentSearchKeyword.value.trim();
-  const accountId = favoriteAccountId();
-  const requestVersion = ++favoriteContentSearchVersion;
-  if (!keyword || !accountId) {
-    favoriteContentSearchResults.value = [];
-    favoriteContentSearchError.value = '';
-    favoriteContentSearchLoading.value = false;
-    return;
-  }
-  favoriteContentSearchLoading.value = true;
-  favoriteContentSearchError.value = '';
-  try {
-    const [results, count] = await Promise.all([
-      searchFavoriteContentIndex(accountId, keyword),
-      getFavoriteContentIndexCount(accountId),
-    ]);
-    if (requestVersion !== favoriteContentSearchVersion) return;
-    favoriteContentSearchResults.value = results;
-    favoriteContentIndexCount.value = count;
-  } catch (error) {
-    if (requestVersion !== favoriteContentSearchVersion) return;
-    favoriteContentSearchResults.value = [];
-    favoriteContentSearchError.value = getErrorMessage(error, '本地正文索引不可用');
-  } finally {
-    if (requestVersion === favoriteContentSearchVersion) favoriteContentSearchLoading.value = false;
-  }
-}
-
-function scheduleFavoriteContentSearch() {
-  if (favoriteContentSearchTimer) clearTimeout(favoriteContentSearchTimer);
-  favoriteContentSearchTimer = setTimeout(() => {
-    favoriteContentSearchTimer = null;
-    void runFavoriteContentSearch();
-  }, 180);
-}
-
-async function refreshFavoriteContentIndex(showResult: boolean) {
+async function refreshFavoriteContentIndex() {
   const accountId = favoriteAccountId();
   if (!accountId || favoriteContentIndexing.value) return;
   favoriteContentIndexing.value = true;
   try {
-    const result = await syncFavoriteContentIndex(accountId);
-    favoriteContentIndexCount.value = result.total;
-    if (favoriteContentSearchKeyword.value.trim()) await runFavoriteContentSearch();
-    if (showResult) {
-      const status = result.complete ? '完成' : '部分完成';
-      showToast(`正文索引${status}：${result.total} 条，新增 ${result.indexed} 条，更新 ${result.updated} 条`, 'success');
-    }
+    await syncFavoriteContentIndex(accountId);
   } catch (error) {
-    if (showResult) showToast(getErrorMessage(error, '更新正文索引失败'), 'error');
-    else console.warn('后台更新收藏正文索引失败:', error);
+    console.warn('后台更新收藏正文索引失败:', error);
   } finally {
     favoriteContentIndexing.value = false;
   }
@@ -968,7 +814,6 @@ function getCollectionGradient(titleOrId?: string): string {
 
 function handleFeedDeleted(id: string | number) {
   const filter = (list: any[]) => list.filter((f: any) => String(f.id) !== String(id));
-  cloudFeeds.value = filter(cloudFeeds.value);
   collectionItems.value = filter(collectionItems.value);
   void removeFavoriteContentIndexEntry(favoriteAccountId(), id).catch((error) => console.warn('移除删除动态的正文索引失败:', error));
 }
@@ -976,9 +821,7 @@ function handleFeedDeleted(id: string | number) {
 function handleFavoriteChanged(payload: { id: string | number; favorited: boolean }) {
   if (payload.favorited) return;
   const filter = (list: any[]) => list.filter((f: any) => String(f.id) !== String(payload.id));
-  cloudFeeds.value = filter(cloudFeeds.value);
   collectionItems.value = filter(collectionItems.value);
-  favoriteContentSearchResults.value = favoriteContentSearchResults.value.filter(entry => entry.feedId !== String(payload.id));
   void removeFavoriteContentIndexEntry(favoriteAccountId(), payload.id).catch((error) => console.warn('移除取消收藏的正文索引失败:', error));
 }
 const collectionLiked = ref(false);
@@ -1125,21 +968,6 @@ function backToCollections() {
   resetCollectionState();
   const { collectionId: _collectionId, collectionTitle: _collectionTitle, ...query } = route.query;
   void router.push({ path: route.path, query });
-}
-
-function switchSubTab(tab: 'all' | 'collections') {
-  if (activeSubTab.value === tab && !activeCollectionId.value) return;
-  activeSubTab.value = tab;
-  if (activeCollectionId.value) {
-    resetCollectionState();
-    const { collectionId: _collectionId, collectionTitle: _collectionTitle, ...query } = route.query;
-    void router.push({ path: route.path, query });
-  }
-  if (tab === 'all') {
-    if (cloudFeeds.value.length === 0) void fetchCloudFavorites(true);
-  } else {
-    if (collections.value.length === 0) void fetchCollections();
-  }
 }
 
 async function fetchCollections() {
@@ -1363,7 +1191,6 @@ watch(
       id: String(collectionIdValue),
       title: collectionTitle || '收藏单',
     };
-    activeSubTab.value = 'collections';
     activateCollection(source);
   },
   { immediate: true }
@@ -1506,36 +1333,11 @@ async function fetchCollectionItems(isRefresh = false) {
   }
 }
 
-async function fetchCloudFavorites(isRefresh = false) {
-  const uid = authStore.user?.uid;
-  if (!uid) return;
-  if (loading.value || (!isRefresh && noMore.value)) return;
-
-  if (isRefresh) {
-    noMore.value = false;
-    cloudFeeds.value = [];
-    loading.value = true;
-  }
-  cloudError.value = '';
-
-  try {
-    const result = await loadAllFavoriteFeeds();
-    cloudFeeds.value = result.feeds;
-    noMore.value = true;
-    if (!result.complete) cloudError.value = '部分收藏单或内容未能完整读取，请刷新重试';
-  } catch (err: any) {
-    cloudError.value = err?.message || '加载失败，请检查网络';
-    noMore.value = true;
-  } finally {
-    loading.value = false;
-  }
-}
-
 function handleScroll(e: Event) {
   const target = e.target as HTMLElement;
   const { scrollTop, clientHeight, scrollHeight } = target;
   if (scrollTop + clientHeight >= scrollHeight - 120) {
-    if (activeSubTab.value === 'collections' && activeCollectionId.value) {
+    if (activeCollectionId.value) {
       if (!collectionItemsLoading.value && !collectionItemsLoadingMore.value && !collectionItemsNoMore.value) {
         fetchCollectionItems(false);
       }
@@ -1547,26 +1349,22 @@ watch(
   () => authStore.user?.uid,
   () => {
     if (authStore.isLoggedIn) {
-      void fetchCloudFavorites(true);
       void fetchCollections();
-      void refreshFavoriteContentIndex(false);
+      void refreshFavoriteContentIndex();
     }
   }
 );
 
-watch(favoriteContentSearchKeyword, () => scheduleFavoriteContentSearch());
 watch(collectionContentSearchKeyword, () => scheduleCollectionContentSearch());
 
 onMounted(() => {
   if (authStore.isLoggedIn) {
-    void fetchCloudFavorites(true);
     void fetchCollections();
-    void refreshFavoriteContentIndex(false);
+    void refreshFavoriteContentIndex();
   }
 });
 
 onBeforeUnmount(() => {
-  if (favoriteContentSearchTimer) clearTimeout(favoriteContentSearchTimer);
   if (collectionContentSearchTimer) clearTimeout(collectionContentSearchTimer);
 });
 </script>
@@ -1608,15 +1406,9 @@ onBeforeUnmount(() => {
   font-size: var(--font-size-sub);
   font-weight: 550;
   color: var(--text-secondary);
-  cursor: pointer;
+  cursor: default;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-}
-
-.cat-tab:hover {
-  background-color: var(--surface-hover);
-  color: var(--text-primary);
-  border-color: var(--border-light);
 }
 
 .cat-tab.active {
@@ -1701,11 +1493,6 @@ onBeforeUnmount(() => {
   color: var(--text-primary);
 }
 
-.favorite-content-search-wrap {
-  width: min(300px, 48vw);
-}
-
-.favorite-index-refresh,
 .favorite-export-trigger,
 .btn-create-collection {
   display: inline-flex;
@@ -1722,33 +1509,10 @@ onBeforeUnmount(() => {
   transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
 
-.favorite-index-refresh:hover:not(:disabled),
 .favorite-export-trigger:hover,
 .btn-create-collection:hover {
   background: var(--brand-soft);
   border-color: var(--brand-primary);
-  color: var(--brand-primary);
-}
-
-.favorite-index-refresh:disabled {
-  opacity: 0.62;
-  cursor: wait;
-}
-
-.favorite-content-search-summary {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin: 0 0 var(--space-3);
-  padding: 8px 11px;
-  border: 1px solid var(--border-light, var(--border));
-  border-radius: var(--radius-control);
-  background: var(--brand-soft);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-}
-
-.favorite-content-search-summary i {
   color: var(--brand-primary);
 }
 
