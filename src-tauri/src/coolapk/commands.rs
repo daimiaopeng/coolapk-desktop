@@ -3117,25 +3117,21 @@ pub async fn download_update(
         return Err(format!("更新链接域名不在允许列表内: {host}"));
     }
 
-    let dir = std::env::temp_dir().join("coolapk-desktop-update");
+    let dir = update_cache_dir(&app)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
-    // 文件名净化：只保留安全字符，防路径穿越（..\..\x.exe 等），并限制扩展名
+    // 文件名净化：只保留安全字符，防路径穿越，并按平台限制扩展名。
     let raw_name = url.rsplit('/').next().unwrap_or("").trim();
     let safe_name: String = raw_name
         .chars()
         .take(128)
         .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
         .collect();
-    if safe_name.is_empty() || !(safe_name.ends_with(".exe") || safe_name.ends_with(".msi")) {
+    if safe_name.is_empty() || !is_update_package_extension(Path::new(&safe_name)) {
         return Err("更新包文件名不合法".to_string());
     }
     // 每次下载使用独立文件名，避免旧任务或另一个应用实例仍持有同名安装包时互相锁定。
-    let extension = if safe_name.to_ascii_lowercase().ends_with(".msi") {
-        "msi"
-    } else {
-        "exe"
-    };
+    let extension = safe_name.rsplit('.').next().unwrap_or_default().to_ascii_lowercase();
     let stem = safe_name
         .get(..safe_name.len().saturating_sub(extension.len() + 1))
         .filter(|value| !value.is_empty())
@@ -3148,7 +3144,19 @@ pub async fn download_update(
     let path = dir.join(unique_name);
     let partial_path = path.with_extension(format!("{extension}.part"));
 
-    let mut builder = reqwest::Client::builder().user_agent("coolapk-desktop-updater");
+    let mut builder = reqwest::Client::builder()
+        .user_agent("coolapk-desktop-updater")
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            let host = attempt.url().host_str().unwrap_or_default().to_ascii_lowercase();
+            if attempt.previous().len() >= 10
+                || attempt.url().scheme() != "https"
+                || !UPDATE_ALLOWED_HOSTS.contains(&host.as_str())
+            {
+                attempt.error("更新包跳转到了不可信地址")
+            } else {
+                attempt.follow()
+            }
+        }));
     if let Some(proxy) = proxy_url.filter(|p| !p.trim().is_empty()) {
         builder =
             builder.proxy(reqwest::Proxy::all(proxy).map_err(|e| format!("代理设置无效: {e}"))?);
@@ -3211,6 +3219,24 @@ pub async fn download_update(
     tokio::fs::rename(&partial_path, &path)
         .await
         .map_err(|e| format!("保存更新包失败：{e}"))?;
+    #[cfg(target_os = "android")]
+    {
+        let published = call_android_update_method(
+            &app,
+            "publishUpdateApk",
+            path.to_string_lossy().to_string(),
+        ).await?;
+        if published.starts_with("error:") {
+            return Err(published.trim_start_matches("error:").to_string());
+        }
+        if published != "private_fallback" {
+            if !published.starts_with("content://") {
+                return Err(format!("Android 下载目录返回未知结果：{published}"));
+            }
+            let _ = tokio::fs::remove_file(&path).await;
+            return Ok(published);
+        }
+    }
     Ok(path.to_string_lossy().to_string())
 }
 
@@ -3349,29 +3375,41 @@ fn cache_locations(
     custom_dir: Option<&str>,
 ) -> Result<(PathBuf, PathBuf), String> {
     let image = image_cache_root(app, custom_dir)?;
-    let update = update_cache_dir();
+    let update = update_cache_dir(app)?;
     Ok((image, update))
 }
 
-fn update_cache_dir() -> PathBuf {
-    std::env::temp_dir().join("coolapk-desktop-update")
+fn update_cache_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    #[cfg(target_os = "android")]
+    {
+        // Tauri 的 Android app_data_dir 是应用数据根目录；files 子目录可由 FileProvider 安全共享。
+        Ok(app.path().app_data_dir().map_err(|e| e.to_string())?
+            .join("files")
+            .join("coolapk-desktop-update"))
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Ok(std::env::temp_dir().join("coolapk-desktop-update"))
+    }
 }
 
 fn is_update_package_extension(path: &std::path::Path) -> bool {
-    matches!(
-        path.extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase()
-            .as_str(),
-        "exe" | "msi"
-    )
+    let extension = path.extension().and_then(|value| value.to_str()).unwrap_or_default();
+    #[cfg(target_os = "android")]
+    { extension.eq_ignore_ascii_case("apk") }
+    #[cfg(not(target_os = "android"))]
+    { extension.eq_ignore_ascii_case("exe") || extension.eq_ignore_ascii_case("msi") }
 }
 
 /// 启动时校验待安装包是否仍存在且位于应用更新目录内。
 #[tauri::command]
-pub fn is_update_package_available(installer_path: String) -> Result<bool, String> {
-    let expected_dir = update_cache_dir();
+pub async fn is_update_package_available(app: tauri::AppHandle, installer_path: String) -> Result<bool, String> {
+    #[cfg(target_os = "android")]
+    if installer_path.starts_with("content://") {
+        return Ok(call_android_update_method(&app, "isUpdatePackageAvailable", installer_path).await? == "available");
+    }
+    let expected_dir = update_cache_dir(&app)?;
     let expected_dir = match expected_dir.canonicalize() {
         Ok(path) => path,
         Err(_) => return Ok(false),
@@ -3393,8 +3431,8 @@ pub fn is_update_package_available(installer_path: String) -> Result<bool, Strin
 /// 清理没有被待安装记录引用的旧安装包和未完成下载文件。
 /// 更新包不属于普通图片/WebView缓存，不能由 clear_app_cache 直接删除。
 #[tauri::command]
-pub fn cleanup_update_packages(keep_path: Option<String>) -> Result<(), String> {
-    let update_dir = update_cache_dir();
+pub fn cleanup_update_packages(app: tauri::AppHandle, keep_path: Option<String>) -> Result<(), String> {
+    let update_dir = update_cache_dir(&app)?;
     if !update_dir.exists() {
         return Ok(());
     }
@@ -3522,29 +3560,95 @@ pub fn get_update_distribution() -> String {
     }
 }
 
-/// 安装版以 NSIS 静默更新；单文件版启动下载好的新程序作为更新助手，退出后原位替换并重启。
+/// Windows 启动 NSIS/便携版更新；Android 将 APK 交给系统安装器确认。
 #[tauri::command]
-pub fn install_update(installer_path: String, portable: bool) -> Result<(), String> {
+pub async fn install_update(app: tauri::AppHandle, installer_path: String, portable: bool) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     {
-        install_update_windows(installer_path, portable)
+        install_update_windows(&app, installer_path, portable).map(|_| "started".to_string())
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "android")]
     {
+        if portable {
+            return Err("Android 更新包必须是 APK".to_string());
+        }
+        install_update_android(app, installer_path).await
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "android")))]
+    {
+        let _ = app;
         let _ = installer_path;
         let _ = portable;
         Err("当前平台暂不支持应用内自动安装，请前往发布页面手动下载安装".to_string())
     }
 }
 
+#[cfg(target_os = "android")]
+async fn install_update_android(app: tauri::AppHandle, installer_path: String) -> Result<String, String> {
+    let location = if installer_path.starts_with("content://") {
+        installer_path
+    } else {
+        let canonical = std::fs::canonicalize(&installer_path)
+            .map_err(|_| "更新安装包不存在，可能已被清理，请重新下载".to_string())?;
+        let expected_dir = update_cache_dir(&app)?
+            .canonicalize()
+            .map_err(|_| "更新目录不存在，请重新下载 APK".to_string())?;
+        if !canonical.starts_with(&expected_dir) || !is_update_package_extension(&canonical) {
+            return Err("拒绝安装不在更新目录内的 APK".to_string());
+        }
+        canonical.to_string_lossy().to_string()
+    };
+    let status = call_android_update_method(&app, "launchUpdateInstaller", location).await?;
+    match status.as_str() {
+        "started" | "permission_required" => Ok(status),
+        error if error.starts_with("error:") => Err(error.trim_start_matches("error:").to_string()),
+        _ => Err(format!("Android 安装器返回未知结果：{status}")),
+    }
+}
+
+#[cfg(target_os = "android")]
+async fn call_android_update_method(
+    app: &tauri::AppHandle,
+    method: &'static str,
+    argument: String,
+) -> Result<String, String> {
+    let window = app.get_webview_window("main")
+        .ok_or_else(|| "Android 主窗口不可用".to_string())?;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    window.with_webview(move |webview| {
+        webview.jni_handle().exec(move |env, activity, _| {
+            let result: jni::errors::Result<String> = (|| {
+                let argument = env.new_string(argument)?;
+                let value = env.call_method(
+                    activity,
+                    method,
+                    "(Ljava/lang/String;)Ljava/lang/String;",
+                    &[(&argument).into()],
+                )?.l()?;
+                let value = jni::objects::JString::from(value);
+                Ok(env.get_string(&value)?.into())
+            })();
+            if result.is_err() && env.exception_check().unwrap_or(false) {
+                let _ = env.exception_clear();
+            }
+            let _ = sender.send(result.map_err(|error| error.to_string()));
+        });
+    }).map_err(|error| format!("调用 Android 安装器失败：{error}"))?;
+    tokio::time::timeout(Duration::from_secs(120), receiver)
+        .await
+        .map_err(|_| "等待 Android 安装器响应超时".to_string())?
+        .map_err(|_| "Android 安装器未返回结果".to_string())?
+        .map_err(|error| error.to_string())
+}
+
 #[cfg(target_os = "windows")]
-fn install_update_windows(installer_path: String, portable: bool) -> Result<(), String> {
+fn install_update_windows(app: &tauri::AppHandle, installer_path: String, portable: bool) -> Result<(), String> {
     // 只允许执行更新目录内的 .exe/.msi 安装包：
     // 路径必须真实存在于下载目录（canonicalize 解析 .. / 符号链接后再前缀校验），
     // 防止前端被注入时借助该命令执行任意文件。
     let canonical = std::fs::canonicalize(&installer_path)
         .map_err(|_| "更新安装包不存在，可能已被清理，请重新下载".to_string())?;
-    let expected_dir = update_cache_dir();
+    let expected_dir = update_cache_dir(app)?;
     let expected_dir = expected_dir.canonicalize().unwrap_or(expected_dir);
     if !canonical.starts_with(&expected_dir) {
         return Err("拒绝安装不在更新目录内的文件".to_string());

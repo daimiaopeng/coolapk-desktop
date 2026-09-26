@@ -1333,7 +1333,7 @@ export class CoolapkTauriAPI {
   }
 
   static async installUpdate(installerPath: string, portable = false) {
-    await invoke('install_update', { installerPath, portable });
+    return await invoke<'started' | 'permission_required'>('install_update', { installerPath, portable });
   }
 
   static async getUpdateDistribution() {

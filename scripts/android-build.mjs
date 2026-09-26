@@ -7,6 +7,7 @@ const androidDir = join(root, 'src-tauri', 'gen', 'android');
 const gradleProperties = join(androidDir, 'gradle.properties');
 const appBuildGradle = join(androidDir, 'app', 'build.gradle.kts');
 const androidManifest = join(androidDir, 'app', 'src', 'main', 'AndroidManifest.xml');
+const androidFilePaths = join(androidDir, 'app', 'src', 'main', 'res', 'xml', 'file_paths.xml');
 const androidActivityDir = join(androidDir, 'app', 'src', 'main', 'java', 'com', 'coolapk', 'desktop');
 const keystoreProperties = join(androidDir, 'keystore.properties');
 const tauriCli = join(root, 'node_modules', '@tauri-apps', 'cli', 'tauri.js');
@@ -97,6 +98,10 @@ function ensureAndroidProject() {
 
   const loginActivityMarker = 'android:name=".LoginActivity"';
   let manifest = readFileSync(androidManifest, 'utf8');
+  const installPermission = '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />';
+  if (!manifest.includes(installPermission)) {
+    manifest = manifest.replace('</manifest>', `    ${installPermission}\n</manifest>`);
+  }
   if (!manifest.includes(loginActivityMarker)) {
     const closingTag = '    </application>';
     if (!manifest.includes(closingTag)) throw new Error('AndroidManifest.xml 缺少 application 节点');
@@ -106,9 +111,16 @@ function ensureAndroidProject() {
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:label="酷安官方授权登录" />
 ${closingTag}`);
-    writeFileSync(androidManifest, manifest, 'utf8');
+  }
+  writeFileSync(androidManifest, manifest, 'utf8');
+  let filePaths = readFileSync(androidFilePaths, 'utf8');
+  const updatePath = '<files-path name="coolapk_updates" path="coolapk-desktop-update/" />';
+  if (!filePaths.includes(updatePath)) {
+    filePaths = filePaths.replace('</paths>', `    ${updatePath}\n</paths>`);
+    writeFileSync(androidFilePaths, filePaths, 'utf8');
   }
   mkdirSync(androidActivityDir, { recursive: true });
+  copyFileSync(join(root, 'src-tauri', 'android', 'MainActivity.kt'), join(androidActivityDir, 'MainActivity.kt'));
   copyFileSync(join(root, 'src-tauri', 'android', 'LoginActivity.kt'), join(androidActivityDir, 'LoginActivity.kt'));
 }
 

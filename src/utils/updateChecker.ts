@@ -12,6 +12,7 @@ export type UpdateInfo = {
   publishedAt?: string;
   downloadUrl?: string;
   installerUrl?: string;
+  installerName?: string;
   packageType?: UpdatePackageType;
 };
 
@@ -27,6 +28,12 @@ export function isUpdateAssetCompatible(
   platform: PlatformInfo,
   packageType: UpdatePackageType
 ): boolean {
+  if (platform.os === 'android') {
+    return packageType === 'installer'
+      && platform.arch === 'aarch64'
+      && /^coolapk-v?.+-android-arm64(?:-\d+-\d+)?\.apk$/i.test(name)
+      && Boolean(versionFromAssetName(name));
+  }
   if (platform.os !== 'windows') return false;
   const typePattern = packageType === 'portable'
     ? /[-_]portable(?:[-_][^.]+)*\.exe$/i
@@ -44,6 +51,10 @@ export function selectInstallerAsset(
   assets: InstallerAsset[],
   platform: PlatformInfo
 ): InstallerAsset | undefined {
+  if (platform.os === 'android') {
+    return assets.find((asset) => asset.name && asset.browser_download_url
+      && isUpdateAssetCompatible(asset.name, platform, 'installer'));
+  }
   if (platform.os !== 'windows') return undefined;
   const candidates = assets.filter(
     (asset) => asset.name && /[-_]setup\.exe$/i.test(asset.name) && asset.browser_download_url
@@ -193,11 +204,15 @@ export async function checkLatestRelease(
   const tagName = release.tag_name || '';
   const hasNew = Boolean(normalizeVersion(tagName)) && isNewerVersion(tagName);
 
-  // 按当前运行模式挑选 NSIS 安装包或真正的单文件便携版，并严格匹配架构与版本号。
+  // 按平台挑选 Android APK、NSIS 安装包或真正的单文件便携版，并严格匹配架构与版本号。
   let installerUrl: string | undefined;
   const assets: InstallerAsset[] = release.assets || [];
+  const currentPlatform = platform ?? await getPlatformInfo();
   const candidates = assets.filter((asset) => {
     if (!asset.name || !asset.browser_download_url) return false;
+    if (currentPlatform.os === 'android') {
+      return packageType === 'installer' && /-android-arm64\.apk$/i.test(asset.name);
+    }
     return packageType === 'portable'
       ? /[-_]portable\.exe$/i.test(asset.name)
       : /[-_]setup\.exe$/i.test(asset.name);
@@ -215,10 +230,10 @@ export async function checkLatestRelease(
       ? []
       : candidates;
 
-  const currentPlatform = platform ?? await getPlatformInfo();
-  installerUrl = (packageType === 'portable'
+  const selectedAsset = (packageType === 'portable'
     ? selectPortableAsset(validCandidates, currentPlatform)
-    : selectInstallerAsset(validCandidates, currentPlatform))?.browser_download_url;
+    : selectInstallerAsset(validCandidates, currentPlatform));
+  installerUrl = selectedAsset?.browser_download_url;
 
   const releaseNotes = hasNew
     ? (release.body ? release.body.trim() : '暂无特别更新说明')
@@ -233,11 +248,14 @@ export async function checkLatestRelease(
     publishedAt,
     downloadUrl: release.html_url || 'https://github.com/daimiaopeng/coolapk-desktop/releases',
     installerUrl,
+    installerName: selectedAsset?.name,
     packageType,
   };
 }
 
 export function versionFromAssetName(name: string) {
+  const androidMatch = name.match(/^coolapk-(v?.+)-android-(?:arm64|aarch64)(?:-\d+-\d+)?\.apk$/i);
+  if (androidMatch) return normalizeVersion(androidMatch[1]) || undefined;
   const match = name.match(/(?:^|[-_])v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?=[-_]|$)/i);
   return match ? normalizeVersion(match[1]) : undefined;
 }
