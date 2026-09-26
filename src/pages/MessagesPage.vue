@@ -1141,7 +1141,25 @@ function sortChatHistory(items: any[]): any[] {
 }
 
 function mergeChatHistory(existing: any[], incoming: any[], prepend = false): any[] {
-  const result = prepend ? [...incoming, ...existing] : [...existing, ...incoming];
+  const unmatchedIncoming = [...incoming];
+  const existingIds = new Set(existing.filter((item) => !item.__localPending).map(getChatHistoryItemId).filter(Boolean));
+  // 发送接口偶尔不返回消息 ID。历史记录到达后，用同一发送者、内容和时间
+  // 对应的服务端消息替换临时气泡，每条历史消息最多匹配一个临时气泡。
+  const reconciledExisting = existing.filter((item) => {
+    if (!item.__localPending) return true;
+    const matchIndex = unmatchedIncoming.findIndex((serverItem) =>
+      getChatHistoryItemId(serverItem)
+      && !existingIds.has(getChatHistoryItemId(serverItem))
+      && String(serverItem.fromuid ?? serverItem.fromUid ?? '') === String(item.fromuid ?? '')
+      && String(getMessageText(serverItem)) === String(getMessageText(item))
+      && String(serverItem.message_pic ?? serverItem.messagePic ?? '') === String(item.message_pic ?? '')
+      && Math.abs(Number(getDateline(serverItem)) - Number(getDateline(item))) <= 60,
+    );
+    if (matchIndex < 0) return true;
+    unmatchedIncoming.splice(matchIndex, 1);
+    return false;
+  });
+  const result = prepend ? [...incoming, ...reconciledExisting] : [...reconciledExisting, ...incoming];
   const seen = new Set<string>();
   return result.filter((item) => {
     const key = getChatHistoryItemKey(item);
@@ -1155,7 +1173,7 @@ function mergeChatHistory(existing: any[], incoming: any[], prepend = false): an
 function getOldestChatHistoryCursor(items: any[]): string {
   for (const item of items) {
     // APK 会跳过关注提示等浮层，只用真实消息或时间项的 entityId 翻页。
-    if (getEntityType(item) === 'messageExtra' && getEntityTemplate(item) !== 'time') continue;
+    if (item.__localPending || (getEntityType(item) === 'messageExtra' && getEntityTemplate(item) !== 'time')) continue;
     const itemId = getChatHistoryItemId(item);
     if (itemId) return itemId;
   }
@@ -1165,7 +1183,7 @@ function getOldestChatHistoryCursor(items: any[]): string {
 function getNewestChatHistoryCursor(items: any[]): string {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (getEntityType(item) === 'messageExtra' && getEntityTemplate(item) !== 'time') continue;
+    if (item.__localPending || (getEntityType(item) === 'messageExtra' && getEntityTemplate(item) !== 'time')) continue;
     const itemId = getChatHistoryItemId(item);
     if (itemId) return itemId;
   }
@@ -1782,12 +1800,13 @@ const sendImageFile = async (file: File): Promise<boolean> => {
     const realMsg = sendRes?.data && Array.isArray(sendRes.data) ? sendRes.data[0] : null;
 
     const nowTimestamp = Math.floor(Date.now() / 1000);
-    if (realMsg) {
-      chatHistory.value.push({ ...realMsg, fromuid: currentUserUid.value, uid: targetUid });
+    if (realMsg && getChatHistoryItemId(realMsg)) {
+      chatHistory.value = mergeChatHistory(chatHistory.value, [{ ...realMsg, fromuid: currentUserUid.value, uid: targetUid }]);
     } else {
       // 乐观更新 UI（与酷安 API 字段一致：uid=接收者，fromuid=发送者）
       chatHistory.value.push({
         id: Date.now(),
+        __localPending: true,
         uid: targetUid,
         fromuid: currentUserUid.value,
         message_pic: picPath,
@@ -1851,19 +1870,20 @@ const sendTextMessage = async (text: string): Promise<boolean> => {
   }
 
   // 调用后台原生 API 发送
-  await CoolapkTauriAPI.sendPrivateMessage(String(targetUid), text);
+  const sendRes = await CoolapkTauriAPI.sendPrivateMessage(String(targetUid), text);
+  const realMsg = Array.isArray(sendRes?.data) ? sendRes.data[0] : null;
 
   // 乐观更新 UI（与酷安 API 字段一致：uid=接收者，fromuid=发送者）
   const nowTimestamp = Math.floor(Date.now() / 1000);
   const newMsg = {
-    id: Date.now(),
+    ...(realMsg && getChatHistoryItemId(realMsg) ? realMsg : { id: Date.now(), __localPending: true }),
     uid: targetUid,
     fromuid: currentUserUid.value,
     message: text,
-    dateline: nowTimestamp
+    dateline: realMsg?.dateline || nowTimestamp
   };
 
-  chatHistory.value.push(newMsg);
+  chatHistory.value = mergeChatHistory(chatHistory.value, [newMsg]);
 
   // 同步写入缓存
   const ukey = currentSession.value.ukey || currentSession.value.id;

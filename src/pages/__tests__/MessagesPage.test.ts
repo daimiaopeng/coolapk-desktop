@@ -530,6 +530,49 @@ describe('MessagesPage 粘贴图片发送功能', () => {
     expect(mocks.sendPrivateMessage).toHaveBeenCalledWith('20002', '测试消息');
   });
 
+  it('发送成功后使用服务端消息 ID，刷新历史记录不重复显示', async () => {
+    const session = { ...JSON.parse(sessionStorage.getItem('coolapk_message_sessions_10001')!)[0], isNewConversation: false };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([session]));
+    mocks.listMessages.mockResolvedValue({ data: [session] });
+    const w = await mountMessagesPage();
+    const editor = w.find('.message-rich-editor');
+    editor.element.textContent = '只发送一次';
+    await editor.trigger('input');
+    await w.find('.input-actions .app-btn').trigger('click');
+    await flushPromises();
+
+    mocks.listChatHistory.mockResolvedValue({ data: [
+      { id: 1000, entityId: 1000, fromuid: 10001, uid: 20002, message: '只发送一次', dateline: Math.floor(Date.now() / 1000) },
+    ] });
+    await w.find('.session-item').trigger('click');
+    await flushPromises();
+
+    expect(w.findAll('.message-item')).toHaveLength(1);
+    expect(w.find('.message-item .msg-text').text()).toBe('只发送一次');
+  });
+
+  it('发送接口没有返回消息 ID 时，用服务端记录替换临时气泡', async () => {
+    const session = { ...JSON.parse(sessionStorage.getItem('coolapk_message_sessions_10001')!)[0], isNewConversation: false };
+    sessionStorage.setItem('coolapk_message_sessions_10001', JSON.stringify([session]));
+    mocks.listMessages.mockResolvedValue({ data: [session] });
+    mocks.sendPrivateMessage.mockResolvedValue({ data: [] });
+    const w = await mountMessagesPage();
+    const editor = w.find('.message-rich-editor');
+    editor.element.textContent = '等待同步';
+    await editor.trigger('input');
+    await w.find('.input-actions .app-btn').trigger('click');
+    await flushPromises();
+
+    mocks.listChatHistory.mockResolvedValue({ data: [
+      { id: 2001, entityId: 2001, fromuid: 10001, uid: 20002, message: '等待同步', dateline: Math.floor(Date.now() / 1000) },
+    ] });
+    await w.find('.session-item').trigger('click');
+    await flushPromises();
+
+    expect(w.findAll('.message-item')).toHaveLength(1);
+    expect(w.find('.message-item .bubble-wrapper').attributes('data-context-message-id')).toBe('2001');
+  });
+
   it('切换为换行模式后按 Enter 换行，按 Ctrl+Enter 发送私信', async () => {
     const w = await mountMessagesPage();
     const settingsStore = useSettingsStore();
