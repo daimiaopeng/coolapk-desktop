@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell" :class="{ 'has-mobile-window-controls': showWindowControls }">
+  <div class="app-shell" :class="{ 'has-mobile-window-controls': showWindowControls, 'is-android': isAndroidApp }">
     <NetworkStatusBanner />
     <TopBar />
     <MobileTopBar
@@ -26,6 +26,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { isTauri } from '@tauri-apps/api/core';
 import { useRoute, useRouter } from 'vue-router';
 import TopBar from './TopBar.vue';
 import MainSidebar from './MainSidebar.vue';
@@ -40,6 +41,7 @@ import { useDesktopWindow } from '../../composables/useDesktopWindow';
 const route = useRoute();
 const router = useRouter();
 const mobileNavigationOpen = ref(false);
+const isAndroidApp = isTauri() && /android/i.test(navigator.userAgent);
 const { showWindowControls, usesMacOverlay } = useDesktopWindow();
 
 function toggleMobileNavigation() {
@@ -95,6 +97,19 @@ onUnmounted(() => window.removeEventListener('keydown', handleMobileNavigationKe
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
+}
+
+@media (min-width: 721px) {
+  /* Android 平板使用桌面顶栏时，给系统状态栏留出顶部安全区。 */
+  .app-shell.is-android::before {
+    content: '';
+    flex: 0 0 env(safe-area-inset-top, 0px);
+    background: var(--titlebar-background);
+  }
+
+  .app-shell.is-android :deep(.network-status-banner) {
+    top: calc(var(--app-titlebar-height) + env(safe-area-inset-top, 0px));
+  }
 }
 
 @media (max-width: 720px) {
