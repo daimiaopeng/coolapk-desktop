@@ -72,6 +72,7 @@ describe('设置页面交互', () => {
     await wrapper.get('.font-picker-button').trigger('click');
     await flushPromises();
     await wrapper.findAll('.density-card')[2].trigger('click');
+    await wrapper.findAll('.setting-row').find((row) => row.text().includes('显示顶部页面标签栏'))!.find('.switch-input').setValue(false);
     await wrapper.findAll('.zoom-btn')[3].trigger('click');
     await wrapper.find('.nav-toggle-card input').setValue(false);
     expect(wrapper.find('.nav-main-grid').text()).not.toContain('应用');
@@ -84,6 +85,7 @@ describe('设置页面交互', () => {
     expect(settings.settings.accentColor).toBe('blue');
     expect(settings.settings.fontFamily).toBe('Noto Sans SC');
     expect(settings.settings.density).toBe('compact');
+    expect(settings.settings.showPageTabBar).toBe(false);
     expect(settings.settings.fontSize).toBe(16);
     expect(settings.settings.navVisibility?.home).toBe(false);
   });

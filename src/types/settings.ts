@@ -126,6 +126,7 @@ export interface AppSettings {
   zoom: number;
   zoomManuallySet: boolean;
   sidebarCollapsed: boolean;
+  showPageTabBar: boolean;
   myRecentPinned: boolean;
   moreExpanded: boolean;
   reduceMotion: boolean;

@@ -116,6 +116,7 @@ const defaultSettings: AppSettings = {
   zoom: DEFAULT_ZOOM,
   zoomManuallySet: false,
   sidebarCollapsed: false,
+  showPageTabBar: true,
   myRecentPinned: false,
   moreExpanded: false,
   reduceMotion: false,
@@ -269,6 +270,7 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.zoom = readNumber(source.zoom, result.zoom, MIN_ZOOM, MAX_ZOOM);
   result.zoomManuallySet = readBoolean(source.zoomManuallySet, result.zoomManuallySet);
   result.sidebarCollapsed = readBoolean(source.sidebarCollapsed, result.sidebarCollapsed);
+  result.showPageTabBar = readBoolean(source.showPageTabBar, result.showPageTabBar);
   result.myRecentPinned = readBoolean(source.myRecentPinned, readBoolean(source.sidebarMyCardsPinned, result.myRecentPinned));
   result.moreExpanded = readBoolean(source.moreExpanded, result.moreExpanded);
   result.reduceMotion = readBoolean(source.reduceMotion, result.reduceMotion);

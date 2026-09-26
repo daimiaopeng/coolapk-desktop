@@ -148,6 +148,17 @@
       </div>
     </div>
 
+    <div class="setting-group">
+      <h4 class="group-title">页面标签栏</h4>
+      <div class="setting-row">
+        <div class="row-info">
+          <span class="row-label">显示顶部页面标签栏</span>
+          <span class="row-sub">关闭后隐藏已打开页面的标签栏，仍可通过侧边栏和后退按钮导航</span>
+        </div>
+        <AppSwitch v-model="settingsStore.settings.showPageTabBar" />
+      </div>
+    </div>
+
     <div v-if="!isAndroidTauri" class="setting-group">
       <h4 class="group-title">首页右侧栏</h4>
       <p class="group-sub">分别控制首页右侧的热榜和热门话题卡片，关闭后不再请求对应数据</p>

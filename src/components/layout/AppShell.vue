@@ -14,7 +14,7 @@
         @close-mobile="closeMobileNavigation"
       />
       <div class="app-content-column">
-        <PageTabBar />
+        <PageTabBar v-if="settingsStore.settings.showPageTabBar" />
         <main class="app-main-content">
           <slot></slot>
         </main>
@@ -37,9 +37,11 @@ import PageTabBar from './PageTabBar.vue';
 import { useAndroidBackButton } from '../../utils/androidBackButton';
 import { navigateBack } from '../../utils/navigation';
 import { useDesktopWindow } from '../../composables/useDesktopWindow';
+import { useSettingsStore } from '../../stores/settings';
 
 const route = useRoute();
 const router = useRouter();
+const settingsStore = useSettingsStore();
 const mobileNavigationOpen = ref(false);
 const isAndroidApp = isTauri() && /android/i.test(navigator.userAgent);
 const { showWindowControls, usesMacOverlay } = useDesktopWindow();
