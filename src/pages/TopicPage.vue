@@ -54,39 +54,41 @@
       <LoadingState text="正在加载话题概况..." />
     </div>
 
-    <!-- APK 话题页由 tabList 下发栏目，展示方式与设备页 Tab 保持一致。 -->
-    <div v-if="topicTabs.length > 1" class="topic-sub-tabs custom-scrollbar">
-      <button
-        v-for="tab in topicTabs"
-        :key="tab.key"
-        :class="['topic-tab-item', { active: activeTopicTabKey === tab.key }]"
-        type="button"
-        @click="changeTopicTab(tab.key)"
-      >
-        <span>{{ tab.label }}</span>
-        <span v-if="activeTopicTabKey === tab.key" class="tab-line"></span>
-      </button>
-    </div>
+    <div v-if="topicTabs.length > 1 || isDiscussionTab(activeTopicTab)" class="topic-sticky-controls">
+      <!-- APK 话题页由 tabList 下发栏目，展示方式与设备页 Tab 保持一致。 -->
+      <div v-if="topicTabs.length > 1" class="topic-sub-tabs custom-scrollbar">
+        <button
+          v-for="tab in topicTabs"
+          :key="tab.key"
+          :class="['topic-tab-item', { active: activeTopicTabKey === tab.key }]"
+          type="button"
+          @click="changeTopicTab(tab.key)"
+        >
+          <span>{{ tab.label }}</span>
+          <span v-if="activeTopicTabKey === tab.key" class="tab-line"></span>
+        </button>
+      </div>
 
-    <!-- 4. 排序筛选与搜索工具条 -->
-    <EntityFilterBar
-      v-if="isDiscussionTab(activeTopicTab)"
-      v-model:sort="currentSort"
-      v-model:search-keyword="searchKeyword"
-      :sort-options="sortOptions"
-      :search-sort-options="FEED_SEARCH_SORT_OPTIONS"
-      :feed-type="searchFeedType"
-      :feed-type-options="TOPIC_FEED_TYPE_OPTIONS"
-      show-feed-type
-      :target-title="tag"
-      scope-type="tag"
-      :scope-param="tag"
-      :auto-navigate-search="false"
-      @change="changeSort"
-      @search="handleTopicSearch"
-      @clear="handleTopicClear"
-      @change-feed-type="handleTopicFeedTypeChange"
-    />
+      <!-- 4. 排序筛选与搜索工具条 -->
+      <EntityFilterBar
+        v-if="isDiscussionTab(activeTopicTab)"
+        v-model:sort="currentSort"
+        v-model:search-keyword="searchKeyword"
+        :sort-options="sortOptions"
+        :search-sort-options="FEED_SEARCH_SORT_OPTIONS"
+        :feed-type="searchFeedType"
+        :feed-type-options="TOPIC_FEED_TYPE_OPTIONS"
+        show-feed-type
+        :target-title="tag"
+        scope-type="tag"
+        :scope-param="tag"
+        :auto-navigate-search="false"
+        @change="changeSort"
+        @search="handleTopicSearch"
+        @clear="handleTopicClear"
+        @change-feed-type="handleTopicFeedTypeChange"
+      />
+    </div>
 
     <!-- 5. Feed 动态列表加载中转圈 -->
     <div v-if="feedsLoading && page === 1" class="loading-wrapper">
@@ -926,6 +928,17 @@ onMounted(() => {
 }
 
 /* 2. Sub-Tabs 分类栏 */
+.topic-sticky-controls {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 8px;
+  background: var(--background);
+}
+
 .topic-sub-tabs {
   display: flex;
   align-items: center;
@@ -937,9 +950,6 @@ onMounted(() => {
   height: 48px;
   min-height: 48px;
   flex: 0 0 48px;
-  position: sticky;
-  top: 0;
-  z-index: 20;
   overflow-x: auto;
   user-select: none;
   scrollbar-width: none;

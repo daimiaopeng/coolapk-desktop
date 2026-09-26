@@ -109,7 +109,7 @@
     </div>
   </section>
 
-  <section v-else-if="isDigitalProductGroup" class="discovery-product-group">
+  <section v-else-if="isDigitalProductGroup" :class="['discovery-product-group', { 'is-vertical': productLayout === 'vertical' }]">
     <header v-if="title || subtitle" class="discovery-group-header">
       <div>
         <h3 v-if="title">{{ title }}</h3>
@@ -118,7 +118,7 @@
       <button v-if="route" type="button" @click="emitOpen">更多 <i class="fas fa-chevron-right"></i></button>
     </header>
     <div class="discovery-product-group-items">
-      <DigitalProductCard v-for="(child, index) in entity.entities" :key="getEntityKey(child, index)" :product="child" layout="grid" @open="$emit('open', $event)" />
+      <DigitalProductCard v-for="(child, index) in entity.entities" :key="getEntityKey(child, index)" :product="child" :layout="productLayout || 'grid'" @open="$emit('open', $event)" />
     </div>
   </section>
 
@@ -157,6 +157,7 @@
         :key="getEntityKey(child, index)"
         :entity="child"
         :compact="isCompactGrid || isGrid"
+        :product-layout="productLayout"
         @open="$emit('open', $event)"
       />
     </div>
@@ -172,7 +173,7 @@
     <button type="button" @click.stop="emitOpen">查看</button>
   </article>
 
-  <DigitalProductCard v-else-if="entityKind === 'product'" :product="entity" :layout="compact ? 'compact' : 'vertical'" @open="$emit('open', $event)" />
+  <DigitalProductCard v-else-if="entityKind === 'product'" :product="entity" :layout="productLayout || (compact ? 'compact' : 'vertical')" @open="$emit('open', $event)" />
 
   <TopicCard v-else-if="entityKind === 'topic'" :topic="entity" layout-mode="card" @select="emitOpen" />
 
@@ -256,7 +257,7 @@ import { isLiveEntity } from '../../utils/live';
 
 defineOptions({ name: 'DiscoveryEntityCard' });
 
-const props = defineProps<{ entity: DiscoveryEntity; compact?: boolean }>();
+const props = defineProps<{ entity: DiscoveryEntity; compact?: boolean; productLayout?: 'grid' | 'vertical' }>();
 const compact = computed(() => props.compact === true);
 const emit = defineEmits<{ (event: 'open', entity: DiscoveryEntity): void; (event: 'deleted', id: string | number): void }>();
 const authStore = useAuthStore();
@@ -480,6 +481,7 @@ async function toggleDyhFollow() {
   align-items: stretch;
 }
 .discovery-product-group-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; padding: 4px 14px 14px; }
+.discovery-product-group.is-vertical .discovery-product-group-items { grid-template-columns: minmax(0, 1fr); }
 .discovery-entity-group.is-grid .discovery-group-items {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }

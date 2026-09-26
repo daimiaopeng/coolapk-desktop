@@ -88,7 +88,7 @@
             <div v-if="productLoading && products.length === 0" class="digital-result-state"><DiscoverySkeleton /></div>
             <div v-else-if="productError && products.length === 0" class="digital-result-state"><ErrorState title="数码页面加载失败" :message="productError" @retry="loadProducts" /></div>
             <div v-else-if="products.length === 0" class="digital-result-state"><EmptyState title="服务端暂未返回内容" description="该品牌或分类当前没有可展示的数码内容" /></div>
-            <div v-else class="digital-result-list">
+            <div v-else :class="['digital-result-list', displayMode]">
               <template v-for="(block, index) in displayBlocks" :key="blockKey(block, index)">
                 <DigitalSeriesTitle v-if="block.kind === 'title'" :title="block.title || ''" />
                 <DigitalSeriesMore v-else-if="block.kind === 'more' && block.entity" :label="entityTitle(block.entity)" @open="openEntity(block.entity)" />
@@ -106,7 +106,9 @@
                     />
                   </template>
                 </div>
-                <DiscoveryEntityCard v-else-if="block.entity" :entity="block.entity" @open="openEntity" />
+                <div v-else-if="block.entity" :class="['digital-entity-item', { 'is-group': Array.isArray(block.entity.entities) && block.entity.entities.length > 0 }]">
+                  <DiscoveryEntityCard :entity="block.entity" :product-layout="displayMode === 'grid' ? 'grid' : 'vertical'" @open="openEntity" />
+                </div>
               </template>
               <div ref="productBottomSentinel" class="digital-pagination">
                 <LoadingState v-if="productLoading" text="正在加载更多服务端内容..." />
@@ -137,7 +139,7 @@
           <div v-if="dynamicCategoryLoading && dynamicCategoryItems.length === 0" class="digital-result-state"><DiscoverySkeleton /></div>
           <div v-else-if="dynamicCategoryError && dynamicCategoryItems.length === 0" class="digital-result-state"><ErrorState title="数码栏目加载失败" :message="dynamicCategoryError" @retry="loadDynamicCategory" /></div>
           <div v-else-if="dynamicCategoryItems.length === 0" class="digital-result-state"><EmptyState title="服务端暂未返回内容" description="该数码栏目当前没有可展示的内容" /></div>
-          <div v-else class="digital-result-list">
+          <div v-else :class="['digital-result-list', displayMode]">
             <template v-for="(block, index) in dynamicCategoryBlocks" :key="`dynamic-category-${blockKey(block, index)}`">
               <DigitalSeriesTitle v-if="block.kind === 'title'" :title="block.title || ''" />
               <DigitalSeriesMore v-else-if="block.kind === 'more' && block.entity" :label="entityTitle(block.entity)" @open="openEntity(block.entity)" />
@@ -150,7 +152,9 @@
                   @open="openEntity"
                 />
               </div>
-              <DiscoveryEntityCard v-else-if="block.entity" :entity="block.entity" @open="openEntity" />
+              <div v-else-if="block.entity" :class="['digital-entity-item', { 'is-group': Array.isArray(block.entity.entities) && block.entity.entities.length > 0 }]">
+                <DiscoveryEntityCard :entity="block.entity" :product-layout="displayMode === 'grid' ? 'grid' : 'vertical'" @open="openEntity" />
+              </div>
             </template>
             <div ref="dynamicCategoryBottomSentinel" class="digital-pagination">
               <LoadingState v-if="dynamicCategoryLoading" text="正在加载更多服务端内容..." />
@@ -184,7 +188,7 @@
       <div v-if="tabLoading && tabItems.length === 0" class="digital-result-state"><DiscoverySkeleton /></div>
       <div v-else-if="tabError && tabItems.length === 0" class="digital-result-state"><ErrorState title="数码页面加载失败" :message="tabError" @retry="loadTabItems" /></div>
       <div v-else-if="tabItems.length === 0" class="digital-result-state"><EmptyState title="服务端暂未返回内容" description="该数码栏目当前没有可展示的内容" /></div>
-      <div v-else class="digital-server-list">
+      <div v-else :class="['digital-server-list', displayMode]">
         <template v-for="(block, index) in tabDisplayBlocks" :key="`tab-${blockKey(block, index)}`">
           <DigitalSeriesTitle v-if="block.kind === 'title'" :title="block.title || ''" />
           <DigitalSeriesMore v-else-if="block.kind === 'more' && block.entity" :label="entityTitle(block.entity)" @open="openEntity(block.entity)" />
@@ -197,7 +201,9 @@
               @open="openEntity"
             />
           </div>
-          <DiscoveryEntityCard v-else-if="block.entity" :entity="block.entity" @open="openEntity" />
+          <div v-else-if="block.entity" :class="['digital-entity-item', { 'is-group': Array.isArray(block.entity.entities) && block.entity.entities.length > 0 }]">
+            <DiscoveryEntityCard :entity="block.entity" :product-layout="displayMode === 'grid' ? 'grid' : 'vertical'" @open="openEntity" />
+          </div>
         </template>
         <div ref="tabBottomSentinel" class="digital-pagination">
           <LoadingState v-if="tabLoading" text="正在加载更多服务端内容..." />
@@ -242,7 +248,8 @@ const modes: Array<{ key: DigitalMode; label: string; icon: string }> = [
   { key: 'category', label: '分类', icon: 'fas fa-layer-group' },
 ];
 const activeMode = ref<DigitalMode>('brand');
-const displayMode = ref<DisplayMode>((localStorage.getItem('coolapk.digital.display_mode') as DisplayMode) || 'grid');
+const savedDisplayMode = localStorage.getItem('coolapk.digital.display_mode');
+const displayMode = ref<DisplayMode>(savedDisplayMode === 'vertical' ? 'vertical' : 'grid');
 
 function setDisplayMode(mode: DisplayMode) {
   displayMode.value = mode;
@@ -953,6 +960,10 @@ onBeforeUnmount(() => { productObserver?.disconnect(); dynamicCategoryObserver?.
 .digital-content, .digital-server-content { min-width: 0; min-height: 0; height: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; background: var(--surface-hover); }
 .digital-server-content { flex: 1 1 0; }
 .digital-server-list { display: flex; flex-direction: column; gap: 14px; max-width: 1280px; padding: 16px 22px 28px; margin: 0 auto; }
+.digital-result-list.grid, .digital-server-list.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); align-content: start; }
+.digital-result-list.grid > :not(.digital-entity-item), .digital-server-list.grid > :not(.digital-entity-item),
+.digital-result-list.grid > .digital-entity-item.is-group, .digital-server-list.grid > .digital-entity-item.is-group { grid-column: 1 / -1; }
+.digital-entity-item { min-width: 0; }
 .digital-content-toolbar {
   display: flex;
   align-items: center;
