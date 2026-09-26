@@ -10,7 +10,7 @@ import { CoolapkTauriAPI } from './api/coolapk';
 import { useSettingsStore } from './stores/settings';
 import { setupGlobalAlertProxy } from './utils/toast';
 import { normalizeCoolapkDeepLink } from './utils/coolapkRoute';
-import { installDiagnosticLogging, logDiagnostic } from './utils/diagnosticLogger';
+import { installDiagnosticLogging, logDiagnostic, summarizeDiagnosticError } from './utils/diagnosticLogger';
 
 // 启动全局原生 alert 代理拦截，统一呈现顶部高质感 Toast
 setupGlobalAlertProxy();
@@ -77,21 +77,22 @@ function describeError(error: unknown): string {
 
 app.config.errorHandler = (err, _instance, info) => {
   const msg = `${info || 'render'}: ${describeError(err)}`;
-  logDiagnostic('error', 'vue', 'render_exception', info || 'render');
+  logDiagnostic('error', 'vue', 'render_exception', `${info || 'render'} ${summarizeDiagnosticError(err)}`);
   console.error('[global-error]', msg, err);
   showGlobalError(msg);
 };
 
 window.addEventListener('error', (e) => {
   const msg = `${e.message || 'unknown'} @ ${e.filename || ''}:${e.lineno || ''}:${e.colno || ''}`;
-  logDiagnostic('error', 'window', 'uncaught_exception', e.error instanceof Error ? e.error.name : 'unknown');
+  const location = `${e.filename || 'unknown'}:${e.lineno || 0}:${e.colno || 0}`;
+  logDiagnostic('error', 'window', 'uncaught_exception', `${summarizeDiagnosticError(e.error || e.message)} location=${location}`);
   console.error('[window-error]', msg, e.error);
   showGlobalError(msg);
 });
 
 window.addEventListener('unhandledrejection', (e) => {
   const msg = describeError(e.reason || e);
-  logDiagnostic('error', 'window', 'unhandled_rejection', e.reason instanceof Error ? e.reason.name : 'unknown');
+  logDiagnostic('error', 'window', 'unhandled_rejection', summarizeDiagnosticError(e.reason));
   console.error('[unhandledrejection]', msg, e.reason);
   showGlobalError(msg);
 });
@@ -135,6 +136,12 @@ async function bootstrap() {
   settingsStore.applyAppearance();
   await setupDeepLinkHandling();
   logDiagnostic('info', 'app', 'ready');
+  const readyAt = Date.now();
+  window.setInterval(() => {
+    if (!document.hidden) {
+      logDiagnostic('info', 'app', 'heartbeat', `uptime_s=${Math.floor((Date.now() - readyAt) / 1000)}`);
+    }
+  }, 30_000);
 }
 
 void bootstrap();

@@ -770,6 +770,7 @@ fn is_main_window_navigation_allowed(url: &tauri::Url) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    diagnostics::install_panic_hook();
     let client = CoolapkClient::new();
     let state = AppState {
         client,
@@ -879,6 +880,7 @@ pub fn run() {
         })
         .manage(state)
         .setup(|app| {
+            diagnostics::begin_session(app.handle());
             #[cfg(any(target_os = "windows", target_os = "linux"))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
@@ -1058,6 +1060,10 @@ pub fn run() {
                     }
                 }
                 WindowEvent::CloseRequested { api, .. } => {
+                    log::info!(
+                        "runtime.main_window_close_requested to_tray={}",
+                        CLOSE_TO_TRAY.load(Ordering::SeqCst)
+                    );
                     // 记忆窗口状态：先在隐藏/关闭前读取真实几何信息，避免托盘模式下查询失败。
                     persist_current_window_geometry(&window.app_handle());
                     // 关闭到托盘：仅主窗口点击关闭时隐藏而非退出，其余窗口（如外部链接窗口）正常关闭
@@ -1067,6 +1073,7 @@ pub fn run() {
                     }
                 }
                 WindowEvent::Destroyed => {
+                    log::info!("runtime.main_window_destroyed");
                     // 兼容其他 app.exit() 调用：窗口已销毁后只能使用最近一次缓存。
                     if REMEMBER_WINDOW_STATE.load(Ordering::SeqCst) {
                         if let Some(state) = cached_window_state() {
@@ -1347,6 +1354,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
+            if matches!(&event, tauri::RunEvent::Exit) {
+                diagnostics::end_session(app);
+            }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen {
                 has_visible_windows,

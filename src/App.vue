@@ -176,7 +176,6 @@ import { clearResourceCache } from './utils/resourceCache';
 import { useSidebarTransition } from './utils/routeTransition';
 import { registerGlobalSelectionClear } from './utils/selection';
 import { getPlatformInfo } from './utils/platform';
-import { syncFavoriteContentIndex } from './utils/favoriteContentIndex';
 import { usePageTabsStore } from './stores/pageTabs';
 import { logDiagnostic } from './utils/diagnosticLogger';
 
@@ -227,16 +226,6 @@ let updateDownloadInFlight = false;
 
 // 所有路由入口（侧边栏、内容卡片、深链和快捷键）统一在这里登记为可见标签页。
 watch(() => route.fullPath, () => pageTabsStore.syncRoute(route), { immediate: true });
-
-watch(
-  [() => authStore.isLoggedIn, () => authStore.user?.uid],
-  ([isLoggedIn, uid]) => {
-    if (!isLoggedIn || !uid) return;
-    // 收藏正文索引在后台同步，不阻塞启动、登录或页面渲染。
-    void syncFavoriteContentIndex(uid).catch((error) => console.warn('后台同步收藏正文索引失败:', error));
-  },
-  { immediate: true },
-);
 
 function formatBytes(bytes: number) {
   if (!bytes) return '0 MB';

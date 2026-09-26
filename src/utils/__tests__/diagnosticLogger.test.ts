@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => true, invoke: mocks.invoke }));
 vi.mock('@tauri-apps/plugin-log', () => ({ info: mocks.info, warn: mocks.warn, error: mocks.error, debug: mocks.debug }));
 
-import { logDiagnostic, redactDiagnosticText, setVerboseDiagnosticLogging } from '../diagnosticLogger';
+import { logDiagnostic, redactDiagnosticText, setVerboseDiagnosticLogging, summarizeDiagnosticError } from '../diagnosticLogger';
 
 describe('diagnosticLogger', () => {
   beforeEach(() => { (window as any).__TAURI_INTERNALS__ = {}; });
@@ -36,6 +36,16 @@ describe('diagnosticLogger', () => {
     logDiagnostic('error', 'login', 'failed', { cookie: 'private-value' });
     expect(mocks.error).toHaveBeenCalledWith(expect.stringContaining('[object]'));
     expect(mocks.error.mock.calls[0][0]).not.toContain('private-value');
+  });
+
+  it('logs one sanitized source frame for runtime errors', () => {
+    const failure = new Error('failed with token=secret');
+    failure.stack = 'Error: failed with token=secret\n    at load (https://example.com/app.js?token=secret:12:3)';
+    const summary = summarizeDiagnosticError(failure);
+    expect(summary).toContain('load');
+    expect(summary).not.toContain('secret');
+    expect(summarizeDiagnosticError({ token: 'private-value' })).toBe('unknown');
+    expect(summarizeDiagnosticError('token=secret')).not.toContain('secret');
   });
 
   it('only writes debug events when verbose mode is enabled', async () => {

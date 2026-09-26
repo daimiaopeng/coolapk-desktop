@@ -1552,12 +1552,18 @@ impl CoolapkClient {
         })?;
         let status = response.status();
         let result = response_json(response).await;
-        if result.is_err() {
-            log::warn!("api.response_failed method={} path={} status={} elapsed_ms={}",
-                method_name, log_path, status.as_u16(), started.elapsed().as_millis());
-        } else {
-            log::debug!("api.response_ok method={} path={} status={} elapsed_ms={}",
-                method_name, log_path, status.as_u16(), started.elapsed().as_millis());
+        match &result {
+            Err(error) => log::warn!("api.response_failed method={} path={} status={} reason={} elapsed_ms={}",
+                method_name, log_path, status.as_u16(), classify_api_failure(error), started.elapsed().as_millis()),
+            Ok(value) => {
+                if let Some((code, reason)) = application_failure(value) {
+                    log::warn!("api.application_failed method={} path={} status={} code={} reason={}",
+                        method_name, log_path, status.as_u16(), code, reason);
+                } else {
+                    log::debug!("api.response_ok method={} path={} status={} elapsed_ms={}",
+                        method_name, log_path, status.as_u16(), started.elapsed().as_millis());
+                }
+            }
         }
         result
     }
@@ -1615,12 +1621,18 @@ impl CoolapkClient {
             })?;
         let status = response.status();
         let result = response_json(response).await;
-        if result.is_err() {
-            log::warn!("api.guest_response_failed path={} status={} elapsed_ms={}",
-                log_path, status.as_u16(), started.elapsed().as_millis());
-        } else {
-            log::debug!("api.guest_response_ok path={} status={} elapsed_ms={}",
-                log_path, status.as_u16(), started.elapsed().as_millis());
+        match &result {
+            Err(error) => log::warn!("api.guest_response_failed path={} status={} reason={} elapsed_ms={}",
+                log_path, status.as_u16(), classify_api_failure(error), started.elapsed().as_millis()),
+            Ok(value) => {
+                if let Some((code, reason)) = application_failure(value) {
+                    log::warn!("api.guest_application_failed path={} status={} code={} reason={}",
+                        log_path, status.as_u16(), code, reason);
+                } else {
+                    log::debug!("api.guest_response_ok path={} status={} elapsed_ms={}",
+                        log_path, status.as_u16(), started.elapsed().as_millis());
+                }
+            }
         }
         result
     }
@@ -8539,6 +8551,36 @@ mod path_requirements_tests {
     }
 }
 
+fn classify_api_failure(text: &str) -> &'static str {
+    let lower = text.to_ascii_lowercase();
+    if lower.contains("captcha") || text.contains("验证码") {
+        "captcha"
+    } else if lower.contains("rate_limit") || lower.contains("too many") || text.contains("访问过于频繁") {
+        "rate_limit"
+    } else if lower.contains("login") || lower.contains("auth") || text.contains("未登录") {
+        "authentication"
+    } else if lower.contains("empty response body") {
+        "empty_body"
+    } else {
+        "other"
+    }
+}
+
+fn application_failure(value: &Value) -> Option<(i64, &'static str)> {
+    let raw_code = value.get("code")?;
+    let code = raw_code.as_i64().or_else(|| raw_code.as_str()?.parse().ok())?;
+    if code == 0 || code == 200 || (0..400).contains(&code) {
+        return None;
+    }
+    let reason = ["messageStatus", "messageExtra", "message"]
+        .iter()
+        .filter_map(|key| value.get(*key).and_then(Value::as_str))
+        .map(classify_api_failure)
+        .find(|reason| *reason != "other")
+        .unwrap_or("other");
+    Some((code, reason))
+}
+
 async fn response_json(response: reqwest::Response) -> Result<Value, String> {
     let status = response.status();
     let body = response
@@ -8556,6 +8598,20 @@ async fn response_json(response: reqwest::Response) -> Result<Value, String> {
     }
 
     serde_json::from_str(&body).map_err(|e| format!("invalid Coolapk JSON response: {e}"))
+}
+
+#[cfg(test)]
+mod api_failure_log_tests {
+    use super::{application_failure, classify_api_failure};
+    use serde_json::json;
+
+    #[test]
+    fn classifies_failure_without_exposing_server_message() {
+        assert_eq!(application_failure(&json!({"code": 403, "messageStatus": "err_request_captcha_v2"})), Some((403, "captcha")));
+        assert_eq!(application_failure(&json!({"code": -415, "message": "访问过于频繁"})), Some((-415, "rate_limit")));
+        assert_eq!(application_failure(&json!({"code": 200, "message": "ok"})), None);
+        assert_eq!(classify_api_failure("Coolapk API returned HTTP 403: empty response body"), "empty_body");
+    }
 }
 
 #[cfg(test)]

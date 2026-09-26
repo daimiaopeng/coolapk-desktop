@@ -48,6 +48,14 @@ function summarize(value: unknown): string {
   return '[object]';
 }
 
+/** Keep one source frame and a short, redacted message; never serialize rejection objects. */
+export function summarizeDiagnosticError(value: unknown): string {
+  if (typeof value === 'string') return redactDiagnosticText(value).slice(0, 800);
+  if (!(value instanceof Error)) return 'unknown';
+  const frame = value.stack?.split('\n').slice(1).find(line => line.trim().startsWith('at '))?.trim() || '';
+  return redactDiagnosticText(`${value.name}: ${value.message}${frame ? ` frame=${frame}` : ''}`).slice(0, 800);
+}
+
 export function logDiagnostic(level: LogLevel, module: string, event: string, detail?: unknown): void {
   if (!loggingAvailable() || writing || (level === 'debug' && !verbose)) return;
   const message = `[frontend][${redactDiagnosticText(module)}] ${redactDiagnosticText(event)}${detail === undefined ? '' : ` ${summarize(detail)}`}`;

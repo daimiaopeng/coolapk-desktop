@@ -597,7 +597,6 @@ import {
   normalizeFavoriteSearchText,
   removeFavoriteContentIndexEntry,
   searchFavoriteContentIndex,
-  syncFavoriteContentIndex,
 } from '../utils/favoriteContentIndex';
 
 const authStore = useAuthStore();
@@ -609,8 +608,6 @@ const favoriteExportOpen = ref(false);
 function openFavoriteExport() {
   favoriteExportOpen.value = true;
 }
-
-const favoriteContentIndexing = ref(false);
 
 const collections = ref<any[]>([]);
 const collectionsLoading = ref(false);
@@ -732,19 +729,6 @@ function scheduleCollectionContentSearch() {
     collectionContentSearchTimer = null;
     void runCollectionContentSearch();
   }, 180);
-}
-
-async function refreshFavoriteContentIndex() {
-  const accountId = favoriteAccountId();
-  if (!accountId || favoriteContentIndexing.value) return;
-  favoriteContentIndexing.value = true;
-  try {
-    await syncFavoriteContentIndex(accountId);
-  } catch (error) {
-    console.warn('后台更新收藏正文索引失败:', error);
-  } finally {
-    favoriteContentIndexing.value = false;
-  }
 }
 
 const filteredCollections = computed(() => {
@@ -1350,7 +1334,6 @@ watch(
   () => {
     if (authStore.isLoggedIn) {
       void fetchCollections();
-      void refreshFavoriteContentIndex();
     }
   }
 );
@@ -1360,7 +1343,6 @@ watch(collectionContentSearchKeyword, () => scheduleCollectionContentSearch());
 onMounted(() => {
   if (authStore.isLoggedIn) {
     void fetchCollections();
-    void refreshFavoriteContentIndex();
   }
 });
 
