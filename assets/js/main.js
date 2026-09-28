@@ -1,5 +1,6 @@
 /**
  * Coolapk Desktop (酷安桌面版) 官网交互脚本
+ * 包含：深浅主题、平台切换、图片画廊 Lightbox、FAQ 手风琴、返回顶部、GitHub API 动态数据绑定
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -9,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initLightbox();
   initFaqAccordion();
   initBackToTop();
-  initCopyButtons();
+  initDynamicGitHubData();
 });
 
 /* ================= 1. 主题切换 (Dark / Light Mode) ================= */
@@ -38,7 +39,6 @@ function updateThemeIcon(theme) {
   const icon = document.getElementById('theme-icon');
   if (!icon) return;
   if (theme === 'dark') {
-    // 显示太阳图标（点击切换为浅色）
     icon.innerHTML = `
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="5"></circle>
@@ -53,7 +53,6 @@ function updateThemeIcon(theme) {
       </svg>
     `;
   } else {
-    // 显示月亮图标（点击切换为深色）
     icon.innerHTML = `
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
@@ -84,7 +83,7 @@ function initPlatformTabs() {
     });
   });
 
-  // 根据当前访问者操作系统自动预选平台
+  // 根据当前系统环境预选对应标签
   const userAgent = navigator.userAgent.toLowerCase();
   let defaultPlatform = 'windows';
   if (userAgent.includes('mac')) {
@@ -175,7 +174,6 @@ function initFaqAccordion() {
       const content = item.querySelector('.faq-content');
       const isOpen = item.classList.contains('open');
 
-      // 关闭其他展开项
       document.querySelectorAll('.faq-item.open').forEach(openedItem => {
         if (openedItem !== item) {
           openedItem.classList.remove('open');
@@ -215,33 +213,209 @@ function initBackToTop() {
   });
 }
 
-/* ================= 7. 快捷复制按钮 ================= */
-function initCopyButtons() {
-  const copyButtons = document.querySelectorAll('.btn-copy');
+/* ================= 7. 动态数据绑定 (GitHub API) ================= */
+async function initDynamicGitHubData() {
+  // 动态年份
+  const copyrightYear = document.getElementById('copyright-year');
+  if (copyrightYear) {
+    copyrightYear.textContent = new Date().getFullYear();
+  }
 
-  copyButtons.forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const textToCopy = btn.getAttribute('data-copy');
-      if (!textToCopy) return;
+  const REPO = 'daimiaopeng/coolapk-desktop';
 
-      try {
-        await navigator.clipboard.writeText(textToCopy);
-        const originalText = btn.innerHTML;
-        btn.innerHTML = `
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-          已复制!
-        `;
-        btn.classList.add('copied');
-        setTimeout(() => {
-          btn.innerHTML = originalText;
-          btn.classList.remove('copied');
-        }, 2000);
-      } catch (err) {
-        console.error('复制失败:', err);
+  // 1. 获取 Star 数量
+  try {
+    const repoData = await fetchGitHubWithCache(`https://api.github.com/repos/${REPO}`, 'repo_meta');
+    if (repoData && repoData.stargazers_count !== undefined) {
+      const starEl = document.getElementById('repo-stars');
+      if (starEl) {
+        const count = repoData.stargazers_count;
+        const formatted = count >= 1000 ? (count / 1000).toFixed(1) + 'k' : count;
+        starEl.textContent = `★ Star ${formatted}`;
       }
+    }
+  } catch (err) {
+    console.warn('获取 Star 计数失败，保留静态预设:', err);
+  }
+
+  // 2. 获取最新发布 Release 与下载直链
+  try {
+    const releaseData = await fetchGitHubWithCache(`https://api.github.com/repos/${REPO}/releases/latest`, 'latest_release');
+    if (!releaseData || !releaseData.tag_name) return;
+
+    const version = releaseData.tag_name; // 例如 "v1.27.4"
+    const rawVersion = version.replace(/^v/, ''); // 例如 "1.27.4"
+    const assets = releaseData.assets || [];
+
+    // 更新顶栏 Badge
+    const badge = document.getElementById('app-version-badge');
+    if (badge) badge.textContent = version;
+
+    // 计算相对时间（如 "3天前"）
+    let dateStr = '';
+    if (releaseData.published_at) {
+      dateStr = formatRelativeTime(releaseData.published_at);
+    }
+
+    // 更新 Hero 胶囊提示
+    const heroInfo = document.getElementById('hero-release-info');
+    if (heroInfo) {
+      heroInfo.textContent = dateStr 
+        ? `最新版本 ${version} (${dateStr}发布) · 全平台跨端体验`
+        : `最新版本 ${version} 已就绪 · 全平台跨端体验`;
+    }
+
+    // 更新底部 CTA 按钮文案
+    const bottomCta = document.getElementById('bottom-cta-version');
+    if (bottomCta) {
+      bottomCta.textContent = `立即前往下载 (${version})`;
+    }
+
+    // 映射并绑定各平台的资产直接下载链接与文件大小
+    bindAssetDownload({
+      btnId: 'dl-win-setup',
+      metaId: 'meta-win-setup',
+      defaultText: '下载安装包 (x64)',
+      matchFn: (name) => name.includes('x64-setup.exe') || name.includes('setup.exe'),
+      assets
     });
+
+    bindAssetDownload({
+      btnId: 'dl-win-portable',
+      metaId: 'meta-win-portable',
+      defaultText: '下载单文件版',
+      matchFn: (name) => name.includes('x64-portable.exe') || name.includes('portable.exe'),
+      assets
+    });
+
+    bindAssetDownload({
+      btnId: 'dl-mac-arm64',
+      metaId: 'meta-mac-arm64',
+      defaultText: '下载 DMG (Apple 芯片)',
+      matchFn: (name) => name.includes('aarch64.dmg'),
+      assets
+    });
+
+    bindAssetDownload({
+      btnId: 'dl-mac-intel',
+      metaId: 'meta-mac-intel',
+      defaultText: '下载 DMG (Intel)',
+      matchFn: (name) => name.includes('x64.dmg'),
+      assets
+    });
+
+    bindAssetDownload({
+      btnId: 'dl-linux-appimage',
+      metaId: 'meta-linux-appimage',
+      defaultText: '下载 AppImage',
+      matchFn: (name) => name.endsWith('.AppImage'),
+      assets
+    });
+
+    bindAssetDownload({
+      btnId: 'dl-linux-deb',
+      metaId: 'meta-linux-deb',
+      defaultText: '获取 DEB / RPM 安装包',
+      matchFn: (name) => name.endsWith('.deb'),
+      assets
+    });
+
+    bindAssetDownload({
+      btnId: 'dl-android-apk',
+      metaId: 'meta-android-apk',
+      defaultText: '下载 Android APK',
+      matchFn: (name) => name.endsWith('.apk'),
+      assets
+    });
+
+    bindAssetDownload({
+      btnId: 'dl-ios-ipa',
+      metaId: 'meta-ios-ipa',
+      defaultText: '下载 iOS IPA',
+      matchFn: (name) => name.endsWith('.ipa'),
+      assets
+    });
+
+  } catch (err) {
+    console.warn('获取最新 Release 信息失败，自动保留默认静态配置:', err);
+  }
+}
+
+/**
+ * 匹配 asset 并绑定 href、大小及文件名标注
+ */
+function bindAssetDownload({ btnId, metaId, defaultText, matchFn, assets }) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+
+  const matched = assets.find(a => matchFn(a.name));
+  if (matched) {
+    btn.href = matched.browser_download_url;
+    const sizeMb = (matched.size / (1024 * 1024)).toFixed(1);
+    
+    const textSpan = btn.querySelector('.btn-text');
+    if (textSpan) {
+      textSpan.textContent = `${defaultText} (${sizeMb} MB)`;
+    }
+
+    if (metaId) {
+      const metaEl = document.getElementById(metaId);
+      if (metaEl) {
+        metaEl.textContent = `文件：${matched.name} (${sizeMb} MB)`;
+      }
+    }
+  }
+}
+
+/**
+ * 轻量带缓存的 Fetch（SessionStorage 缓存 10 分钟，避免 GitHub API Rate Limit）
+ */
+async function fetchGitHubWithCache(url, cacheKey) {
+  const fullKey = `coolapk_gh_${cacheKey}`;
+  const cached = sessionStorage.getItem(fullKey);
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      // 10 分钟有效期
+      if (Date.now() - parsed.timestamp < 10 * 60 * 1000) {
+        return parsed.data;
+      }
+    } catch (e) {
+      sessionStorage.removeItem(fullKey);
+    }
+  }
+
+  const res = await fetch(url, {
+    headers: {
+      'Accept': 'application/vnd.github.v3+json'
+    }
   });
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+  }
+
+  const data = await res.json();
+  sessionStorage.setItem(fullKey, JSON.stringify({
+    timestamp: Date.now(),
+    data
+  }));
+
+  return data;
+}
+
+/**
+ * 友好的相对时间格式化
+ */
+function formatRelativeTime(dateString) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffSec = Math.floor((now - date) / 1000);
+
+  if (diffSec < 60) return '刚刚';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} 分钟前`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} 小时前`;
+  if (diffSec < 86400 * 30) return `${Math.floor(diffSec / 86400)} 天前`;
+  
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }

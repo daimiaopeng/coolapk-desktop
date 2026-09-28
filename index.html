@@ -18,7 +18,7 @@
         <img src="assets/logo.png" alt="酷安 Logo" class="brand-logo">
         <div class="brand-text">
           <span>酷安桌面版</span>
-          <span class="brand-badge">v1.27.4</span>
+          <span class="brand-badge" id="app-version-badge">v1.27.4</span>
         </div>
       </a>
 
@@ -41,11 +41,11 @@
         </button>
 
         <!-- GitHub 仓库 -->
-        <a href="https://github.com/daimiaopeng/coolapk-desktop" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" title="在 GitHub 查看源码">
+        <a href="https://github.com/daimiaopeng/coolapk-desktop" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" title="在 GitHub 查看源码并点赞">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
           </svg>
-          <span>Star 关注</span>
+          <span id="repo-stars">★ Star</span>
         </a>
 
         <!-- 下载入口 -->
@@ -61,10 +61,10 @@
     <div class="hero-glow-1"></div>
     <div class="container">
       
-      <div class="hero-pill">
-        <span class="hero-pill-badge">NEW</span>
-        <span>最新版本 v1.27.4 已就绪 · 全平台跨端体验</span>
-      </div>
+      <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="hero-pill">
+        <span class="hero-pill-badge">RELEASE</span>
+        <span id="hero-release-info">最新版本 v1.27.4 已就绪 · 全平台跨端体验</span>
+      </a>
 
       <h1 class="hero-title">
         极客社区，<span class="gradient-text">大屏新生</span>
@@ -82,7 +82,7 @@
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
           </svg>
-          <span>获取酷安桌面版</span>
+          <span id="hero-download-btn-text">获取酷安桌面版</span>
         </a>
         <a href="https://github.com/daimiaopeng/coolapk-desktop" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-lg">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -103,7 +103,7 @@
         </div>
         <div class="hero-meta-item">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          <span>跨平台支持 (Win/Mac/Linux)</span>
+          <span>跨平台支持 (Win/Mac/Linux/移动端)</span>
         </div>
       </div>
 
@@ -457,14 +457,14 @@
                   </div>
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span>格式：.exe (NSIS 安装包)</span>
+                    <span id="meta-win-setup">格式：.exe (NSIS 安装包)</span>
                   </div>
                 </div>
               </div>
               <div class="download-btn-group">
-                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
+                <a id="dl-win-setup" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  <span>下载安装包 (x64)</span>
+                  <span class="btn-text">下载安装包 (x64)</span>
                 </a>
               </div>
             </div>
@@ -483,14 +483,14 @@
                   </div>
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span>格式：coolapk-desktop_portable.exe</span>
+                    <span id="meta-win-portable">格式：x64-portable.exe</span>
                   </div>
                 </div>
               </div>
               <div class="download-btn-group">
-                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
+                <a id="dl-win-portable" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  <span>下载单文件版</span>
+                  <span class="btn-text">下载单文件版</span>
                 </a>
               </div>
             </div>
@@ -521,13 +521,13 @@
                   </div>
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span>格式：.dmg 磁盘映像包</span>
+                    <span id="meta-mac-arm64">格式：.dmg 磁盘映像包</span>
                   </div>
                 </div>
               </div>
               <div class="download-btn-group">
-                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
-                  <span>下载 DMG (Apple 芯片)</span>
+                <a id="dl-mac-arm64" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
+                  <span class="btn-text">下载 DMG (Apple 芯片)</span>
                 </a>
               </div>
             </div>
@@ -546,13 +546,13 @@
                   </div>
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span>格式：.dmg 磁盘映像包</span>
+                    <span id="meta-mac-intel">格式：.dmg 磁盘映像包</span>
                   </div>
                 </div>
               </div>
               <div class="download-btn-group">
-                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
-                  <span>下载 DMG (Intel)</span>
+                <a id="dl-mac-intel" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
+                  <span class="btn-text">下载 DMG (Intel)</span>
                 </a>
               </div>
             </div>
@@ -579,7 +579,7 @@
                 <div class="download-meta-list">
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span>格式：.AppImage</span>
+                    <span id="meta-linux-appimage">格式：.AppImage</span>
                   </div>
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -588,8 +588,8 @@
                 </div>
               </div>
               <div class="download-btn-group">
-                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
-                  <span>下载 AppImage</span>
+                <a id="dl-linux-appimage" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
+                  <span class="btn-text">下载 AppImage</span>
                 </a>
               </div>
             </div>
@@ -604,7 +604,7 @@
                 <div class="download-meta-list">
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span>格式：.deb / .rpm</span>
+                    <span id="meta-linux-deb">格式：.deb / .rpm</span>
                   </div>
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -613,8 +613,8 @@
                 </div>
               </div>
               <div class="download-btn-group">
-                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
-                  <span>获取 DEB / RPM 安装包</span>
+                <a id="dl-linux-deb" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
+                  <span class="btn-text">获取 DEB / RPM 安装包</span>
                 </a>
               </div>
             </div>
@@ -634,13 +634,13 @@
                 <div class="download-meta-list">
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span>包名：coolapk-android-arm64.apk</span>
+                    <span id="meta-android-apk">包名：coolapk-android-arm64.apk</span>
                   </div>
                 </div>
               </div>
               <div class="download-btn-group">
-                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
-                  <span>下载 Android APK</span>
+                <a id="dl-android-apk" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
+                  <span class="btn-text">下载 Android APK</span>
                 </a>
               </div>
             </div>
@@ -655,13 +655,13 @@
                 <div class="download-meta-list">
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span>格式：.ipa (需第三方工具签名)</span>
+                    <span id="meta-ios-ipa">格式：.ipa (需第三方工具签名)</span>
                   </div>
                 </div>
               </div>
               <div class="download-btn-group">
-                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
-                  <span>下载 iOS IPA</span>
+                <a id="dl-ios-ipa" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
+                  <span class="btn-text">下载 iOS IPA</span>
                 </a>
               </div>
             </div>
@@ -795,7 +795,7 @@
       <div class="cta-actions">
         <a href="#download" class="btn btn-white btn-lg">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          <span>立即前往下载 (v1.27.4)</span>
+          <span id="bottom-cta-version">立即前往下载</span>
         </a>
         <a href="https://github.com/daimiaopeng/coolapk-desktop" target="_blank" rel="noopener noreferrer" class="btn btn-white-outline btn-lg">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -857,7 +857,7 @@
           <strong>非官方声明</strong>：本项目为开源社区发起的非官方客户端，与酷安官方及深圳酷安网络科技有限公司无任何隶属、授权或商业合作关系。酷安相关品牌名称、Logo 及商标版权归其合法权利人所有。
         </div>
         <div>
-          <span>© 2026 daimiaopeng & Coolapk Desktop Contributors.</span>
+          <span>© <span id="copyright-year">2026</span> daimiaopeng & Coolapk Desktop Contributors.</span>
         </div>
       </div>
     </div>
