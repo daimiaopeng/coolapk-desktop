@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>酷安桌面版 (Coolapk Desktop) - 基于 Tauri 2 & Rust 的非官方酷安客户端</title>
+  <meta name="description" content="基于 Tauri 2、Vue 3 和 Rust 构建的现代非官方酷安桌面客户端。极速轻量、低内存占用、全平台覆盖，提供纯净的大屏酷安社区浏览体验。">
+  <meta name="keywords" content="酷安, 酷安桌面版, coolapk, coolapk-desktop, Tauri, Rust, Vue 3, 极客社区, 客户端">
+  <link rel="icon" type="image/png" href="assets/logo.png">
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- ================= 顶栏导航 ================= -->
+  <header class="site-header">
+    <div class="container nav-container">
+      <a href="#" class="brand">
+        <img src="assets/logo.png" alt="酷安 Logo" class="brand-logo">
+        <div class="brand-text">
+          <span>酷安桌面版</span>
+          <span class="brand-badge">v1.27.4</span>
+        </div>
+      </a>
+
+      <nav class="nav-menu">
+        <a href="#features" class="nav-link">核心特性</a>
+        <a href="#screenshots" class="nav-link">界面预览</a>
+        <a href="#download" class="nav-link">下载中心</a>
+        <a href="#security" class="nav-link">安全与隐私</a>
+        <a href="#faq" class="nav-link">常见问题</a>
+      </nav>
+
+      <div class="nav-actions">
+        <!-- 主题切换 -->
+        <button id="theme-toggle" class="btn-icon" title="切换深浅主题" aria-label="切换主题">
+          <span id="theme-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          </span>
+        </button>
+
+        <!-- GitHub 仓库 -->
+        <a href="https://github.com/daimiaopeng/coolapk-desktop" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" title="在 GitHub 查看源码">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          <span>Star 关注</span>
+        </a>
+
+        <!-- 下载入口 -->
+        <a href="#download" class="btn btn-primary btn-sm">
+          <span>立即下载</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= Hero 区域 ================= -->
+  <section class="hero-section">
+    <div class="hero-glow-1"></div>
+    <div class="container">
+      
+      <div class="hero-pill">
+        <span class="hero-pill-badge">NEW</span>
+        <span>最新版本 v1.27.4 已就绪 · 全平台跨端体验</span>
+      </div>
+
+      <h1 class="hero-title">
+        极客社区，<span class="gradient-text">大屏新生</span>
+      </h1>
+
+      <p class="hero-desc">
+        基于 Tauri 2、Vue 3 和 Rust 构建的现代非官方酷安桌面客户端。<br>
+        告别模拟器卡顿与沉重内存占用，回归原生极致轻快、纯粹沉浸的大屏极客体验。
+      </p>
+
+      <div class="hero-cta">
+        <a href="#download" class="btn btn-primary btn-lg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>获取酷安桌面版</span>
+        </a>
+        <a href="https://github.com/daimiaopeng/coolapk-desktop" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-lg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          <span>查看 GitHub 源码</span>
+        </a>
+      </div>
+
+      <div class="hero-meta">
+        <div class="hero-meta-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span>超低内存仅 ~60MB</span>
+        </div>
+        <div class="hero-meta-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span>零遥测 & 本地加密</span>
+        </div>
+        <div class="hero-meta-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span>跨平台支持 (Win/Mac/Linux)</span>
+        </div>
+      </div>
+
+      <!-- 客户端窗口实机预览 Mockup -->
+      <div class="showcase-wrapper">
+        <div class="window-frame">
+          <div class="window-header">
+            <div class="window-dots">
+              <span class="dot dot-red"></span>
+              <span class="dot dot-yellow"></span>
+              <span class="dot dot-green"></span>
+            </div>
+            <div class="window-address">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <span>搜索应用、动态、用户、话题 (Ctrl+K)</span>
+            </div>
+            <div class="window-actions">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            </div>
+          </div>
+          <div class="window-body">
+            <img src="assets/screenshots/home.png" alt="酷安桌面版主界面实机运行预览">
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= 数据与技术亮点 Banner ================= -->
+  <section class="stat-section">
+    <div class="container">
+      <div class="stat-grid">
+        <div class="stat-item">
+          <h3>Tauri 2</h3>
+          <p>下一代原生微内核，极速秒开</p>
+        </div>
+        <div class="stat-item">
+          <h3>Rust</h3>
+          <p>内存安全并发后端，Token 签名认证</p>
+        </div>
+        <div class="stat-item">
+          <h3>Vue 3 + TS</h3>
+          <p>组合式现代化交互，全响应式体验</p>
+        </div>
+        <div class="stat-item">
+          <h3>100% 本地</h3>
+          <p>零广告、零第三方跟踪、零遥测收集</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 核心特性矩阵 ================= -->
+  <section id="features" class="section-padding">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-tag">KEY FEATURES</span>
+        <h2 class="section-title">为大屏极客而生的细腻设计</h2>
+        <p class="section-subtitle">专为桌面体验量身适配，重塑每一处信息流呈现与社区交互逻辑。</p>
+      </div>
+
+      <div class="features-grid">
+        
+        <!-- 特性 1 -->
+        <div class="feature-card">
+          <div class="feature-icon-wrapper">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="3" y1="9" x2="21" y2="9"></line>
+              <line x1="9" y1="21" x2="9" y2="9"></line>
+            </svg>
+          </div>
+          <h3 class="feature-title">全频道丰富信息流</h3>
+          <p class="feature-desc">涵盖推荐、热榜、头条快讯、酷图壁纸、数码选机、二手交易与深度评测，与移动端全量动态无缝同步。</p>
+          <span class="feature-badge">实时聚合刷新</span>
+        </div>
+
+        <!-- 特性 2 -->
+        <div class="feature-card">
+          <div class="feature-icon-wrapper">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <h3 class="feature-title">深度互动与楼中楼</h3>
+          <p class="feature-desc">优雅的楼中楼评论树排版、爆评优先高亮、点赞转发与收藏一气呵成；完美内置酷安原汁原味官方表情包。</p>
+          <span class="feature-badge">酷安原生表情</span>
+        </div>
+
+        <!-- 特性 3 -->
+        <div class="feature-card">
+          <div class="feature-icon-wrapper">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+          </div>
+          <h3 class="feature-title">满幅瀑布流与大屏视野</h3>
+          <p class="feature-desc">支持全屏无边距满幅平铺布局与多列响应式栅格，自由调节缩放，享受宽屏显示器下的高密度内容浏览快感。</p>
+          <span class="feature-badge">大屏自适应</span>
+        </div>
+
+        <!-- 特性 4 -->
+        <div class="feature-card">
+          <div class="feature-icon-wrapper">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="8.5" cy="7" r="4"></circle>
+              <polyline points="17 11 19 13 23 9"></polyline>
+            </svg>
+          </div>
+          <h3 class="feature-title">多账号随心切换</h3>
+          <p class="feature-desc">内置支持官方 Web 授权扫码登录与 Cookie 导入两种登录模式，本地加密存储多账号凭据，无感一键快速切号。</p>
+          <span class="feature-badge">多账户秒切</span>
+        </div>
+
+        <!-- 特性 5 -->
+        <div class="feature-card">
+          <div class="feature-icon-wrapper">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+          <h3 class="feature-title">全站搜索与专区广场</h3>
+          <p class="feature-desc">全站级快捷综合搜索（支持 Ctrl+K 唤起），即时联想应用、游戏、用户、话题与图文；话题广场与分类一触即达。</p>
+          <span class="feature-badge">Ctrl+K 瞬时搜索</span>
+        </div>
+
+        <!-- 特性 6 -->
+        <div class="feature-card">
+          <div class="feature-icon-wrapper">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+          </div>
+          <h3 class="feature-title">足迹历史与云端收藏</h3>
+          <p class="feature-desc">精细化时间轴浏览轨迹记录，支持动态、用户、话题与应用即时过滤筛选；常逛专区快速直达，收藏夹云端同步。</p>
+          <span class="feature-badge">时间轴轨迹</span>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 界面预览交互画廊 ================= -->
+  <section id="screenshots" class="section-padding" style="background: var(--bg-subtle);">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-tag">SCREENSHOTS</span>
+        <h2 class="section-title">实机界面全景预览</h2>
+        <p class="section-subtitle">点击任意截图可查看高清原图，体验每一个页面的精巧细节。</p>
+      </div>
+
+      <!-- 分类标签过滤器 -->
+      <div class="gallery-nav">
+        <button class="gallery-btn active" data-filter="all">全部界面</button>
+        <button class="gallery-btn" data-filter="feed">首页热榜</button>
+        <button class="gallery-btn" data-filter="digital">数码选机</button>
+        <button class="gallery-btn" data-filter="topics">话题广场</button>
+        <button class="gallery-btn" data-filter="photos">酷图大图</button>
+        <button class="gallery-btn" data-filter="services">专区服务</button>
+        <button class="gallery-btn" data-filter="profile">个人主页</button>
+        <button class="gallery-btn" data-filter="settings">设置中心</button>
+      </div>
+
+      <!-- 画廊图片网格 -->
+      <div class="gallery-grid">
+        
+        <!-- 图 1: 首页 -->
+        <div class="gallery-item" data-category="feed">
+          <div class="gallery-thumb-wrap">
+            <img src="assets/screenshots/home.png" alt="首页热榜与动态信息流">
+            <div class="gallery-overlay">
+              <span class="gallery-zoom-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                放大查看
+              </span>
+            </div>
+          </div>
+          <div class="gallery-info">
+            <h4>首页热榜与动态信息流</h4>
+            <span>周榜 · 月榜 · 热门话题 · 多标签页导航</span>
+          </div>
+        </div>
+
+        <!-- 图 2: 数码选机 -->
+        <div class="gallery-item" data-category="digital">
+          <div class="gallery-thumb-wrap">
+            <img src="assets/screenshots/digital.png" alt="数码频道与选机中心">
+            <div class="gallery-overlay">
+              <span class="gallery-zoom-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                放大查看
+              </span>
+            </div>
+          </div>
+          <div class="gallery-info">
+            <h4>数码库与选机对比中心</h4>
+            <span>机型配置参数 · 评分排行 · 价格走势</span>
+          </div>
+        </div>
+
+        <!-- 图 3: 话题广场 -->
+        <div class="gallery-item" data-category="topics">
+          <div class="gallery-thumb-wrap">
+            <img src="assets/screenshots/topics.png" alt="热门话题广场">
+            <div class="gallery-overlay">
+              <span class="gallery-zoom-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                放大查看
+              </span>
+            </div>
+          </div>
+          <div class="gallery-info">
+            <h4>热门话题与兴趣圈子广场</h4>
+            <span>系统固件 · 摄影美化 · 玩机教程 · 讨论聚集地</span>
+          </div>
+        </div>
+
+        <!-- 图 4: 酷图壁纸 -->
+        <div class="gallery-item" data-category="photos">
+          <div class="gallery-thumb-wrap">
+            <img src="assets/screenshots/coolpic.png" alt="酷图频道多列瀑布流">
+            <div class="gallery-overlay">
+              <span class="gallery-zoom-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                放大查看
+              </span>
+            </div>
+          </div>
+          <div class="gallery-info">
+            <h4>酷图与壁纸精选瀑布流</h4>
+            <span>高清多图九宫格 · 二次元 · 风景壁纸 · 摄影</span>
+          </div>
+        </div>
+
+        <!-- 图 5: 更多服务 -->
+        <div class="gallery-item" data-category="services">
+          <div class="gallery-thumb-wrap">
+            <img src="assets/screenshots/services.png" alt="专区服务与聚合中心">
+            <div class="gallery-overlay">
+              <span class="gallery-zoom-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                放大查看
+              </span>
+            </div>
+          </div>
+          <div class="gallery-info">
+            <h4>专区服务与功能导航</h4>
+            <span>二手市场 · 深度评测 · 应用/游戏中心 · AnyList</span>
+          </div>
+        </div>
+
+        <!-- 图 6: 个人主页 -->
+        <div class="gallery-item" data-category="profile">
+          <div class="gallery-thumb-wrap">
+            <img src="assets/screenshots/profile.png" alt="个人主页与我的装备">
+            <div class="gallery-overlay">
+              <span class="gallery-zoom-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                放大查看
+              </span>
+            </div>
+          </div>
+          <div class="gallery-info">
+            <h4>个人主页与装备展示</h4>
+            <span>酷龄徽章 · 粉丝关注列表 · 装备库 · 动态合集</span>
+          </div>
+        </div>
+
+        <!-- 图 7: 设置中心 -->
+        <div class="gallery-item" data-category="settings">
+          <div class="gallery-thumb-wrap">
+            <img src="assets/screenshots/settings.png" alt="设置中心与个性化偏好">
+            <div class="gallery-overlay">
+              <span class="gallery-zoom-badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                放大查看
+              </span>
+            </div>
+          </div>
+          <div class="gallery-info">
+            <h4>设置中心与个性化选项</h4>
+            <span>外观主题 · 缓存管理 · 全局快捷键 · 启动行为</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 全平台下载中心 ================= -->
+  <section id="download" class="section-padding download-section">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-tag">DOWNLOAD</span>
+        <h2 class="section-title">下载酷安桌面版</h2>
+        <p class="section-subtitle">支持 Windows、macOS、Linux 主流操作系统，并扩展提供移动端体验包。</p>
+      </div>
+
+      <!-- 平台切换器 -->
+      <div class="platform-tabs">
+        <button class="platform-tab-btn active" data-platform="windows">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+          </svg>
+          <span>Windows</span>
+        </button>
+        <button class="platform-tab-btn" data-platform="macos">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 4.88c.63-.77 1.06-1.84.94-2.88-.91.04-2.02.6-2.67 1.36-.58.68-1.1 1.77-.96 2.81 1.02.08 2.06-.52 2.69-1.29z"/>
+          </svg>
+          <span>macOS</span>
+        </button>
+        <button class="platform-tab-btn" data-platform="linux">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12.002 0c-4.417 0-8 3.582-8 8 0 2.585 1.233 4.884 3.141 6.344-.127.426-.299.883-.521 1.383-.699 1.572-1.879 2.766-2.227 3.057-.429.358-.521.968-.218 1.434.303.465.914.619 1.434.363.155-.077 2.305-1.171 3.565-3.082 1.405.441 2.915.688 4.482.688 1.567 0 3.077-.247 4.482-.688 1.26 1.911 3.41 3.005 3.565 3.082.52.256 1.131.102 1.434-.363.303-.466.211-1.076-.218-1.434-.348-.291-1.528-1.485-2.227-3.057-.222-.5-.394-.957-.521-1.383 1.908-1.46 3.141-3.759 3.141-6.344 0-4.418-3.583-8-8-8z"/>
+          </svg>
+          <span>Linux</span>
+        </button>
+        <button class="platform-tab-btn" data-platform="mobile">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+            <line x1="12" y1="18" x2="12.01" y2="18"></line>
+          </svg>
+          <span>移动端 (Android / iOS)</span>
+        </button>
+      </div>
+
+      <div class="download-cards-container">
+        
+        <!-- Windows 面板 -->
+        <div id="pane-windows" class="platform-pane active">
+          <div class="download-grid">
+            <div class="download-card">
+              <div>
+                <div class="download-card-header">
+                  <h3 class="download-card-title">Windows 安装版</h3>
+                  <span class="download-tag">推荐日常使用</span>
+                </div>
+                <p class="download-desc">包含桌面快捷方式与开始菜单，支持客户端内自动静默检测更新升级。</p>
+                <div class="download-meta-list">
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>架构：x64 (主流 64 位) / ARM64</span>
+                  </div>
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>格式：.exe (NSIS 安装包)</span>
+                  </div>
+                </div>
+              </div>
+              <div class="download-btn-group">
+                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span>下载安装包 (x64)</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="download-card">
+              <div>
+                <div class="download-card-header">
+                  <h3 class="download-card-title">Windows 单文件绿色版</h3>
+                  <span class="download-tag">免安装便携</span>
+                </div>
+                <p class="download-desc">单可执行文件，无需写入注册表或安装，放在 U 盘或任意目录双击即开。</p>
+                <div class="download-meta-list">
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>纯净便携，原位更新替换</span>
+                  </div>
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>格式：coolapk-desktop_portable.exe</span>
+                  </div>
+                </div>
+              </div>
+              <div class="download-btn-group">
+                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span>下载单文件版</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div class="platform-notice-box">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <div>
+              <strong>Windows 运行要求</strong>：Windows 10 / 11 默认已预装 WebView2 Runtime；如在精简版系统提示缺少组件，请前往微软官网下载安装 Evergreen WebView2 运行库。
+            </div>
+          </div>
+        </div>
+
+        <!-- macOS 面板 -->
+        <div id="pane-macos" class="platform-pane">
+          <div class="download-grid">
+            <div class="download-card">
+              <div>
+                <div class="download-card-header">
+                  <h3 class="download-card-title">Apple 芯片 (M系列)</h3>
+                  <span class="download-tag">M1/M2/M3/M4 原生</span>
+                </div>
+                <p class="download-desc">针对 Apple Silicon 原生 ARM64 架构编译，功耗更低，极速响应。</p>
+                <div class="download-meta-list">
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>架构：aarch64</span>
+                  </div>
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>格式：.dmg 磁盘映像包</span>
+                  </div>
+                </div>
+              </div>
+              <div class="download-btn-group">
+                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
+                  <span>下载 DMG (Apple 芯片)</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="download-card">
+              <div>
+                <div class="download-card-header">
+                  <h3 class="download-card-title">Intel 芯片版本</h3>
+                  <span class="download-tag">Intel Mac 适用</span>
+                </div>
+                <p class="download-desc">专为基于 Intel 处理器的 Mac 机型编译构建的 x64 原生应用安装镜像。</p>
+                <div class="download-meta-list">
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>架构：x86_64</span>
+                  </div>
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>格式：.dmg 磁盘映像包</span>
+                  </div>
+                </div>
+              </div>
+              <div class="download-btn-group">
+                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
+                  <span>下载 DMG (Intel)</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div class="platform-notice-box">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink: 0; color: var(--primary);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <div>
+              <strong>首次打开安全提示</strong>：若提示“无法打开，因为无法验证开发者”，请按住 Control 键点按应用图标选择「打开」，或在「系统设置 → 隐私与安全性」中点击「仍要打开」。
+            </div>
+          </div>
+        </div>
+
+        <!-- Linux 面板 -->
+        <div id="pane-linux" class="platform-pane">
+          <div class="download-grid">
+            <div class="download-card">
+              <div>
+                <div class="download-card-header">
+                  <h3 class="download-card-title">AppImage 免安装</h3>
+                  <span class="download-tag">通用开箱即用</span>
+                </div>
+                <p class="download-desc">单文件即可执行，完美兼容几乎所有主流 Linux 发行版，赋予执行权限后直接启动。</p>
+                <div class="download-meta-list">
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>格式：.AppImage</span>
+                  </div>
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>指令：chmod +x & ./运行</span>
+                  </div>
+                </div>
+              </div>
+              <div class="download-btn-group">
+                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
+                  <span>下载 AppImage</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="download-card">
+              <div>
+                <div class="download-card-header">
+                  <h3 class="download-card-title">DEB / RPM 包</h3>
+                  <span class="download-tag">系统原生集成</span>
+                </div>
+                <p class="download-desc">专为 Ubuntu、Debian、Deepin (DEB) 及 Fedora、openSUSE (RPM) 提供的原生软件包。</p>
+                <div class="download-meta-list">
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>格式：.deb / .rpm</span>
+                  </div>
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>包含桌面启动图标与系统关联</span>
+                  </div>
+                </div>
+              </div>
+              <div class="download-btn-group">
+                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
+                  <span>获取 DEB / RPM 安装包</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 移动端面板 -->
+        <div id="pane-mobile" class="platform-pane">
+          <div class="download-grid">
+            <div class="download-card">
+              <div>
+                <div class="download-card-header">
+                  <h3 class="download-card-title">Android (安卓版)</h3>
+                  <span class="download-tag">ARM64 APK / AAB</span>
+                </div>
+                <p class="download-desc">基于 Tauri Mobile 构建的 Android 客户端，支持高刷流式加载。</p>
+                <div class="download-meta-list">
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>包名：coolapk-android-arm64.apk</span>
+                  </div>
+                </div>
+              </div>
+              <div class="download-btn-group">
+                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
+                  <span>下载 Android APK</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="download-card">
+              <div>
+                <div class="download-card-header">
+                  <h3 class="download-card-title">iOS (iPhone / iPad)</h3>
+                  <span class="download-tag">未签名 IPA</span>
+                </div>
+                <p class="download-desc">提供未签名设备包，需使用 AltStore、SideStore、Sideloadly 或自签名证书安装。</p>
+                <div class="download-meta-list">
+                  <div class="download-meta-item">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    <span>格式：.ipa (需第三方工具签名)</span>
+                  </div>
+                </div>
+              </div>
+              <div class="download-btn-group">
+                <a href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
+                  <span>下载 iOS IPA</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= 安全与隐私哲学 ================= -->
+  <section id="security" class="section-padding">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-tag">SECURITY & PRIVACY</span>
+        <h2 class="section-title">纯粹、安全与隐私承诺</h2>
+        <p class="section-subtitle">恪守开源极客精神，尊重用户隐私，将数据控制权完整交还于您。</p>
+      </div>
+
+      <div class="security-grid">
+        <div class="security-card">
+          <div class="security-badge-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          </div>
+          <h3 class="security-title">本地加密持久化</h3>
+          <p class="security-desc">登录凭据与 Cookie 仅保存在本地 Tauri Stronghold 加密库中。客户端没有中央服务，绝不上传凭据至任何第三方开发者服务器。</p>
+        </div>
+
+        <div class="security-card">
+          <div class="security-badge-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          </div>
+          <h3 class="security-title">动态虚拟设备指纹</h3>
+          <p class="security-desc">每次客户端冷启动时会动态生成临时随机设备标识，不抓取用户主机的真实物理硬件指纹，极大程度保障设备私密性。</p>
+        </div>
+
+        <div class="security-card">
+          <div class="security-badge-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+          </div>
+          <h3 class="security-title">100% 开源与透明构建</h3>
+          <p class="security-desc">所有代码在 GitHub 完全公开且经过严格自动化类型与单元测试。每个安装包均由 GitHub Actions 官方纯净环境自动编译。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 常见问题 FAQ ================= -->
+  <section id="faq" class="section-padding" style="background: var(--bg-subtle);">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-tag">FAQ</span>
+        <h2 class="section-title">常见问题与解答</h2>
+        <p class="section-subtitle">有疑问？这里汇总了用户最常咨询的使用要点。</p>
+      </div>
+
+      <div class="faq-container">
+        
+        <div class="faq-item">
+          <div class="faq-header">
+            <span>必须登录酷安账号才能使用吗？</span>
+            <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div class="faq-content">
+            <div class="faq-body">
+              <strong>完全不需要。</strong>公开浏览功能（包括首页信息流、热榜、热门动态、查看图文详情、评论区阅读、数码选机库、话题广场等）无需登录即可自由畅享。只有在进行点赞、收藏、发布动态、楼中楼回复及私信等互动行为时，才需要在客户端内登录。
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-header">
+            <span>官方网页授权登录与 Cookie 导入有什么区别？</span>
+            <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div class="faq-content">
+            <div class="faq-body">
+              客户端首选推荐「官方授权登录」，它会调起酷安官方安全登录页面（account.coolapk.com），支持微信扫码与短信验证码登录，安全省心；「Cookie 手动导入」则是备用机制，当您的系统环境 WebView2 授权弹窗受限时，可通过浏览器抓取 Cookie 快速导入。
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-header">
+            <span>为什么相比 Electron，Tauri 2 客户端启动更快、体积更小？</span>
+            <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div class="faq-content">
+            <div class="faq-body">
+              Electron 会给每一个应用打包一整个 Chromium 浏览器内核和 Node.js 运行时，安装包通常在 150MB 以上，启动后常驻内存轻松突破 300MB~600MB。而 Tauri 2 直接复用操作系统的原生 WebView 引擎（如 Windows 的 WebView2、macOS 的 WebKit），并结合编译型语言 Rust 处理系统级能力与网络请求，使安装包压缩到仅数十兆，内存占用降至 ~50MB 左右。
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-header">
+            <span>Windows 单文件版与安装版有什么不同？</span>
+            <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div class="faq-content">
+            <div class="faq-body">
+              安装版提供系统开机启动选项、开始菜单与桌面快捷图标，并在发布新版本时支持原位静默检测升级；单文件版则是单个独立绿色可执行程序（.exe），不写入注册表，适合放在 U 盘随时携带，两者核心功能与性能表现完全一致。
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-header">
+            <span>遇到某些动态无法加载或接口报错怎么办？</span>
+            <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+          <div class="faq-content">
+            <div class="faq-body">
+              本项目调用酷安官方网络接口。部分接口可能受酷安服务器策略、请求频率限制、账号风控或接口调整产生临时波动。若遇到异常，可尝试在左下角设置中清理应用缓存、重新登录账号，或在 GitHub Issues 提交反馈。
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 底部 CTA 行动召集 ================= -->
+  <section class="container">
+    <div class="cta-banner">
+      <h2 class="cta-title">重回纯粹的极客大屏体验</h2>
+      <p class="cta-desc">
+        无论您是在 Windows 办公、macOS 编码还是 Linux 探索，酷安桌面版都将为您呈现最舒适的大屏社区视觉。
+      </p>
+      <div class="cta-actions">
+        <a href="#download" class="btn btn-white btn-lg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>立即前往下载 (v1.27.4)</span>
+        </a>
+        <a href="https://github.com/daimiaopeng/coolapk-desktop" target="_blank" rel="noopener noreferrer" class="btn btn-white-outline btn-lg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          <span>在 GitHub 给个 Star</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 页脚 Footer ================= -->
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <div class="brand">
+            <img src="assets/logo.png" alt="酷安 Logo" class="brand-logo">
+            <span>酷安桌面版</span>
+          </div>
+          <p>
+            基于 Tauri 2、Vue 3 和 Rust 构建的现代非官方酷安桌面客户端。致力于为社区酷友打造丝滑、轻巧、安全的大屏社区浏览体验。
+          </p>
+        </div>
+
+        <div class="footer-col">
+          <h5>产品与下载</h5>
+          <div class="footer-links">
+            <a href="#download">Windows 安装包</a>
+            <a href="#download">Windows 单文件版</a>
+            <a href="#download">macOS (Apple / Intel)</a>
+            <a href="#download">Linux (AppImage / DEB)</a>
+            <a href="#download">移动端 APK / IPA</a>
+          </div>
+        </div>
+
+        <div class="footer-col">
+          <h5>开源社区</h5>
+          <div class="footer-links">
+            <a href="https://github.com/daimiaopeng/coolapk-desktop" target="_blank" rel="noopener noreferrer">GitHub 仓库</a>
+            <a href="https://github.com/daimiaopeng/coolapk-desktop/releases" target="_blank" rel="noopener noreferrer">版本发布日志</a>
+            <a href="https://github.com/daimiaopeng/coolapk-desktop/issues" target="_blank" rel="noopener noreferrer">问题与建议反馈</a>
+            <a href="https://github.com/daimiaopeng/coolapk-desktop/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT 开源许可证</a>
+          </div>
+        </div>
+
+        <div class="footer-col">
+          <h5>安全与规范</h5>
+          <div class="footer-links">
+            <a href="#security">隐私保护承诺</a>
+            <a href="https://github.com/daimiaopeng/coolapk-desktop/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer">安全策略 (Security)</a>
+            <a href="https://github.com/daimiaopeng/coolapk-desktop/blob/main/docs/cookie-guide.md" target="_blank" rel="noopener noreferrer">Cookie 抓取指引</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div class="disclaimer-text">
+          <strong>非官方声明</strong>：本项目为开源社区发起的非官方客户端，与酷安官方及深圳酷安网络科技有限公司无任何隶属、授权或商业合作关系。酷安相关品牌名称、Logo 及商标版权归其合法权利人所有。
+        </div>
+        <div>
+          <span>© 2026 daimiaopeng & Coolapk Desktop Contributors.</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ================= Lightbox 大图查看模态框 ================= -->
+  <div id="lightbox-modal" class="lightbox-modal">
+    <div class="lightbox-content">
+      <button id="lightbox-close" class="lightbox-close" aria-label="关闭预览">&times;</button>
+      <img id="lightbox-img" class="lightbox-img" src="" alt="预览大图">
+      <div id="lightbox-caption" class="lightbox-caption"></div>
+    </div>
+  </div>
+
+  <!-- ================= 回到顶部按钮 ================= -->
+  <button id="back-to-top" class="back-to-top" aria-label="回到顶部" title="回到顶部">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="18 15 12 9 6 15"></polyline>
+    </svg>
+  </button>
+
+  <script src="assets/js/main.js"></script>
+</body>
+</html>
