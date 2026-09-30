@@ -453,7 +453,7 @@
                 <div class="download-meta-list">
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span>架构：x64 (主流 64 位) / ARM64</span>
+                    <span>适用系统：Windows 10 / 11 (支持 x64 与 ARM64)</span>
                   </div>
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -461,10 +461,14 @@
                   </div>
                 </div>
               </div>
-              <div class="download-btn-group">
-                <a id="dl-win-setup" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="flex: 1;">
+              <div class="download-btn-stack">
+                <a id="dl-win-setup" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-primary" style="width: 100%;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  <span class="btn-text">下载安装包 (x64)</span>
+                  <span class="btn-text">下载安装包 (x64 / 主流推荐)</span>
+                </a>
+                <a id="dl-win-setup-arm64" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="width: 100%;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span class="btn-text">下载安装包 (ARM64)</span>
                 </a>
               </div>
             </div>
@@ -483,14 +487,18 @@
                   </div>
                   <div class="download-meta-item">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <span id="meta-win-portable">格式：x64-portable.exe</span>
+                    <span id="meta-win-portable">格式：独立便携可执行文件 (.exe)</span>
                   </div>
                 </div>
               </div>
-              <div class="download-btn-group">
-                <a id="dl-win-portable" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
+              <div class="download-btn-stack">
+                <a id="dl-win-portable" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="width: 100%;">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                  <span class="btn-text">下载单文件版</span>
+                  <span class="btn-text">下载单文件版 (x64)</span>
+                </a>
+                <a id="dl-win-portable-arm64" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="width: 100%;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  <span class="btn-text">下载单文件版 (ARM64)</span>
                 </a>
               </div>
             </div>
@@ -612,9 +620,12 @@
                   </div>
                 </div>
               </div>
-              <div class="download-btn-group">
-                <a id="dl-linux-deb" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="flex: 1;">
-                  <span class="btn-text">获取 DEB / RPM 安装包</span>
+              <div class="download-btn-stack">
+                <a id="dl-linux-deb" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="width: 100%;">
+                  <span class="btn-text">下载 DEB 安装包 (Ubuntu / Debian)</span>
+                </a>
+                <a id="dl-linux-rpm" href="https://github.com/daimiaopeng/coolapk-desktop/releases/latest" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="width: 100%;">
+                  <span class="btn-text">下载 RPM 安装包 (Fedora / openSUSE)</span>
                 </a>
               </div>
             </div>

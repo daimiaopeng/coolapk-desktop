@@ -822,6 +822,12 @@ button {
   gap: 10px;
 }
 
+.download-btn-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .platform-notice-box {
   background: var(--bg-surface);
   border: 1px dashed var(--border-subtle);

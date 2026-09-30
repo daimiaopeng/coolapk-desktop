@@ -271,22 +271,53 @@ async function initDynamicGitHubData() {
       bottomCta.textContent = `立即前往下载 (${version})`;
     }
 
-    // 映射并绑定各平台的资产直接下载链接与文件大小
+    // Windows x64 安装版 (严格排除 arm64)
     bindAssetDownload({
       btnId: 'dl-win-setup',
       metaId: 'meta-win-setup',
-      defaultText: '下载安装包 (x64)',
-      matchFn: (name) => name.includes('x64-setup.exe') || name.includes('setup.exe'),
+      defaultText: '下载安装包 (x64 / 主流推荐)',
+      matchFn: (name) => (name.includes('x64') || name.includes('x86_64')) && name.includes('setup.exe') && !name.includes('arm64'),
       assets
     });
 
+    // Windows ARM64 安装版
+    bindAssetDownload({
+      btnId: 'dl-win-setup-arm64',
+      metaId: null,
+      defaultText: '下载安装包 (ARM64)',
+      matchFn: (name) => (name.includes('arm64') || name.includes('aarch64')) && name.includes('setup.exe'),
+      assets
+    });
+
+    // Windows x64 单文件版 (严格排除 arm64)
     bindAssetDownload({
       btnId: 'dl-win-portable',
       metaId: 'meta-win-portable',
-      defaultText: '下载单文件版',
-      matchFn: (name) => name.includes('x64-portable.exe') || name.includes('portable.exe'),
+      defaultText: '下载单文件版 (x64)',
+      matchFn: (name) => (name.includes('x64') || name.includes('x86_64')) && name.includes('portable.exe') && !name.includes('arm64'),
       assets
     });
+
+    // Windows ARM64 单文件版
+    bindAssetDownload({
+      btnId: 'dl-win-portable-arm64',
+      metaId: null,
+      defaultText: '下载单文件版 (ARM64)',
+      matchFn: (name) => (name.includes('arm64') || name.includes('aarch64')) && name.includes('portable.exe'),
+      assets
+    });
+
+    // 若在 Windows ARM64 设备访问，自动将 ARM64 设为主要推荐高亮
+    if (typeof navigator !== 'undefined' && navigator.userAgent && /Windows.*(ARM64|aarch64)/i.test(navigator.userAgent)) {
+      const winSetupX64 = document.getElementById('dl-win-setup');
+      const winSetupArm64 = document.getElementById('dl-win-setup-arm64');
+      if (winSetupX64 && winSetupArm64) {
+        winSetupX64.classList.remove('btn-primary');
+        winSetupX64.classList.add('btn-secondary');
+        winSetupArm64.classList.remove('btn-secondary');
+        winSetupArm64.classList.add('btn-primary');
+      }
+    }
 
     bindAssetDownload({
       btnId: 'dl-mac-arm64',
@@ -315,8 +346,16 @@ async function initDynamicGitHubData() {
     bindAssetDownload({
       btnId: 'dl-linux-deb',
       metaId: 'meta-linux-deb',
-      defaultText: '获取 DEB / RPM 安装包',
+      defaultText: '下载 DEB 安装包 (Ubuntu / Debian)',
       matchFn: (name) => name.endsWith('.deb'),
+      assets
+    });
+
+    bindAssetDownload({
+      btnId: 'dl-linux-rpm',
+      metaId: null,
+      defaultText: '下载 RPM 安装包 (Fedora / openSUSE)',
+      matchFn: (name) => name.endsWith('.rpm'),
       assets
     });
 
