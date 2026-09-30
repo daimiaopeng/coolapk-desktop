@@ -410,7 +410,16 @@ function bindAssetDownload({ btnId, metaId, defaultText, matchFn, assets }) {
  * 轻量带缓存的 Fetch（SessionStorage 缓存 10 分钟，避免 GitHub API Rate Limit）
  */
 async function fetchGitHubWithCache(url, cacheKey) {
-  const fullKey = `coolapk_gh_${cacheKey}`;
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith('coolapk_gh_') && !k.startsWith('coolapk_gh_v4_')) {
+        sessionStorage.removeItem(k);
+      }
+    }
+  } catch (e) {}
+
+  const fullKey = `coolapk_gh_v4_${cacheKey}`;
   const cached = sessionStorage.getItem(fullKey);
   if (cached) {
     try {
