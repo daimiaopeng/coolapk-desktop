@@ -1,6 +1,7 @@
 pub mod coolapk;
 pub mod diagnostics;
 pub mod download_manager;
+mod windows_tile;
 
 use coolapk::client::CoolapkClient;
 use coolapk::commands::{get_user_plugins, save_user_plugins, claim_user_plugin};
@@ -605,10 +606,24 @@ async fn pick_font_family(
 }
 
 #[tauri::command]
+async fn update_desktop_tile(
+    app: tauri::AppHandle,
+    source: Option<String>,
+) -> Result<(), String> {
+    let override_source = source
+        .as_deref()
+        .map(|raw| crate::windows_tile::LiveTileSource::from_setting(Some(raw)));
+    crate::windows_tile::refresh_tile(&app, override_source).await
+}
+
+#[tauri::command]
 fn get_platform_info() -> serde_json::Value {
     serde_json::json!({
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
+        // 是否以 MSIX 打包形式运行。未打包时动态磁贴不可用，
+        // 前端据此隐藏磁贴数据源设置项，避免给出一个选了也没用的选项。
+        "hasPackageIdentity": crate::windows_tile::has_package_identity(),
     })
 }
 
@@ -655,8 +670,7 @@ fn register_windows_notification_identity(app: &tauri::AppHandle) -> Result<(), 
     Ok(())
 }
 
-#[cfg(windows)]
-fn escape_notification_xml(value: &str) -> String {
+pub(crate) fn escape_notification_xml(value: &str) -> String {
     value
         .replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -1051,6 +1065,33 @@ pub fn run() {
             }
             }
 
+            // 磁贴刷新含网络请求，必须离开主线程，否则应用启动会被一次网络往返阻塞。
+            //
+            // 先探测包标识：磁贴由系统外壳渲染，其 API 要求调用方具有包标识，
+            // 未打包时必然返回 0x80070490。没有包标识就整体跳过，连定时器都不启动 ——
+            // NSIS 版与便携版用户（本项目的主力发行形态）对此完全无感：
+            // 不产生任何多余网络请求，也不会有任何日志噪音。
+            if crate::windows_tile::has_package_identity() {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match crate::windows_tile::refresh_tile(&handle, None).await {
+                        Ok(()) => log::info!("动态磁贴已更新"),
+                        Err(e) => log::warn!("动态磁贴更新失败: {e}"),
+                    }
+
+                    // 运行中定时刷新。间隔 30 分钟。
+                    let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1800));
+                    ticker.tick().await; // 跳过立刻返回的第一次 tick
+                    loop {
+                        ticker.tick().await;
+                        match crate::windows_tile::refresh_tile(&handle, None).await {
+                            Ok(()) => log::info!("动态磁贴已按计划刷新"),
+                            Err(e) => log::warn!("动态磁贴定时刷新失败: {e}"),
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1262,6 +1303,7 @@ pub fn run() {
             set_close_to_tray,
             set_window_theme,
             pick_font_family,
+            update_desktop_tile,
             set_startup_flags,
             send_desktop_notification,
             download_update,
