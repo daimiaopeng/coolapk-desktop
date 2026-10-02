@@ -8,6 +8,8 @@
 //! `<visual>` 也不带 `version` 属性。实测加上 `<adaptive>` 时外壳会静默丢弃
 //! binding 内容，磁贴只剩品牌名。
 
+use std::sync::atomic::{AtomicU64, Ordering};
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,23 +333,43 @@ fn push_tile(items: &[TileItem]) -> Result<(), String> {
     let queued = updater.EnableNotificationQueue(true).is_ok();
 
     let limit = if queued { MAX_TILE_ITEMS } else { 1 };
-    let mut pushed = 0usize;
 
-    for item in items.iter().take(limit).rev() {
+    // 先把本轮全部通知构造并校验完毕，再动队列。
+    // 这样"清空之后才发现构造失败"的窗口最小。
+    let mut notifications = Vec::new();
+    for item in items.iter().take(limit) {
         let xml = XmlDocument::new().map_err(|e| format!("创建 XmlDocument 失败: {e}"))?;
         xml.LoadXml(&windows::core::HSTRING::from(build_tile_xml(item)))
             .map_err(|e| format!("解析磁贴 XML 失败: {e}"))?;
-        let notification = TileNotification::CreateTileNotification(&xml)
-            .map_err(|e| format!("构造 TileNotification 失败: {e}"))?;
-        updater
-            .Update(&notification)
-            .map_err(|e| format!("更新磁贴失败: {e}"))?;
-        pushed += 1;
+        notifications.push(
+            TileNotification::CreateTileNotification(&xml)
+                .map_err(|e| format!("构造 TileNotification 失败: {e}"))?,
+        );
     }
 
-    if pushed == 0 {
+    if notifications.is_empty() {
         return Err("没有可推送的条目".to_string());
     }
+
+    // **必须先清空队列。** 队列是 5 槽 FIFO，只在写满时才挤掉最旧的：
+    // 本轮条目少于 5 条时，若只追加，上一轮的条目会残留在队首继续轮播 ——
+    // 例如从「推荐」切到「快讯」而本轮只取到 2 条，队列会变成 C D E F G，
+    // 用户明明选了快讯却仍看到 3 条旧的推荐。
+    //
+    // 注意这**不违反**"宁可旧也不要空"的原则：该原则约束的是失败路径
+    // （取数失败 / 条目为空时直接返回、不 Clear）。这里已经拿到一组完整
+    // 的新数据，语义是一次**整体替换**而不是追加。
+    updater
+        .Clear()
+        .map_err(|e| format!("清空磁贴队列失败: {e}"))?;
+
+    // 倒序推送：最后推送的显示在最前。
+    for notification in notifications.iter().rev() {
+        updater
+            .Update(notification)
+            .map_err(|e| format!("更新磁贴失败: {e}"))?;
+    }
+
     Ok(())
 }
 
@@ -355,6 +377,13 @@ fn push_tile(items: &[TileItem]) -> Result<(), String> {
 fn push_tile(_items: &[TileItem]) -> Result<(), String> {
     Err("动态磁贴仅在 Windows 上可用".to_string())
 }
+
+/// 刷新代次计数器，用于让"最新发起的刷新"胜出。
+///
+/// 三个触发源（启动、30 分钟定时、设置变更）都可能并发发起刷新，而网络请求
+/// 的完成顺序无法保证。每次刷新在取数前领一个递增的代次，返回后比对：
+/// 若已有更新的刷新发起，本次结果直接丢弃。
+static REFRESH_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 /// 读设置 → 取数 → 生成 → 推送。任一环节失败都**保留现有磁贴不清空**。
 ///
@@ -371,8 +400,19 @@ pub async fn refresh_tile(
         return Err("当前环境不支持动态磁贴（需 Windows 10 且已注册稀疏身份包）".to_string());
     }
 
+    // 记下代次。取数期间若又发起了更新的刷新，本次结果作废。
+    let generation = REFRESH_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+
     let source = override_source.unwrap_or_else(|| read_live_tile_source(app));
     let items = fetch_items(app, source).await?;
+
+    // 网络请求的完成顺序无法保证：启动刷新（旧源、较慢）可能在用户已切到新源
+    // 并完成刷新之后才返回，把旧数据覆盖上去。这里做"最新发起的胜出"判定 ——
+    // 只是在返回后丢弃过期结果，比用 Mutex 串行化更合适：后者让用户连续切换时
+    // 白白等待前几个已经无意义的网络请求。
+    if generation != REFRESH_GENERATION.load(Ordering::SeqCst) {
+        return Ok(());
+    }
 
     if items.is_empty() {
         // 宁可磁贴是旧的，也不要清空它。
