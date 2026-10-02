@@ -173,6 +173,90 @@ mod tests {
         assert_eq!(tile_items_from_response(&raw).len(), MAX_TILE_ITEMS);
     }
 
+    // ---- html_to_plain_text ----
+
+    #[test]
+    fn strips_tags_but_keeps_their_text() {
+        // 实测样本：酷安正文里的话题链接
+        let input = r#"<a class="feed-link-tag" href="/t/%E9%85%B7%E5%85%A5" target="_blank">酷入</a>今天聊聊"#;
+        assert_eq!(html_to_plain_text(input), "酷入今天聊聊");
+    }
+
+    #[test]
+    fn decodes_common_entities() {
+        assert_eq!(html_to_plain_text("a &amp; b"), "a & b");
+        assert_eq!(html_to_plain_text("&lt;tag&gt;"), "<tag>");
+        assert_eq!(html_to_plain_text("&quot;q&quot;"), "\"q\"");
+        assert_eq!(html_to_plain_text("&nbsp;x"), "x");
+    }
+
+    /// &amp; 必须最后解码，否则 "&amp;lt;" 会被二次解码成 "<"。
+    #[test]
+    fn amp_is_decoded_last() {
+        assert_eq!(html_to_plain_text("&amp;lt;"), "&lt;");
+    }
+
+    #[test]
+    fn br_becomes_newline() {
+        assert_eq!(html_to_plain_text("第一行<br>第二行"), "第一行\n第二行");
+        assert_eq!(html_to_plain_text("第一行<br/>第二行"), "第一行\n第二行");
+    }
+
+    /// 危险容器连内容一起丢弃 —— 与前端 sanitizeHtml 的语义一致。
+    #[test]
+    fn dangerous_containers_are_dropped_with_their_content() {
+        assert_eq!(html_to_plain_text("前<script>alert(1)</script>后"), "前后");
+        assert_eq!(html_to_plain_text("前<style>.a{color:red}</style>后"), "前后");
+        assert_eq!(html_to_plain_text("前<iframe src=x></iframe>后"), "前后");
+    }
+
+    /// 嵌套标签视为透明容器，只去标签、保留文本。
+    #[test]
+    fn nested_transparent_containers_keep_inner_text() {
+        assert_eq!(html_to_plain_text("<font color='red'><b>加粗</b></font>"), "加粗");
+    }
+
+    #[test]
+    fn unterminated_tag_is_treated_as_text() {
+        assert_eq!(html_to_plain_text("正常<a href=x"), "正常<a href=x");
+    }
+
+    #[test]
+    fn plain_text_passes_through_unchanged() {
+        assert_eq!(html_to_plain_text("没有任何标签"), "没有任何标签");
+    }
+
+    #[test]
+    fn result_is_trimmed() {
+        assert_eq!(html_to_plain_text("  <b>  文本  </b>  "), "文本");
+    }
+
+    /// 映射层必须应用去标签 —— 真实数据里话题链接标签会直接出现。
+    #[test]
+    fn mapping_strips_html_from_message() {
+        let raw = serde_json::json!({
+            "code": 200,
+            "data": [{
+                "username": "甲",
+                "message": "<a class=\"feed-link-tag\" href=\"/t/%E9%85%B7\" target=\"_blank\">酷入</a>今天聊聊这个"
+            }]
+        });
+        let items = tile_items_from_response(&raw);
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].message, "酷入今天聊聊这个");
+        assert!(!items[0].message.contains('<'), "标签必须已被去除");
+    }
+
+    /// 纯标签无文本的条目应被跳过，而不是产出空磁贴。
+    #[test]
+    fn mapping_skips_item_whose_message_is_only_markup() {
+        let raw = serde_json::json!({
+            "code": 200,
+            "data": [{ "username": "甲", "message": "<br/><br/>" }]
+        });
+        assert!(tile_items_from_response(&raw).is_empty());
+    }
+
     #[test]
     fn malformed_response_yields_empty_vec_not_panic() {
         assert!(tile_items_from_response(&serde_json::json!({ "code": 500 })).is_empty());
@@ -365,6 +449,114 @@ pub fn build_tile_xml(item: &TileItem) -> String {
     )
 }
 
+/// 危险容器：连内容一起丢弃，其余标签只去标签、保留文本。
+const HTML_DROPPED_ELEMENTS: [&str; 5] = ["script", "style", "iframe", "object", "embed"];
+
+/// 取标签名（`<a class="x">` → `a`，`</a>` → `a`）。
+fn html_tag_name(inner: &str) -> &str {
+    inner
+        .trim_start()
+        .trim_start_matches('/')
+        .trim_start()
+        .split(|c: char| c.is_ascii_whitespace() || c == '/')
+        .next()
+        .unwrap_or("")
+}
+
+/// 大小写不敏感地查找子串，返回字节偏移。
+///
+/// `to_ascii_lowercase` 只改动 ASCII，因此不会改变字节长度，偏移可直接使用。
+fn find_ignore_ascii_case(haystack: &str, needle: &str) -> Option<usize> {
+    haystack
+        .to_ascii_lowercase()
+        .find(&needle.to_ascii_lowercase())
+}
+
+/// 解码酷安正文中常见的 HTML 实体。
+///
+/// `&amp;` **必须最后**解码，否则 `&amp;lt;` 会被二次解码成 `<`。
+fn decode_html_entities(input: &str) -> String {
+    input
+        .replace("&nbsp;", " ")
+        .replace("&emsp;", " ")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
+/// 把酷安富文本正文转为纯文本。
+///
+/// 酷安的 `message` 字段是富文本 HTML（应用内用 `v-html` 渲染），而磁贴没有
+/// webview —— 直接渲染会把 `<a class="feed-link-tag" href="/t/...">` 这类标签
+/// 原样显示出来。本函数复刻前端 `coolapkHtmlToPlainText`
+/// （`src/utils/sanitizeHtml.ts`）的语义：去标签、解码实体、保留换行；
+/// `script`/`style`/`iframe`/`object`/`embed` 连内容一起丢弃，其余标签一律
+/// 视为透明容器（只去标签、保留其文本）。
+///
+/// 这不是安全边界 —— 输出最终仍会经 `escape_notification_xml` 转义。
+/// 本函数只负责让磁贴显示可读文本而非标签。
+///
+/// 局限：属性值内含 `>` 的标签会被提前截断。酷安正文的标签形态固定，
+/// 不涉及该情况；若将来遇到，应改用完整的 HTML 解析器而非在此堆特例。
+pub fn html_to_plain_text(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut idx = 0usize;
+
+    while let Some(lt_rel) = input[idx..].find('<') {
+        let lt = idx + lt_rel;
+        out.push_str(&input[idx..lt]);
+
+        let Some(gt_rel) = input[lt..].find('>') else {
+            // 未闭合的 '<'，按普通文本处理
+            out.push_str(&input[lt..]);
+            idx = input.len();
+            break;
+        };
+        let gt = lt + gt_rel;
+        let name = html_tag_name(&input[lt + 1..gt]);
+
+        if name.eq_ignore_ascii_case("br") {
+            out.push('\n');
+            idx = gt + 1;
+            continue;
+        }
+
+        if HTML_DROPPED_ELEMENTS
+            .iter()
+            .any(|d| name.eq_ignore_ascii_case(d))
+        {
+            let close = format!("</{name}");
+            match find_ignore_ascii_case(&input[gt + 1..], &close) {
+                Some(pos) => {
+                    let after = gt + 1 + pos + close.len();
+                    idx = input[after..]
+                        .find('>')
+                        .map_or(input.len(), |g| after + g + 1);
+                }
+                // 没有闭合标签：丢弃到结尾
+                None => idx = input.len(),
+            }
+            continue;
+        }
+
+        // 普通标签：只丢标签本身，保留其文本
+        idx = gt + 1;
+    }
+
+    if idx < input.len() {
+        out.push_str(&input[idx..]);
+    }
+
+    decode_html_entities(&out)
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .trim()
+        .to_string()
+}
+
 /// 把客户端返回的 feed 响应映射为磁贴条目。
 ///
 /// 容错设计：任何字段缺失或类型不符的条目都**跳过**，不影响其余条目；
@@ -381,7 +573,10 @@ pub fn tile_items_from_response(response: &serde_json::Value) -> Vec<TileItem> {
             if user_name.is_empty() {
                 return None;
             }
-            let message = row.get("message").and_then(|v| v.as_str())?.trim();
+            // 酷安的 message 是富文本 HTML（应用内用 v-html 渲染）。
+            // 磁贴没有 webview，必须先转纯文本，否则会把
+            // <a class="feed-link-tag" href="/t/..."> 这类标签原样显示出来。
+            let message = html_to_plain_text(row.get("message").and_then(|v| v.as_str())?);
             if message.is_empty() {
                 return None;
             }
@@ -394,7 +589,7 @@ pub fn tile_items_from_response(response: &serde_json::Value) -> Vec<TileItem> {
 
             Some(TileItem {
                 user_name: user_name.to_string(),
-                message: message.to_string(),
+                message,
                 avatar_url,
             })
         })
