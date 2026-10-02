@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+  稀疏身份包（sparse package / external location）。
+
+  这个包**不包含应用程序**，只提供包标识（package identity）。应用本体仍然由
+  常规的 NSIS 安装版 / 便携版提供，二进制不搬进包里。注册时用
+  `-ExternalLocation` 指向应用的安装目录。
+
+  为什么需要它：动态磁贴由系统外壳渲染，驱动它的 TileUpdateManager 要求调用方
+  具有包标识。未打包的 Win32 进程调用只会得到 0x80070490 —— 这是实测结论。
+
+  为什么用稀疏包而不是把整个应用打成 MSIX：
+  本项目的**主力发行形态是 exe**，稀疏包让它继续是主线，磁贴只是叠加一层
+  几 KB 的身份，不引入第二种分发与更新流程。
+
+  离线/打包注意：
+  - ProcessorArchitecture 必须是 neutral（内容在包外，包本身不含架构相关二进制）
+  - 不得声明 EntryPoint（稀疏的 win32App 声明它会注册失败）
+  - 磁贴资源由外部位置提供，因此 Assets\ 必须与 exe 部署在同一目录下
+  - 未打包时磁贴子系统会整体跳过，对 exe 版用户完全无感
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap10 desktop6 rescap">
+
+  <Identity
+    Name="com.coolapk.desktop"
+    Publisher="CN=coolapk-desktop-dev"
+    Version="1.29.0.0"
+    ProcessorArchitecture="neutral" />
+
+  <Properties>
+    <DisplayName>酷安</DisplayName>
+    <PublisherDisplayName>coolapk-desktop</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
+    <!-- 全信任桌面应用不应被重定向注册表写入 -->
+    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.19045.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="zh-CN" />
+  </Resources>
+
+  <Applications>
+    <Application Id="CoolapkDesktop"
+      Executable="coolapk_desktop.exe"
+      uap10:RuntimeBehavior="win32App"
+      uap10:TrustLevel="mediumIL">
+      <!--
+        刻意不使用 AppListEntry="none"。
+
+        微软的稀疏包示例都带这个属性（身份包不应产生应用列表条目，因为应用由
+        常规安装流程提供入口）。但**动态磁贴恰恰依赖 Start 里的那个条目** ——
+        没有条目就没有可固定的磁贴。实测：去掉该属性能得到可固定的条目，
+        磁贴正常渲染并轮播；带上则没有磁贴可固定。
+      -->
+      <uap:VisualElements
+        DisplayName="酷安"
+        Description="非官方酷安桌面客户端"
+        BackgroundColor="#00B578"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile
+          Wide310x150Logo="Assets\Wide310x150Logo.png"
+          Square71x71Logo="Assets\Square71x71Logo.png"
+          Square310x310Logo="Assets\Square310x310Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+</Package>
