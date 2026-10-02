@@ -4,15 +4,16 @@ export type PlatformInfo = {
   os: 'windows' | 'macos' | 'linux' | string;
   arch: 'x86_64' | 'aarch64' | string;
   /**
-   * 是否以 MSIX 打包形式运行。
+   * 本机是否真正支持动态磁贴。
    *
-   * 动态磁贴要求调用方具有包标识，未打包时该功能整体不可用，
-   * 前端据此隐藏磁贴相关设置，避免给出一个选了也没用的选项。
+   * 需同时满足 Windows、Windows 10、且具有包标识 ——
+   * Windows 11 已移除动态磁贴，仅有包标识并不足够。
+   * 条件不满足时前端隐藏磁贴相关设置，避免给出一个选了也没用的选项。
    */
-  hasPackageIdentity?: boolean;
+  supportsLiveTile?: boolean;
 };
 
-const UNKNOWN_PLATFORM: PlatformInfo = { os: 'unknown', arch: 'unknown', hasPackageIdentity: false };
+const UNKNOWN_PLATFORM: PlatformInfo = { os: 'unknown', arch: 'unknown', supportsLiveTile: false };
 let platformInfoPromise: Promise<PlatformInfo> | null = null;
 
 export function getPlatformInfo(): Promise<PlatformInfo> {

@@ -257,6 +257,26 @@ mod tests {
         assert!(tile_items_from_response(&raw).is_empty());
     }
 
+    /// 打包形态的 AUMID 必须是 `<PackageFamilyName>!<ApplicationId>`，
+    /// 且 Application Id 与 manifest 一致。
+    #[test]
+    fn packaged_aumid_joins_family_name_and_application_id() {
+        assert_eq!(
+            packaged_aumid("com.coolapk.desktop_1k5x5tky3azf6"),
+            "com.coolapk.desktop_1k5x5tky3azf6!CoolapkDesktop"
+        );
+        assert_eq!(PACKAGE_APPLICATION_ID, "CoolapkDesktop", "须与 AppxManifest 的 Application/@Id 一致");
+    }
+
+    /// Windows 10 / 11 的分界 —— 22000 起属于 Windows 11，而 Win11 没有动态磁贴。
+    #[test]
+    fn windows_10_build_boundary_excludes_windows_11() {
+        assert!(is_windows_10_build(19041), "Win10 2004 应判为 Windows 10");
+        assert!(is_windows_10_build(19045), "Win10 22H2 应判为 Windows 10");
+        assert!(!is_windows_10_build(22000), "22000 是 Windows 11 起点，不应判为 10");
+        assert!(!is_windows_10_build(26100), "Win11 24H2 不应判为 Windows 10");
+    }
+
     #[test]
     fn malformed_response_yields_empty_vec_not_panic() {
         assert!(tile_items_from_response(&serde_json::json!({ "code": 500 })).is_empty());
@@ -345,9 +365,10 @@ pub async fn refresh_tile(
     app: &tauri::AppHandle,
     override_source: Option<LiveTileSource>,
 ) -> Result<(), String> {
-    // 未打包时磁贴 API 必然失败，此时连取数都不该做 —— 那只是白白发一次网络请求。
-    if !has_package_identity() {
-        return Err("当前未以 MSIX 打包形式运行，动态磁贴不可用".to_string());
+    // 本机不支持磁贴时（非 Windows / Windows 11 无磁贴 / 未打包），
+    // 连取数都不该做 —— 那只是白白发一次网络请求。
+    if !supports_live_tile() {
+        return Err("当前环境不支持动态磁贴（需 Windows 10 且已注册稀疏身份包）".to_string());
     }
 
     let source = override_source.unwrap_or_else(|| read_live_tile_source(app));
@@ -361,28 +382,137 @@ pub async fn refresh_tile(
     push_tile(&items)
 }
 
-/// 判断当前进程是否具有包标识（即是否以 MSIX 打包形式运行）。
+/// 判断当前进程是否具有包标识（即是否以 MSIX / 稀疏包形式运行）。
 ///
-/// 磁贴由系统外壳渲染，驱动它的 `TileUpdateManager` **要求调用方具有包标识**：
-/// 未打包的 Win32 进程调用只会得到 `0x80070490`（Element not found）。
+/// 探测方式遵循微软给出的标准流程：第一次传空缓冲区，
+/// **有包标识**时 API 需要缓冲区，返回 `ERROR_INSUFFICIENT_BUFFER`（122）；
+/// **无包标识**时返回 `APPMODEL_ERROR_NO_PACKAGE`（15700）。
 ///
-/// 因此未打包时必须**整体跳过**磁贴刷新，否则 NSIS 版与便携版用户每次启动
-/// 都会白白发一次真实网络请求，还会记下一条无意义的警告。对这个项目而言，
-/// 主力发行形态正是 exe —— 磁贴功能对它们必须是完全无感的。
+/// 必须精确判定 `ERROR_INSUFFICIENT_BUFFER`，不能写成
+/// `status != APPMODEL_ERROR_NO_PACKAGE` —— 那样任何**其他**错误
+/// （参数错误、API 异常等）都会被误判为"有包标识"，
+/// 进而误启动网络请求与定时刷新。
 #[cfg(target_os = "windows")]
 pub fn has_package_identity() -> bool {
-    use windows::Win32::Foundation::APPMODEL_ERROR_NO_PACKAGE;
+    use windows::Win32::Foundation::ERROR_INSUFFICIENT_BUFFER;
     use windows::Win32::Storage::Packaging::Appx::GetCurrentPackageFullName;
 
     let mut length = 0u32;
-    // 第一次调用只取所需长度；未打包时直接返回 APPMODEL_ERROR_NO_PACKAGE。
     let status = unsafe { GetCurrentPackageFullName(&mut length, None) };
-    status != APPMODEL_ERROR_NO_PACKAGE
+    status == ERROR_INSUFFICIENT_BUFFER
 }
 
 #[cfg(not(target_os = "windows"))]
 pub fn has_package_identity() -> bool {
     false
+}
+
+/// Windows 11 的内部版本起点。低于它即为 Windows 10。
+const WINDOWS_11_FIRST_BUILD: u32 = 22000;
+
+/// 内部版本号是否属于 Windows 10。
+///
+/// 单列成函数是为了让边界可以被单元测试钉住 —— 直接查系统的那一层无法在
+/// CI 上断言，因为 Windows runner 的版本会随镜像变化。
+fn is_windows_10_build(build: u32) -> bool {
+    build < WINDOWS_11_FIRST_BUILD
+}
+
+/// 当前系统是否为 Windows 10（而非 Windows 11 或更高）。
+///
+/// 判断依据是内部版本号：Windows 10 为 10240–19045，Windows 11 自 22000 起。
+///
+/// 用注册表而不 `GetVersionEx`：后者在清单未声明 `supportedOS` 时会谎报 6.2。
+/// `winreg` 已是本项目的 Windows 依赖。
+#[cfg(target_os = "windows")]
+fn is_windows_10() -> bool {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_LOCAL_MACHINE;
+
+    RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
+        .and_then(|key| key.get_value::<String, _>("CurrentBuildNumber"))
+        .ok()
+        .and_then(|build| build.trim().parse::<u32>().ok())
+        .is_some_and(is_windows_10_build)
+}
+
+/// 本机是否**真正可以显示动态磁贴**。
+///
+/// 三个条件缺一不可：
+///
+/// 1. **Windows** —— 磁贴是 Windows Shell 的功能
+/// 2. **Windows 10** —— Windows 11 已移除动态磁贴。仅有包标识并不够：
+///    Win11 上即使注册了稀疏包、`TileUpdateManager` 调用成功，
+///    也不会有任何磁贴被显示 —— 只会白白产生网络请求和永不停止的定时刷新
+/// 3. **具有包标识** —— 磁贴 API 的硬性要求（未打包进程只会得到 `0x80070490`）
+///
+/// 所有与磁贴相关的分支 —— 启动刷新、30 分钟定时器、前端设置项显隐 ——
+/// 都统一走这一个判断，不要各自去判子条件，否则很容易漏掉第 2 条。
+pub fn supports_live_tile() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        is_windows_10() && has_package_identity()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
+}
+
+/// 打包形态下本应用的 Application Id。
+///
+/// **必须与 `msix/AppxManifest.xml` 的 `Application/@Id` 逐字一致** ——
+/// AUMID 的组成是 `<PackageFamilyName>!<ApplicationId>`，写错就落到一个
+/// 清单里不存在的身份上。
+const PACKAGE_APPLICATION_ID: &str = "CoolapkDesktop";
+
+/// 组装打包形态的 AUMID。
+fn packaged_aumid(package_family_name: &str) -> String {
+    format!("{package_family_name}!{PACKAGE_APPLICATION_ID}")
+}
+
+/// 当前进程的包族名（PackageFamilyName）。未打包时返回 `None`。
+#[cfg(target_os = "windows")]
+fn current_package_family_name() -> Option<String> {
+    use windows::Win32::Foundation::{ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS};
+    use windows::Win32::Storage::Packaging::Appx::GetCurrentPackageFamilyName;
+    use windows::core::PWSTR;
+
+    let mut length = 0u32;
+    let status = unsafe { GetCurrentPackageFamilyName(&mut length, None) };
+    if status != ERROR_INSUFFICIENT_BUFFER || length == 0 {
+        return None;
+    }
+
+    let mut buffer = vec![0u16; length as usize];
+    let status = unsafe {
+        GetCurrentPackageFamilyName(&mut length, Some(PWSTR(buffer.as_mut_ptr())))
+    };
+    if status != ERROR_SUCCESS {
+        return None;
+    }
+
+    let end = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+    Some(String::from_utf16_lossy(&buffer[..end]))
+}
+
+/// 发起桌面通知应当使用的 AUMID。
+///
+/// **两种形态不能混用：**
+///
+/// - **有包标识**：必须是 `<PackageFamilyName>!<ApplicationId>`
+/// - **未打包**：用注册在 HKCU 的那个 BareId，即 `tauri.conf.json` 的 identifier
+///
+/// 有包标识时传未打包的 BareId，通知**仍会投递**（已实测确认），但系统会把它
+/// 解析成 `<PackageFamilyName>!<BareId>` —— 一个**清单里并不存在的 Application Id**。
+/// 结果是通知的归属身份不对：它挂在那个幻影身份下，而不是本应用声明的应用上。
+pub fn notification_aumid(bare_id: &str) -> String {
+    #[cfg(target_os = "windows")]
+    if let Some(package_family_name) = current_package_family_name() {
+        return packaged_aumid(&package_family_name);
+    }
+    bare_id.to_string()
 }
 
 /// 磁贴条目上限：Windows 通知队列最多容纳 5 条。

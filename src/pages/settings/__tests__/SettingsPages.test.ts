@@ -32,9 +32,9 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn().mockResolvedValue(undefined),
   isTauri: vi.fn(() => false),
 }));
-// 磁贴数据源设置行只在具备 MSIX 包标识时渲染，因此这里把平台信息声明为
-// “Windows + 已打包”，以便覆盖该行。未打包时该行隐藏的逻辑由 Rust 侧的
-// has_package_identity() 提供，不在此处断言。
+// 磁贴数据源设置行只在 supportsLiveTile 为真时渲染，因此这里把它声明为真，
+// 以便覆盖该行。判定条件本身（Windows && Windows 10 && 有包标识）由 Rust 侧的
+// supports_live_tile() 提供，不在此处断言。
 vi.mock('../../../utils/platform', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/platform')>();
   return {
@@ -42,7 +42,7 @@ vi.mock('../../../utils/platform', async (importOriginal) => {
     getPlatformInfo: vi.fn().mockResolvedValue({
       os: 'windows',
       arch: 'x86_64',
-      hasPackageIdentity: true,
+      supportsLiveTile: true,
     }),
   };
 });

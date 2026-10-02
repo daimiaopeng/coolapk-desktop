@@ -621,9 +621,10 @@ fn get_platform_info() -> serde_json::Value {
     serde_json::json!({
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
-        // 是否以 MSIX 打包形式运行。未打包时动态磁贴不可用，
-        // 前端据此隐藏磁贴数据源设置项，避免给出一个选了也没用的选项。
-        "hasPackageIdentity": crate::windows_tile::has_package_identity(),
+        // 本机是否真正支持动态磁贴（Windows && Windows 10 && 有包标识）。
+        // 前端据此决定是否显示磁贴数据源设置项 —— 条件不满足时整行隐藏，
+        // 避免给出一个选了也不会有任何效果的选项。
+        "supportsLiveTile": crate::windows_tile::supports_live_tile(),
     })
 }
 
@@ -709,8 +710,10 @@ async fn send_desktop_notification(
 
     #[cfg(desktop)]
     {
+    // AUMID 必须与当前形态匹配：有包标识时用 `<PackageFamilyName>!<ApplicationId>`，
+    // 未打包时用注册在 HKCU 的 BareId。混用会让通知挂到一个清单里不存在的身份上。
     #[cfg(windows)]
-    let identifier = app.config().identifier.clone();
+    let identifier = crate::windows_tile::notification_aumid(&app.config().identifier);
     #[cfg(windows)]
     let icon_path = windows_notification_icon_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -1067,11 +1070,13 @@ pub fn run() {
 
             // 磁贴刷新含网络请求，必须离开主线程，否则应用启动会被一次网络往返阻塞。
             //
-            // 先探测包标识：磁贴由系统外壳渲染，其 API 要求调用方具有包标识，
-            // 未打包时必然返回 0x80070490。没有包标识就整体跳过，连定时器都不启动 ——
-            // NSIS 版与便携版用户（本项目的主力发行形态）对此完全无感：
-            // 不产生任何多余网络请求，也不会有任何日志噪音。
-            if crate::windows_tile::has_package_identity() {
+            // 先做统一能力判断（Windows && Windows 10 && 有包标识）。不满足就整体跳过，
+            // 连定时器都不启动 —— NSIS 版的普通用户与便携版用户对此完全无感：
+            // 不产生多余网络请求，也没有日志噪音。
+            //
+            // 注意 Windows 11 也必须跳过：Win11 已移除动态磁贴，
+            // 即使注册了稀疏包、API 调用成功，也不会有磁贴被显示。
+            if crate::windows_tile::supports_live_tile() {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     match crate::windows_tile::refresh_tile(&handle, None).await {

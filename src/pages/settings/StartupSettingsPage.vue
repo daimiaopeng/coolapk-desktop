@@ -160,11 +160,12 @@ const settingsStore = useSettingsStore();
 // 桌面端语义的开关：手机上窗口永远窄，开了只会把移动外壳关掉，因此不展示。
 const showDesktopLayoutSwitch = !isTouchMobilePlatform();
 
-// 动态磁贴要求 MSIX 包标识。exe 安装版与便携版没有包标识，磁贴功能对它们
-// 完全不可用，因此整行隐藏 —— 避免给出一个选了也不会有任何效果的选项。
+// 磁贴需要 Windows 10 + 包标识（Windows 11 已移除动态磁贴）。
+// 条件不满足时整行隐藏 —— 避免给出一个选了也不会有任何效果的选项。
+// 判断统一由后端的 supports_live_tile() 提供，此处不再自行拆条件。
 const showTileSourceSetting = ref(false);
 void getPlatformInfo().then((info) => {
-  showTileSourceSetting.value = info.os === 'windows' && info.hasPackageIdentity === true;
+  showTileSourceSetting.value = info.supportsLiveTile === true;
 });
 const autostartError = ref(false);
 
