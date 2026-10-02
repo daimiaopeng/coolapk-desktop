@@ -201,6 +201,32 @@ catch { throw "身份包清单不是合法 XML（$pkgManifest）：$($_.Exceptio
 
 Write-Ok "身份包清单已就绪，版本 $pkgVersion（取自 tauri.conf.json 的 $appVersion）"
 
+# ---------------------------------------------------------------- 磁贴资源
+# 刻意排在修改 exe **之前**：稀疏包不含内容，外壳从外部位置取图，
+# 资源缺失会让磁贴无图。这一步失败应当在任何改动发生前中止，
+# 而不是等 exe 已经改完、注册也做完之后才发现。
+
+$assetTarget = Join-Path $InstallDir "Assets"
+$expectedAssets = @(
+    "Square44x44Logo.png", "Square71x71Logo.png", "Square150x150Logo.png",
+    "Wide310x150Logo.png", "Square310x310Logo.png", "StoreLogo.png"
+)
+
+New-Item -ItemType Directory -Force -Path $assetTarget | Out-Null
+foreach ($name in $expectedAssets) {
+    $src = Join-Path $assetSource $name
+    if (-not (Test-Path $src)) { throw "磁贴资源缺失：$src" }
+    # 不用 -ErrorAction SilentlyContinue：复制失败必须中止
+    Copy-Item $src (Join-Path $assetTarget $name) -Force
+}
+
+# 复制后逐个校验 —— 目录存在不代表六张图都在（例如被占用导致部分失败）
+$missing = @($expectedAssets | Where-Object { -not (Test-Path (Join-Path $assetTarget $_)) })
+if ($missing.Count -gt 0) {
+    throw "磁贴资源复制后校验失败，缺失：$($missing -join ', ')"
+}
+Write-Ok "磁贴资源已就位并通过校验（$($expectedAssets.Count) 个文件）"
+
 # ---------------------------------------------------------------- 备份
 # 到这一步为止什么都没改。备份当前清单，作为后续任一步失败的回滚素材。
 
@@ -227,14 +253,6 @@ try {
     throw "嵌入身份元素失败，exe 清单已回滚：$($_.Exception.Message)"
 }
 Write-Ok "已嵌入 <msix>（packageName=com.coolapk.desktop, applicationId=CoolapkDesktop）"
-
-# 磁贴资源随 exe 部署 —— 稀疏包不含内容，外壳从外部位置取图。
-Copy-Item "$assetSource\*.png" (Join-Path $InstallDir "Assets") -Force -ErrorAction SilentlyContinue
-if (-not (Test-Path (Join-Path $InstallDir "Assets"))) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $InstallDir "Assets") | Out-Null
-    Copy-Item "$assetSource\*.png" (Join-Path $InstallDir "Assets") -Force
-}
-Write-Ok "磁贴资源已就位：$(Join-Path $InstallDir 'Assets')"
 
 # ---------------------------------------------------------------- 注册
 
