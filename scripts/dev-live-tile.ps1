@@ -228,7 +228,12 @@ if ($missing.Count -gt 0) {
 Write-Ok "磁贴资源已就位并通过校验（$($expectedAssets.Count) 个文件）"
 
 # ---------------------------------------------------------------- 备份
-# 到这一步为止什么都没改。备份当前清单，作为后续任一步失败的回滚素材。
+# 回滚素材：exe 的当前清单。恢复它等于撤销对 exe 的修改。
+#
+# "事务式"的**范围**：可回滚的是 **exe 清单**与**身份包注册**。
+# 磁贴资源（Assets/）在上一步已经复制完成，不参与回滚 —— 这些 PNG 无害，
+# 留着不影响使用，为此做资源级备份/恢复对一个开发工具不值得。
+# 停用（-Unregister）也不会删除它们。
 
 if (Test-Path $ExePath) {
     & $mt -nologo "-inputresource:${ExePath};#1" "-out:$backupManifest" | Out-Null

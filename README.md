@@ -108,7 +108,11 @@
 powershell -ExecutionPolicy Bypass -File .\scripts\dev-live-tile.ps1
 ```
 
-脚本流程是**事务式**的：全部前置检查通过后才开始改动；修改 exe 前先备份其清单；注册失败会自动回滚 exe 清单，且**不会破坏已有的注册**。默认作用于 `src-tauri\target\release`，用 `-InstallDir` 可指定其他安装目录。
+脚本流程对 **exe 清单与身份包注册**是事务式的：全部前置检查（含磁贴资源校验）通过后才开始改动；修改 exe 前先备份其清单；注册失败会自动回滚 exe 清单，且**不会破坏已有的注册**。
+
+> 磁贴资源会在前置阶段复制到安装目录，不参与回滚 —— 它们是普通 PNG，留着不影响使用；停用时也不会删除。
+
+默认作用于 `src-tauri\target\release`，用 `-InstallDir` 可指定其他安装目录。
 
 完成后打开开始菜单搜索「酷安」，右键 → 固定到"开始"屏幕。
 
