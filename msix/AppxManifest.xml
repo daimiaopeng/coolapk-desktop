@@ -39,8 +39,21 @@
     <PublisherDisplayName>coolapk-desktop</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
-    <!-- 全信任桌面应用不应被重定向注册表写入 -->
+    <!--
+      同时关闭注册表与文件系统写入虚拟化。
+
+      微软文档给出的"不希望 AppData 被虚拟化"的写法就是**成对**关闭这两项
+      （FileSystemWriteVirtualization 默认是 enabled）。本项目的数据大量位于
+      AppData —— settings.json（tauri-plugin-store）、startup_state.json、
+      账户库等 —— 一旦被重定向到包的私有区域，启用与停用身份包之间就会
+      看到两套数据，表现为"设置丢了"。
+
+      注：在本机实测中未观察到应用文件被重定向（虚拟化区内只有系统自身的
+      settings.dat）。这里仍然显式关闭，是为了不依赖"碰巧没被重定向"，
+      让行为由声明决定而不是由默认值决定。
+    -->
     <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
+    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
   </Properties>
 
   <Dependencies>

@@ -79,35 +79,43 @@
 
 部分功能依赖酷安服务端接口，可能因官方调整、账号权限或风控策略而临时失效。
 
-## Windows 10 动态磁贴（可选）
+## Windows 10 动态磁贴（开发预览）
 
 在开始菜单磁贴上显示真实酷安内容，最多 5 条自动轮播，数据源可在「设置 → 启动 → 磁贴数据源」中切换（推荐 / 热榜 / 快讯 / 精选）。
 
-**这是可选功能，且需要你手动启用。** exe 安装版与便携版**默认不含**磁贴能力 —— 不做任何启用操作时，应用行为与之前完全一致：不发任何额外网络请求，也不产生额外日志。
+**这是开发预览，不是面向最终用户的启用方式。** 不启用时应用行为与之前完全一致：不发任何额外网络请求，也不产生额外日志。
 
 ### 为什么需要额外一步
 
 磁贴由系统外壳渲染，驱动它的 `TileUpdateManager` 要求调用方具有**包标识（package identity）**。未打包的 Win32 程序调用只会得到 `0x80070490`。
 
-因此本项目的做法是给 exe 叠加一个**稀疏身份包**（sparse package）—— 一个只有几 KB、仅含清单的包，指向应用的安装目录。**应用本体不搬动、不重新打包**，NSIS 安装版与便携版仍然是主线发行形态。
+本项目的做法是给 exe 叠加一个**稀疏身份包**（sparse package）—— 一个只有几 KB、仅含清单的包，指向应用的安装目录。**应用本体不搬动、不重新打包**，NSIS 安装版与便携版仍然是主线发行形态。
 
-### 启用方式
+### 为什么当前只作为开发预览
 
-需要 **Windows 10 2004（内部版本 19041）或更高**，以及 [Windows SDK](https://developer.microsoft.com/windows/downloads/windows-sdk/)（提供 `mt.exe`）。
+下面的脚本需要机器上装有 [Windows SDK](https://developer.microsoft.com/windows/downloads/windows-sdk/)（提供 `mt.exe`）来给 exe 嵌入身份元素。**这不该是普通用户的依赖。**
+
+正式发行方案应当把两件事都移出用户机器：嵌入 `<msix>` 放到**构建阶段**（顺序为 embed → 签名 → 打包），注册身份包交给 **NSIS 安装器**。此外身份包需要受信任的签名证书，否则未签名的包在用户机器上仍会撞上「开发者模式」这一门槛。
+
+在这些落地之前，本功能以开发工具的形式提供。
+
+### 启用方式（开发用）
+
+需要 **Windows 10 2004（内部版本 19041）或更高**。**Windows 11 不支持** —— 微软已在该系统中移除动态磁贴，脚本会直接拒绝运行。
 
 ```powershell
 # 在仓库根目录执行
-powershell -ExecutionPolicy Bypass -File .\scripts\enable-live-tile.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\dev-live-tile.ps1
 ```
 
-脚本会：给 exe 嵌入 `<msix>` 身份元素 → 把磁贴资源复制到安装目录 → 注册稀疏身份包。若已构建，它默认作用于 `src-tauri\target\release`；用 `-InstallDir` 可指定其他安装目录。
+脚本流程是**事务式**的：全部前置检查通过后才开始改动；修改 exe 前先备份其清单；注册失败会自动回滚 exe 清单，且**不会破坏已有的注册**。默认作用于 `src-tauri\target\release`，用 `-InstallDir` 可指定其他安装目录。
 
 完成后打开开始菜单搜索「酷安」，右键 → 固定到"开始"屏幕。
 
-卸载：
+停用：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\enable-live-tile.ps1 -Unregister
+powershell -ExecutionPolicy Bypass -File .\scripts\dev-live-tile.ps1 -Unregister
 ```
 
 ### 关于开发者模式
