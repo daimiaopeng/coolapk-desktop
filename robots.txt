@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://coolapk.123741.xyz/sitemap.xml
