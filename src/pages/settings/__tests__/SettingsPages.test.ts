@@ -32,6 +32,20 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn().mockResolvedValue(undefined),
   isTauri: vi.fn(() => false),
 }));
+// 磁贴数据源设置行只在 supportsLiveTile 为真时渲染，因此这里把它声明为真，
+// 以便覆盖该行。判定条件本身（Windows && Windows 10 && 有包标识）由 Rust 侧的
+// supports_live_tile() 提供，不在此处断言。
+vi.mock('../../../utils/platform', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/platform')>();
+  return {
+    ...actual,
+    getPlatformInfo: vi.fn().mockResolvedValue({
+      os: 'windows',
+      arch: 'x86_64',
+      supportsLiveTile: true,
+    }),
+  };
+});
 
 import AppearanceSettingsPage from '../AppearanceSettingsPage.vue';
 import AccountSettingsPage from '../AccountSettingsPage.vue';
@@ -44,7 +58,7 @@ import PrivacySettingsPage from '../PrivacySettingsPage.vue';
 import StartupSettingsPage from '../StartupSettingsPage.vue';
 import SettingsLayout from '../SettingsLayout.vue';
 import ShortcutSettingsPage from '../ShortcutSettingsPage.vue';
-import { useSettingsStore } from '../../../stores/settings';
+import { normalizeSettings, useSettingsStore } from '../../../stores/settings';
 
 const RouterViewStub = { template: '<div><slot :Component="null" /></div>' };
 const RouterLinkStub = { props: ['to'], template: '<a><slot /></a>' };
@@ -134,19 +148,35 @@ describe('设置页面交互', () => {
     expect(settings.settings.deviceSignature).toBe('测试设备');
   });
 
-  it('启动页覆盖首页、关闭行为、更新渠道和窗口行为', async () => {
+  it('启动页覆盖首页、磁贴数据源、关闭行为、更新渠道和窗口行为', async () => {
     const { wrapper, settings } = mountPage(StartupSettingsPage);
+    // 磁贴数据源那一行要等 getPlatformInfo() 解析后才渲染。
+    await flushPromises();
     const selects = wrapper.findAll('select');
     await selects[0].setValue('secondhand');
-    await selects[2].setValue('tray');
+    await selects[1].setValue('hot');
+    await selects[3].setValue('tray');
     await wrapper.findAll('.switch-input')[3].setValue(true);
-    await selects[1].setValue('beta');
+    await selects[2].setValue('beta');
     await wrapper.findAll('.switch-input')[4].setValue(true);
     expect(settings.settings.defaultHomeTab).toBe('secondhand');
+    expect(settings.settings.liveTileSource).toBe('hot');
     expect(settings.settings.closeToTray).toBe(true);
     expect(settings.settings.experimentalFeatures).toBe(true);
     expect(settings.settings.updateChannel).toBe('beta');
     expect(settings.settings.alwaysOnTop).toBe(true);
+  });
+
+  it('磁贴数据源默认是推荐，且非法值被归一化回默认', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const settings = useSettingsStore(pinia);
+    await settings.initializeSettings();
+    expect(settings.settings.liveTileSource).toBe('index_v8');
+
+    // 非法值必须被白名单拒绝并回落，而不是被静默丢弃导致 undefined
+    const normalized = normalizeSettings({ liveTileSource: 'not_a_source' } as never);
+    expect(normalized.liveTileSource).toBe('index_v8');
   });
 
   it('设备页覆盖设备指纹输入、预设、警告和恢复默认', async () => {
