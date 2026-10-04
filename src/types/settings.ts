@@ -15,6 +15,7 @@ export type ExternalLinkMode = 'internal' | 'system';
 export type TimeDisplayMode = 'relative' | 'absolute';
 export type MessageEnterBehavior = 'send' | 'newline';
 export type UpdateChannel = 'stable' | 'beta';
+export type LiveTileSource = 'index_v8' | 'hot' | 'news' | 'digest';
 
 /** 官方 ConfigPage 实体模型（对齐 com.coolapk.market.model.ConfigPage） */
 export interface ConfigPageTab {
@@ -145,6 +146,7 @@ export interface AppSettings {
   showHomeMonthlyRank: boolean;
   showHomeHotTopics: boolean;
   defaultHomeTab: HomeTabKey;
+  liveTileSource: LiveTileSource;
   homeTabOrder: HomeTabKey[];
   favoriteCollectionViewMode: FavoriteCollectionViewMode;
   favoriteCollectionSortMode: FavoriteCollectionSortMode;

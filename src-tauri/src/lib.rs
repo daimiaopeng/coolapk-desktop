@@ -1,6 +1,7 @@
 pub mod coolapk;
 pub mod diagnostics;
 pub mod download_manager;
+mod windows_tile;
 
 use coolapk::client::CoolapkClient;
 use coolapk::commands::{get_user_plugins, save_user_plugins, claim_user_plugin};
@@ -605,10 +606,25 @@ async fn pick_font_family(
 }
 
 #[tauri::command]
+async fn update_desktop_tile(
+    app: tauri::AppHandle,
+    source: Option<String>,
+) -> Result<(), String> {
+    let override_source = source
+        .as_deref()
+        .map(|raw| crate::windows_tile::LiveTileSource::from_setting(Some(raw)));
+    crate::windows_tile::refresh_tile(&app, override_source).await
+}
+
+#[tauri::command]
 fn get_platform_info() -> serde_json::Value {
     serde_json::json!({
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
+        // 本机是否真正支持动态磁贴（Windows && Windows 10 && 有包标识）。
+        // 前端据此决定是否显示磁贴数据源设置项 —— 条件不满足时整行隐藏，
+        // 避免给出一个选了也不会有任何效果的选项。
+        "supportsLiveTile": crate::windows_tile::supports_live_tile(),
     })
 }
 
@@ -655,8 +671,7 @@ fn register_windows_notification_identity(app: &tauri::AppHandle) -> Result<(), 
     Ok(())
 }
 
-#[cfg(windows)]
-fn escape_notification_xml(value: &str) -> String {
+pub(crate) fn escape_notification_xml(value: &str) -> String {
     value
         .replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -695,8 +710,10 @@ async fn send_desktop_notification(
 
     #[cfg(desktop)]
     {
+    // AUMID 必须与当前形态匹配：有包标识时用 `<PackageFamilyName>!<ApplicationId>`，
+    // 未打包时用注册在 HKCU 的 BareId。混用会让通知挂到一个清单里不存在的身份上。
     #[cfg(windows)]
-    let identifier = app.config().identifier.clone();
+    let identifier = crate::windows_tile::notification_aumid(&app.config().identifier);
     #[cfg(windows)]
     let icon_path = windows_notification_icon_path(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -1051,6 +1068,35 @@ pub fn run() {
             }
             }
 
+            // 磁贴刷新含网络请求，必须离开主线程，否则应用启动会被一次网络往返阻塞。
+            //
+            // 先做统一能力判断（Windows && Windows 10 && 有包标识）。不满足就整体跳过，
+            // 连定时器都不启动 —— NSIS 版的普通用户与便携版用户对此完全无感：
+            // 不产生多余网络请求，也没有日志噪音。
+            //
+            // 注意 Windows 11 也必须跳过：Win11 已移除动态磁贴，
+            // 即使注册了稀疏包、API 调用成功，也不会有磁贴被显示。
+            if crate::windows_tile::supports_live_tile() {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    match crate::windows_tile::refresh_tile(&handle, None).await {
+                        Ok(()) => log::info!("动态磁贴已更新"),
+                        Err(e) => log::warn!("动态磁贴更新失败: {e}"),
+                    }
+
+                    // 运行中定时刷新。间隔 30 分钟。
+                    let mut ticker = tokio::time::interval(std::time::Duration::from_secs(1800));
+                    ticker.tick().await; // 跳过立刻返回的第一次 tick
+                    loop {
+                        ticker.tick().await;
+                        match crate::windows_tile::refresh_tile(&handle, None).await {
+                            Ok(()) => log::info!("动态磁贴已按计划刷新"),
+                            Err(e) => log::warn!("动态磁贴定时刷新失败: {e}"),
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1265,6 +1311,7 @@ pub fn run() {
             set_close_to_tray,
             set_window_theme,
             pick_font_family,
+            update_desktop_tile,
             set_startup_flags,
             send_desktop_notification,
             download_update,

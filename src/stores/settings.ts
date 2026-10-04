@@ -133,6 +133,7 @@ const defaultSettings: AppSettings = {
   showHomeMonthlyRank: true,
   showHomeHotTopics: true,
   defaultHomeTab: 'digest',
+  liveTileSource: 'index_v8',
   homeTabOrder: [...DEFAULT_HOME_TAB_ORDER],
   favoriteCollectionViewMode: 'large',
   favoriteCollectionSortMode: 'default',
@@ -238,6 +239,9 @@ export function normalizeSettings(value: unknown): AppSettings {
   result.fontFamily = normalizeFontFamily(source.fontFamily, result.fontFamily);
   if (isOneOf(source.accentColor, ['green', 'blue', 'violet', 'orange'])) result.accentColor = source.accentColor;
   if (isOneOf(source.defaultHomeTab, ['index_v8', 'digest', 'hot', 'latest', 'cool_picture', 'secondhand', 'pictures', 'dyh'])) result.defaultHomeTab = source.defaultHomeTab;
+  if (isOneOf(source.liveTileSource, ['index_v8', 'hot', 'news', 'digest'])) {
+    result.liveTileSource = source.liveTileSource;
+  }
   if (isOneOf(source.favoriteCollectionViewMode, ['large', 'single', 'double', 'no-image'])) result.favoriteCollectionViewMode = source.favoriteCollectionViewMode as FavoriteCollectionViewMode;
   const hasSavedCollectionSortDirection = isOneOf(source.favoriteCollectionSortDirection, ['asc', 'desc']);
   if (hasSavedCollectionSortDirection) result.favoriteCollectionSortDirection = source.favoriteCollectionSortDirection as FavoriteCollectionSortDirection;
@@ -494,6 +498,15 @@ export const useSettingsStore = defineStore('settings', () => {
   }, { deep: true, flush: 'sync' });
   watch(() => settings.value.experimentalFeatures, (enabled) => {
     if (!enabled && settings.value.updateChannel === 'beta') settings.value.updateChannel = 'stable';
+  }, { flush: 'sync' });
+  // 磁贴数据源变更后立即刷新，不必等下一个定时周期。
+  // 直接把新值传给后端：持久化链路较慢（异步写盘），后端此刻读缓存拿到的
+  // 仍是旧值，磁贴会与界面不一致。
+  watch(() => settings.value.liveTileSource, (source) => {
+    if (!nativeSyncReady) return;
+    invoke('update_desktop_tile', { source }).catch((err) => {
+      console.warn('[settings] 触发磁贴刷新失败', err);
+    });
   }, { flush: 'sync' });
 
   void initializeSettings();

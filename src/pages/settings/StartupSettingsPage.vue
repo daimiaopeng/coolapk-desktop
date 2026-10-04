@@ -19,6 +19,19 @@
         </select>
       </div>
 
+      <div v-if="showTileSourceSetting" class="setting-row">
+        <div class="row-info">
+          <span class="row-label">磁贴数据源</span>
+          <span class="row-sub">开始菜单动态磁贴显示的内容来源</span>
+        </div>
+        <select v-model="settingsStore.settings.liveTileSource" class="select-control">
+          <option value="index_v8">推荐</option>
+          <option value="hot">热榜</option>
+          <option value="news">快讯</option>
+          <option value="digest">精选</option>
+        </select>
+      </div>
+
       <div class="setting-row">
         <div class="row-info">
           <span class="row-label">开机自启动</span>
@@ -141,11 +154,19 @@
 import { computed, onMounted, ref } from 'vue';
 import { useSettingsStore } from '../../stores/settings';
 import AppSwitch from '../../components/common/AppSwitch.vue';
-import { isTouchMobilePlatform } from '../../utils/platform';
+import { getPlatformInfo, isTouchMobilePlatform } from '../../utils/platform';
 
 const settingsStore = useSettingsStore();
 // 桌面端语义的开关：手机上窗口永远窄，开了只会把移动外壳关掉，因此不展示。
 const showDesktopLayoutSwitch = !isTouchMobilePlatform();
+
+// 磁贴需要 Windows 10 + 包标识（Windows 11 已移除动态磁贴）。
+// 条件不满足时整行隐藏 —— 避免给出一个选了也不会有任何效果的选项。
+// 判断统一由后端的 supports_live_tile() 提供，此处不再自行拆条件。
+const showTileSourceSetting = ref(false);
+void getPlatformInfo().then((info) => {
+  showTileSourceSetting.value = info.supportsLiveTile === true;
+});
 const autostartError = ref(false);
 
 const closeBehavior = computed({
